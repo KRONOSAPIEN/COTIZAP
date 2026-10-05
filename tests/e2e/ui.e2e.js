@@ -379,7 +379,7 @@ const ok = (cond, msg) => {
     await p.context().close();
   }
 
-  console.log('15) Injerto simple y Reducción con injerto (30° o 45°, derecho o izquierdo)');
+  console.log('15) Injerto simple y Reducción con injerto (30° o 45°)');
   {
     const p = await nuevaPagina();
     await p.click('#btn-agregar');
@@ -389,8 +389,8 @@ const ok = (cond, msg) => {
     ok(!nombres.some((n) => /Pantal|Ramal/.test(n)), 'ya no ofrece Ramal en ángulo ni Pantalón');
     await p.click('.fam:has(span:text-is("Reducción con injerto"))');
     ok(JSON.stringify(await p.locator('#f_beta_deg option').allInnerTexts()) === JSON.stringify(['30°', '45°']), 'el ángulo del injerto es 30° o 45°');
-    ok(JSON.stringify(await p.locator('#f_lado option').allInnerTexts()) === JSON.stringify(['Derecho', 'Izquierdo']), 'el lado es derecho o izquierdo');
-    ok(await p.locator('#f_beta_deg').inputValue() === '45' && await p.locator('#f_lado').inputValue() === 'DER', 'por omisión: 45° derecho');
+    ok(await p.locator('#f_lado').count() === 0 && !/Lado del injerto/.test(await p.locator('#dlg-partida').innerText()), 'no hay campo "Lado del injerto"');
+    ok(await p.locator('#f_beta_deg').inputValue() === '45', 'por omisión: 45°');
     ok(await p.locator('#dlg-prev .errores').count() === 0, 'con los valores por defecto calcula sin errores');
     ok((await p.locator('#f_L_ramal_mm').getAttribute('placeholder')) === 'auto' && (await p.locator('#f_L_reduccion_mm').getAttribute('placeholder')) === 'auto', 'los largos del injerto y de la reducción son automáticos por omisión');
     ok(await p.locator('#f_L_cuerpo_mm').count() === 0, 'ya no hay "tramo recto": el injerto va sobre el cono');
@@ -403,9 +403,8 @@ const ok = (cond, msg) => {
     await p.selectOption('#f_sentido', 'MAYOR');
     const precio45 = await p.locator('#dlg-prev .prev-val').innerText();
     await p.selectOption('#f_beta_deg', '30');
-    await p.selectOption('#f_lado', 'IZQ');
     await p.waitForTimeout(100);
-    ok(await p.locator('#dlg-prev .errores').count() === 0, 'a 30° izquierdo también calcula sin errores (el largo automático se ajusta)');
+    ok(await p.locator('#dlg-prev .errores').count() === 0, 'a 30° también calcula sin errores (el largo automático se ajusta)');
     ok(precio45 !== '' && (await p.locator('#dlg-prev .prev-val').innerText()) !== '', 'la vista previa muestra el precio');
     await p.click('#dlg-guardar');
     await p.waitForTimeout(100);
@@ -413,13 +412,13 @@ const ok = (cond, msg) => {
       const q = window.COTIZAP.web.estadoApp.cot.partidas.find((x) => x.familia === 'REDUCCION_INJERTO' && x.beta_deg === 30);
       return q ? { beta: q.beta_deg, tipo: typeof q.beta_deg, lado: q.lado, id: q.id } : null;
     });
-    ok(guardada && guardada.beta === 30 && guardada.tipo === 'number' && guardada.lado === 'IZQ', 'se guarda el ángulo como número y el lado');
-    ok(await p.locator('#lista-partidas .partida-meta:has-text("a 30° izq.")').count() === 1, 'la lista lo resume con el vocabulario del taller ("… a 30° izq.")');
+    ok(guardada && guardada.beta === 30 && guardada.tipo === 'number' && guardada.lado === undefined, 'se guarda el ángulo como número y ya no se guarda un lado');
+    ok(await p.locator('#lista-partidas .partida-meta:has-text("a 30°")').count() === 1, 'la lista lo resume con el vocabulario del taller ("… injerto Ø6″ a 30°")');
     ok(await p.locator('#lista-partidas .partida-meta:has-text("Injerto")').count() >= 2, 'el injerto simple y la reducción con injerto se rotulan como injertos');
-    // editar y guardar sin tocar nada deja la partida igual (ángulo y lado se conservan)
-    await p.locator(`#lista-partidas .partida:has(.partida-meta:has-text("a 30° izq."))`).locator('button[aria-label^="Editar"]').click();
+    // editar y guardar sin tocar nada deja la partida igual (el ángulo se conserva)
+    await p.locator(`#lista-partidas .partida:has(.partida-meta:has-text("a 30°"))`).locator('button[aria-label^="Editar"]').click();
     await p.waitForSelector('#dlg-partida[open]');
-    ok(await p.locator('#f_beta_deg').inputValue() === '30' && await p.locator('#f_lado').inputValue() === 'IZQ', 'al editar, el ángulo y el lado vuelven como se guardaron');
+    ok(await p.locator('#f_beta_deg').inputValue() === '30', 'al editar, el ángulo vuelve como se guardó');
     // un injerto demasiado corto se rechaza con el nombre de taller
     await p.fill('#f_L_ramal_mm', '100');
     await p.waitForTimeout(100);
@@ -430,10 +429,10 @@ const ok = (cond, msg) => {
     ok(/La reducción es corta para alojar el injerto: necesita al menos \d+ mm/.test(await p.locator('#dlg-prev .errores').innerText()), 'una reducción demasiado corta se rechaza y dice cuánto necesita');
     await p.click('#dlg-cancelar');
     // el desglose habla de tronco e injerto
-    await p.locator('#lista-partidas .partida:has(.partida-meta:has-text("a 30° izq."))').click();
+    await p.locator('#lista-partidas .partida:has(.partida-meta:has-text("a 30°"))').click();
     await p.waitForTimeout(100);
     const detalle = await p.locator('#detalle').innerText();
-    ok(/Lado del injerto\s*Izquierdo/.test(detalle) && /Longitud de la reducción/.test(detalle) && /Área del injerto/.test(detalle) && /El injerto se inclina hacia\s*El extremo mayor/.test(detalle), 'el desglose muestra lado, inclinación, reducción e injerto');
+    ok(/Longitud de la reducción/.test(detalle) && /Área del injerto/.test(detalle) && /El injerto se inclina hacia\s*El extremo mayor/.test(detalle) && !/Lado del injerto/.test(detalle), 'el desglose muestra inclinación, reducción e injerto, y ya no el lado');
 
     // una cotización anterior con pantalón sigue calculando, rotulado como retirado
     const vieja = {
@@ -456,6 +455,23 @@ const ok = (cond, msg) => {
     await p.waitForSelector('#dlg-partida[open]');
     ok(!(await p.locator('#dlg-familias .fam span').allInnerTexts()).some((n) => /Pantal/.test(n)), 'pero no se ofrece para partidas nuevas');
     await p.click('#dlg-cancelar');
+
+    // una cotización anterior que traía el lado (der/izq) del injerto: abre, calcula y ya no lo muestra
+    const conLado = {
+      app: 'COTIZAP', version: 2,
+      cotizacion: { cliente: 'Anterior', proyecto: '', fecha: '2026-01-01', vigencia_dias: 15, unidad_diam: 'in', unidad_long: 'mm', riesgo: 'MEDIO', servicio: 'POLVO',
+        partidas: [{ id: 'rl1', familia: 'REDUCCION_INJERTO', descripcion: 'Reducción con injerto izq. 30°', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 30, lado: 'IZQ', material_id: 'ACERO_CARBON', calibre: 16, cantidad: 1 }] },
+      maestros: {},
+    };
+    await p.click('#btn-io');
+    await p.fill('#io-texto', JSON.stringify(conLado));
+    await p.click('#io-cargar');
+    await p.waitForTimeout(150);
+    ok((await p.locator('#lista-partidas .partida-importe').innerText()).includes('$'), 'una cotización anterior con lado (der/izq) sigue calculando su precio');
+    await p.locator('#lista-partidas .partida').first().locator('button[aria-label^="Editar"]').click();
+    await p.waitForSelector('#dlg-partida[open]');
+    ok(await p.locator('#f_lado').count() === 0 && !/Lado del injerto/.test(await p.locator('#dlg-partida').innerText()), 'y al editarla ya no hay campo de lado');
+    await p.click('#dlg-cancelar');
     await p.context().close();
   }
 
@@ -468,7 +484,7 @@ const ok = (cond, msg) => {
     };
     const pm = await nuevaPagina({}, sembrar(guardada(true)));
     const titulos = await pm.locator('#lista-partidas .partida-titulo').allInnerTexts();
-    ok(titulos.some((t) => /^Injerto simple a 45°/.test(t)) && titulos.some((t) => /^Reducción con injerto der\. 45°/.test(t)), 'la muestra de una versión anterior se renueva con los nombres y las partidas actuales');
+    ok(titulos.some((t) => /^Injerto simple a 45°/.test(t)) && titulos.some((t) => /^Reducción con injerto 45°/.test(t)), 'la muestra de una versión anterior se renueva con los nombres y las partidas actuales');
     ok(!titulos.some((t) => /^Ramal/.test(t)), 'ya no aparece "Ramal"');
     ok(await pm.locator('#c_unidad_diam').inputValue() === 'mm' && await pm.locator('#c_unidad_long').inputValue() === 'm' && await pm.locator('#c_riesgo').inputValue() === 'ALTO' && await pm.locator('#c_vigencia_dias').inputValue() === '30', 'conserva los ajustes generales que ya había cambiado');
     await pm.context().close();

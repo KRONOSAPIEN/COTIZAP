@@ -35,7 +35,6 @@
     proceso_corte: [['', 'Automático'], ['GUILLOTINA', 'Guillotina'], ['PLASMA', 'Plasma CNC'], ['LASER', 'Láser']],
     tipo_costura: [['A_TOPE', 'Soldada a tope'], ['TRASLAPE', 'Soldada a traslape'], ['PITTSBURGH', 'Engargolado Pittsburgh']],
     excentrica: [['NO', 'Concéntrica'], ['CARA_PLANA', 'Excéntrica · cara plana']],
-    lado: [['DER', 'Derecho'], ['IZQ', 'Izquierdo']],
     sentido_injerto: [['MAYOR', 'El extremo mayor (D1)'], ['MENOR', 'El extremo menor (D2)']],
     driver: [['PIEZA', 'Por pieza'], ['KG_NETO', 'Por kg neto'], ['KG_BRUTO', 'Por kg bruto'], ['M2_NETO', 'Por m² de lámina'], ['M_CORTE', 'Por m de corte'], ['M_SOLDADURA', 'Por m de soldadura']],
   };
@@ -91,7 +90,6 @@
       { id: 'd_mm', etiqueta: 'Diámetro del injerto', tipo: 'dim', defecto: 152.4 },
       { id: 'beta_deg', etiqueta: 'Ángulo del injerto', tipo: 'select', opciones: 'angulos_injerto', numerico: true, defecto: 45 },
       { id: 'sentido', etiqueta: 'El injerto se inclina hacia', tipo: 'select', opciones: 'sentido_injerto', defecto: 'MAYOR', ayuda: 'Cambia el desarrollo: el cono se abre o se cierra en ese sentido' },
-      { id: 'lado', etiqueta: 'Lado del injerto', tipo: 'select', opciones: 'lado', defecto: 'DER', ayuda: 'Sólo identifica la pieza en el taller: no cambia el costo' },
       { id: 'L_reduccion_mm', etiqueta: 'Longitud de la reducción', tipo: 'dim', opcional: true, ayuda: 'Vacío = automático (la menor que aloja el injerto sobre el cono, con holgura)' },
       { id: 'L_ramal_mm', etiqueta: 'Longitud del injerto', tipo: 'dim', opcional: true, ayuda: 'Sobre su eje, desde el eje de la reducción. Vacío = automático' },
     ],
@@ -183,7 +181,7 @@
       case 'RAMAL':
         return `${d(p.D_mm)} + injerto ${d(p.d_mm)} a ${p.beta_deg}°`;
       case 'REDUCCION_INJERTO':
-        return `${d(p.D1_mm)} → ${d(p.D2_mm)} + injerto ${d(p.d_mm)} a ${p.beta_deg}° ${p.lado === 'IZQ' ? 'izq.' : 'der.'}${p.sentido === 'MENOR' ? ' · hacia D2' : ''}`;
+        return `${d(p.D1_mm)} → ${d(p.D2_mm)} + injerto ${d(p.d_mm)} a ${p.beta_deg}°${p.sentido === 'MENOR' ? ' · hacia D2' : ''}`;
       case 'PANTALON':
         return `${d(p.D_mm)} → ${d(p.d1_mm)} + ${d(p.d2_mm)}`;
       case 'PERSONALIZADO':

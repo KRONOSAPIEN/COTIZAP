@@ -52,7 +52,7 @@
         P({ familia: 'CODO', descripcion: 'Codo 90° · 5 gajos Ø12″', D_mm: 304.8, theta_deg: 90, k_R: 1.5, cantidad: 2 }),
         P({ familia: 'REDUCCION', descripcion: 'Reducción excéntrica Ø12″ → Ø8″', D1_mm: 304.8, D2_mm: 203.2, excentrica: 'CARA_PLANA' }),
         P({ familia: 'RAMAL', descripcion: 'Injerto simple a 45° Ø8″ sobre Ø12″', D_mm: 304.8, d_mm: 203.2, L_cuerpo_mm: 700, L_ramal_mm: 450, beta_deg: 45, cantidad: 2 }),
-        P({ familia: 'REDUCCION_INJERTO', descripcion: 'Reducción con injerto der. 45° Ø12″ → Ø10″ + Ø6″', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 45, lado: 'DER' }),
+        P({ familia: 'REDUCCION_INJERTO', descripcion: 'Reducción con injerto 45° Ø12″ → Ø10″ + Ø6″', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 45 }),
         P({ familia: 'TRANSICION', descripcion: 'Transición Ø12″ → 400 × 300 mm', D_mm: 304.8, a_mm: 400, b_mm: 300 }),
         { id: idNuevo(), familia: 'COMPRADO', descripcion: 'Compuerta de guillotina Ø12″ (compra)', precio_compra_unitario: 1850, peso_kg: 9, cantidad: 1 },
       ],
@@ -483,8 +483,6 @@
       if (typeof v === 'number') {
         const e = ETQ_DET[k];
         kvs.append(kv(e ? e[0] : k, W.num(v, e ? e[2] : 3), e ? e[1] : ''));
-      } else if (k === 'lado') {
-        kvs.append(kv('Lado del injerto', v === 'IZQ' ? 'Izquierdo' : 'Derecho'));
       } else if (k === 'sentido') {
         kvs.append(kv('El injerto se inclina hacia', v === 'MENOR' ? 'El extremo menor (D2)' : 'El extremo mayor (D1)'));
       } else if (k === 'patron' && v) {

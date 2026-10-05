@@ -448,11 +448,11 @@
   }
 
   /**
-   * Reducción con injerto: el injerto (diámetro d, a 30° o 45°, derecho o izquierdo) va SOBRE EL CONO de la reducción
-   * D1 → D2. La pieza es el cono con el orificio de la silleta más la pared del injerto: 2 piezas, 1 junta interna y
-   * 3 extremos bridados (D1, D2 y d). La silleta se centra en el largo del cono; el largo de la reducción es el menor
-   * que la aloja con holgura a cada extremo (o el que se capture). El lado (der/izq) sólo identifica la pieza; hacia
-   * qué extremo se inclina el injerto (sentido) SÍ cambia el desarrollo, porque el cono se ensancha o se cierra.
+   * Reducción con injerto: el injerto (diámetro d, a 30° o 45°) va SOBRE EL CONO de la reducción D1 → D2. La pieza es
+   * el cono con el orificio de la silleta más la pared del injerto: 2 piezas, 1 junta interna y 3 extremos bridados
+   * (D1, D2 y d). La silleta se centra en el largo del cono; el largo de la reducción es el menor que la aloja con
+   * holgura a cada extremo (o el que se capture). Hacia qué extremo se inclina el injerto (sentido) cambia el
+   * desarrollo, porque el cono se ensancha o se cierra en ese sentido.
    */
   function reduccionInjerto(p, e, M) {
     const PF = nuevoPF('REDUCCION_INJERTO');
@@ -461,8 +461,6 @@
     const vacio = p.beta_deg === undefined || p.beta_deg === null || p.beta_deg === '';
     const beta_deg = vacio ? M.proceso.beta_ramal_defecto_deg : Number(p.beta_deg);
     exigir(beta_deg >= 20 && beta_deg <= 90, 'El ángulo del injerto β debe estar entre 20° y 90°.'); // límite del modelo; el taller maneja 30° y 45°
-    const lado = p.lado === undefined ? 'DER' : p.lado;
-    exigir(lado === 'DER' || lado === 'IZQ', 'El lado del injerto es derecho (DER) o izquierdo (IZQ).');
     const inclinacion = p.sentido === undefined ? 'MAYOR' : p.sentido;
     exigir(inclinacion === 'MAYOR' || inclinacion === 'MENOR', 'El injerto se inclina hacia el extremo mayor (MAYOR) o el menor (MENOR).');
     const sentido = inclinacion === 'MENOR' ? 1 : -1;
@@ -543,7 +541,7 @@
       L_reduccion_mm: L, L_reduccion_auto_mm: L_auto, L_ramal_mm: L_r, L_ramal_auto_mm: L_ramal_auto,
       semiangulo_deg: C.detalle.semiangulo_deg, generatriz_max_mm: s_cono,
       x_silleta_min_mm: g.x_min, x_silleta_max_mm: g.x_max, holgura_mm: Math.min(g.x_min, L - g.x_max),
-      lado, sentido: inclinacion,
+      sentido: inclinacion,
     };
     return PF;
   }

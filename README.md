@@ -82,7 +82,7 @@ Cinco detalles se **supusieron** y conviene confirmarlos con el taller (se edita
 | Reducción (concéntrica y excéntrica) | tronco de cono, integral numérica | exacta (verificada con malla 3D) |
 | Transición redondo → rectángulo | triangulación estándar | exacta (verificada con malla 3D) |
 | Injerto simple, a 30° o 45° (antes ramal en ángulo) | promedio elíptico de la silleta | exacta (verificada) |
-| Reducción con injerto, a 30° o 45°, derecho o izquierdo | el injerto va **sobre el cono**: la intersección cilindro–cono se resuelve numéricamente (silleta, orificio y soldadura); el largo de la reducción sale solo (el mínimo que aloja la silleta con 25 mm de holgura) o se captura | exacta (verificada contra cálculo independiente por fuerza bruta); merma y dificultad por calibrar |
+| Reducción con injerto, a 30° o 45° | el injerto va **sobre el cono**: la intersección cilindro–cono se resuelve numéricamente (silleta, orificio y soldadura); el largo de la reducción sale solo (el mínimo que aloja la silleta con 25 mm de holgura) o se captura | exacta (verificada contra cálculo independiente por fuerza bruta); merma y dificultad por calibrar |
 | Personalizada | área desarrollada desde CAD | la que traiga el CAD |
 | Comprado | precio de compra | — |
 
@@ -102,7 +102,7 @@ scripts/construir.js                       empaquetado a un solo HTML
 
 ## Límites conocidos
 
-- Injertos y codos: siete detalles se **supusieron** y hay que confirmarlos con el taller (qué significa «der», hacia qué extremo se inclina el injerto sobre el cono, silleta centrada, holgura de 25 mm, largo del injerto, merma y dificultad, gajos del codo de 30°); están en [§10.5](docs/arquitectura-cotizador-ducterias.md#105-supuestos-de-injertos-y-codos-por-confirmar-con-el-taller) y cada uno se cambia en las tablas maestras o en la partida. El pantalón se retiró de la interfaz; el motor lo conserva sólo para abrir cotizaciones anteriores.
+- Injertos y codos: seis detalles se **supusieron** y hay que confirmarlos con el taller (hacia qué extremo se inclina el injerto sobre el cono, silleta centrada, holgura de 25 mm, largo del injerto, merma y dificultad, gajos del codo de 30°); están en [§10.5](docs/arquitectura-cotizador-ducterias.md#105-supuestos-de-injertos-y-codos-por-confirmar-con-el-taller) y cada uno se cambia en las tablas maestras o en la partida. El pantalón se retiró de la interfaz; el motor lo conserva sólo para abrir cotizaciones anteriores.
 - Transiciones sólo centradas; ducto espiral, collarines y campanas se capturan como pieza *personalizada* o *comprada*.
 - El anidado de hojas está descrito en el documento pero no implementado: la merma es un porcentaje por familia (editable por partida).
 - Fuera de alcance: instalación, soportería, flete a obra.

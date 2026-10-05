@@ -246,8 +246,8 @@ test('Todas las familias cotizan y producen precio positivo con desglose consist
     { familia: 'REDUCCION', D1_mm: 400, D2_mm: 200 },
     { familia: 'TRANSICION', D_mm: 300, a_mm: 400, b_mm: 300 },
     { familia: 'RAMAL', D_mm: 400, d_mm: 200, L_cuerpo_mm: 800, L_ramal_mm: 500, beta_deg: 45 },
-    { familia: 'REDUCCION_INJERTO', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 45, lado: 'DER' },
-    { familia: 'REDUCCION_INJERTO', D1_mm: 400, D2_mm: 300, d_mm: 200, beta_deg: 30, lado: 'IZQ', sentido: 'MENOR' },
+    { familia: 'REDUCCION_INJERTO', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 45 },
+    { familia: 'REDUCCION_INJERTO', D1_mm: 400, D2_mm: 300, d_mm: 200, beta_deg: 30, sentido: 'MENOR' },
     { familia: 'PANTALON', D_mm: 500, d1_mm: 354, d2_mm: 354, L_tronco_mm: 300, L1_mm: 500, L2_mm: 500 },
     { familia: 'PERSONALIZADO', A_neta_m2: 1.2, L_corte_m: 9, L_sold_tope_m: 4, n_piezas: 2, n_extremos: 2, D_ref_mm: 300 },
   ];
@@ -265,7 +265,7 @@ test('Todas las familias cotizan y producen precio positivo con desglose consist
 /* Injerto simple y reducción con injerto                                 */
 /* ====================================================================== */
 const redInj = {
-  familia: 'REDUCCION_INJERTO', material_id: 'ACERO_CARBON', calibre: 16, D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 45, lado: 'DER',
+  familia: 'REDUCCION_INJERTO', material_id: 'ACERO_CARBON', calibre: 16, D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 45,
   tipo_union: 'BRIDADO', servicio: 'POLVO', riesgo: 'MEDIO',
 };
 
@@ -273,7 +273,7 @@ test('Nombres de taller: "Injerto simple" (id RAMAL) y "Reducción con injerto"'
   assert.equal(C.FAMILIAS.RAMAL, 'Injerto simple');
   assert.equal(C.FAMILIAS.REDUCCION_INJERTO, 'Reducción con injerto');
   assert.equal(C.cotizarPartida({ ...redInj }, M).descripcion, 'Reducción con injerto');
-  assert.equal(C.cotizarPartida({ ...redInj, descripcion: 'Inj. der. 45°' }, M).descripcion, 'Inj. der. 45°');
+  assert.equal(C.cotizarPartida({ ...redInj, descripcion: 'Inj. 45°' }, M).descripcion, 'Inj. 45°');
 });
 
 test('Reducción con injerto: usa su merma (28 %) y su dificultad de armado (1.9), con tres extremos bridados', () => {
@@ -287,12 +287,15 @@ test('Reducción con injerto: usa su merma (28 %) y su dificultad de armado (1.9
   casi(r.qto.lam.m_bruta_kg, r.qto.lam.m_neta_kg / (1 - 0.28), 1e-12);
 });
 
-test('Reducción con injerto: el lado (der/izq) no cambia el precio ni ninguna cantidad', () => {
-  const der = C.cotizarPartida({ ...redInj, lado: 'DER' }, M);
-  const izq = C.cotizarPartida({ ...redInj, lado: 'IZQ' }, M);
-  assert.equal(der.precio.unitario, izq.precio.unitario);
-  casi(der.peso.neto_unitario_kg, izq.peso.neto_unitario_kg, 1e-12);
-  assert.equal(JSON.stringify(der.qto.tmp.unitarios_min), JSON.stringify(izq.qto.tmp.unitarios_min));
+test('Reducción con injerto: ya no hay "lado"; una cotización anterior que lo traía cotiza igual, sin errores', () => {
+  const base = C.cotizarPartida({ ...redInj }, M);
+  ['DER', 'IZQ'].forEach((lado) => {
+    const r = C.cotizarPartida({ ...redInj, lado }, M);
+    assert.equal(r.ok, true);
+    assert.equal(r.precio.unitario, base.precio.unitario);
+    casi(r.peso.neto_unitario_kg, base.peso.neto_unitario_kg, 1e-12);
+    assert.equal(JSON.stringify(r.qto.tmp.unitarios_min), JSON.stringify(base.qto.tmp.unitarios_min));
+  });
 });
 
 test('Reducción con injerto: la merma y la dificultad son datos de maestros, no del código', () => {
@@ -319,14 +322,12 @@ test('Reducción con injerto: los datos inválidos devuelven errores claros sin 
   const r = C.cotizar({ partidas: [
     { ...redInj, beta_deg: 60 },
     { ...redInj, D2_mm: 400 },
-    { ...redInj, lado: 'CENTRO' },
     { ...redInj },
   ] }, M);
-  assert.equal(r.totales.n_partidas_error, 3);
+  assert.equal(r.totales.n_partidas_error, 2);
   assert.match(r.partidas[0].errores[0], /30° o 45°/);
   assert.match(r.partidas[1].errores[0], /D2 debe ser menor que D1/);
-  assert.match(r.partidas[2].errores[0], /derecho \(DER\) o izquierdo \(IZQ\)/);
-  assert.equal(r.partidas[3].ok, true);
+  assert.equal(r.partidas[2].ok, true);
 });
 
 /* ====================================================================== */

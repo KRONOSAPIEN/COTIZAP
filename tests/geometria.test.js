@@ -437,7 +437,7 @@ test('Reducción con injerto: área, corte, soldadura y piezas recalculados de f
     const D2 = 300;
     const d = 150;
     const sentido = inclinacion === 'MENOR' ? 1 : -1;
-    const PF = G.perfilFabricacion({ familia: 'REDUCCION_INJERTO', D1_mm: D1, D2_mm: D2, d_mm: d, beta_deg: b, sentido: inclinacion, lado: 'DER', L_reduccion_mm: L }, E_16, M);
+    const PF = G.perfilFabricacion({ familia: 'REDUCCION_INJERTO', D1_mm: D1, D2_mm: D2, d_mm: d, beta_deg: b, sentido: inclinacion, L_reduccion_mm: L }, E_16, M);
 
     const R1 = (D1 + E_16) / 2;
     const R2 = (D2 + E_16) / 2;
@@ -497,7 +497,7 @@ test('Reducción con injerto: un cono más largo se ve en la lámina y la sillet
   casi((largo.detalle.x_silleta_min_mm + largo.detalle.x_silleta_max_mm) / 2, largo.detalle.L_reduccion_mm / 2, 5e-3);
 });
 
-test('Reducción con injerto: hacia qué extremo se inclina SÍ cambia el desarrollo (más orificio hacia el mayor); el lado (der/izq) no', () => {
+test('Reducción con injerto: hacia qué extremo se inclina cambia el desarrollo (más orificio hacia el mayor)', () => {
   [30, 45].forEach((b) => {
     const mayor = G.perfilFabricacion({ ...BASE_RI, beta_deg: b, sentido: 'MAYOR', L_reduccion_mm: 500 }, E_16, M);
     const menor = G.perfilFabricacion({ ...BASE_RI, beta_deg: b, sentido: 'MENOR', L_reduccion_mm: 500 }, E_16, M);
@@ -505,18 +505,20 @@ test('Reducción con injerto: hacia qué extremo se inclina SÍ cambia el desarr
     assert.ok(mayor.sold.filete_m > menor.sold.filete_m, `β=${b}`);
     assert.ok(mayor.detalle.t_max_mm > menor.detalle.t_max_mm, `β=${b}`);
   });
-  const sinLado = (PF) => JSON.stringify({ ...PF, detalle: { ...PF.detalle, lado: undefined } });
-  const der = G.perfilFabricacion({ ...BASE_RI, lado: 'DER' }, E_16, M);
-  const izq = G.perfilFabricacion({ ...BASE_RI, lado: 'IZQ' }, E_16, M);
-  assert.equal(sinLado(der), sinLado(izq));
-  assert.equal(der.detalle.lado, 'DER');
-  assert.equal(izq.detalle.lado, 'IZQ');
   const omitido = G.perfilFabricacion({ ...BASE_RI }, E_16, M);
-  assert.equal(omitido.detalle.lado, 'DER', 'por omisión: derecho');
   assert.equal(omitido.detalle.sentido, 'MAYOR', 'por omisión: hacia el extremo mayor');
 });
 
-test('Reducción con injerto: validaciones físicas (D2 < D1, injerto menor que el cono, largos suficientes, lado y sentido válidos)', () => {
+test('Reducción con injerto: ya no hay "lado" (der/izq); una cotización anterior que lo traía calcula exactamente igual', () => {
+  const sin = G.perfilFabricacion({ ...BASE_RI }, E_16, M);
+  ['DER', 'IZQ', 'CENTRO'].forEach((lado) => {
+    const con = G.perfilFabricacion({ ...BASE_RI, lado }, E_16, M);
+    assert.equal(JSON.stringify(con), JSON.stringify(sin), `el dato sobrante "${lado}" se ignora`);
+  });
+  assert.equal('lado' in sin.detalle, false, 'el detalle ya no trae lado');
+});
+
+test('Reducción con injerto: validaciones físicas (D2 < D1, injerto menor que el cono, largos suficientes, sentido válido)', () => {
   const ok = (extra) => G.perfilFabricacion({ ...BASE_RI, ...extra }, E_16, M);
   assert.doesNotThrow(() => ok({}));
   assert.throws(() => ok({ D2_mm: 304.8 }), /D2 debe ser menor que D1/);
@@ -524,7 +526,6 @@ test('Reducción con injerto: validaciones físicas (D2 < D1, injerto menor que 
   assert.throws(() => ok({ d_mm: 300 }), /injerto debe ser de menor diámetro que la reducción/);
   assert.throws(() => ok({ D1_mm: 0 }), U.ErrorValidacion);
   assert.throws(() => ok({ beta_deg: 10 }), /entre 20° y 90°/);
-  assert.throws(() => ok({ lado: 'CENTRO' }), /derecho \(DER\) o izquierdo \(IZQ\)/);
   assert.throws(() => ok({ sentido: 'ARRIBA' }), /extremo mayor \(MAYOR\) o el menor \(MENOR\)/);
   assert.throws(() => ok({ L_ramal_mm: 100 }), /longitud del injerto debe exceder/);
   assert.throws(() => ok({ L_reduccion_mm: 120 }), /La reducción es corta para alojar el injerto: necesita al menos \d+ mm/);
