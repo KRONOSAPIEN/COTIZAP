@@ -1,0 +1,196 @@
+/**
+ * COTIZAP · material.js — Peso de lámina, merma y herrajes de unión.
+ *
+ * Merma (φ): fracción del material COMPRADO que no queda en la pieza.
+ *     m_bruta = m_neta / (1 − φ)        (NO es m_neta · (1 + φ))
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) {
+    module.exports = factory(require('./util'));
+  } else {
+    root.COTIZAP = root.COTIZAP || {};
+    root.COTIZAP.material = factory(root.COTIZAP.util);
+  }
+}(typeof self !== 'undefined' ? self : this, function (U) {
+  'use strict';
+
+  const { PI } = U;
+  const DENSIDAD_ACERO_PERFIL_G_CM3 = 7.85;
+
+  function exigir(cond, msg) {
+    if (!cond) throw new U.ErrorValidacion([msg]);
+  }
+
+  /** Espesor (mm) a partir del calibre y la tabla del material; `espesor_mm` manda si se captura (placa). */
+  function espesorMm(M, mat, p) {
+    if (p.espesor_mm > 0) return p.espesor_mm;
+    const tabla = M.calibres[mat.tabla_calibre];
+    exigir(tabla, `Tabla de calibres inexistente: ${mat.tabla_calibre}`);
+    const pulg = tabla[p.calibre];
+    exigir(pulg !== undefined, `El calibre ${p.calibre} no existe en la tabla ${mat.tabla_calibre} (capturar espesor_mm para placa).`);
+    return pulg * U.MM_POR_PULGADA;
+  }
+
+  /** Propiedades derivadas de un ángulo de lados iguales: área, peso lineal y centroide. */
+  function perfilDerivado(M, id) {
+    const base = M.herrajes.perfiles[id];
+    exigir(base, `Perfil inexistente: ${id}`);
+    const b = base.ala_mm;
+    const t = base.esp_mm;
+    const area = t * (2 * b - t);
+    return {
+      id,
+      ...base,
+      area_mm2: area,
+      peso_kg_m: (area * DENSIDAD_ACERO_PERFIL_G_CM3) / 1000,
+      c_centroide_mm: (b * t + b * b - t * t) / (2 * (2 * b - t)),
+    };
+  }
+
+  function seleccionarPerfil(M, dim_mayor_mm, id_forzado) {
+    if (id_forzado) return perfilDerivado(M, id_forzado);
+    const fila = M.herrajes.seleccion_perfil.find((f) => dim_mayor_mm <= f.hasta_mm);
+    return perfilDerivado(M, (fila || M.herrajes.seleccion_perfil[M.herrajes.seleccion_perfil.length - 1]).perfil);
+  }
+
+  /** Peso neto, merma y peso bruto de lámina para el área neta total (incluye prolongación de espiga). */
+  function lamina(PF, A_extra_m2, p, mat, e, M) {
+    const A = PF.A_neta_m2 + A_extra_m2;
+    const kg_m2 = (mat.densidad_kg_m3 * e) / 1000;
+    const hayOverride = p.merma_pct !== undefined && p.merma_pct !== null && p.merma_pct !== '';
+    const phi = hayOverride ? Number(p.merma_pct) : M.merma[PF.familia];
+    exigir(phi >= 0 && phi < 1, 'La merma debe estar en el intervalo [0, 1).');
+    const m_neta = A * kg_m2;
+    const m_bruta = m_neta / (1 - phi);
+    return {
+      A_neta_m2: A, kg_m2, m_neta_kg: m_neta, phi, m_bruta_kg: m_bruta, m_merma_kg: m_bruta - m_neta, A_bruta_m2: m_bruta / kg_m2,
+    };
+  }
+
+  /** Geometría del aro de brida y del patrón de tornillos para un extremo. */
+  function geometriaAro(ext, perfil, holgura_mm) {
+    const c = perfil.c_centroide_mm;
+    const g = perfil.gramil_mm;
+    const b = perfil.ala_mm;
+    const t = perfil.esp_mm;
+    if (ext.forma === 'REDONDA') {
+      const D = ext.D_ext_mm;
+      const Dre = D + 2 * b;
+      return {
+        L_aro_mm: PI * (D + 2 * c) + holgura_mm,
+        P_perno_mm: PI * (D + 2 * g),
+        L_cierre_mm: 2 * b,
+        A_pintura_m2: ((PI / 2) * (Dre * Dre - D * D) + PI * Dre * t) / 1e6,
+      };
+    }
+    const a = ext.a_ext_mm;
+    const h = ext.b_ext_mm;
+    return {
+      L_aro_mm: 2 * (a + h) + 8 * c + 4 * holgura_mm,
+      P_perno_mm: 2 * (a + h) + 8 * g,
+      L_cierre_mm: 4 * 2 * b,
+      A_pintura_m2: (2 * ((a + 2 * b) * (h + 2 * b) - a * h) + 2 * ((a + 2 * b) + (h + 2 * b)) * t) / 1e6,
+    };
+  }
+
+  /**
+   * Herrajes de unión por unidad de partida.
+   *   BRIDADO: aros de ángulo + tornillería + empaque (+ sellador según clase).
+   *   ESPIGA : prolongación macho + fijaciones + sellador.
+   *   LISO   : sin herraje.
+   * Cada junta se comparte entre dos extremos: se asigna 0.5 junta de tornillería, empaque y sellador por extremo.
+   */
+  function herrajes(PF, p, mat, e, M) {
+    const tipo = p.tipo_union || 'BRIDADO';
+    const U_ = M.herrajes.uniones[tipo];
+    exigir(U_, `Tipo de unión desconocido: ${tipo}`);
+    const clase = p.clase_sellado === undefined ? 'C' : p.clase_sellado;
+    exigir(['NINGUNA', 'A', 'B', 'C'].includes(clase), `Clase de sellado desconocida: ${clase}`);
+
+    const out = {
+      tipo_union: tipo,
+      clase_sellado: clase,
+      n_aros: 0,
+      aros: [],
+      L_aros_m: 0,
+      m_aros_neta_kg: 0,
+      m_aros_bruta_kg: 0,
+      tornillos_por_tipo: {},
+      n_tornillos_asignados: 0,
+      n_barrenos: 0,
+      n_juntas_asignadas: 0,
+      L_empaque_m: 0,
+      L_sellado_m: 0,
+      V_sellador_ml: 0,
+      n_espigas: 0,
+      n_fijaciones: 0,
+      A_espiga_m2: 0,
+      L_corte_extra_m: 0,
+      sold_aros: { tope_m: 0, filete_m: 0 },
+      A_pintura_aros_m2: 0,
+    };
+
+    if (tipo === 'BRIDADO') {
+      const holgura = M.proceso.aros.holgura_corte_mm;
+      PF.extremos.forEach((ext) => {
+        const dim_mayor = ext.forma === 'REDONDA' ? ext.D_ext_mm : Math.max(ext.a_ext_mm, ext.b_ext_mm);
+        const perfil = seleccionarPerfil(M, dim_mayor, p.perfil_id);
+        const g = geometriaAro(ext, perfil, holgura);
+        const n_raw = Math.ceil(g.P_perno_mm / U_.paso_tornillo_mm - 1e-9);
+        const n_tornillos = U.techoMultiplo(Math.max(U_.n_min_tornillos, n_raw), U_.multiplo_tornillos);
+        const L_aro_m = g.L_aro_mm / 1000;
+        out.aros.push({
+          perfil_id: perfil.id, tornillo: perfil.tornillo, L_aro_mm: g.L_aro_mm, P_perno_mm: g.P_perno_mm,
+          n_tornillos, m_aro_kg: L_aro_m * perfil.peso_kg_m, c_centroide_mm: perfil.c_centroide_mm, peso_kg_m: perfil.peso_kg_m,
+        });
+        out.n_aros += 1;
+        out.L_aros_m += L_aro_m;
+        out.m_aros_neta_kg += L_aro_m * perfil.peso_kg_m;
+        out.tornillos_por_tipo[perfil.tornillo] = (out.tornillos_por_tipo[perfil.tornillo] || 0) + 0.5 * n_tornillos;
+        out.n_tornillos_asignados += 0.5 * n_tornillos;
+        out.n_barrenos += n_tornillos;
+        out.n_juntas_asignadas += 0.5;
+        if (p.usa_empaque !== false) out.L_empaque_m += (0.5 * g.P_perno_mm * (1 + U_.f_traslape_empaque)) / 1000;
+        if (clase !== 'NINGUNA') out.L_sellado_m += (0.5 * ext.P_ext_mm) / 1000;
+        out.sold_aros.filete_m += (U_.f_cont_soldadura_aro * ext.P_ext_mm) / 1000;
+        out.sold_aros.tope_m += g.L_cierre_mm / 1000;
+        out.A_pintura_aros_m2 += g.A_pintura_m2;
+      });
+      out.m_aros_bruta_kg = out.m_aros_neta_kg / (1 - M.merma.PERFIL);
+    }
+
+    if (tipo === 'ESPIGA') {
+      const n_esp = p.n_espigas === undefined ? PF.espigas_defecto : Math.min(p.n_espigas, PF.extremos.length);
+      const prof = U_.prof_espiga_mm;
+      PF.extremos.slice(0, n_esp).forEach((ext) => {
+        out.n_espigas += 1;
+        out.A_espiga_m2 += (ext.P_med_mm * prof) / 1e6;
+        out.L_corte_extra_m += (2 * prof) / 1000;
+        out.n_fijaciones += Math.max(U_.n_min_fijaciones, Math.ceil(ext.P_ext_mm / U_.paso_fijacion_mm - 1e-9));
+        out.n_juntas_asignadas += 1;
+        if (clase !== 'NINGUNA') out.L_sellado_m += ext.P_ext_mm / 1000;
+      });
+    }
+
+    // Sellado por clase (SMACNA): C = juntas transversales; B = C + costuras longitudinales no soldadas; A = B + penetraciones.
+    if (clase === 'B' || clase === 'A') out.L_sellado_m += PF.engargolado_m;
+    if (clase === 'A') out.L_sellado_m += p.L_penetraciones_m || 0;
+    const S = M.herrajes.sellador;
+    out.V_sellador_ml = out.L_sellado_m * S.ml_por_m * (1 + S.f_merma);
+    return out;
+  }
+
+  /** Superficie a pintar y manos del sistema de pintura. */
+  function pintura(PF, her, p, mat, M) {
+    const sistema = p.pintura || mat.pintura_defecto || 'NINGUNA';
+    const capas = M.proceso.pintura.sistemas[sistema];
+    exigir(capas, `Sistema de pintura desconocido: ${sistema}`);
+    const caras = p.caras_pintadas === 2 ? 2 : 1;
+    const A_pint = capas.length ? (PF.A_ext_m2 * caras + her.A_pintura_aros_m2) : 0;
+    return { sistema, capas, caras, A_pint_m2: A_pint };
+  }
+
+  return {
+    espesorMm, perfilDerivado, seleccionarPerfil, lamina, geometriaAro, herrajes, pintura,
+  };
+}));

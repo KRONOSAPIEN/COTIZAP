@@ -1,0 +1,215 @@
+'use strict';
+/**
+ * VECTOR DE PRUEBA (golden test) — Ejemplo A del documento de arquitectura.
+ *
+ * Tramo recto de 3 m · Ø12" (interior) · calibre 16 · acero al carbón · bridado ambos extremos ·
+ * sellado clase C · primario · servicio POLVO · riesgo MEDIO · 1 pieza.
+ *
+ * El oráculo recalcula TODO paso a paso con aritmética directa (sin llamar a las funciones del motor)
+ * y compara contra la salida del motor. Los valores monetarios dependen de las tablas maestras
+ * ilustrativas: si se cambian, este vector debe regenerarse.
+ */
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { crearMaestros } = require('../src/datos/maestros');
+const C = require('../src/motor/cotizador');
+
+const M = crearMaestros();
+const PI = Math.PI;
+const P = M.precios;
+
+const casi = (real, esperado, tol = 1e-9, msg = '') => {
+  assert.ok(Math.abs(real - esperado) <= tol * Math.max(1, Math.abs(esperado)), `${msg} esperado ${esperado}, obtenido ${real}`);
+};
+
+function interp(tabla, x) {
+  if (x <= tabla[0][0]) return tabla[0][1];
+  for (let i = 1; i < tabla.length; i += 1) {
+    if (x <= tabla[i][0]) {
+      const [x0, y0] = tabla[i - 1];
+      const [x1, y1] = tabla[i];
+      return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
+    }
+  }
+  return tabla[tabla.length - 1][1];
+}
+
+const entrada = {
+  familia: 'RECTO', material_id: 'ACERO_CARBON', calibre: 16, D_mm: 12 * 25.4, L_mm: 3000, tipo_costura: 'A_TOPE',
+  tipo_union: 'BRIDADO', clase_sellado: 'C', pintura: 'PRIMARIO', servicio: 'POLVO', riesgo: 'MEDIO', cantidad: 1,
+};
+
+test('Ejemplo A — recálculo independiente paso a paso', () => {
+  const r = C.cotizarPartida(entrada, M);
+
+  /* Paso 1 · espesor y diámetros */
+  const e = 0.0598 * 25.4;
+  const D_int = 304.8;
+  const D_med = D_int + e;
+  const D_ext = D_int + 2 * e;
+  casi(r.espesor_mm, e);
+
+  /* Paso 2 · desarrollo (plantilla) y área neta */
+  const B = PI * D_med + 1.0;
+  const A = (B * 3000) / 1e6;
+  casi(r.geometria.A_neta_m2, A);
+
+  /* Paso 3 · peso neto */
+  const kg_m2 = (7850 * e) / 1000;
+  const m_neta = A * kg_m2;
+  casi(r.qto.lam.m_neta_kg, m_neta);
+
+  /* Paso 4 · merma (φ = 8 %) y peso bruto */
+  const phi = 0.08;
+  const m_bruta = m_neta / (1 - phi);
+  casi(r.qto.lam.m_bruta_kg, m_bruta);
+  const costo_lamina = m_bruta * P.precio_kg_acero_carbon;
+
+  /* Paso 5 · aros de brida: perfil L38×3.2 (selección por D_ext ≤ 450 mm) */
+  const ala = 38.1; const esp = 3.175; const gramil = 22.0;
+  const w = (esp * (2 * ala - esp) * 7.85) / 1000;
+  const c = (ala * esp + ala * ala - esp * esp) / (2 * (2 * ala - esp));
+  const L_aro = PI * (D_ext + 2 * c) + 3.0;
+  const m_aros_neta = (2 * L_aro * w) / 1000;
+  const m_aros_bruta = m_aros_neta / (1 - 0.05);
+  casi(r.qto.her.m_aros_neta_kg, m_aros_neta);
+  casi(r.qto.her.m_aros_bruta_kg, m_aros_bruta);
+  const costo_perfiles = m_aros_bruta * P.precio_kg_perfil_angulo;
+
+  /* Paso 6 · tornillería: 8 por junta; 2 extremos × 0.5 junta = 1 junta; reserva 5 % */
+  const P_perno = PI * (D_ext + 2 * gramil);
+  const n_tornillos = Math.ceil(Math.max(4, Math.ceil(P_perno / 150 - 1e-9)) / 4 - 1e-9) * 4;
+  assert.equal(n_tornillos, 8);
+  const costo_tornilleria = n_tornillos * 1.0 * 1.05 * P.precio_juego_tornillo_m10;
+
+  /* Paso 7 · empaque (1 junta · perímetro de tornillos · 1.05) */
+  const L_emp = (1.0 * P_perno * 1.05) / 1000;
+  const costo_empaque = L_emp * P.precio_m_empaque_neopreno;
+
+  /* Paso 8 · sellador clase C: 1 cordón por junta transversal */
+  const L_sel = (1.0 * PI * D_ext) / 1000;
+  const V_sel = L_sel * 20 * 1.15;
+  const costo_sellador = V_sel * (P.precio_cartucho_sellador_300ml / 300);
+
+  /* Paso 9 · flete de entrada sobre lámina y perfil */
+  const costo_flete = 0.02 * (costo_lamina + costo_perfiles);
+
+  /* Paso 10 · longitudes de proceso */
+  const L_corte = (2 * (B + 3000)) / 1000;
+  const L_tope = 3.0 + (2 * 2 * ala) / 1000;
+  const L_fil = (2 * PI * D_ext) / 1000;
+  const L_sold = L_tope + L_fil;
+  casi(r.qto.tmp.detalle.L_soldadura_m, L_sold);
+
+  /* Paso 11 · tiempos estándar (min) */
+  const A_hoja = (1219 * 3048) / 1e6;
+  const A_bruta = m_bruta / kg_m2;
+  const t_corte = (A_bruta / A_hoja) * 4.0 + L_corte / interp([[0.5, 9], [1.5, 8], [3.0, 6], [6.0, 3.5]], e);
+  const t_rolado = 1 * (3.0 + (3 * 1 * 3.0) / interp([[0.6, 8], [1.0, 7], [1.5, 6], [2.0, 5], [3.0, 3.5], [4.5, 2.5]], e));
+  const t_armado = 1.0 * (1 * 6.0 + 0 * 0 + 2 * 4.0);
+  const t_aros = 2 * (4.0 + 2.5 * (L_aro / 1000));
+  const v_sold = interp([[0.6, 0.9], [1.0, 0.7], [1.5, 0.5], [2.0, 0.42], [3.0, 0.32], [4.5, 0.24]], e) * 1.0;
+  const t_arco = L_sold / v_sold;
+  const t_sold = (t_arco / 0.4) * 1.0;
+  const t_barren = 16 * 0.35;
+  const t_acab = 0.25 * t_sold;
+  const A_aro_pint = ((PI / 2) * ((D_ext + 2 * ala) ** 2 - D_ext ** 2) + PI * (D_ext + 2 * ala) * esp) / 1e6;
+  const A_pint = PI * D_ext * 3.0 / 1000 + 2 * A_aro_pint;
+  const t_pint = A_pint * (4.0 + 1 * 3.0);
+  const t_qc = 3.0 + 0.05 * (m_neta + m_aros_neta);
+  const T = r.qto.tmp.unitarios_min;
+  casi(T.corte, t_corte); casi(T.rolado, t_rolado); casi(T.armado, t_armado); casi(T.aros, t_aros);
+  casi(T.soldadura, t_sold); casi(T.barrenado, t_barren); casi(T.acabado, t_acab); casi(T.pintura, t_pint);
+  casi(T.qc_embalaje, t_qc);
+
+  /* Paso 12 · consumibles */
+  const A_tope = Math.max(2.0, 1.75 * e * e);
+  const A_fil = Math.max(2.0, 1.0 * e * e);
+  const kg_alambre = ((L_tope * A_tope + L_fil * A_fil) * 7.85) / 1000 / 0.93;
+  const V_gas = (t_arco * 15 * 1.1) / 1000;
+  const costo_alambre = kg_alambre * P.precio_kg_alambre_er70s6;
+  const costo_gas = V_gas * P.precio_m3_gas_mezcla_ar_co2;
+  const costo_corte = L_corte * P.precio_m_corte_guillotina;
+  const litros = A_pint / (((10 * 55) / 50) * 0.65);
+  const costo_pintura = litros * P.precio_L_primario + litros * 0.1 * P.precio_L_diluyente;
+
+  /* Paso 13 · mano de obra y equipo (η = 0.80) */
+  const tar = (s, eq) => ({ mo: (s * 1.55) / 8, eq });
+  const ops = {
+    corte: [t_corte, tar(480, 45)], rolado: [t_rolado, tar(500, 55)], armado: [t_armado, tar(520, 25)], aros: [t_aros, tar(520, 40)],
+    soldadura: [t_sold, tar(600, 45)], barrenado: [t_barren, tar(450, 25)], acabado: [t_acab, tar(450, 20)],
+    pintura: [t_pint, tar(480, 40)], qc_embalaje: [t_qc, tar(450, 0)],
+  };
+  let MO = 0; let EQ = 0; let hMOD = 0;
+  Object.values(ops).forEach(([t, tr]) => {
+    const h = t / 0.8 / 60;
+    MO += h * tr.mo; EQ += h * tr.eq; hMOD += h;
+  });
+  const HM = 0.03 * MO;
+
+  /* Paso 14 · costo directo */
+  const CD = costo_lamina + costo_perfiles + costo_tornilleria + costo_empaque + costo_sellador + costo_flete
+    + costo_alambre + costo_gas + costo_corte + costo_pintura + MO + EQ + HM;
+  casi(r.costos.CD, CD, 1e-9, 'CD');
+  casi(r.costos.h_MOD, hMOD, 1e-9, 'h_MOD');
+
+  /* Paso 15 · pila de precio */
+  const CI = 85.0 * hMOD + 0.08 * CD;
+  const IMP = 0.04 * (CD + CI);
+  const C_T = CD + CI + IMP;
+  const FIN = C_T * ((0.14 * 45) / 365);
+  const precio = (C_T + FIN) / (1 - 0.2 - 0.02 - 0.0);
+  casi(r.pila.CI, CI, 1e-9, 'CI');
+  casi(r.pila.imprevistos, IMP, 1e-9, 'imprevistos');
+  casi(r.pila.C_T, C_T, 1e-9, 'C_T');
+  casi(r.pila.financiamiento, FIN, 1e-9, 'financiamiento');
+  casi(r.pila.precio, precio, 1e-9, 'precio');
+  assert.equal(r.precio.unitario, Math.round(precio * 100) / 100);
+  assert.equal(r.precio.importe, r.precio.unitario);
+
+  /* Identidad de la pila: precio = costo base + utilidad + comisión + otros */
+  casi(r.pila.C_base + r.pila.utilidad + r.pila.comision + r.pila.otros, r.pila.precio, 1e-12);
+  casi(r.pila.utilidad / r.pila.precio, 0.2, 1e-12);
+});
+
+test('Ejemplo A — la merma NO se omite: con φ=0 el costo de lámina baja exactamente φ', () => {
+  const con = C.cotizarPartida(entrada, M);
+  const sin = C.cotizarPartida({ ...entrada, merma_pct: 0 }, M);
+  casi(sin.costos.materiales.lamina, con.costos.materiales.lamina * (1 - 0.08), 1e-12);
+  assert.ok(sin.precio.unitario < con.precio.unitario);
+});
+
+test('Ejemplo A — vector de referencia (valores redondeados que cita el documento)', () => {
+  const r = C.cotizarPartida(entrada, M);
+  const f = (x, d) => Number(x.toFixed(d));
+  assert.deepEqual({
+    espesor_mm: f(r.espesor_mm, 4),
+    D_med_mm: f(r.geometria.detalle.D_med_mm, 4),
+    ancho_plantilla_mm: f(r.geometria.detalle.ancho_plantilla_mm, 3),
+    A_neta_m2: f(r.geometria.A_neta_m2, 4),
+    m_neta_kg: f(r.qto.lam.m_neta_kg, 3),
+    m_bruta_kg: f(r.qto.lam.m_bruta_kg, 3),
+    L_aro_mm: f(r.qto.her.aros[0].L_aro_mm, 1),
+    n_tornillos: r.qto.her.aros[0].n_tornillos,
+    horas_mod_reales: f(r.costos.h_MOD, 3),
+    CD: f(r.costos.CD, 2),
+    C_T: f(r.pila.C_T, 2),
+    precio_unitario: r.precio.unitario,
+  }, GOLDEN);
+});
+
+/* Vector de referencia: coincide con las cifras del Ejemplo A del documento de arquitectura. */
+const GOLDEN = {
+  espesor_mm: 1.5189,
+  D_med_mm: 306.3189,
+  ancho_plantilla_mm: 963.329,
+  A_neta_m2: 2.89,
+  m_neta_kg: 34.459,
+  m_bruta_kg: 37.455,
+  L_aro_mm: 1037.3,
+  n_tornillos: 8,
+  horas_mod_reales: 2.085,
+  CD: 1435.88,
+  C_T: 1797.11,
+  precio_unitario: 2343.75,
+};

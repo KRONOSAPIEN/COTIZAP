@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>COTIZAP · Cotizador de ducterías</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=Barlow+Semi+Condensed:wght@500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+<a class="saltar" href="#panel-cotizacion">Saltar al contenido</a>
+
+<header class="barra">
+  <div class="marca">
+    <svg class="marca-logo" viewBox="0 0 40 28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 24V15A12 12 0 0 1 15 3h22"/><path d="M13 24v-5a4 4 0 0 1 4-4h20"/><path d="M3 17l10 1M6 9l8 7M14 4l4 8"/></svg>
+    <div>
+      <div class="marca-nombre">COTIZAP</div>
+      <div class="marca-sub">Cotizador maestro de ducterías</div>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="Secciones">
+    <button type="button" role="tab" id="tab-cotizacion" data-tab="cotizacion" aria-selected="true" aria-controls="panel-cotizacion">Cotización</button>
+    <button type="button" role="tab" id="tab-maestros" data-tab="maestros" aria-selected="false" aria-controls="panel-maestros">Tablas maestras</button>
+  </nav>
+  <div class="acciones">
+    <button type="button" class="btn btn-sec" id="btn-nueva">Nueva</button>
+    <button type="button" class="btn btn-sec" id="btn-io">Guardar y cargar</button>
+    <button type="button" class="btn btn-sec" id="btn-imprimir">Imprimir propuesta</button>
+  </div>
+</header>
+
+<main>
+  <div class="avisos-globales">
+    <div class="aviso aviso-info" id="aviso-ilustrativo">
+      <span class="aviso-icono" aria-hidden="true">i</span>
+      <p class="aviso-txt"><strong>Precios, tarifas y tiempos son ilustrativos.</strong> Sustitúyalos por los reales en <button type="button" class="enlace" id="ir-maestros">Tablas maestras</button> antes de cotizar a un cliente.</p>
+      <button type="button" class="btn-texto" id="btn-ya-revise">Ya los revisé</button>
+    </div>
+    <div class="aviso aviso-ejemplo" id="aviso-ejemplo" hidden>
+      <span class="aviso-icono" aria-hidden="true">★</span>
+      <p class="aviso-txt"><strong>Cotización de ejemplo.</strong> Las partidas son datos de muestra para explorar el cálculo.</p>
+      <button type="button" class="btn-texto" id="btn-vaciar-ejemplo">Vaciar y empezar</button>
+    </div>
+    <div class="aviso aviso-err" id="aviso-error" hidden>
+      <span class="aviso-icono" aria-hidden="true">!</span>
+      <span class="aviso-txt"></span>
+    </div>
+  </div>
+
+  <section id="panel-cotizacion" class="panel" role="tabpanel" aria-labelledby="tab-cotizacion">
+    <form class="datos" aria-label="Datos de la cotización">
+      <div class="campo"><label for="c_cliente">Cliente</label><input id="c_cliente" type="text" autocomplete="organization" placeholder="Razón social"></div>
+      <div class="campo"><label for="c_proyecto">Proyecto</label><input id="c_proyecto" type="text" placeholder="Nombre del proyecto"></div>
+      <div class="campo"><label for="c_fecha">Fecha</label><input id="c_fecha" type="date"></div>
+      <div class="campo"><label for="c_vigencia_dias">Vigencia (días)</label><input id="c_vigencia_dias" type="number" min="1" step="1" inputmode="numeric"></div>
+      <div class="campo"><label for="c_unidad_diam">Diámetros y secciones</label>
+        <select id="c_unidad_diam"><option value="in">Pulgadas (″)</option><option value="mm">Milímetros (mm)</option></select></div>
+      <div class="campo"><label for="c_unidad_long">Longitudes</label>
+        <select id="c_unidad_long"><option value="mm">Milímetros (mm)</option><option value="m">Metros (m)</option><option value="in">Pulgadas (″)</option></select></div>
+      <div class="campo"><label for="c_servicio">Servicio</label>
+        <select id="c_servicio"><option value="VENTILACION">Ventilación</option><option value="POLVO">Colección de polvo</option><option value="ABRASIVO">Material abrasivo</option></select></div>
+      <div class="campo"><label for="c_riesgo">Riesgo (imprevistos)</label>
+        <select id="c_riesgo"><option value="BAJO">Bajo · 2 %</option><option value="MEDIO">Medio · 4 %</option><option value="ALTO">Alto · 8 %</option></select></div>
+    </form>
+
+    <div class="rejilla">
+      <section class="col-lista" aria-labelledby="tit-partidas">
+        <div class="lista-cab">
+          <h2 id="tit-partidas">Partidas</h2>
+          <button type="button" class="btn btn-primario" id="btn-agregar"><span class="icono" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>Agregar partida</button>
+        </div>
+        <ul id="lista-partidas" class="partidas"></ul>
+      </section>
+      <aside class="col-der" aria-label="Totales y desglose">
+        <div id="totales" class="tarjeta totales"></div>
+        <div id="detalle" class="tarjeta detalle"></div>
+      </aside>
+    </div>
+  </section>
+
+  <section id="panel-maestros" class="panel" role="tabpanel" aria-labelledby="tab-maestros" hidden>
+    <div class="maestros-cab">
+      <div>
+        <h2>Tablas maestras</h2>
+        <p>Todo número que un taller puede querer cambiar vive aquí, no en las fórmulas. Los cambios recalculan la cotización al instante y se guardan en este navegador.</p>
+      </div>
+      <div class="maestros-acc">
+        <div class="buscar"><span class="icono" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg></span>
+          <input id="maestros-buscar" type="search" placeholder="Buscar parámetro (p. ej. gas, merma, soldadura)" aria-label="Buscar parámetro"></div>
+        <button type="button" class="btn btn-sec" id="maestros-reset">Restablecer valores ilustrativos</button>
+      </div>
+    </div>
+    <div id="maestros-cuerpo"></div>
+  </section>
+</main>
+
+<section id="propuesta" aria-hidden="true"></section>
+
+<dialog id="dlg-partida" aria-labelledby="dlg-titulo">
+  <form id="form-partida" novalidate>
+    <header class="dlg-cab">
+      <h2 id="dlg-titulo">Nueva partida</h2>
+      <div class="dlg-unidades">
+        <label class="dlg-unidad">Diámetros
+          <select id="dlg-unidad-diam"><option value="in">pulg</option><option value="mm">mm</option></select>
+        </label>
+        <label class="dlg-unidad">Longitudes
+          <select id="dlg-unidad-long"><option value="mm">mm</option><option value="m">m</option><option value="in">pulg</option></select>
+        </label>
+      </div>
+      <button type="button" class="btn-icono" id="dlg-cerrar" aria-label="Cerrar"><span class="icono" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span></button>
+    </header>
+    <div class="dlg-cuerpo">
+      <div class="dlg-form">
+        <div id="dlg-familias" class="familias" role="radiogroup" aria-label="Familia de pieza"></div>
+        <div id="dlg-campos"></div>
+      </div>
+      <aside class="dlg-prev" id="dlg-prev" aria-live="polite"></aside>
+    </div>
+    <footer class="dlg-pie">
+      <button type="button" class="btn btn-sec" id="dlg-cancelar">Cancelar</button>
+      <button type="submit" class="btn btn-primario" id="dlg-guardar">Agregar partida</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog id="dlg-io" aria-labelledby="io-titulo">
+  <div class="io">
+    <header class="dlg-cab">
+      <h2 id="io-titulo">Guardar y cargar</h2>
+      <button type="button" class="btn-icono" id="io-cerrar" aria-label="Cerrar"><span class="icono" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span></button>
+    </header>
+    <p class="io-ayuda">Copie el texto para guardar la cotización y las tablas maestras, o pegue aquí un JSON guardado y pulse <strong>Cargar</strong>. El CSV de partidas abre directo en Excel.</p>
+    <textarea id="io-texto" rows="12" spellcheck="false" aria-label="Contenido de la cotización en JSON o CSV"></textarea>
+    <div class="io-acc">
+      <button type="button" class="btn btn-primario" id="io-copiar">Copiar texto</button>
+      <button type="button" class="btn btn-sec" id="io-json">Ver JSON</button>
+      <button type="button" class="btn btn-sec" id="io-csv">Copiar CSV de partidas</button>
+      <button type="button" class="btn btn-sec" id="io-descargar">Descargar JSON</button>
+      <label class="btn btn-sec archivo">Cargar archivo<input id="io-archivo" type="file" accept=".json,application/json"></label>
+      <button type="button" class="btn btn-sec" id="io-cargar">Cargar desde el texto</button>
+    </div>
+  </div>
+</dialog>
+
+<div id="toasts" aria-live="polite"></div>
+
+<script src="../motor/util.js"></script>
+<script src="../datos/maestros.js"></script>
+<script src="../motor/geometria.js"></script>
+<script src="../motor/material.js"></script>
+<script src="../motor/mano_obra.js"></script>
+<script src="../motor/consumibles.js"></script>
+<script src="../motor/precios.js"></script>
+<script src="../motor/cotizador.js"></script>
+<script src="dom.js"></script>
+<script src="esquemas.js"></script>
+<script src="maestros_ui.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
