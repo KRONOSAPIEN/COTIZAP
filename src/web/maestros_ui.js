@@ -2,7 +2,8 @@
  * COTIZAP · web/maestros_ui.js — Editor genérico de tablas maestras.
  * Recorre el objeto de maestros de forma recursiva y genera un campo por cada número,
  * con unidades inferidas del nombre. Los cambios recalculan la cotización al instante
- * y se guardan en el navegador.
+ * y se guardan solos (almacén del artefacto y navegador; ver almacen.js); la línea de estado
+ * de la cabecera dice dónde quedaron.
  */
 (function (root) {
   'use strict';
@@ -110,6 +111,41 @@
     return fila(ruta, valor);
   }
 
+  /* ---- Línea de estado del guardado automático ---- */
+  const hora = (t) => new Date(t).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  const MENSAJES = {
+    inicio: () => 'Los cambios se guardan automáticamente.',
+    cargando: () => 'Buscando sus precios guardados…',
+    guardando: () => 'Guardando…',
+    guardado: (i) => (i.hora ? `Guardado automáticamente a las ${hora(i.hora)}.` : 'Los cambios se guardan automáticamente.'),
+    lectura: () => 'Sólo lectura: los precios los cambia el propietario o un editor del artefacto.',
+    error: (i) => (i.codigo === 'quota_exceeded'
+      ? 'No hay espacio para guardar en el artefacto. Sus cambios siguen en este navegador.'
+      : 'No se pudo guardar. Sus cambios siguen en este navegador y se reintentará.'),
+    local: (i) => (i.motivo === 'sin-artefacto'
+      ? 'Los cambios se guardan automáticamente en este navegador.'
+      : 'Guardado sólo en este navegador: no hay conexión con el almacenamiento del artefacto.'),
+  };
+  let ultimoEstado = { estado: 'inicio', info: {} };
+
+  /** En sólo lectura (o sin poder guardar) los campos se muestran pero no se editan. */
+  function aplicarBloqueo() {
+    const bloquear = !!(ultimoEstado.info && ultimoEstado.info.soloLectura);
+    $$('#maestros-cuerpo input').forEach((i) => { i.disabled = bloquear; });
+    const reset = $('#maestros-reset');
+    if (reset) reset.disabled = bloquear;
+  }
+
+  function mostrarGuardado(estado, info) {
+    ultimoEstado = { estado, info: info || {} };
+    const el = $('#maestros-guardado');
+    if (!el) return;
+    el.dataset.estado = estado;
+    $('.guardado-txt', el).textContent = (MENSAJES[estado] || MENSAJES.inicio)(ultimoEstado.info);
+    $('#maestros-reintentar').hidden = estado !== 'error';
+    aplicarBloqueo();
+  }
+
   function render() {
     const M = W.estadoApp.M;
     const cont = $('#maestros-cuerpo');
@@ -117,6 +153,7 @@
       h('summary', null, h('span', { class: 'm-grupo-tit' }, titulo), h('span', { class: 'm-grupo-nota' }, nota)),
       h('div', { class: 'm-grupo-cuerpo' }, nodo(M[clave], [clave])))));
     filtrar();
+    aplicarBloqueo();
   }
 
   function filtrar() {
@@ -160,6 +197,7 @@
 
   let enlazado = false;
   W.maestrosUI = {
+    mostrarGuardado,
     render() {
       if (!enlazado) {
         enlazado = true;

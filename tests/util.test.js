@@ -53,3 +53,14 @@ test('mezclar: un parche con un arreglo editado lo reemplaza completo', () => {
   assert.deepEqual(r.proceso.corte.v_m_min.PLASMA, [[1, 9], [2, 7]]);
   assert.deepEqual(r.proceso.corte.v_m_min.LASER, base.proceso.corte.v_m_min.LASER);
 });
+
+test('mezclar y diferencia ignoran la llave __proto__ de un parche que viene de fuera', () => {
+  const parche = JSON.parse('{"__proto__": {"contaminado": true}, "a": 2}');
+  const r = U.mezclar({ a: 1, b: 3 }, parche);
+  assert.equal(r.a, 2);
+  assert.equal(r.b, 3);
+  assert.equal(r.contaminado, undefined);
+  assert.equal(Object.getPrototypeOf(r), Object.prototype);
+  assert.equal({}.contaminado, undefined);
+  assert.deepEqual(U.diferencia({ a: 1 }, parche), { a: 2 });
+});

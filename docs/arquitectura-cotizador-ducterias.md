@@ -921,7 +921,9 @@ L_corte = π·D_med·(2·j·κ + 2) + 2·L_eje = 11.154 m ;  L_soldadura (chapa)
 
 ### 8.1 Modelo de datos
 
-Modelo lógico recomendado. La aplicación de referencia (`src/web/`) guarda las cotizaciones y los maestros editados en el navegador (`localStorage`) y exporta/importa JSON; un despliegue multiusuario debe llevar este modelo a una base de datos. Los maestros se guardan como **parche** respecto a los valores de arranque (`diferencia` / `mezclar` en `src/motor/util.js`) y no como copia completa: si los valores de arranque cambian (p. ej. al adoptar un estándar nuevo de bridas), quien no editó esa celda recibe el valor nuevo en lugar de quedarse con el viejo.
+Modelo lógico recomendado. La aplicación de referencia (`src/web/`) guarda la cotización en el navegador (`localStorage`) y exporta/importa JSON; un despliegue multiusuario debe llevar este modelo a una base de datos. Las **tablas maestras se guardan solas** cada vez que se editan: en el almacén del artefacto (documento `config/maestros` de la capacidad `db`, que sobrevive a cerrar el navegador, a cambiar de equipo y a publicar versiones nuevas de la página) y, siempre, en `localStorage` como respaldo. Se guardan como **parche** respecto a los valores de arranque (`diferencia` / `mezclar` en `src/motor/util.js`) y no como copia completa: si los valores de arranque cambian (p. ej. al adoptar un estándar nuevo de bridas), quien no editó esa celda recibe el valor nuevo en lugar de quedarse con el viejo.
+
+Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tras una pausa de 0.7 s para juntar una ráfaga de cambios y de a una por vez; mientras no se confirma, el cambio queda marcado como *pendiente* en el navegador, y si falla se reintenta (y se sube al volver a abrir); al abrir manda lo guardado en el artefacto, salvo que haya cambios pendientes, y lo que se edite mientras se consulta el almacén se conserva encima. Los precios son de todos los que abren el artefacto: sólo el propietario y los editores los cambian; quien sólo puede ver los ve bloqueados. Fuera de un artefacto (archivo suelto) sólo existe el respaldo en `localStorage`.
 
 ```text
  Maestros ──1:N──▶ Cotización ──1:N──▶ Partida ──1:1──▶ ResultadoPartida
@@ -944,7 +946,7 @@ Modelo lógico recomendado. La aplicación de referencia (`src/web/`) guarda las
 | Sección del documento | Archivo |
 | --- | --- |
 | Tablas maestras (T1–T9) | `src/datos/maestros.js` |
-| Utilidades numéricas (Simpson, interpolación) | `src/motor/util.js` |
+| Utilidades numéricas (Simpson, interpolación, parche de maestros) | `src/motor/util.js` |
 | §3.1–3.4 Geometría por familia | `src/motor/geometria.js` |
 | §3.3 y §3.5 Lámina, merma y herrajes | `src/motor/material.js` |
 | §4.1 Tiempos y tarifas | `src/motor/mano_obra.js` |
@@ -952,6 +954,7 @@ Modelo lógico recomendado. La aplicación de referencia (`src/web/`) guarda las
 | §5 Valorización y pila de precio | `src/motor/precios.js` |
 | §6 Orquestación y validación | `src/motor/cotizador.js` |
 | Interfaz web (captura, desglose, editor de maestros, propuesta imprimible) | `src/web/` (`index.html`, `app.js`, `maestros_ui.js`, `esquemas.js`, `dom.js`, `estilos.css`) |
+| Guardado automático de las tablas maestras (artefacto y navegador) | `src/web/almacen.js` |
 | Empaquetado a un solo HTML | `scripts/construir.js` |
 | Pruebas y vector de referencia | `tests/` |
 
@@ -972,6 +975,7 @@ Modelo lógico recomendado. La aplicación de referencia (`src/web/`) guarda las
 - **Pruebas de política:** separación cantidades/precios, identidades de la pila (`P·(1 − u − c − o) = C_base`), cargo mínimo, subcontratos, validaciones, uniones, materiales (`tests/motor.test.js`).
 - **Estándar de bridas del taller** (`tests/motor.test.js`): la solera de 1½" × 3/16" pesa `b·t·ρ`; el taller usa la misma brida (barreno Ø3/8", tornillo 5/16" × 1¼") en todos los diámetros; `L_aro = π·(D_ext + b) + holgura`; nº de barrenos múltiplo de 4 por paso; cada aro se valoriza con el precio de su propio perfil y el tornillo con el suyo; el cierre del aro se suelda a tope al espesor de la solera; marco rectangular; y `ESPIGA` no genera aros ni barrenos.
 - **Persistencia de maestros** (`tests/util.test.js`): `mezclar(base, diferencia(base, actual))` reconstruye lo editado y los valores de arranque nuevos no quedan enmascarados.
+- **Guardado automático** (`tests/almacen.test.js` con un almacén de mentira, y las secciones 11–14 de `tests/e2e/ui.e2e.js` con un `window.claude` simulado cuyo almacén vive fuera del navegador): qué manda al abrir, una ráfaga de cambios = una escritura, una escritura a la vez, pendientes y reintentos, sólo lectura, cambios hechos durante la carga, y recuperación única de los precios de la versión 1.
 - **Interfaz de extremo a extremo (opcional, Playwright):** `tests/e2e/ui.e2e.js` da de alta cada familia, edita y guarda cada partida **sin cambios** en tres combinaciones de unidades y exige que el precio no se mueva (el formulario no pierde datos), y recorre validaciones, subcontratos, tablas maestras, persistencia, guardar/cargar y pantalla móvil.
 
 ---

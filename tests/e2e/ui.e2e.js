@@ -7,7 +7,9 @@
  *
  * Abre src/web/index.html por file:// y recorre: carga, alta de cada familia, edición sin pérdida
  * (ida y vuelta en tres combinaciones de unidades), validación, subcontratos, tablas maestras,
- * persistencia, guardar/cargar y estado vacío. Termina con código 1 si algo falla.
+ * persistencia, guardar/cargar, estado vacío y el guardado automático en el artefacto (con un window.claude
+ * simulado cuyo almacén vive en Node, así sobrevive a recargas y a navegadores nuevos).
+ * Termina con código 1 si algo falla.
  */
 const path = require('path');
 const { pathToFileURL } = require('url');
@@ -20,6 +22,8 @@ try {
   process.exit(2);
 }
 
+const { crearMaestros } = require('../../src/datos/maestros');
+
 const URL = pathToFileURL(path.resolve(__dirname, '../../src/web/index.html')).href;
 let fallos = 0;
 const ok = (cond, msg) => {
@@ -30,8 +34,9 @@ const ok = (cond, msg) => {
 (async () => {
   const browser = await chromium.launch();
   const errores = [];
-  const nuevaPagina = async (opts) => {
+  const nuevaPagina = async (opts, preparar) => {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 }, locale: 'es-MX', ...opts });
+    if (preparar) await preparar(ctx);
     const page = await ctx.newPage();
     // Google Fonts puede estar bloqueado en entornos sin red: no es un error de la app.
     page.on('console', (m) => { if (m.type() === 'error' && !/ERR_CERT|ERR_INTERNET|fonts\./.test(m.text())) errores.push(m.text()); });
@@ -186,6 +191,193 @@ const ok = (cond, msg) => {
   page = await nuevaPagina({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const dims = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
   ok(dims.sw <= dims.cw, `scrollWidth ${dims.sw} ≤ clientWidth ${dims.cw}`);
+
+  /* ---------------------------------------------------------------------------------------------- */
+  /* Guardado automático en el artefacto: un window.claude de mentira con un almacén que vive en Node */
+  /* ---------------------------------------------------------------------------------------------- */
+  const nuevoAlmacen = () => ({ docs: new Map(), puedeEditar: true, fallaEscritura: null, retardoLectura: 0 });
+  /** Instala window.claude (capacidades db y user) en un contexto; `opciones.sinDb` simula un visor sin la capacidad. */
+  const instalarClaude = (almacen, opciones = {}) => async (ctx) => {
+    await ctx.exposeFunction('__bdGet', async (ruta) => {
+      if (almacen.retardoLectura) await new Promise((r) => setTimeout(r, almacen.retardoLectura));
+      return almacen.docs.has(ruta) ? { existe: true, datos: JSON.parse(JSON.stringify(almacen.docs.get(ruta))) } : { existe: false };
+    });
+    await ctx.exposeFunction('__bdSet', async (ruta, datos) => {
+      if (almacen.fallaEscritura) return { codigo: almacen.fallaEscritura };
+      almacen.docs.set(ruta, JSON.parse(JSON.stringify(datos)));
+      return {};
+    });
+    await ctx.exposeFunction('__puedeEditar', async () => almacen.puedeEditar);
+    await ctx.addInitScript((sinDb) => {
+      const error = (codigo) => Object.assign(new Error(codigo), { code: codigo });
+      window.claude = {
+        use: async (nombre) => {
+          if (nombre === 'db') {
+            if (sinDb) return null;
+            return {
+              doc: (ruta) => ({
+                path: ruta,
+                get: async () => { const r = await window.__bdGet(ruta); return { exists: r.existe, data: () => r.datos }; },
+                set: async (datos) => { const r = await window.__bdSet(ruta, datos); if (r.codigo) throw error(r.codigo); },
+              }),
+            };
+          }
+          if (nombre === 'user') return { canEdit: () => window.__puedeEditar() };
+          return null;
+        },
+      };
+    }, !!opciones.sinDb);
+  };
+  const esperarHasta = async (cond, ms = 5000) => {
+    const t0 = Date.now();
+    while (Date.now() - t0 < ms) {
+      if (await cond()) return true;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return false;
+  };
+  const textoEstado = (p) => p.locator('#maestros-guardado .guardado-txt').innerText();
+  const ACERO = 'input#m_precios__precio_kg_acero_carbon';
+  const abrirMaestros = async (p, buscar = 'precio_kg_acero_carbon') => {
+    await p.click('#tab-maestros');
+    await p.fill('#maestros-buscar', buscar);
+  };
+  const editarAcero = async (p, valor) => {
+    await abrirMaestros(p);
+    const inp = p.locator(ACERO);
+    await inp.fill(String(valor));
+    await inp.dispatchEvent('change');
+  };
+  const aceroGuardado = (p) => estadoApp(p, () => window.COTIZAP.web.estadoApp.M.precios.precio_kg_acero_carbon);
+
+  console.log('11) Guardado automático: los precios se mantienen al volver a abrir (artefacto)');
+  {
+    const bd = nuevoAlmacen();
+
+    // a) primer equipo: sin nada guardado; al editar un precio se guarda solo
+    const p1 = await nuevaPagina({}, instalarClaude(bd));
+    await p1.click('#tab-maestros');
+    ok(await esperarHasta(async () => (await p1.locator('#maestros-guardado').getAttribute('data-estado')) === 'guardado'), 'al abrir, la cabecera de las tablas queda en "se guardan automáticamente"');
+    await new Promise((r) => setTimeout(r, 1200)); // más que la pausa de guardado: si algo fuera a escribirse, ya lo habría hecho
+    ok(!bd.docs.has('config/maestros'), 'abrir sin editar no escribe nada en el almacén');
+    await editarAcero(p1, 33.5);
+    ok(await esperarHasta(() => bd.docs.has('config/maestros')), 'al editar un precio se escribe solo en el almacén del artefacto');
+    const doc = bd.docs.get('config/maestros');
+    ok(doc && doc.v === 2 && doc.parche.precios.precio_kg_acero_carbon === 33.5, 'el documento trae el parche con el precio nuevo');
+    ok(await esperarHasta(async () => /Guardado automáticamente a las/.test(await textoEstado(p1))), 'la línea de estado confirma el guardado con la hora');
+    await p1.context().close();
+
+    // b) otro navegador (sin localStorage): al abrir, el precio guardado ya está
+    const p2 = await nuevaPagina({}, instalarClaude(bd));
+    ok(await esperarHasta(async () => (await aceroGuardado(p2)) === 33.5), 'un navegador sin datos locales abre con el precio guardado');
+    await abrirMaestros(p2);
+    ok(Number(await p2.locator(ACERO).inputValue()) === 33.5, 'el editor de tablas muestra el precio guardado');
+    ok(bd.docs.size === 1 && bd.docs.get('config/maestros').parche.precios.precio_kg_acero_carbon === 33.5, 'abrir de nuevo no reescribe lo guardado');
+
+    // c) si la escritura falla: se avisa, queda pendiente y se sube al reintentar (incluso después de recargar)
+    bd.fallaEscritura = 'resource_exhausted';
+    await editarAcero(p2, 36);
+    ok(await esperarHasta(async () => /No se pudo guardar/.test(await textoEstado(p2))), 'si no se puede guardar, la línea de estado lo dice');
+    ok(await p2.locator('#maestros-reintentar').isVisible(), 'aparece el botón para reintentar');
+    ok(bd.docs.get('config/maestros').parche.precios.precio_kg_acero_carbon === 33.5, 'lo guardado antes sigue intacto');
+    ok(await estadoApp(p2, () => window.localStorage.getItem('cotizap.maestros.pendiente')) === 'true', 'el cambio queda marcado como pendiente en este navegador');
+    await p2.reload();
+    await p2.waitForSelector('#lista-partidas .partida');
+    ok(await esperarHasta(async () => (await aceroGuardado(p2)) === 36), 'tras recargar, lo pendiente manda sobre lo guardado (no se pierde el cambio)');
+    await p2.click('#tab-maestros');
+    ok(await esperarHasta(async () => /No se pudo guardar/.test(await textoEstado(p2))), 'tras recargar, el aviso sigue: el cambio pendiente aún no llega al almacén');
+    bd.fallaEscritura = null; // se resuelve la falla
+    await p2.click('#maestros-reintentar');
+    ok(await esperarHasta(() => bd.docs.get('config/maestros').parche.precios.precio_kg_acero_carbon === 36), 'al reintentar, el cambio pendiente llega al almacén');
+    ok(await esperarHasta(async () => (await estadoApp(p2, () => window.localStorage.getItem('cotizap.maestros.pendiente'))) === null), 'y la bandera de pendiente se limpia');
+    await p2.context().close();
+
+    // d) quien sólo puede ver: ve los precios compartidos, no los puede cambiar y no escribe
+    bd.puedeEditar = false;
+    const antesDeLectura = JSON.stringify([...bd.docs]);
+    const p3 = await nuevaPagina({}, instalarClaude(bd));
+    ok(await esperarHasta(async () => (await aceroGuardado(p3)) === 36), 'un lector ve los precios guardados');
+    await abrirMaestros(p3);
+    ok(/Sólo lectura/.test(await textoEstado(p3)), 'la línea de estado dice que es sólo lectura');
+    ok(await p3.locator(ACERO).isDisabled(), 'los campos de precios están bloqueados');
+    ok(await p3.locator('#maestros-reset').isDisabled(), 'el botón de restablecer también');
+    ok(JSON.stringify([...bd.docs]) === antesDeLectura, 'un lector no escribe nada');
+    await p3.context().close();
+    bd.puedeEditar = true;
+
+    // e) restablecer también se guarda: al volver a abrir siguen los valores ilustrativos
+    const p4 = await nuevaPagina({}, instalarClaude(bd));
+    ok(await esperarHasta(async () => (await aceroGuardado(p4)) === 36), 'el editor vuelve a abrir con lo guardado');
+    await p4.click('#tab-maestros');
+    await p4.click('#maestros-reset');
+    await p4.click('#maestros-reset');
+    ok(await esperarHasta(() => Object.keys(bd.docs.get('config/maestros').parche).length === 0), 'restablecer guarda un parche vacío');
+    await p4.context().close();
+    const p5 = await nuevaPagina({}, instalarClaude(bd));
+    ok(await esperarHasta(async () => (await aceroGuardado(p5)) === 22), 'al abrir de nuevo siguen los valores ilustrativos');
+    await p5.context().close();
+  }
+
+  console.log('12) Guardado automático: cambios hechos mientras se consulta el almacén no se pierden');
+  {
+    const bd = nuevoAlmacen();
+    bd.docs.set('config/maestros', { v: 2, parche: { precios: { precio_kg_acero_carbon: 40 }, mano_obra: { FSR: 1.7 } }, actualizado: '2026-10-05T18:00:00.000Z' });
+    bd.retardoLectura = 1500;
+    const p = await nuevaPagina({}, instalarClaude(bd));
+    ok(/Buscando/.test(await textoEstado(p)), 'mientras consulta el almacén lo dice');
+    await editarAcero(p, 50); // el almacén todavía no contestó: se puede seguir trabajando
+    ok(await esperarHasta(async () => (await estadoApp(p, () => window.COTIZAP.web.estadoApp.M.mano_obra.FSR)) === 1.7, 8000), 'llega lo guardado (FSR 1.7)');
+    ok((await aceroGuardado(p)) === 50, 'y lo que se editó durante la carga se conserva encima (acero 50)');
+    ok(await esperarHasta(() => {
+      const g = bd.docs.get('config/maestros');
+      return g.parche.precios.precio_kg_acero_carbon === 50 && g.parche.mano_obra.FSR === 1.7;
+    }), 'el almacén queda con las dos cosas');
+    await p.context().close();
+  }
+
+  console.log('13) Guardado automático: sin la capacidad db sólo se guarda en este navegador');
+  {
+    const bd = nuevoAlmacen();
+    const p = await nuevaPagina({}, instalarClaude(bd, { sinDb: true }));
+    await p.click('#tab-maestros');
+    ok(await esperarHasta(async () => /sólo en este navegador/i.test(await textoEstado(p))), 'avisa que sólo se guarda en este navegador');
+    await editarAcero(p, 37);
+    await p.reload();
+    await p.waitForSelector('#lista-partidas .partida');
+    ok((await aceroGuardado(p)) === 37, 'aun así el precio se mantiene al volver a abrir (localStorage)');
+    ok(bd.docs.size === 0, 'y no se escribió en el almacén');
+    await p.context().close();
+  }
+
+  console.log('14) Precios capturados con la versión 1: se recuperan una sola vez y se suben al artefacto');
+  {
+    const v1 = crearMaestros();
+    v1.precios.precio_kg_acero_carbon = 26.5;
+    v1.precios.precio_m_empaque_neopreno = 18; // valor de arranque de la versión 1
+    v1.herrajes.seleccion_perfil = [{ hasta_mm: 150, perfil: 'L25x3.2' }, { hasta_mm: 99999, perfil: 'L64x6.4' }];
+    const bd = nuevoAlmacen();
+    const sembrar = async (ctx) => {
+      await ctx.addInitScript((m) => {
+        if (!window.localStorage.getItem('__sembrado')) {
+          window.localStorage.setItem('cotizap.maestros.v1', JSON.stringify(m));
+          window.localStorage.setItem('__sembrado', '1');
+        }
+      }, v1);
+      await instalarClaude(bd)(ctx);
+    };
+    const p = await nuevaPagina({}, sembrar);
+    const M = await estadoApp(p, () => {
+      const a = window.COTIZAP.web.estadoApp.M;
+      return { acero: a.precios.precio_kg_acero_carbon, empaque: a.precios.precio_m_empaque_neopreno, perfiles: a.herrajes.seleccion_perfil.map((f) => f.perfil) };
+    });
+    ok(M.acero === 26.5, 'se recupera el precio que se había capturado con la versión 1');
+    ok(M.empaque === 28 && M.perfiles.length === 1 && M.perfiles[0] === 'SOL38x4.8', 'sin heredar los valores de arranque viejos (empaque, ángulos por diámetro)');
+    ok(await esperarHasta(() => bd.docs.has('config/maestros') && bd.docs.get('config/maestros').parche.precios.precio_kg_acero_carbon === 26.5), 'y se sube al artefacto');
+    await p.reload();
+    await p.waitForSelector('#lista-partidas .partida');
+    ok((await aceroGuardado(p)) === 26.5, 'la recuperación no se repite ni se pierde al recargar');
+    await p.context().close();
+  }
 
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();

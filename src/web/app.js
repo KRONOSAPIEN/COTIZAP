@@ -16,6 +16,9 @@
   const LLAVE_COT = 'cotizap.cotizacion.v1';
   // v2: se guarda sólo el PARCHE de lo que el usuario editó (v1 guardaba el objeto completo y dejaba fijos los valores de arranque viejos)
   const LLAVE_MAE = 'cotizap.maestros.v2';
+  const LLAVE_MAE_V1 = 'cotizap.maestros.v1';
+  const LLAVE_MIGRADO = 'cotizap.maestros.migrado_v1';
+  const LLAVE_PENDIENTE = 'cotizap.maestros.pendiente'; // hay cambios en las tablas que todavía no llegaron al almacén del artefacto
 
   /* ================================================================== */
   /* Estado y persistencia                                              */
@@ -25,6 +28,16 @@
 
   const guardarLS = (k, v) => { try { root.localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* sin almacenamiento */ } };
   const leerLS = (k) => { try { const t = root.localStorage.getItem(k); return t ? JSON.parse(t) : null; } catch (e) { return null; } };
+  const borrarLS = (k) => { try { root.localStorage.removeItem(k); } catch (e) { /* sin almacenamiento */ } };
+
+  /** Guardado automático de las tablas maestras: en el artefacto (capacidad db) y, siempre, en este navegador. */
+  const Almacen = C.almacen.crear({
+    claude: () => root.claude,
+    ls: { leer: leerLS, guardar: guardarLS, borrar: borrarLS },
+    llavePendiente: LLAVE_PENDIENTE,
+    alEstado: (e, info) => { if (W.maestrosUI) W.maestrosUI.mostrarGuardado(e, info); },
+  });
+  W.almacen = Almacen;
   const idNuevo = () => `p${Math.random().toString(36).slice(2, 8)}`;
   const hoy = () => new Date().toISOString().slice(0, 10);
 
@@ -51,7 +64,16 @@
 
   function cargarEstado() {
     const base = C.maestros.crearMaestros();
-    const parche = leerLS(LLAVE_MAE);
+    let parche = leerLS(LLAVE_MAE);
+    if (!leerLS(LLAVE_MIGRADO)) {
+      // Una sola vez: los precios que se capturaron con la versión 1 (que guardaba los maestros completos) no se pierden.
+      const v1 = leerLS(LLAVE_MAE_V1);
+      if (v1 && (!parche || !Object.keys(parche).length)) {
+        parche = C.almacen.parcheDesdeV1(base, v1);
+        guardarLS(LLAVE_MAE, parche);
+      }
+      guardarLS(LLAVE_MIGRADO, true);
+    }
     estado.M = parche ? U.mezclar(base, parche) : base;
     const c = leerLS(LLAVE_COT);
     estado.cot = c && Array.isArray(c.partidas) ? { ...cotizacionVacia(), ...c } : cotizacionEjemplo();
@@ -73,8 +95,29 @@
   const parcheMaestros = () => U.diferencia(C.maestros.crearMaestros(), estado.M);
 
   function persistir() {
+    const parche = parcheMaestros();
     guardarLS(LLAVE_COT, estado.cot);
-    guardarLS(LLAVE_MAE, parcheMaestros());
+    guardarLS(LLAVE_MAE, parche);
+    Almacen.programar(parche); // al artefacto, tras una pausa corta y sólo si el parche cambió
+  }
+
+  /**
+   * Aplica lo guardado en el artefacto. Lo que el usuario cambió en las tablas mientras se consultaba el almacén
+   * (`arranque` es el parche con el que abrió la página) se conserva encima de lo guardado.
+   */
+  function aplicarRemoto(remoto, arranque) {
+    const base = C.maestros.crearMaestros();
+    const ediciones = U.diferencia(U.mezclar(base, arranque), estado.M);
+    estado.M = U.mezclar(U.mezclar(base, remoto), ediciones);
+    persistir();
+    render();
+    if (estado.tab === 'maestros' && W.maestrosUI) {
+      const cuerpo = $('#maestros-cuerpo');
+      if (cuerpo.contains(document.activeElement)) {
+        // No se reconstruye el editor bajo el cursor: se actualiza al soltar el campo.
+        cuerpo.addEventListener('focusout', () => setTimeout(() => W.maestrosUI.render(), 0), { once: true });
+      } else W.maestrosUI.render();
+    }
   }
 
   function calcular() {
@@ -1008,6 +1051,19 @@
     render();
     irPestana('cotizacion');
     root.addEventListener('resize', () => $$('.seg').forEach((el) => el.classList.toggle('con-txt', el.offsetWidth >= 46)));
+    iniciarAlmacen();
+  }
+
+  /** Abre el guardado automático: al cerrar o ocultar la página se escribe lo pendiente sin esperar la pausa. */
+  function iniciarAlmacen() {
+    $('#maestros-reintentar').addEventListener('click', () => Almacen.reintentar());
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') Almacen.vaciar(); });
+    root.addEventListener('pagehide', () => Almacen.vaciar());
+    const arranque = parcheMaestros();
+    Almacen.iniciar(arranque).then((r) => {
+      if (r.origen === 'remoto') aplicarRemoto(r.parche, arranque);
+      else persistir(); // lo local manda (cambios pendientes o primera vez): se sube
+    });
   }
 
   W.estadoApp = estado;

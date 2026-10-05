@@ -16,7 +16,7 @@ Cotizador para ducterías de lámina (colección de polvo y control ambiental). 
 
 ## Empezar
 
-**Usar la app.** Abra `src/web/index.html` en el navegador (doble clic). No necesita servidor ni instalación; las cotizaciones y las tablas maestras editadas se guardan en el propio navegador (de las tablas sólo se guarda lo que usted cambió, así que los valores de arranque nuevos le llegan solos). Arranca con una cotización de ejemplo para explorar el cálculo. Las tipografías (Barlow, IBM Plex Mono) se piden a Google Fonts; sin conexión se usan las del sistema.
+**Usar la app.** Abra `src/web/index.html` en el navegador (doble clic). No necesita servidor ni instalación; la cotización se guarda en el propio navegador y las tablas maestras se guardan solas cada vez que las cambia (ver [Dónde se guardan los precios](#dónde-se-guardan-los-precios)). Arranca con una cotización de ejemplo para explorar el cálculo. Las tipografías (Barlow, IBM Plex Mono) se piden a Google Fonts; sin conexión se usan las del sistema.
 
 1. **Tablas maestras** → capture precios, tarifas y velocidades reales.
 2. **Cotización** → *Agregar partida*, elija la familia y capture dimensiones; el precio se recalcula mientras escribe.
@@ -28,7 +28,7 @@ Cotizador para ducterías de lámina (colección de polvo y control ambiental). 
 **Pruebas.** Requiere Node 22 o superior.
 
 ```bash
-npm test                 # motor: geometría, ejemplo, precios, validaciones
+npm test                 # motor y guardado: geometría, ejemplo, precios, validaciones, almacén de tablas
 npm run test:e2e         # interfaz (opcional): npm i -D playwright && npx playwright install chromium
 ```
 
@@ -51,6 +51,21 @@ console.log(r.qto);                        // cantidades físicas, sin precios
 ```
 
 `cotizar({ riesgo, servicio, partidas }, M)` cotiza varias partidas y suma IVA. Una partida con datos inválidos devuelve sus errores sin tumbar a las demás.
+
+## Dónde se guardan los precios
+
+Cada cambio en **Tablas maestras** (precios, tarifas, tiempos…) se guarda automáticamente, sin botón de guardar. Una línea bajo el título de la pestaña dice cómo va: *Guardando…*, *Guardado automáticamente a las 20:41*, o el aviso si algo falla.
+
+| Dónde se abre | Dónde se guardan las tablas | Qué se mantiene al volver a abrir |
+| --- | --- | --- |
+| **Artefacto de Claude** | En el artefacto (documento `config/maestros`) y, como respaldo, en el navegador | Los precios, desde cualquier navegador o equipo, y también después de publicar versiones nuevas de la página |
+| **Archivo suelto** (`dist/cotizap.html`, `src/web/index.html`) | Sólo en el navegador | Los precios, en ese mismo navegador |
+
+- De las tablas sólo se guarda **lo que usted cambió**, no una copia completa; así, si cambian los valores de arranque (como pasó con la brida estándar), quien no tocó esa celda recibe el valor nuevo.
+- En el artefacto los precios son **de todos los que lo abren**: sólo el propietario y los editores los cambian; quien sólo puede ver los ve bloqueados (*Sólo lectura*).
+- Si una escritura falla, el cambio queda marcado como pendiente y se reintenta solo (hay un botón *Reintentar ahora*); si se cierra la página antes, se sube en la próxima apertura.
+- Los precios capturados con la primera versión de la app (que los guardaba completos en el navegador) se recuperan una sola vez al abrir.
+- La **cotización** (cliente, partidas) sigue guardándose sólo en el navegador; *Guardar y cargar* exporta e importa todo en JSON.
 
 ## Brida estándar del taller
 
@@ -78,7 +93,7 @@ docs/arquitectura-cotizador-ducterias.md   especificación
 src/
   datos/maestros.js                        tablas maestras (valores ilustrativos)
   motor/                                   util · geometria · material · mano_obra · consumibles · precios · cotizador
-  web/                                     index.html · app.js · maestros_ui.js · esquemas.js · dom.js · estilos.css
+  web/                                     index.html · app.js · almacen.js · maestros_ui.js · esquemas.js · dom.js · estilos.css
 tests/                                     *.test.js (node:test) · e2e/ui.e2e.js (Playwright, opcional)
 scripts/construir.js                       empaquetado a un solo HTML
 ```

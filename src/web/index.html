@@ -84,7 +84,12 @@
     <div class="maestros-cab">
       <div>
         <h2>Tablas maestras</h2>
-        <p>Todo número que un taller puede querer cambiar vive aquí, no en las fórmulas. Los cambios recalculan la cotización al instante y se guardan en este navegador.</p>
+        <p>Todo número que un taller puede querer cambiar vive aquí, no en las fórmulas. Los cambios recalculan la cotización al instante y se guardan solos.</p>
+        <div class="guardado" id="maestros-guardado" role="status" aria-live="polite" data-estado="inicio">
+          <span class="guardado-punto" aria-hidden="true"></span>
+          <span class="guardado-txt">Los cambios se guardan automáticamente.</span>
+          <button type="button" class="btn-texto" id="maestros-reintentar" hidden>Reintentar ahora</button>
+        </div>
       </div>
       <div class="maestros-acc">
         <div class="buscar"><span class="icono" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg></span>
@@ -158,6 +163,7 @@
 <script src="dom.js"></script>
 <script src="esquemas.js"></script>
 <script src="maestros_ui.js"></script>
+<script src="almacen.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

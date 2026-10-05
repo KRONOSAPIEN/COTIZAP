@@ -90,6 +90,7 @@
   function diferencia(base, actual) {
     const parche = {};
     Object.keys(actual).forEach((k) => {
+      if (k === '__proto__') return;
       const a = actual[k];
       const b = base ? base[k] : undefined;
       const objeto = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
@@ -109,6 +110,7 @@
     if (typeof base !== 'object' || base === null || Array.isArray(base)) return clonar(parche);
     const salida = clonar(base);
     Object.keys(parche).forEach((k) => {
+      if (k === '__proto__') return; // el parche puede venir de fuera (almacén compartido, archivo): nunca toca prototipos
       const pv = parche[k];
       if (pv && typeof pv === 'object' && !Array.isArray(pv) && typeof salida[k] === 'object' && !Array.isArray(salida[k])) {
         salida[k] = mezclar(salida[k], pv);

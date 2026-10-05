@@ -436,6 +436,17 @@ legend { font: 600 12px var(--font-ui); letter-spacing: 0.07em; text-transform: 
 .maestros-cab { display: flex; flex-wrap: wrap; gap: 14px 24px; justify-content: space-between; align-items: flex-end; margin-bottom: 14px; }
 .maestros-cab p { color: var(--fg-2); max-width: 70ch; margin-top: 4px; }
 .maestros-acc { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* Línea de estado del guardado automático: el color del punto y del texto sigue al estado, nunca sólo el color */
+.guardado { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 8px; margin-top: 8px; font-size: 13px; line-height: 1.4; color: var(--fg-3); max-width: 70ch; }
+.guardado-punto { flex: none; width: 8px; height: 8px; margin-top: 0.5em; border-radius: 50%; background: var(--fg-3); }
+.guardado-txt { flex: 1 1 14em; min-width: 0; }
+.guardado .btn-texto { flex: none; }
+.guardado[data-estado="guardado"] .guardado-punto { background: var(--good); }
+.guardado[data-estado="guardando"] .guardado-punto, .guardado[data-estado="cargando"] .guardado-punto { background: var(--accent); }
+.guardado[data-estado="local"] { color: var(--warn); }
+.guardado[data-estado="local"] .guardado-punto, .guardado[data-estado="lectura"] .guardado-punto { background: var(--warn); }
+.guardado[data-estado="error"] { color: var(--crit); }
+.guardado[data-estado="error"] .guardado-punto { background: var(--crit); }
 .buscar { position: relative; min-width: min(360px, 100%); }
 .buscar .icono { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--fg-3); }
 .buscar input { padding-left: 34px; }
