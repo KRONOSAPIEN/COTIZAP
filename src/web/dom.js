@@ -16,6 +16,7 @@
         if (v === undefined || v === null || v === false) return;
         if (k === 'class') el.className = v;
         else if (k === 'dataset') Object.assign(el.dataset, v);
+        else if (k === 'style') el.style.cssText = v; // CSSOM: no depende de 'style-src' para atributos en línea
         else if (k === 'html') el.innerHTML = v;
         else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
         else if (v === true) el.setAttribute(k, '');
