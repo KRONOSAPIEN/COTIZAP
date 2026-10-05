@@ -406,9 +406,9 @@
     d_med_mm: ['Diámetro medio del injerto', 'mm', 3], k_d_sobre_D: ['k = d / D', '', 3], beta_deg: ['Ángulo del injerto β', '°', 1], t_medio_mm: ['Distancia media a la silleta', 'mm', 2],
     t_max_mm: ['Distancia máxima a la silleta', 'mm', 2], A_cuerpo_m2: ['Área del tronco (sin orificio)', 'm²', 4], A_ramal_m2: ['Área del injerto', 'm²', 4],
     K_orificio: ['Corrección K del orificio', '', 4], P_orificio_mm: ['Perímetro del orificio', 'mm', 1],
-    L_cuerpo_mm: ['Longitud del tramo recto de D1', 'mm', 1], L_cuerpo_auto_mm: ['Mínimo del tramo recto (automático)', 'mm', 1],
     L_ramal_mm: ['Longitud del injerto', 'mm', 1], L_ramal_auto_mm: ['Longitud automática del injerto', 'mm', 1],
-    L_reduccion_mm: ['Longitud de la reducción', 'mm', 1], A_cono_m2: ['Área del cono de la reducción', 'm²', 4],
+    L_reduccion_mm: ['Longitud de la reducción', 'mm', 1], L_reduccion_auto_mm: ['Largo mínimo de la reducción (automático)', 'mm', 1], A_cono_m2: ['Área del cono de la reducción', 'm²', 4],
+    x_silleta_min_mm: ['Silleta: desde el extremo mayor', 'mm', 1], x_silleta_max_mm: ['Silleta: hasta', 'mm', 1], holgura_mm: ['Holgura de la silleta al extremo del cono', 'mm', 1],
     k_entrepierna: ['Factor de entrepierna', '', 3], razon_areas_ramales_tronco: ['Σ áreas ramales / área del tronco', '', 3], A_tronco_m2: ['Área del tronco', 'm²', 4], A_ramales_m2: ['Área de los ramales', 'm²', 4],
   };
 
@@ -485,6 +485,8 @@
         kvs.append(kv(e ? e[0] : k, W.num(v, e ? e[2] : 3), e ? e[1] : ''));
       } else if (k === 'lado') {
         kvs.append(kv('Lado del injerto', v === 'IZQ' ? 'Izquierdo' : 'Derecho'));
+      } else if (k === 'sentido') {
+        kvs.append(kv('El injerto se inclina hacia', v === 'MENOR' ? 'El extremo menor (D2)' : 'El extremo mayor (D1)'));
       } else if (k === 'patron' && v) {
         kvs.append(kv('Patrón plano · sector', W.num(v.sector_deg, 2), '°'), kv('Patrón plano · R1', W.num(v.R1_mm, 1), 'mm'), kv('Patrón plano · R2', W.num(v.R2_mm, 1), 'mm'));
       }
@@ -640,7 +642,8 @@
   function opcionesDe(clave) {
     const M = estado.M;
     if (clave === 'materiales') return Object.keys(M.materiales).map((k) => [k, M.materiales[k].nombre]);
-    if (clave === 'angulos_injerto') return M.proceso.angulos_injerto_reduccion_deg.map((a) => [String(a), `${a}°`]);
+    if (clave === 'angulos_injerto') return M.proceso.angulos_injerto_deg.map((a) => [String(a), `${a}°`]);
+    if (clave === 'angulos_codo') return M.proceso.angulos_codo_deg.map((a) => [String(a), `${a}°`]);
     if (clave === 'perfiles') return [['', 'Estándar del taller'], ...Object.keys(M.herrajes.perfiles).map((k) => [k, `${k} · ${M.herrajes.perfiles[k].descripcion}`])];
     return W.OPC[clave];
   }
@@ -656,7 +659,9 @@
     const id = `f_${c.id}`;
     let ctl;
     if (c.tipo === 'select' || c.tipo === 'calibre') {
-      const ops = c.tipo === 'calibre' ? opcionesCalibre(dlg.valores.material_id) : opcionesDe(c.opciones);
+      let ops = c.tipo === 'calibre' ? opcionesCalibre(dlg.valores.material_id) : opcionesDe(c.opciones);
+      // Un ángulo guardado que ya no está en la lista del taller se muestra tal cual, marcado, para que se vea qué hay que corregir.
+      if (c.numerico && valor !== undefined && valor !== '' && !ops.some(([v]) => String(v) === String(valor))) ops = [[String(valor), `${valor}° (no permitido)`], ...ops];
       ctl = h('select', { id, name: c.id }, ops.map(([v, t]) => h('option', { value: v, selected: String(valor) === String(v) }, t)));
     } else if (c.tipo === 'dim') {
       ctl = h('input', { id, name: c.id, type: 'text', inputmode: 'decimal', autocomplete: 'off', value: valor === undefined || valor === '' ? '' : aUnidad(valor, c.eje), placeholder: c.opcional ? 'auto' : '' });

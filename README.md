@@ -78,13 +78,15 @@ Cinco detalles se **supusieron** y conviene confirmarlos con el taller (se edita
 | Familia | Geometría | Precisión |
 | --- | --- | --- |
 | Tramo recto (redondo y rectangular) | desarrollo con fibra neutra | exacta |
-| Codo (segmentado y de radio) | longitud de eje exacta; factor `tan(α/2)/(α/2)` | exacta (verificada con malla 3D) |
+| Codo de 30°, 45°, 60° o 90° (segmentado y de radio) | longitud de eje exacta; factor `tan(α/2)/(α/2)` | exacta (verificada con malla 3D) |
 | Reducción (concéntrica y excéntrica) | tronco de cono, integral numérica | exacta (verificada con malla 3D) |
 | Transición redondo → rectángulo | triangulación estándar | exacta (verificada con malla 3D) |
-| Injerto simple (antes ramal en ángulo) | promedio elíptico de la silleta | exacta (verificada) |
-| Reducción con injerto (30° o 45°, derecho o izquierdo) | injerto simple sobre el tramo recto de D1 + cono concéntrico a D2 | exacta (suma de piezas verificadas); merma y dificultad por calibrar |
+| Injerto simple, a 30° o 45° (antes ramal en ángulo) | promedio elíptico de la silleta | exacta (verificada) |
+| Reducción con injerto, a 30° o 45°, derecho o izquierdo | el injerto va **sobre el cono**: la intersección cilindro–cono se resuelve numéricamente (silleta, orificio y soldadura); el largo de la reducción sale solo (el mínimo que aloja la silleta con 25 mm de holgura) o se captura | exacta (verificada contra cálculo independiente por fuerza bruta); merma y dificultad por calibrar |
 | Personalizada | área desarrollada desde CAD | la que traiga el CAD |
 | Comprado | precio de compra | — |
+
+**Ángulos del taller.** Todo injerto (simple o en la reducción) es de **30° o 45°** y los codos son de **30°, 45°, 60° o 90°**. En la captura son listas desplegables; el motor además rechaza cualquier otro ángulo con un mensaje claro (una cotización anterior con un ángulo distinto se abre mostrándolo como *no permitido* hasta corregirlo). Las listas están en las tablas maestras (`proceso.angulos_injerto_deg`, `proceso.angulos_codo_deg`), no en el código.
 
 ## Estructura
 
@@ -100,7 +102,7 @@ scripts/construir.js                       empaquetado a un solo HTML
 
 ## Límites conocidos
 
-- Reducción con injerto: se supone el injerto asentado en el tramo recto del diámetro mayor (no sobre el cono) y cono concéntrico; confirmar con el taller ([§10.5](docs/arquitectura-cotizador-ducterias.md#105-supuestos-de-la-reducción-con-injerto-por-confirmar-con-el-taller)). El pantalón se retiró de la interfaz; el motor lo conserva sólo para abrir cotizaciones anteriores.
+- Injertos y codos: siete detalles se **supusieron** y hay que confirmarlos con el taller (qué significa «der», hacia qué extremo se inclina el injerto sobre el cono, silleta centrada, holgura de 25 mm, largo del injerto, merma y dificultad, gajos del codo de 30°); están en [§10.5](docs/arquitectura-cotizador-ducterias.md#105-supuestos-de-injertos-y-codos-por-confirmar-con-el-taller) y cada uno se cambia en las tablas maestras o en la partida. El pantalón se retiró de la interfaz; el motor lo conserva sólo para abrir cotizaciones anteriores.
 - Transiciones sólo centradas; ducto espiral, collarines y campanas se capturan como pieza *personalizada* o *comprada*.
 - El anidado de hojas está descrito en el documento pero no implementado: la merma es un porcentaje por familia (editable por partida).
 - Fuera de alcance: instalación, soportería, flete a obra.

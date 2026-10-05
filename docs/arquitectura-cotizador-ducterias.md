@@ -31,7 +31,7 @@
 | Plataforma de implementación | **Núcleo agnóstico**: tablas maestras + funciones puras + pseudocódigo (§6). Implementación de referencia en JavaScript sin dependencias: motor (Node y navegador) y aplicación web que se abre con doble clic. El mapeo a Excel, React y Python está en §8.3. | §8.3 |
 | Factor de área del codo de 90° de 5 gajos | **No es un número fijo: se deriva exactamente.** Respecto a un tramo recto cuya longitud es el arco de eje (π/2·R): **F_arco = 1.0131**. En forma absoluta: **A = 7.4988·D²** con R/D = 1.5. El sobrecosto real de un codo no viene del área sino de la merma y la mano de obra (§3.4.1 y Ejemplo B). | §3.4.1 |
 | Diámetro y calibre del ejemplo | Ø12" (interior), calibre 16, acero al carbón, 3 m, bridado (los valores sugeridos en el prompt). | §7 |
-| Injerto simple y reducción con injerto | El «ramal en ángulo» pasó a llamarse **injerto simple** (misma geometría, id `RAMAL`). El «pantalón» se sustituyó por la **reducción con injerto**: tronco que se reduce de D1 a D2 con un injerto a **30° o 45°, derecho o izquierdo** (id `REDUCCION_INJERTO`). El pantalón se retiró de la interfaz; el motor lo sigue calculando sólo para abrir cotizaciones anteriores. Seis supuestos de detalle están por confirmar con el taller (§10.5). | §3.4.4 · §3.4.5 · §7.3 · §10.5 |
+| Injerto simple, reducción con injerto y ángulos del taller | El «ramal en ángulo» pasó a llamarse **injerto simple** (misma geometría, id `RAMAL`). El «pantalón» se sustituyó por la **reducción con injerto** (id `REDUCCION_INJERTO`): una reducción D1 → D2 con el injerto **sobre el cono**, derecho o izquierdo. **Todo injerto es a 30° o 45°** y **los codos son de 30°, 45°, 60° o 90°**: son listas de maestros y el cotizador rechaza cualquier otro ángulo. El pantalón se retiró de la interfaz; el motor lo sigue calculando sólo para abrir cotizaciones anteriores. Siete supuestos de detalle están por confirmar con el taller (§10.5). | §3.4.1 · §3.4.4 · §3.4.5 · §7.3 · §10.5 |
 | Brida estándar del taller | **Una sola brida para todos los diámetros: aro de solera 1½" × 3/16", barreno Ø3/8", tornillo 5/16" × 1¼".** Se modela como el perfil `SOL38x4.8` (tipo solera, rolada "de canto"), que lleva en sus propias columnas el barreno y el tornillo; los ángulos quedan como opción por partida (`perfil_id`). Cinco supuestos de detalle están por confirmar con el taller (§10.4). | T4 · T5 · §3.5 · §10.4 |
 | Público objetivo | Ingenieros de ventas técnicas en México y desarrolladores internos. Moneda **MXN**, **IVA 16 %** aparte, **Factor de Salario Real (FSR)** para mano de obra. | `capas.iva_pct`, `mano_obra.FSR` |
 
@@ -137,11 +137,11 @@
 | Familia | Entradas | Notas |
 | --- | --- | --- |
 | `RECTO` | redondo: `D_mm` · rectangular: `a_mm`, `b_mm` · `L_mm`, `tipo_costura` (`A_TOPE` `TRASLAPE` `PITTSBURGH`), `L_max_pieza_mm`, `n_costuras_long` | Se divide en `⌈L/L_max⌉` piezas iguales. |
-| `CODO` | redondo: `D_mm`, `theta_deg` (90), `n_gajos` (auto), `k_R` (1.5), `L_tangente_mm` (0) · rectangular: `a_mm`, `b_mm`, `theta_deg`, `k_R` | `n_gajos` automático con α ≤ 22.5° por junta. |
+| `CODO` | redondo: `D_mm`, `theta_deg` (**30, 45, 60 ó 90**; 90), `n_gajos` (auto), `k_R` (1.5), `L_tangente_mm` (0) · rectangular: `a_mm`, `b_mm`, `theta_deg`, `k_R` | `n_gajos` automático con α ≤ 22.5° por junta: 3, 3, 4 y 5 gajos para 30°, 45°, 60° y 90°. |
 | `REDUCCION` | `D1_mm`, `D2_mm`, `L_mm` (auto con semiángulo 15°), `excentrica` (`NO` `CARA_PLANA`) | |
 | `TRANSICION` | `D_mm` (extremo redondo), `a_mm`, `b_mm` (extremo rectangular), `H_mm` (auto) | Centrada. |
-| `RAMAL` (injerto simple) | `D_mm` (tronco), `d_mm` (injerto), `L_cuerpo_mm`, `L_ramal_mm`, `beta_deg` (45; 20°–90°) | `L_ramal` se mide sobre el eje del injerto desde el eje del tronco. |
-| `REDUCCION_INJERTO` | `D1_mm`, `D2_mm` (< D1), `d_mm` (< D1), `beta_deg` (**30** ó **45**; 45), `lado` (`DER` `IZQ`; `DER`), `L_cuerpo_mm`, `L_ramal_mm`, `L_reduccion_mm` | Los tres largos son opcionales: vacíos → automáticos (§3.4.5). El lado sólo identifica la pieza. |
+| `RAMAL` (injerto simple) | `D_mm` (tronco), `d_mm` (injerto), `L_cuerpo_mm`, `L_ramal_mm`, `beta_deg` (**30 ó 45**; 45) | `L_ramal` se mide sobre el eje del injerto desde el eje del tronco. |
+| `REDUCCION_INJERTO` | `D1_mm`, `D2_mm` (< D1), `d_mm`, `beta_deg` (**30** ó **45**; 45), `sentido` (`MAYOR` `MENOR`; `MAYOR`), `lado` (`DER` `IZQ`; `DER`), `L_reduccion_mm`, `L_ramal_mm` | El injerto va **sobre el cono**. Los dos largos son opcionales: vacíos → automáticos (§3.4.5). El lado sólo identifica la pieza; el sentido sí cambia el desarrollo. |
 | `PERSONALIZADO` | `A_neta_m2`, `L_corte_m`, `L_sold_tope_m`, `L_sold_filete_m`, `n_piezas`, `n_extremos`, `D_ref_mm` | Para campanas y piezas con desarrollo CAD. |
 | `COMPRADO` | `precio_compra_unitario`, `peso_kg` | Compuertas, flexibles, etc.: pasa por la pila sin mano de obra. |
 
@@ -299,9 +299,9 @@
 | V2 | El calibre existe en la tabla del material (o se captura `espesor_mm`) | Error |
 | V3 | Calibre más delgado que el mínimo para (diámetro, `servicio`) — tabla parametrizable `servicios`, **no normativa** hasta que se pueble con la norma interna | Advertencia |
 | V4 | Reducción: semiángulo `atan(δ/L)` ≤ 15° | Advertencia |
-| V5 | Injerto simple: `d < D`; 20° ≤ β ≤ 90°; `L_ramal > t_max`; tramo de tronco suficiente para el orificio | Error / advertencia |
-| V6 | Reducción con injerto: β en la lista de maestros (`angulos_injerto_reduccion_deg` = 30°, 45°); `D2 < D1`; `d < D1`; `lado` ∈ {`DER`, `IZQ`}; `L_ramal > t_max`; tramo recto suficiente para el orificio; semiángulo del cono ≤ 15° | Error / advertencia |
-| V7 | Codo: `n_gajos ≥ 2`, `R/D ≥ 1.0` | Error |
+| V5 | Injerto simple: β en la lista de maestros (`proceso.angulos_injerto_deg` = 30°, 45°); `d < D`; `L_ramal > t_max`; tramo de tronco suficiente para el orificio | Error / advertencia |
+| V6 | Reducción con injerto: β en la misma lista; `D2 < D1`; `d` menor que el diámetro del cono en su punto medio; `lado` ∈ {`DER`, `IZQ`}; `sentido` ∈ {`MAYOR`, `MENOR`}; la silleta cabe en el cono con la holgura de maestros (si se captura el largo); `L_ramal > t_max`; semiángulo del cono ≤ 15° | Error / advertencia |
+| V7 | Codo: θ en la lista de maestros (`proceso.angulos_codo_deg` = 30°, 45°, 60°, 90°); `n_gajos ≥ 2`; `R/D ≥ 1.0` | Error |
 | V8 | Merma en [0, 1) | Error |
 | V9 | `utilidad + comisión + otros < 100 %` del precio | Error |
 | V10 | Toda variable `precio_*` referenciada existe en la tabla de precios | Error |
@@ -378,15 +378,17 @@ F_arco = L_eje / (θ·R) = tan(α/2) / (α/2)         # sólo depende de la desv
 A      = π·λ·D_med² ≈ π·λ·D²
 ```
 
+**Ángulos del taller.** Los codos son de **30°, 45°, 60° y 90°** (lista de maestros `proceso.angulos_codo_deg`; el cotizador rechaza otros). Con α ≤ 22.5° por junta salen 3, 3, 4 y 5 gajos (primeras cuatro filas, R/D = 1.5); si el taller usa otro número de gajos se captura `n_gajos`. Las demás filas muestran cómo cambia el factor con más o menos gajos.
+
 | θ | Gajos | α por junta | **F_arco** | λ (R/D=1.5) | A/D² (R/D=1.5) | λ (R/D=2.0) | A/D² (R/D=2.0) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 90° | 3 | 45.00° | 1.05479 | 2.48528 | 7.8077 | 3.31371 | 10.4103 |
-| 90° | 4 | 30.00° | 1.02349 | 2.41154 | 7.5761 | 3.21539 | 10.1014 |
 | 90° | 5 | 22.50° | 1.01305 | 2.38695 | 7.4988 | 3.18260 | 9.9984 |
-| 90° | 7 | 15.00° | 1.00575 | 2.36974 | 7.4448 | 3.15966 | 9.9264 |
 | 60° | 4 | 20.00° | 1.01028 | 1.58694 | 4.9855 | 2.11592 | 6.6474 |
 | 45° | 3 | 22.50° | 1.01305 | 1.19347 | 3.7494 | 1.59130 | 4.9992 |
 | 30° | 3 | 15.00° | 1.00575 | 0.78991 | 2.4816 | 1.05322 | 3.3088 |
+| 90° | 3 | 45.00° | 1.05479 | 2.48528 | 7.8077 | 3.31371 | 10.4103 |
+| 90° | 4 | 30.00° | 1.02349 | 2.41154 | 7.5761 | 3.21539 | 10.1014 |
+| 90° | 7 | 15.00° | 1.00575 | 2.36974 | 7.4448 | 3.15966 | 9.9264 |
 
 > **Respuesta al campo `[COMPLETAR: Factor sugerido]`:** codo de 90° de 5 gajos, R/D = 1.5 → **`Área codo = Área tramo recto(L = π/2·R) × 1.0131`**, equivalente a `A = 7.4988·D²`. El codo liso de radio (prensado) vale exactamente `F = 1.0000` por el teorema de Pappus: `A = π·D_med·θ·R`.
 
@@ -429,7 +431,7 @@ Verificada contra malla 3D explícita (diferencia < 0.002 %).
 
 #### 3.4.4 Injerto simple (lateral / te)
 
-Injerto de diámetro `d` que entra a un tronco de diámetro `D` con ángulo β entre ejes (90° = te; 30°–45° = lateral típico en colección de polvo; confirmar contra la norma que aplique). En el motor el tronco es el *cuerpo* y el injerto es el *ramal* (de ahí `L_cuerpo`, `L_ramal`, `A_ramal` y el id `RAMAL`).
+Injerto de diámetro `d` que entra a un tronco de diámetro `D` con ángulo β entre ejes (90° = te; 30°–45° = lateral típico en colección de polvo; confirmar contra la norma que aplique). Los injertos del taller son **a 30° o 45°** (lista de maestros `proceso.angulos_injerto_deg`): la geometría vale de 20° a 90°, pero el cotizador sólo acepta los ángulos de la lista. En el motor el tronco es el *cuerpo* y el injerto es el *ramal* (de ahí `L_cuerpo`, `L_ramal`, `A_ramal` y el id `RAMAL`).
 
 ```text
 k      = d_med / D_med   (< 1)
@@ -445,33 +447,54 @@ A_neta     = π·D_med·L_cuerpo − A_orificio + A_ramal
 
 Verificación independiente: `t_med` contra el promedio por fuerza bruta de la distancia de silleta, y `A_orificio` contra una malla fina sobre la pared del tronco (30°, 45°, 60° y 90°; diferencia < 0.005 %).
 
-#### 3.4.5 Reducción con injerto (30° o 45°, derecho o izquierdo)
+#### 3.4.5 Reducción con injerto (30° o 45°, derecho o izquierdo): el injerto va sobre el cono
 
-El tronco de diámetro mayor `D1` lleva el injerto (diámetro `d`, a β = 30° o 45°) y se cierra con un cono concéntrico hasta `D2`. No se inventa una geometría nueva: es la **suma de dos piezas ya verificadas** (§3.4.4 y §3.4.2) más la costura circular que las une.
+La pieza es una reducción (cono de `D1` a `D2`) con el injerto de diámetro `d` soldado **sobre el cono**, a β = 30° o 45° respecto al eje. Es el cono con el orificio de la silleta más la pared del injerto: **2 piezas, 1 junta interna y 3 bridas** (D1, D2 y el injerto).
+
+**Intersección injerto–cono.** Con el eje del cono sobre `x` (radio `r(x) = R1 − m·x`, `m = (R1 − R2)/L`) y el eje del injerto cruzándolo en `(x_j, 0, 0)` a β, cada generatriz `φ` del injerto toca el cono a la distancia axial `t(φ)` de ese cruce. Es la raíz positiva de una cuadrática (cilindro ∩ cono es una cuádrica por recta):
 
 ```text
-Reducción con injerto = injerto simple sobre un tramo recto de D1  +  reducción concéntrica D1 → D2
+u = (s·cosβ, sinβ, 0)            s = −1 si el injerto se inclina hacia el extremo MAYOR ; +1 hacia el MENOR
+A0 = R1 − m·x_j                  # radio del cono en el cruce
+c  = r_b·sinφ·u_x ,   d0 = A0 + m·u_y·r_b·sinφ
+a  = u_y² − m²·u_x²   (> 0: el injerto es más tendido que... más abierto que el cono)
+b  = 2·(u_y·c + m·u_x·d0) ,   g = c² + r_b²·cos²φ − d0²
+t(φ) = ( −b + √(b² − 4·a·g) ) / (2·a)                 # punto de la silleta: x_j + t·u_x − r_b·sinφ·u_y , …
 
-Largos (se pueden capturar; si se omiten son automáticos)
-  L_cuerpo    = 1.25·d_med / sinβ                       # tramo recto de D1: el mínimo que aloja el orificio con holgura
-  L_ramal     = t_max + 150 mm                          # largo del injerto: su generatriz más larga + tramo recto de maestros
-  L_reduccion = (R1 − R2) / tan 15°                     # largo del cono (semiángulo 15°); R = D_med/2
-
-Cantidades
-  A_neta   = [ π·D1_med·L_cuerpo − A_orificio + π·d_med·(L_ramal − t_med) ]  +  π·(R1 + R2)·s          # s = √(L_reduccion² + (R1 − R2)²)
-  L_corte  = [ 2·(B_c + L_cuerpo) + P_h + 2·(π·d_med + L_ramal) ]  +  [ π·(D1_med + D2_med) + 2·s ]
-  Tope     = L_cuerpo + (L_ramal − t_med) + s + π·D1_med                  # costuras longitudinales + costura circular tronco–cono
-  Filete   = P_h                                                           # silleta del injerto
-  Piezas   = 3 (tronco, injerto, cono) ; juntas internas = 2 (silleta, tronco–cono) ; extremos bridados = 3 (D1, D2, d)
-  Rolado   : n·k·L = (L_cuerpo + L_ramal) + k_cónico·s                     # cilindros k = 1 ; cono k = 1.6
+t_med = promedio de t(φ) ;  t_max = máx t(φ) ;  P_h = longitud de la polilínea de la silleta (2 880 puntos)
+A_orificio = | ∮ G(x) dθ | ,   G(x) = √(1 + m²)·(R1·x − m·x²/2)                # Green sobre (x, θ): dA = r·√(1 + m²) dx dθ
 ```
 
-- **Ángulo:** sólo 30° o 45°; la lista es un dato de maestros (`proceso.angulos_injerto_reduccion_deg`), no una constante del código. Con 30° la silleta es más larga (más orificio, más soldadura de filete y un injerto más largo).
-- **Lado (der/izq):** identifica la pieza para el taller y para la propuesta; **no cambia ninguna cantidad**, porque en un tronco redondo concéntrico la pieza izquierda es la derecha instalada girada sobre su eje.
-- **Dónde se asienta el injerto:** en el tramo recto de `D1`, no sobre el cono (así se usa la geometría exacta de §3.4.4). Si el taller lo asienta sobre el cono, hay que confirmarlo (§10.5).
+Por cada punto de la silleta no se usan mallas: el orificio sale de una integral de línea de una función suave y periódica. Con `m → 0` el cono es un cilindro y los tres resultados coinciden con el injerto simple (§3.4.4).
+
+**Hacia qué extremo se inclina.** Con el injerto inclinado hacia el extremo mayor el ángulo efectivo con la pared es β − σ; hacia el menor, β + σ (σ = semiángulo del cono). Cambia el orificio (≈ 20 % a 45° y ≈ 35 % a 30°, para un cono de 5°), la silleta y el largo del cono, y el precio ≈ 3 %. Por omisión `sentido = MAYOR`: en colección de polvo el flujo sale por el extremo mayor y el injerto apunta hacia allá.
+
+**Largos (se pueden capturar; si se omiten son automáticos)**
+
+```text
+Silleta centrada en L/2:   x_j = ( x_c·(u_y + m·u_x) − u_x·R1 ) / u_y ,   x_c = L/2
+L_reducción = menor L tal que  x_min ≥ holgura  y  x_max ≤ L − holgura        # holgura = 25 mm ; piso: el largo de 15° de semiángulo
+              (punto fijo L = máx( L_15° , 2·(holgura + semialcance de la silleta(L)) ) ; converge en pocas vueltas)
+L_ramal     = t_max + 150 mm                                                   # generatriz más larga + tramo recto de maestros
+```
+
+**Cantidades**
+
+```text
+s        = √(L² + (R1 − R2)²)                                                    # generatriz del cono
+A_neta   = π·(R1 + R2)·s − A_orificio + π·d_med·(L_ramal − t_med)               # cono − orificio + pared del injerto
+L_corte  = [ π·(D1_med + D2_med) + 2·s ] + P_h + 2·(π·d_med + L_ramal)
+Tope     = s + (L_ramal − t_med)                                                 # costura del cono + costura del injerto
+Filete   = P_h                                                                   # silleta
+Piezas   = 2 ; juntas internas = 1 ; extremos bridados = 3
+Rolado   : n·k·L = k_cónico·s + L_ramal                                          # cono k = 1.6 ; injerto k = 1
+```
+
+- **Ángulo:** sólo 30° o 45° (lista de maestros `proceso.angulos_injerto_deg`, la misma de todo injerto). A 30° la silleta es más larga: más orificio, más soldadura de filete, un injerto más largo y un cono más largo.
+- **Lado (der/izq):** identifica la pieza para el taller y para la propuesta; **no cambia ninguna cantidad**: en una reducción concéntrica la pieza izquierda es la derecha instalada girada sobre su eje.
 - `merma` (28 %) y `k_dif` (1.9) son valores ilustrativos heredados del pantalón; calibrar con órdenes reales.
 
-Verificación independiente (`tests/geometria.test.js`): el área se recalcula pieza por pieza con los oráculos por fuerza bruta (distancia media de silleta y orificio por malla), y el corte, la soldadura, las piezas y el rolado se comparan contra las fórmulas de arriba. El Ejemplo C (§7.3) lo resuelve completo.
+Verificación independiente (`tests/geometria.test.js`): `t(φ)` por bisección sobre la ecuación del cono (sin la cuadrática), el perímetro por una polilínea de 20 000 puntos, y el área del orificio por una rejilla fina sobre la superficie del cono (diferencias < 0.001 %); además, el límite `m → 0` contra el injerto simple y el ensamble completo (área, corte, soldadura, piezas y rolado) recalculado línea por línea. El Ejemplo C (§7.3) lo resuelve completo.
 
 **Familia retirada — pantalón (Y simétrica).** Se retiró de la interfaz. El motor la conserva (id `PANTALON`; tronco más dos ramales con un factor de entrepierna `k_ent` = 0.08, ±10 %) únicamente para que una cotización anterior que la traiga siga calculando; cada vez avisa «Familia retirada».
 
@@ -486,7 +509,7 @@ Verificación independiente (`tests/geometria.test.js`): el área se recalcula p
 | Reducción excéntrica (cara plana) | integral §3.4.2 | +0.2 % … +4 % sobre concéntrica | 18 % | 1.20 |
 | Transición redondo→rect. | triangulación §3.4.3 | ≈ ½(P₁+P₂)·s (±3 %) | 22 % | 1.50 |
 | Injerto simple 45° | tronco − orificio + injerto | `A_inj = π·d·(L − t_med)` | 25 % | 1.60 |
-| Reducción con injerto 30°/45° | injerto simple + cono (§3.4.5) | suma de piezas exactas | 28 % | 1.90 |
+| Reducción con injerto 30°/45° | cono − orificio + injerto (§3.4.5) | numérica; verificada por fuerza bruta | 28 % | 1.90 |
 
 ### 3.5 Herrajes de unión: bridas, tornillería, empaque, sellador y espiga
 
@@ -609,7 +632,7 @@ Longitudes en m salvo indicación; `κ = √(1 + tan²(α/2)/2)`.
 | Reducción | 1 | `π·(D1_med + D2_med) + 2·s_máx` | `s_máx` | — | 0 |
 | Transición | 2 | `P_rect + π·D_med + 4·s_ref` | `2·s_ref` | — | 0 |
 | Injerto simple | 2 | `2·(B_c + L_c) + P_h + 2·(π·d_med + L_r)` | `L_c + (L_r − t_med)` | `P_h` | 1 |
-| Reducción con injerto | 3 | `2·(B_c + L_c) + P_h + 2·(π·d_med + L_r) + π·(D1_med + D2_med) + 2·s` | `L_c + (L_r − t_med) + s + π·D1_med` | `P_h` | 2 |
+| Reducción con injerto | 2 | `π·(D1_med + D2_med) + 2·s + P_h + 2·(π·d_med + L_r)` | `s + (L_r − t_med)` | `P_h` | 1 |
 
 `P_h = π·d_med·√((1 + csc²β)/2)` es el perímetro del orificio elíptico del injerto (la silleta).
 
@@ -941,81 +964,92 @@ L_corte = π·D_med·(2·j·κ + 2) + 2·L_eje = 11.154 m ;  L_soldadura (chapa)
 
 **Lectura:** el área del codo es sólo 1.3 % mayor que la de un tramo recto de igual longitud de eje (F_arco = 1.0131), pero su **precio por kg neto es 2.65×** el del tramo recto y su **costo directo por m² de lámina es 2.90×**. El sobrecosto no está en el área: está en la merma (20 % vs 8 %), en el corte perfilado, en el armado (k_dif = 1.35) y en la soldadura de 4 juntas elípticas.
 
-### 7.3 Ejemplo C — Reducción con injerto 45°, Ø12" → Ø10" con injerto Ø6", calibre 16
+### 7.3 Ejemplo C — Reducción con injerto 45° sobre el cono, Ø12" → Ø10" con injerto Ø6", calibre 16
 
 La pieza nueva del taller resuelta de punta a punta, con los largos en automático. Mismos maestros y mismas bridas que los ejemplos A y B.
 
-**Datos de entrada** (los tres largos se dejan en automático)
+**Datos de entrada** (los dos largos se dejan en automático)
 
 | Variable | Valor |
 | --- | --- |
-| `familia` | REDUCCION_INJERTO (reducción con injerto) |
+| `familia` | REDUCCION_INJERTO (reducción con injerto: el injerto va **sobre el cono**) |
 | `material_id` · `calibre` | ACERO_CARBON · 16 (tabla MSG) |
-| `D1_mm` · `D2_mm` | 12 in = **304.8 mm** → 10 in = **254.0 mm** (tronco que se reduce) |
+| `D1_mm` · `D2_mm` | 12 in = **304.8 mm** → 10 in = **254.0 mm** |
 | `d_mm` | 6 in = **152.4 mm** (injerto) |
-| `beta_deg` · `lado` | **45°** (30° o 45°) · `DER` (identifica la pieza; no cambia el costo) |
-| `L_cuerpo_mm` · `L_ramal_mm` · `L_reduccion_mm` | vacíos → automáticos (paso 2) |
+| `beta_deg` | **45°** (el taller maneja 30° o 45°) |
+| `sentido` | `MAYOR`: el injerto se inclina hacia el extremo mayor D1 (por omisión) |
+| `lado` | `DER` (identifica la pieza; no cambia el costo) |
+| `L_reduccion_mm` · `L_ramal_mm` | vacíos → automáticos (paso 2) |
 | `tipo_union` | BRIDADO en los tres extremos (D1, D2 y el injerto) |
 | `pintura` · `riesgo` | PRIMARIO · MEDIO |
 
 **Paso 1 · Diámetros medios** (e = 1.5189 mm)
 
 ```text
-D1_med · D2_med · d_med = 304.8 + e = 306.3189 · 254.0 + e = 255.5189 · 152.4 + e = 153.9189 mm
-k = d_med / D1_med      = 0.5025   (< 1: el injerto es más chico que el tronco)
+D1_med · D2_med · d_med           = 306.3189 · 255.5189 · 153.9189 mm   →   R1 = 153.159 · R2 = 127.759 · r_b = 76.959 mm
+r_med (radio del cono a la mitad) = (R1 + R2) / 2 = 140.459 mm      k = r_b / r_med = 0.5479   (< 1: el injerto es más chico que el cono)
 ```
 
-**Paso 2 · Largos automáticos**
+**Paso 2 · Silleta sobre el cono y largo automático de la reducción**
 
 ```text
-L_cuerpo (tramo recto de D1) = 1.25 · d_med / sinβ = 1.25 · 153.9189 / 0.70711 = 272.09 mm   (el mínimo que aloja el orificio con holgura)
-t_max (generatriz más larga) = (D1_med/2 + (d_med/2)·cosβ) / sinβ = 293.56 mm
-L_ramal (injerto)            = t_max + 150 = 443.56 mm   (150 mm de tramo recto de maestros)
-L_reducción (cono)           = (R1 − R2) / tan 15° = 25.400 / 0.26795 = 94.79 mm ;  s = 98.14 mm
+Largo mínimo de la reducción                = el menor L que aloja la silleta con 25 mm de holgura a cada extremo  →  L = 288.67 mm  (piso de 15°: 94.79 mm)
+Cono: pendiente y semiángulo                = m = (R1 − R2) / L = 0.08799 ;  semiángulo = 5.03° ;  generatriz s = 289.79 mm
+Cruce de ejes (silleta centrada en L/2)     = x_j = 284.80 mm   (el eje del injerto cruza el eje del cono; puede caer fuera del cono)
+Silleta sobre el cono                       = x ∈ [25.00, 263.67] mm  →  holgura 25.00 mm a cada extremo
+t(φ): generatriz φ del injerto toca el cono = raíz positiva de  a·t² + b·t + g = 0 ,  a = sin²β − m²·cos²β = 0.49613
+t_med · t_max                               = 180.96 mm · 290.45 mm
+L_ramal (injerto)                           = t_max + 150 = 440.45 mm   (generatriz más larga + tramo recto de maestros)
 ```
 
 **Paso 3 · Área por pieza y área neta**
 
 ```text
-t_med (distancia media a la silleta) = (D1_med / (2·sinβ))·(2/π)·E(k) = 202.20 mm
-A_tronco                             = π · D1_med · L_cuerpo = π · 306.3189 · 272.09 = 0.26184 m²
-A_orificio                           = (π·(d_med/2)² / sinβ)·K(k) = 0.02724 m²   (K = 1.0350)
-A_injerto                            = π · d_med · (L_ramal − t_med) = π · 153.9189 · (443.56 − 202.20) = 0.11671 m²
-A_cono                               = π · (R1 + R2) · s = π · (153.159 + 127.759) · 98.14 = 0.08661 m²
-A_neta                               = A_tronco − A_orificio + A_injerto + A_cono = 0.43793 m²
+A_cono     = π · (R1 + R2) · s = π · (153.159 + 127.759) · 289.79 = 0.25575 m²
+A_orificio = ∮ G(x) dθ sobre la silleta (G' = r·√(1 + m²)) = 0.03036 m²
+A_injerto  = π · d_med · (L_ramal − t_med) = π · 153.9189 · (440.45 − 180.96) = 0.12548 m²
+A_neta     = A_cono − A_orificio + A_injerto = 0.35087 m²
 ```
 
 **Paso 4 · Peso y merma (φ = 28 %)**
 
 ```text
-m_neta          = A_neta · w_a = 0.43793 · 11.9235 = 5.222 kg
-m_bruta         = m_neta / (1 − φ) = 5.222 / 0.72 = 7.252 kg
-Costo de lámina = 7.252 · 22.00 = 159.55 MXN
+m_neta          = A_neta · w_a = 0.35087 · 11.9235 = 4.184 kg
+m_bruta         = m_neta / (1 − φ) = 4.184 / 0.72 = 5.811 kg
+Costo de lámina = 5.811 · 22.00 = 127.83 MXN
 ```
 
 **Paso 5 · Corte, soldadura y armado**
 
 ```text
-P_h (silleta)            = π·d_med·√((1 + csc²β)/2) = 592.23 mm
-L_corte                  = [2·(B_c + L_cuerpo) + P_h + 2·(π·d_med + L_ramal)] + [π·(D1_med + D2_med) + 2·s] = 4.9173 + 1.9613 = 6.8786 m
-Soldadura a tope         = L_cuerpo + (L_ramal − t_med) + s + π·D1_med = 1.5739 m   (costuras longitudinales + costura circular tronco–cono)
-Soldadura de filete      = P_h = 0.5922 m   (silleta del injerto)
-Piezas · juntas internas = 3 (tronco, injerto, cono) · 2 (silleta y tronco–cono)
-Rolado equivalente       = n·k·L = 0.8727 m   (cilindros k = 1; cono k = 1.6)
-Bridas                   = 3 aros (D1, D2 y d): 1089.8 mm · 930.2 mm · 611.0 mm
+P_h (perímetro de la silleta) = 639.91 mm   (suma de la polilínea de la silleta)
+L_corte                       = [π·(D1_med + D2_med) + 2·s] + P_h + 2·(π·d_med + L_ramal) = 4.8326 m
+Soldadura a tope              = s + (L_ramal − t_med) = 0.5493 m   (costura del cono + costura del injerto)
+Soldadura de filete           = P_h = 0.6399 m   (silleta del injerto)
+Piezas · juntas internas      = 2 (cono e injerto) · 1 (silleta)
+Rolado equivalente            = n·k·L = 0.9041 m   (cono k = 1.6; injerto k = 1)
+Bridas                        = 3 aros (D1, D2 y d): 1089.8 mm · 930.2 mm · 611.0 mm
 ```
 
 **Resultado e indicadores de control**
 
 | Indicador | Valor |
 | --- | --- |
-| Costo directo (CD) | 874.86 MXN |
-| Precio unitario antes de IVA | **1,659.21 MXN** |
-| Peso neto terminado (lámina + 3 aros) | 8.970 kg |
-| Precio por kg neto | 184.98 MXN/kg |
-| Horas de mano de obra directa (reales) | 3.276 h  (k_dif armado = 1.9) |
+| Costo directo (CD) | 737.20 MXN |
+| Precio unitario antes de IVA | **1,382.76 MXN** |
+| Peso neto terminado (lámina + 3 aros) | 7.932 kg |
+| Precio por kg neto | 174.34 MXN/kg |
+| Horas de mano de obra directa (reales) | 2.627 h  (k_dif armado = 1.9) |
 
-**Lectura:** el precio por kg neto es **3.00×** el del tramo recto del Ejemplo A, y sale de lo mismo que el codo: merma de 28 % contra 8 %, dificultad de armado 1.9 contra 1.0 y tres bridas en una pieza chica. El lado (der/izq) no mueve ninguna cifra.
+**Sensibilidad** (misma pieza, un solo cambio)
+
+| Variante | L reducción (mm) | Orificio (m²) | Precio (MXN) | vs. base |
+| --- | --- | --- | --- | --- |
+| Base: 45°, hacia el extremo mayor | 288.7 | 0.0304 | 1,382.76 | — |
+| 30°, hacia el extremo mayor | 396.3 | 0.0440 | 1,483.87 | +7.3 % |
+| 45°, hacia el extremo menor | 247.4 | 0.0249 | 1,342.74 | −2.9 % |
+
+**Lectura:** el precio por kg neto es **2.83×** el del tramo recto del Ejemplo A, por lo mismo que el codo: merma de 28 % contra 8 %, dificultad de armado 1.9 contra 1.0 y tres bridas en una pieza chica. A 30° la silleta es más larga y el cono también; hacia el extremo menor el cono "se cierra" y la silleta resulta más corta. El lado (der/izq) no mueve ninguna cifra.
 
 ---
 
@@ -1073,7 +1107,7 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 ### 8.4 Pruebas y vectores de referencia
 
 - **Vector de referencia (*golden test*):** el Ejemplo A de §7.1. `tests/ejemplo_recto.test.js` lo recalcula **de forma independiente** con aritmética directa, línea por línea, y lo compara contra el motor.
-- **Oráculos geométricos independientes:** codo, reducción excéntrica, transición, injerto (distancia media de silleta y área del orificio por fuerza bruta) y reducción con injerto (recalculada pieza por pieza) se comparan contra mallas 3D y promedios numéricos de fuerza bruta (`tests/geometria.test.js`). **Toda familia nueva debe traer su oráculo independiente.**
+- **Oráculos geométricos independientes:** codo, reducción excéntrica, transición, injerto simple (distancia media de silleta y área del orificio por fuerza bruta) y reducción con injerto (silleta sobre el cono por bisección, polilínea y rejilla; ensamble recalculado línea por línea) se comparan contra mallas 3D y promedios numéricos de fuerza bruta (`tests/geometria.test.js`). **Toda familia nueva debe traer su oráculo independiente.**
 - **Pruebas de política:** separación cantidades/precios, identidades de la pila (`P·(1 − u − c − o) = C_base`), cargo mínimo, subcontratos, validaciones, uniones, materiales (`tests/motor.test.js`).
 - **Estándar de bridas del taller** (`tests/motor.test.js`): la solera de 1½" × 3/16" pesa `b·t·ρ`; el taller usa la misma brida (barreno Ø3/8", tornillo 5/16" × 1¼") en todos los diámetros; `L_aro = π·(D_ext + b) + holgura`; nº de barrenos múltiplo de 4 por paso; cada aro se valoriza con el precio de su propio perfil y el tornillo con el suyo; el cierre del aro se suelda a tope al espesor de la solera; marco rectangular; y `ESPIGA` no genera aros ni barrenos.
 - **Persistencia de maestros** (`tests/util.test.js`): `mezclar(base, diferencia(base, actual))` reconstruye lo editado y los valores de arranque nuevos no quedan enmascarados.
@@ -1114,7 +1148,7 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 
 ### 10.2 Límites conocidos (declarados, no ocultos)
 
-- **Reducción con injerto:** el injerto se asienta en el tramo recto de D1 (no sobre el cono) y el cono es concéntrico; `merma` y `k_dif` son los del pantalón, ilustrativos, hasta calibrarlos (§10.5).
+- **Reducción con injerto:** la silleta se centra en el largo del cono y el cono es concéntrico; `merma` y `k_dif` son los del pantalón, ilustrativos, hasta calibrarlos (§10.5).
 - **Transiciones:** sólo centradas; las excéntricas o en desfase se resuelven con `PERSONALIZADO` (área desarrollada desde CAD) o extendiendo la triangulación §3.4.3.
 - **Ducto espiral, collarines, campanas, difusores:** no modelados; usar `PERSONALIZADO` o `COMPRADO`.
 - **Anidado de hojas (modo B):** descrito en §3.3, no implementado; el motor usa φ de tabla.
@@ -1141,15 +1175,16 @@ El taller definió tres datos: **solera 1½" × 3/16", barreno Ø3/8" y tornillo
 | Empaque | Cinta de neopreno 1½" × 1/8" sobre el círculo de barrenos, traslape 5 % | `precio_m_empaque_neopreno` · `f_traslape_empaque` | Si el taller sella sólo con sellador, poner el precio del empaque en 0. |
 | Juego de tornillería | Tornillo 5/16" × 1¼" + tuerca + 2 rondanas, con 5 % de reserva | `precio_juego_tornillo_5_16_x_1_1_4` · `f_reserva_tornilleria` | Si la tornillería se compra por piezas, sumar el precio de cada pieza al juego. |
 
-### 10.5 Supuestos de la reducción con injerto por confirmar con el taller
+### 10.5 Supuestos de injertos y codos por confirmar con el taller
 
-El taller pidió: *injerto simple* (antes ramal en ángulo) y *reducción con injerto que puede ser der 30 o 45°*. Lo demás se **supuso** y se edita en los maestros o se captura en la partida:
+El taller definió: *injerto simple* (antes ramal en ángulo); *reducción con injerto con el injerto sobre el cono, der. a 30° o 45°*; **todo injerto a 30° o 45°**; **codos de 30°, 45°, 60° y 90°**. Lo demás se **supuso** y se edita en los maestros o se captura en la partida:
 
 | Supuesto | Valor usado | Dónde se cambia | Efecto si es distinto |
 | --- | --- | --- | --- |
 | Significado de «der» | Lado **derecho** del injerto; sólo identifica la pieza (no cambia el costo) | Campo `lado` de la partida | Si «der» quiere decir otra cosa (p. ej. *derivación*), indicar cuál: el campo se renombra sin tocar el cálculo. |
-| Ángulos permitidos | 30° y 45° | `proceso.angulos_injerto_reduccion_deg` | Agregar otro ángulo a la lista (p. ej. 60°). |
-| Dónde se asienta el injerto | En el tramo recto del diámetro mayor D1, antes del cono | Geometría (§3.4.5) | Si se asienta sobre el cono, el desarrollo cambia y hay que modelarlo. |
-| Cono de la reducción | Concéntrico, semiángulo 15°; largo automático | `proceso.semiangulo_max_deg`, o capturar `L_reduccion_mm` | Si el taller usa reducciones excéntricas o más largas, capturar el largo. |
-| Largos automáticos | Tramo recto = 1.25·d_med/sinβ; injerto = generatriz más larga + 150 mm | `proceso.injerto_largo_extra_mm`, o capturar `L_cuerpo_mm` y `L_ramal_mm` | Cambian lámina, corte y soldadura. |
+| Hacia dónde se inclina el injerto | Hacia el extremo **mayor** D1 (en colección de polvo el flujo sale por ahí) | Campo `sentido` de la partida | Hacia el menor: cono más corto y orificio ≈ 20 % menor (a 45°); el precio cambia ≈ 3 %. |
+| Posición del injerto en el cono | Silleta centrada en el largo del cono | Geometría (§3.4.5) | Si el taller lo asienta más cerca de un extremo, cambia poco el área pero sí el largo mínimo. |
+| Largo de la reducción | El menor que aloja la silleta con **25 mm** de holgura a cada extremo (piso: 15° de semiángulo) | `proceso.injerto_margen_cono_mm`, o capturar `L_reduccion_mm` | Un cono más largo suma lámina; uno más corto de lo necesario se rechaza. |
+| Largo del injerto | Generatriz más larga + **150 mm** de tramo recto | `proceso.injerto_largo_extra_mm`, o capturar `L_ramal_mm` | Cambian lámina, corte y soldadura. |
 | Merma y dificultad | 28 % y `k_dif` 1.9, heredados del pantalón | `merma.REDUCCION_INJERTO`, `proceso.armado.k_dif.REDUCCION_INJERTO` | Calibrar con 10 órdenes reales. |
+| Gajos de los codos | Automáticos con α ≤ 22.5° por junta: 30° → 3, 45° → 3, 60° → 4, 90° → 5 | `proceso.alfa_max_junta_deg`, o capturar `n_gajos` | Si el codo de 30° lleva 2 gajos en el taller, capturar `n_gajos = 2`. |

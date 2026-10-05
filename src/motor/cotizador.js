@@ -31,6 +31,28 @@
     COMPRADO: 'Artículo comprado',
   };
 
+  /** «30° o 45°» · «30°, 45°, 60° o 90°» */
+  const listaGrados = (a) => (a.length === 1 ? `${a[0]}°` : `${a.slice(0, -1).join('°, ')}° o ${a[a.length - 1]}°`);
+
+  /**
+   * Política del taller: sólo se manejan ciertos ángulos (datos de maestros, no constantes). La geometría vale para
+   * cualquier ángulo físicamente posible; aquí se decide cuáles se cotizan.
+   */
+  function validarAngulos(p, M, errores) {
+    if (p.familia === 'RAMAL' || p.familia === 'REDUCCION_INJERTO') {
+      const permitidos = M.proceso.angulos_injerto_deg;
+      const vacio = p.beta_deg === undefined || p.beta_deg === null || p.beta_deg === '';
+      const beta = vacio ? M.proceso.beta_ramal_defecto_deg : Number(p.beta_deg);
+      if (!permitidos.includes(beta)) errores.push(`Todo injerto debe ser a ${listaGrados(permitidos)} (la partida trae ${vacio ? '—' : `${p.beta_deg}°`}).`);
+    }
+    if (p.familia === 'CODO') {
+      const permitidos = M.proceso.angulos_codo_deg;
+      const vacio = p.theta_deg === undefined || p.theta_deg === null || p.theta_deg === '';
+      const theta = vacio ? 90 : Number(p.theta_deg);
+      if (!permitidos.includes(theta)) errores.push(`Los codos del taller son de ${listaGrados(permitidos)} (la partida trae ${p.theta_deg}°).`);
+    }
+  }
+
   const dimensionCaracteristica = (p) => Math.max(p.D_mm || 0, p.D1_mm || 0, p.D2_mm || 0, p.a_mm || 0, p.b_mm || 0);
 
   /** Validación previa. `errores` bloquean el cálculo; `advertencias` se reportan. */
@@ -39,6 +61,7 @@
     const advertencias = [];
     if (!FAMILIAS[p.familia]) errores.push(`Familia desconocida: ${p.familia}`);
     if (!(p.cantidad > 0) || !Number.isInteger(p.cantidad)) errores.push('La cantidad debe ser un entero mayor que 0.');
+    validarAngulos(p, M, errores);
     if (p.familia === 'COMPRADO') {
       if (!(p.precio_compra_unitario >= 0)) errores.push('Capturar el costo de compra unitario.');
       return { errores, advertencias };

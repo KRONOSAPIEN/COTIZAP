@@ -392,7 +392,15 @@ const ok = (cond, msg) => {
     ok(JSON.stringify(await p.locator('#f_lado option').allInnerTexts()) === JSON.stringify(['Derecho', 'Izquierdo']), 'el lado es derecho o izquierdo');
     ok(await p.locator('#f_beta_deg').inputValue() === '45' && await p.locator('#f_lado').inputValue() === 'DER', 'por omisión: 45° derecho');
     ok(await p.locator('#dlg-prev .errores').count() === 0, 'con los valores por defecto calcula sin errores');
-    ok((await p.locator('#f_L_ramal_mm').getAttribute('placeholder')) === 'auto' && (await p.locator('#f_L_cuerpo_mm').getAttribute('placeholder')) === 'auto', 'los largos del injerto son automáticos por omisión');
+    ok((await p.locator('#f_L_ramal_mm').getAttribute('placeholder')) === 'auto' && (await p.locator('#f_L_reduccion_mm').getAttribute('placeholder')) === 'auto', 'los largos del injerto y de la reducción son automáticos por omisión');
+    ok(await p.locator('#f_L_cuerpo_mm').count() === 0, 'ya no hay "tramo recto": el injerto va sobre el cono');
+    ok(JSON.stringify(await p.locator('#f_sentido option').allInnerTexts()) === JSON.stringify(['El extremo mayor (D1)', 'El extremo menor (D2)']), 'se elige hacia qué extremo se inclina el injerto');
+    ok(await p.locator('#f_sentido').inputValue() === 'MAYOR', 'por omisión: hacia el extremo mayor');
+    const precioMayor = await p.locator('#dlg-prev .prev-val').innerText();
+    await p.selectOption('#f_sentido', 'MENOR');
+    await p.waitForTimeout(100);
+    ok(await p.locator('#dlg-prev .errores').count() === 0 && (await p.locator('#dlg-prev .prev-val').innerText()) !== precioMayor, 'hacia el extremo menor también calcula, con otro precio');
+    await p.selectOption('#f_sentido', 'MAYOR');
     const precio45 = await p.locator('#dlg-prev .prev-val').innerText();
     await p.selectOption('#f_beta_deg', '30');
     await p.selectOption('#f_lado', 'IZQ');
@@ -416,12 +424,16 @@ const ok = (cond, msg) => {
     await p.fill('#f_L_ramal_mm', '100');
     await p.waitForTimeout(100);
     ok(/longitud del injerto debe exceder/.test(await p.locator('#dlg-prev .errores').innerText()), 'un injerto demasiado corto se rechaza: "La longitud del injerto debe exceder …"');
+    await p.fill('#f_L_ramal_mm', '');
+    await p.fill('#f_L_reduccion_mm', '120');
+    await p.waitForTimeout(100);
+    ok(/La reducción es corta para alojar el injerto: necesita al menos \d+ mm/.test(await p.locator('#dlg-prev .errores').innerText()), 'una reducción demasiado corta se rechaza y dice cuánto necesita');
     await p.click('#dlg-cancelar');
     // el desglose habla de tronco e injerto
     await p.locator('#lista-partidas .partida:has(.partida-meta:has-text("a 30° izq."))').click();
     await p.waitForTimeout(100);
     const detalle = await p.locator('#detalle').innerText();
-    ok(/Lado del injerto\s*Izquierdo/.test(detalle) && /Longitud de la reducción/.test(detalle) && /Área del injerto/.test(detalle), 'el desglose muestra lado, reducción e injerto');
+    ok(/Lado del injerto\s*Izquierdo/.test(detalle) && /Longitud de la reducción/.test(detalle) && /Área del injerto/.test(detalle) && /El injerto se inclina hacia\s*El extremo mayor/.test(detalle), 'el desglose muestra lado, inclinación, reducción e injerto');
 
     // una cotización anterior con pantalón sigue calculando, rotulado como retirado
     const vieja = {
@@ -464,6 +476,56 @@ const ok = (cond, msg) => {
     const propios = await pp.locator('#lista-partidas .partida-titulo').allInnerTexts();
     ok(propios.length === 1 && /^Ramal a 45°/.test(propios[0]), 'una cotización propia se deja tal cual');
     await pp.context().close();
+  }
+
+  console.log('17) Ángulos del taller: injertos 30° o 45°, codos 30°, 45°, 60° o 90°');
+  {
+    const p = await nuevaPagina();
+    await p.click('#btn-agregar');
+    await p.waitForSelector('#dlg-partida[open]');
+    await p.click('.fam:has(span:text-is("Codo"))');
+    ok(JSON.stringify(await p.locator('#f_theta_deg option').allInnerTexts()) === JSON.stringify(['30°', '45°', '60°', '90°']), 'el codo se elige entre 30°, 45°, 60° y 90°');
+    ok(await p.locator('#f_theta_deg').inputValue() === '90', 'por omisión: 90°');
+    for (const th of ['30', '45', '60', '90']) {
+      await p.selectOption('#f_theta_deg', th);
+      await p.waitForTimeout(60);
+      ok(await p.locator('#dlg-prev .errores').count() === 0, `codo de ${th}° calcula sin errores`);
+    }
+    await p.click('.fam:has(span:text-is("Injerto simple"))');
+    ok(JSON.stringify(await p.locator('#f_beta_deg option').allInnerTexts()) === JSON.stringify(['30°', '45°']), 'el injerto simple es a 30° o 45°');
+    await p.selectOption('#f_beta_deg', '30');
+    await p.fill('#f_L_ramal_mm', '700');
+    await p.waitForTimeout(100);
+    ok(await p.locator('#dlg-prev .errores').count() === 0, 'injerto simple a 30° calcula sin errores');
+    await p.click('#dlg-cancelar');
+
+    // una cotización anterior con ángulos que el taller no maneja: se marcan, se corrigen y vuelven a calcular
+    const vieja = {
+      app: 'COTIZAP', version: 2,
+      cotizacion: { cliente: 'Anterior', proyecto: '', fecha: '2026-01-01', vigencia_dias: 15, unidad_diam: 'in', unidad_long: 'mm', riesgo: 'MEDIO', servicio: 'POLVO',
+        partidas: [
+          { id: 'a1', familia: 'RAMAL', descripcion: 'Injerto a 60°', D_mm: 304.8, d_mm: 203.2, L_cuerpo_mm: 700, L_ramal_mm: 450, beta_deg: 60, material_id: 'ACERO_CARBON', calibre: 16, cantidad: 1 },
+          { id: 'a2', familia: 'CODO', descripcion: 'Codo a 75°', D_mm: 304.8, theta_deg: 75, k_R: 1.5, material_id: 'ACERO_CARBON', calibre: 16, cantidad: 1 },
+          { id: 'a3', familia: 'CODO', descripcion: 'Codo a 45°', D_mm: 304.8, theta_deg: 45, k_R: 1.5, material_id: 'ACERO_CARBON', calibre: 16, cantidad: 1 },
+        ] },
+      maestros: {},
+    };
+    await p.click('#btn-io');
+    await p.fill('#io-texto', JSON.stringify(vieja));
+    await p.click('#io-cargar');
+    await p.waitForTimeout(150);
+    ok(/2 partidas no se pueden calcular/.test(await p.locator('#aviso-error').innerText()), 'los ángulos que el taller no maneja se avisan: 2 partidas no se pueden calcular');
+    await p.locator('#lista-partidas .partida:has(.partida-titulo:has-text("Injerto a 60°"))').locator('button[aria-label^="Editar"]').click();
+    await p.waitForSelector('#dlg-partida[open]');
+    ok((await p.locator('#f_beta_deg option:checked').innerText()) === '60° (no permitido)', 'el ángulo guardado se muestra como "60° (no permitido)"');
+    ok(/Todo injerto debe ser a 30° o 45° \(la partida trae 60°\)/.test(await p.locator('#dlg-prev .errores').innerText()), 'y la vista previa dice qué corregir');
+    await p.selectOption('#f_beta_deg', '45');
+    await p.waitForTimeout(100);
+    ok(await p.locator('#dlg-prev .errores').count() === 0, 'al elegir 45° vuelve a calcular');
+    await p.click('#dlg-guardar');
+    await p.waitForTimeout(150);
+    ok(/1 partida no se puede calcular/.test(await p.locator('#aviso-error').innerText()), 'queda sólo el codo de 75° por corregir');
+    await p.context().close();
   }
 
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);

@@ -176,8 +176,11 @@
       alfa_max_junta_deg: 22.5,
       k_R_defecto: 1.5,
       beta_ramal_defecto_deg: 45,
-      angulos_injerto_reduccion_deg: [30, 45], // ángulos del injerto en la reducción con injerto
+      // Ángulos que maneja el taller (el cotizador rechaza cualquier otro):
+      angulos_injerto_deg: [30, 45], // TODO injerto, simple o en la reducción
+      angulos_codo_deg: [30, 45, 60, 90],
       injerto_largo_extra_mm: 150, // tramo recto del injerto más allá de su generatriz más larga, si no se captura su largo
+      injerto_margen_cono_mm: 25, // holgura entre la silleta del injerto y cada extremo del cono (reducción con injerto)
       k_entrepierna: 0.08, // pantalón (retirado)
       tolerancia_area_pantalon: 0.15, // pantalón (retirado)
 

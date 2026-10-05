@@ -247,7 +247,7 @@ test('Todas las familias cotizan y producen precio positivo con desglose consist
     { familia: 'TRANSICION', D_mm: 300, a_mm: 400, b_mm: 300 },
     { familia: 'RAMAL', D_mm: 400, d_mm: 200, L_cuerpo_mm: 800, L_ramal_mm: 500, beta_deg: 45 },
     { familia: 'REDUCCION_INJERTO', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 45, lado: 'DER' },
-    { familia: 'REDUCCION_INJERTO', D1_mm: 400, D2_mm: 300, d_mm: 200, beta_deg: 30, lado: 'IZQ', L_cuerpo_mm: 700, L_ramal_mm: 700 },
+    { familia: 'REDUCCION_INJERTO', D1_mm: 400, D2_mm: 300, d_mm: 200, beta_deg: 30, lado: 'IZQ', sentido: 'MENOR' },
     { familia: 'PANTALON', D_mm: 500, d1_mm: 354, d2_mm: 354, L_tronco_mm: 300, L1_mm: 500, L2_mm: 500 },
     { familia: 'PERSONALIZADO', A_neta_m2: 1.2, L_corte_m: 9, L_sold_tope_m: 4, n_piezas: 2, n_extremos: 2, D_ref_mm: 300 },
   ];
@@ -304,14 +304,15 @@ test('Reducción con injerto: la merma y la dificultad son datos de maestros, no
   assert.ok(b.precio.unitario > a.precio.unitario);
 });
 
-test('Reducción con injerto: pesa más que su reducción sola y que su injerto simple (suma de las dos piezas)', () => {
+test('Reducción con injerto: lámina neta = (cono + pared del injerto − orificio)·ρ·e, y el injerto va sobre el cono de la reducción', () => {
   const ri = C.cotizarPartida({ ...redInj }, M);
-  const d = ri.geometria.detalle; // largos automáticos con los que se armó la pieza
-  const red = C.cotizarPartida({ ...redInj, familia: 'REDUCCION', D1_mm: 304.8, D2_mm: 254, L_mm: d.L_reduccion_mm }, M);
-  const inj = C.cotizarPartida({ ...redInj, familia: 'RAMAL', D_mm: 304.8, d_mm: 152.4, L_cuerpo_mm: d.L_cuerpo_mm, L_ramal_mm: d.L_ramal_mm }, M);
-  assert.ok(ri.qto.lam.m_neta_kg > red.qto.lam.m_neta_kg);
-  assert.ok(ri.qto.lam.m_neta_kg > inj.qto.lam.m_neta_kg);
-  casi(ri.qto.lam.m_neta_kg, red.qto.lam.m_neta_kg + inj.qto.lam.m_neta_kg, 1e-12, 'lámina neta = reducción + injerto');
+  const d = ri.geometria.detalle;
+  casi(ri.qto.lam.m_neta_kg, (d.A_cono_m2 + d.A_ramal_m2 - ri.geometria.A_orificio_m2) * ri.qto.lam.kg_m2, 1e-12);
+  const cono = C.cotizarPartida({ ...redInj, familia: 'REDUCCION', L_mm: d.L_reduccion_mm }, M);
+  casi(d.A_cono_m2, cono.geometria.A_neta_m2, 1e-12, 'el cono es el de la reducción de ese largo');
+  assert.ok(ri.qto.lam.m_neta_kg > cono.qto.lam.m_neta_kg, 'con el injerto pesa más que el cono solo');
+  assert.equal(ri.qto.her.n_aros, 3);
+  assert.equal(ri.geometria.n_piezas, 2, 'cono e injerto');
 });
 
 test('Reducción con injerto: los datos inválidos devuelven errores claros sin tumbar el resto de la cotización', () => {
@@ -325,6 +326,59 @@ test('Reducción con injerto: los datos inválidos devuelven errores claros sin 
   assert.match(r.partidas[0].errores[0], /30° o 45°/);
   assert.match(r.partidas[1].errores[0], /D2 debe ser menor que D1/);
   assert.match(r.partidas[2].errores[0], /derecho \(DER\) o izquierdo \(IZQ\)/);
+  assert.equal(r.partidas[3].ok, true);
+});
+
+/* ====================================================================== */
+/* Ángulos del taller: injertos 30° o 45° · codos 30°, 45°, 60° o 90°     */
+/* ====================================================================== */
+const injertoSimple = { familia: 'RAMAL', material_id: 'ACERO_CARBON', calibre: 16, D_mm: 400, d_mm: 200, L_cuerpo_mm: 900, L_ramal_mm: 700, tipo_union: 'BRIDADO' };
+
+test('Todo injerto (simple o en la reducción) es a 30° o 45°: cualquier otro ángulo se rechaza con un mensaje claro', () => {
+  [injertoSimple, redInj].forEach((base) => {
+    [30, 45, '30', '45'].forEach((b) => assert.doesNotThrow(() => C.cotizarPartida({ ...base, beta_deg: b }, M), `β=${b} ${base.familia}`));
+    [20, 60, 90, 15, 0, 75].forEach((b) => assert.throws(() => C.cotizarPartida({ ...base, beta_deg: b }, M), /Todo injerto debe ser a 30° o 45° \(la partida trae/, `β=${b} ${base.familia}`));
+  });
+  assert.doesNotThrow(() => C.cotizarPartida({ ...injertoSimple }, M), 'sin ángulo: el de maestros (45°)');
+});
+
+test('La lista de ángulos de injerto es un dato de maestros (no una constante del código)', () => {
+  const M3 = crearMaestros({ proceso: { angulos_injerto_deg: [30, 45, 60] } });
+  assert.doesNotThrow(() => C.cotizarPartida({ ...injertoSimple, beta_deg: 60 }, M3));
+  assert.throws(() => C.cotizarPartida({ ...injertoSimple, beta_deg: 60 }, M), /30° o 45°/);
+  const solo45 = crearMaestros({ proceso: { angulos_injerto_deg: [45] } });
+  assert.throws(() => C.cotizarPartida({ ...injertoSimple, beta_deg: 30 }, solo45), /Todo injerto debe ser a 45°/);
+});
+
+test('Los codos del taller son de 30°, 45°, 60° o 90°: otros ángulos se rechazan (también el codo rectangular)', () => {
+  [30, 45, 60, 90, '60'].forEach((th) => assert.doesNotThrow(() => C.cotizarPartida({ ...codo, theta_deg: th }, M), `θ=${th}`));
+  [15, 22.5, 75, 120, 180, 0].forEach((th) => assert.throws(() => C.cotizarPartida({ ...codo, theta_deg: th }, M), /Los codos del taller son de 30°, 45°, 60° o 90° \(la partida trae/, `θ=${th}`));
+  const rect = { familia: 'CODO', material_id: 'ACERO_CARBON', calibre: 16, forma: 'RECTANGULAR', a_mm: 400, b_mm: 300, tipo_union: 'BRIDADO' };
+  assert.doesNotThrow(() => C.cotizarPartida({ ...rect, theta_deg: 45 }, M));
+  assert.throws(() => C.cotizarPartida({ ...rect, theta_deg: 75 }, M), /Los codos del taller/);
+  const sinAngulo = { ...codo };
+  delete sinAngulo.theta_deg;
+  assert.doesNotThrow(() => C.cotizarPartida(sinAngulo, M), 'sin ángulo: 90°');
+});
+
+test('Gajos automáticos de los codos del taller: 30° → 3, 45° → 3, 60° → 4, 90° → 5 (α ≤ 22.5° por junta)', () => {
+  Object.entries({ 30: 3, 45: 3, 60: 4, 90: 5 }).forEach(([th, n]) => {
+    const r = C.cotizarPartida({ ...codo, theta_deg: Number(th) }, M);
+    assert.equal(r.geometria.detalle.n_gajos, n, `${th}°`);
+    assert.ok(r.geometria.detalle.alfa_deg <= 22.5 + 1e-9, `${th}°`);
+  });
+});
+
+test('La lista de ángulos de codo es un dato de maestros, y un ángulo no permitido sólo tumba su partida', () => {
+  const M3 = crearMaestros({ proceso: { angulos_codo_deg: [15, 90] } });
+  assert.doesNotThrow(() => C.cotizarPartida({ ...codo, theta_deg: 15 }, M3));
+  assert.throws(() => C.cotizarPartida({ ...codo, theta_deg: 45 }, M3), /Los codos del taller son de 15° o 90°/);
+  const r = C.cotizar({ partidas: [{ ...codo, theta_deg: 75 }, { ...codo, theta_deg: 45 }, { ...injertoSimple, beta_deg: 60 }, { ...injertoSimple }] }, M);
+  assert.equal(r.totales.n_partidas_error, 2);
+  assert.equal(r.totales.n_partidas_ok, 2);
+  assert.equal(r.partidas[0].ok, false);
+  assert.equal(r.partidas[1].ok, true);
+  assert.equal(r.partidas[2].ok, false);
   assert.equal(r.partidas[3].ok, true);
 });
 

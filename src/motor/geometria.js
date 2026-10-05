@@ -378,70 +378,173 @@
   }
 
   /**
-   * Reducción con injerto: el tronco de diámetro mayor D1 lleva el injerto (diámetro d, a 30° o 45°, derecho o izquierdo)
-   * y se cierra con un cono concéntrico hasta D2. Es una composición de dos piezas ya verificadas por separado:
-   *   · injerto simple sobre un tramo recto de D1 (tronco − orificio + injerto)
-   *   · reducción concéntrica D1 → D2 (tronco de cono)
-   * más la costura circular que une el tramo recto con el cono. El lado (der/izq) sólo identifica la pieza: no cambia
-   * ninguna cantidad, porque el injerto sale del mismo tronco redondo.
+   * Silleta de un injerto cilíndrico (radio rb) sobre un cono recto: eje x, radio r(x) = R1 − m·x (grande en x = 0).
+   * El eje del injerto cruza el eje del cono en (xj, 0, 0) y forma el ángulo β con él; se inclina hacia x creciente
+   * (extremo menor) si sentido = +1 o hacia x decreciente (extremo mayor) si sentido = −1.
+   *
+   * Cada generatriz φ del injerto toca el cono a la distancia axial t(φ) de ese cruce: es la raíz positiva de una
+   * cuadrática (cilindro ∩ cono es una cuádrica por recta). De ahí salen, sin mallas:
+   *   · t medio y máximo  → área de pared del injerto A = π·d_med·(L_ramal − t_med) y largo mínimo del injerto
+   *   · perímetro P_h     → soldadura de la silleta
+   *   · área del orificio → integral de línea ∮ G(x) dθ sobre el cono, con G' = r·√(1 + m²) (teorema de Green en (x, θ))
+   *   · alcance axial     → para saber si la silleta cabe en el cono
+   * Devuelve { ok: false, motivo } si la geometría no existe (injerto demasiado tendido o demasiado grande).
+   */
+  function silletaInjertoCono({ R1, m, xj, rb, beta, sentido, N = 2880 }) {
+    const ux = sentido * cos(beta);
+    const uy = sin(beta);
+    const A0 = R1 - m * xj; // radio del cono en el punto donde el eje del injerto cruza el eje
+    const a = uy * uy - m * m * ux * ux;
+    if (!(a > 1e-9)) return { ok: false, motivo: 'tendido' };
+    const xs = new Float64Array(N);
+    const ys = new Float64Array(N);
+    const zs = new Float64Array(N);
+    let sumaT = 0;
+    let tMax = -Infinity;
+    let xMin = Infinity;
+    let xMax = -Infinity;
+    for (let i = 0; i < N; i += 1) {
+      const phi = (2 * PI * i) / N;
+      const sp = sin(phi);
+      const cp = cos(phi);
+      const c = rb * sp * ux;
+      const d0 = A0 + m * uy * rb * sp;
+      const b = 2 * (uy * c + m * ux * d0);
+      const g = c * c + rb * rb * cp * cp - d0 * d0;
+      const disc = b * b - 4 * a * g;
+      if (!(disc > 0)) return { ok: false, motivo: 'grande' };
+      const t = (-b + sqrt(disc)) / (2 * a);
+      xs[i] = xj + t * ux - rb * sp * uy;
+      ys[i] = t * uy + rb * sp * ux;
+      zs[i] = rb * cp;
+      if (!(R1 - m * xs[i] > 0)) return { ok: false, motivo: 'grande' }; // la silleta pasa del vértice del cono
+      sumaT += t;
+      tMax = Math.max(tMax, t);
+      xMin = Math.min(xMin, xs[i]);
+      xMax = Math.max(xMax, xs[i]);
+    }
+    const k = sqrt(1 + m * m);
+    const G = (x) => k * (R1 * x - (m * x * x) / 2);
+    let perimetro = 0;
+    let area = 0;
+    for (let i = 0; i < N; i += 1) {
+      const j = (i + 1) % N;
+      perimetro += Math.hypot(xs[j] - xs[i], ys[j] - ys[i], zs[j] - zs[i]);
+      let dth = Math.atan2(zs[j], ys[j]) - Math.atan2(zs[i], ys[i]);
+      if (dth > PI) dth -= 2 * PI;
+      else if (dth <= -PI) dth += 2 * PI;
+      area += 0.5 * (G(xs[i]) + G(xs[j])) * dth;
+    }
+    return {
+      ok: true, t_med: sumaT / N, t_max: tMax, P_h: perimetro, A_orificio: Math.abs(area), x_min: xMin, x_max: xMax,
+    };
+  }
+
+  /** Cruce (xj) del eje del injerto con el eje del cono para que su silleta quede centrada en x = xc (sobre la generatriz superior). */
+  function cruceInjertoCono({ R1, m, beta, sentido, xc }) {
+    const ux = sentido * cos(beta);
+    const uy = sin(beta);
+    return (xc * (uy + m * ux) - ux * R1) / uy;
+  }
+
+  /**
+   * Reducción con injerto: el injerto (diámetro d, a 30° o 45°, derecho o izquierdo) va SOBRE EL CONO de la reducción
+   * D1 → D2. La pieza es el cono con el orificio de la silleta más la pared del injerto: 2 piezas, 1 junta interna y
+   * 3 extremos bridados (D1, D2 y d). La silleta se centra en el largo del cono; el largo de la reducción es el menor
+   * que la aloja con holgura a cada extremo (o el que se capture). El lado (der/izq) sólo identifica la pieza; hacia
+   * qué extremo se inclina el injerto (sentido) SÍ cambia el desarrollo, porque el cono se ensancha o se cierra.
    */
   function reduccionInjerto(p, e, M) {
     const PF = nuevoPF('REDUCCION_INJERTO');
-    exigir(p.D1_mm > 0 && p.D2_mm > 0 && p.d_mm > 0, 'Los diámetros del tronco (D1 y D2) y del injerto deben ser mayores que 0.');
-    exigir(p.D2_mm < p.D1_mm, 'D2 debe ser menor que D1: el tronco se reduce de D1 a D2.');
-    const permitidos = M.proceso.angulos_injerto_reduccion_deg;
-    const beta_deg = p.beta_deg === undefined ? M.proceso.beta_ramal_defecto_deg : Number(p.beta_deg);
-    exigir(permitidos.includes(beta_deg), `El injerto de la reducción es a ${permitidos.join('° o ')}°.`);
+    exigir(p.D1_mm > 0 && p.D2_mm > 0 && p.d_mm > 0, 'Los diámetros de la reducción (D1 y D2) y del injerto deben ser mayores que 0.');
+    exigir(p.D2_mm < p.D1_mm, 'D2 debe ser menor que D1: la reducción va de D1 a D2.');
+    const vacio = p.beta_deg === undefined || p.beta_deg === null || p.beta_deg === '';
+    const beta_deg = vacio ? M.proceso.beta_ramal_defecto_deg : Number(p.beta_deg);
+    exigir(beta_deg >= 20 && beta_deg <= 90, 'El ángulo del injerto β debe estar entre 20° y 90°.'); // límite del modelo; el taller maneja 30° y 45°
     const lado = p.lado === undefined ? 'DER' : p.lado;
     exigir(lado === 'DER' || lado === 'IZQ', 'El lado del injerto es derecho (DER) o izquierdo (IZQ).');
+    const inclinacion = p.sentido === undefined ? 'MAYOR' : p.sentido;
+    exigir(inclinacion === 'MAYOR' || inclinacion === 'MENOR', 'El injerto se inclina hacia el extremo mayor (MAYOR) o el menor (MENOR).');
+    const sentido = inclinacion === 'MENOR' ? 1 : -1;
 
     const dT = dimensionesRedondas(p.D1_mm, e, p.ref_diametro);
     const dS = dimensionesRedondas(p.D2_mm, e, p.ref_diametro);
     const db = dimensionesRedondas(p.d_mm, e, p.ref_diametro);
+    const R1 = dT.D_med / 2;
+    const R2 = dS.D_med / 2;
+    const rb = db.D_med / 2;
+    const r_med = (R1 + R2) / 2; // radio del cono a la mitad de su largo
+    exigir(rb < r_med, `El injerto debe ser de menor diámetro que la reducción en el punto donde se asienta (Ø${(2 * r_med).toFixed(0)} mm).`);
     const beta = rad(beta_deg);
-    // Largos automáticos (se pueden capturar): tramo recto mínimo para alojar el orificio con holgura, e injerto con
-    // un tramo recto extra más allá de su generatriz más larga (así un cambio de ángulo nunca deja un injerto corto).
-    const L_cuerpo_auto = (1.25 * db.D_med) / sin(beta);
-    const L_cuerpo = p.L_cuerpo_mm > 0 ? p.L_cuerpo_mm : L_cuerpo_auto;
-    const t_max = (dT.D_med / 2 + (db.D_med / 2) * cos(beta)) / sin(beta);
-    const L_ramal_auto = t_max + M.proceso.injerto_largo_extra_mm;
-    const L_ramal = p.L_ramal_mm > 0 ? p.L_ramal_mm : L_ramal_auto;
-    const R = ramal({
-      D_mm: p.D1_mm, d_mm: p.d_mm, L_cuerpo_mm: L_cuerpo, L_ramal_mm: L_ramal, beta_deg, ref_diametro: p.ref_diametro,
-    }, e, M);
-    const C = reduccion({
-      D1_mm: p.D1_mm, D2_mm: p.D2_mm, L_mm: p.L_reduccion_mm, ref_diametro: p.ref_diametro, excentrica: 'NO',
-    }, e, M);
+    const margen = M.proceso.injerto_margen_cono_mm;
 
-    PF.A_neta_m2 = R.A_neta_m2 + C.A_neta_m2;
-    PF.A_orificio_m2 = R.A_orificio_m2;
-    PF.n_piezas = R.n_piezas + C.n_piezas;
-    PF.n_virolas = R.n_virolas + C.n_virolas;
-    // El rolado se calcula con un solo (L_virola, k_rolado): se promedian ponderando por longitud rolada, de modo que
-    // n · k · L conserve el trabajo de rolado de cada pieza (cilindros k = 1, cono k = k_conico).
-    const rolado_m = R.n_virolas * R.L_virola_m + C.n_virolas * C.L_virola_m;
-    PF.L_virola_m = rolado_m / PF.n_virolas;
-    PF.k_rolado = (R.n_virolas * R.k_rolado * R.L_virola_m + C.n_virolas * C.k_rolado * C.L_virola_m) / rolado_m;
-    PF.L_corte_m = R.L_corte_m + C.L_corte_m;
-    PF.sold.tope_m = R.sold.tope_m + C.sold.tope_m + (PI * dT.D_med) / 1000; // + costura circular tronco–cono
-    PF.sold.filete_m = R.sold.filete_m;
-    PF.n_juntas_internas = R.n_juntas_internas + 1; // silleta del injerto + unión tronco–cono
+    // Con la silleta centrada en L/2: ¿cuánto cono hace falta para alojarla con holgura a cada extremo?
+    const ajuste = (L) => {
+      const m = (R1 - R2) / L;
+      const xj = cruceInjertoCono({ R1, m, beta, sentido, xc: L / 2 });
+      const g = silletaInjertoCono({ R1, m, xj, rb, beta, sentido });
+      if (!g.ok) return { ok: false, motivo: g.motivo };
+      const medio = Math.max(L / 2 - g.x_min, g.x_max - L / 2);
+      return { ok: true, g, necesario: 2 * (medio + margen) };
+    };
+    // El largo automático es el punto fijo L = máx(largo de 15°, lo que necesita la silleta con ese largo): el menor que cabe.
+    const L15 = (R1 - R2) / tan(rad(M.proceso.semiangulo_max_deg));
+    let L_auto = Math.max(L15, 2 * (margen + rb / sin(beta)));
+    let aj;
+    let convergio = false;
+    for (let i = 0; i < 80 && !convergio; i += 1) {
+      aj = ajuste(L_auto);
+      if (!aj.ok) { L_auto *= 1.25; continue; }
+      const siguiente = Math.max(L15, aj.necesario);
+      convergio = Math.abs(siguiente - L_auto) < 1e-7;
+      L_auto = siguiente;
+    }
+    exigir(convergio, 'El injerto no cabe en la reducción: revise los diámetros y el ángulo.');
+    aj = ajuste(L_auto);
+    const L = p.L_reduccion_mm > 0 ? p.L_reduccion_mm : L_auto;
+    if (L !== L_auto) {
+      aj = ajuste(L);
+      exigir(aj.ok, 'El injerto no cabe en esa reducción: alargue la reducción o reduzca el injerto.');
+      exigir(L >= aj.necesario - 1e-6, `La reducción es corta para alojar el injerto: necesita al menos ${Math.ceil(L_auto)} mm (con ${margen} mm de holgura a cada extremo).`);
+    }
+    const g = aj.g;
+    const L_ramal_auto = g.t_max + M.proceso.injerto_largo_extra_mm;
+    const L_r = p.L_ramal_mm > 0 ? p.L_ramal_mm : L_ramal_auto;
+    exigir(L_r > g.t_max, `La longitud del injerto debe exceder ${g.t_max.toFixed(0)} mm (medida sobre su eje desde el eje de la reducción).`);
+
+    const C = reduccion({
+      D1_mm: p.D1_mm, D2_mm: p.D2_mm, L_mm: L, ref_diametro: p.ref_diametro, excentrica: 'NO',
+    }, e, M);
+    const s_cono = C.detalle.generatriz_max_mm;
+    const A_cono = C.A_neta_m2 * 1e6;
+    const A_injerto = PI * db.D_med * (L_r - g.t_med);
+    const k = rb / r_med;
+    if (k > 0.8) PF.advertencias.push('El injerto es casi del diámetro de la reducción (d/D > 0.8 en su punto medio): revisar el diseño.');
+
+    PF.A_neta_m2 = (A_cono - g.A_orificio + A_injerto) / 1e6;
+    PF.A_orificio_m2 = g.A_orificio / 1e6;
+    PF.n_piezas = 2; // cono e injerto
+    PF.n_virolas = 2;
+    // Un solo (L_virola, k_rolado) para el rolado: n·k·L conserva el trabajo de cada pieza (cono k = k_conico; cilindro k = 1).
+    const rolado_m = s_cono + L_r;
+    PF.L_virola_m = rolado_m / 2 / 1000;
+    PF.k_rolado = (M.proceso.rolado.k_conico * s_cono + L_r) / rolado_m;
+    PF.L_corte_m = (PI * (dT.D_med + dS.D_med) + 2 * s_cono + g.P_h + 2 * (PI * db.D_med + L_r)) / 1000;
+    PF.sold.tope_m = (s_cono + (L_r - g.t_med)) / 1000; // costura del cono + costura del injerto
+    PF.sold.filete_m = g.P_h / 1000; // silleta
+    PF.n_juntas_internas = 1;
     PF.extremos = [extremoRedondo(dT), extremoRedondo(dS), extremoRedondo(db)];
     PF.espigas_defecto = 3;
-    PF.D_ref_mm = (R.D_ref_mm * R.A_neta_m2 + C.D_ref_mm * C.A_neta_m2) / PF.A_neta_m2;
+    PF.D_ref_mm = (dT.D_med + dS.D_med) / 2;
+    PF.advertencias.push(...C.advertencias);
     PF.detalle = {
-      ...R.detalle,
-      L_cuerpo_mm: L_cuerpo,
-      L_cuerpo_auto_mm: L_cuerpo_auto,
-      L_ramal_mm: L_ramal,
-      L_ramal_auto_mm: L_ramal_auto,
-      L_reduccion_mm: C.detalle.L_mm,
-      semiangulo_deg: C.detalle.semiangulo_deg,
-      generatriz_max_mm: C.detalle.generatriz_max_mm,
-      A_cono_m2: C.A_neta_m2,
-      lado,
+      d_med_mm: db.D_med, k_d_sobre_D: k, beta_deg, t_medio_mm: g.t_med, t_max_mm: g.t_max,
+      A_cono_m2: A_cono / 1e6, A_ramal_m2: A_injerto / 1e6, P_orificio_mm: g.P_h,
+      L_reduccion_mm: L, L_reduccion_auto_mm: L_auto, L_ramal_mm: L_r, L_ramal_auto_mm: L_ramal_auto,
+      semiangulo_deg: C.detalle.semiangulo_deg, generatriz_max_mm: s_cono,
+      x_silleta_min_mm: g.x_min, x_silleta_max_mm: g.x_max, holgura_mm: Math.min(g.x_min, L - g.x_max),
+      lado, sentido: inclinacion,
     };
-    PF.advertencias.push(...R.advertencias, ...C.advertencias);
     return PF;
   }
 
@@ -525,6 +628,8 @@
     areaTransicionRR,
     razonElipticaE,
     factorOrificio,
+    silletaInjertoCono,
+    cruceInjertoCono,
     familias: { recto, codoRedondo, codoRect, reduccion, transicion, ramal, reduccionInjerto, pantalon, personalizado },
   };
 }));

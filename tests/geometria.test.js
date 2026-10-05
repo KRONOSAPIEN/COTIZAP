@@ -301,110 +301,247 @@ test('Injerto: el orificio de la silleta coincide con la malla de fuerza bruta (
   });
 });
 
-test('Reducción con injerto: área, corte, soldadura y piezas recalculados de forma independiente', () => {
-  const D1 = 400;
-  const D2 = 300;
-  const d = 200;
-  const betaDeg = 30;
-  const Lc = 600;
-  const Lr = 700;
-  const PF = G.perfilFabricacion({ familia: 'REDUCCION_INJERTO', D1_mm: D1, D2_mm: D2, d_mm: d, beta_deg: betaDeg, lado: 'DER', L_cuerpo_mm: Lc, L_ramal_mm: Lr }, E_16, M);
+/* ---------- oráculos por fuerza bruta del injerto sobre un cono (sin la cuadrática ni la integral de línea del motor) ---------- */
 
+/** Distancia axial t, desde el cruce de los ejes, a la que la generatriz φ del injerto toca el cono: bisección sobre la ecuación del cono. */
+function tBiseccion(R1, m, xj, rb, betaDeg, sentido, phi) {
   const beta = (betaDeg * PI) / 180;
-  const R1 = (D1 + E_16) / 2; // radios de la fibra neutra
-  const R2 = (D2 + E_16) / 2;
-  const rb = (d + E_16) / 2;
-  const tMed = tMedioBruto(R1, rb, betaDeg);
-  const Ah = orificioBruto(R1, rb, betaDeg);
-  const delta = R1 - R2;
-  const Lcono = delta / Math.tan((15 * PI) / 180); // semiángulo de 15°
-  const s = Math.hypot(Lcono, delta);
+  const ux = sentido * Math.cos(beta);
+  const uy = Math.sin(beta);
+  const sp = Math.sin(phi);
+  const cp = Math.cos(phi);
+  const fuera = (t) => {
+    const x = xj + t * ux - rb * sp * uy;
+    const y = t * uy + rb * sp * ux;
+    return Math.hypot(y, rb * cp) - (R1 - m * x) > 0;
+  };
+  let lo = 0;
+  let hi = 5000;
+  for (let i = 0; i < 200; i += 1) {
+    const mid = (lo + hi) / 2;
+    if (fuera(mid)) hi = mid; else lo = mid;
+  }
+  return (lo + hi) / 2;
+}
 
-  const A_tronco = 2 * PI * R1 * Lc;
-  const A_injerto = 2 * PI * rb * (Lr - tMed);
-  const A_cono = PI * (R1 + R2) * s;
-  casi(PF.A_neta_m2 * 1e6, A_tronco - Ah + A_injerto + A_cono, 3e-5, 'área neta = tronco − orificio + injerto + cono');
-  casi(PF.detalle.A_cono_m2 * 1e6, A_cono, 1e-9, 'cono');
-  casi(PF.detalle.L_reduccion_mm, Lcono, 1e-9, 'largo automático del cono');
+/** t medio, t máximo y perímetro de la silleta a partir de la bisección (N generatrices). */
+function silletaBruta(R1, m, xj, rb, betaDeg, sentido, N = 20000) {
+  const beta = (betaDeg * PI) / 180;
+  const ux = sentido * Math.cos(beta);
+  const uy = Math.sin(beta);
+  let suma = 0;
+  let tMax = 0;
+  let per = 0;
+  let previo = null;
+  let primero = null;
+  for (let i = 0; i <= N; i += 1) {
+    const phi = (2 * PI * (i % N)) / N;
+    const t = tBiseccion(R1, m, xj, rb, betaDeg, sentido, phi);
+    const q = [xj + t * ux - rb * Math.sin(phi) * uy, t * uy + rb * Math.sin(phi) * ux, rb * Math.cos(phi)];
+    if (i < N) { suma += t; tMax = Math.max(tMax, t); }
+    if (previo) per += norma(sub(q, previo));
+    previo = q;
+    if (!primero) primero = q;
+  }
+  return { t_med: suma / N, t_max: tMax, P_h: per };
+}
 
-  const Ph = 2 * PI * rb * Math.sqrt((1 + 1 / Math.sin(beta) ** 2) / 2); // perímetro de la silleta
-  const Bc = 2 * PI * R1 + 1.0; // plantilla del tronco (costura a tope, holgura 1 mm)
-  const corte = (2 * (Bc + Lc) + Ph + 2 * (2 * PI * rb + Lr) + 2 * PI * (R1 + R2) + 2 * s) / 1000;
-  casi(PF.L_corte_m, corte, 1e-4, 'longitud de corte');
-  casi(PF.sold.tope_m, (Lc + (Lr - tMed) + s + 2 * PI * R1) / 1000, 1e-4, 'soldadura a tope: costuras del tronco, injerto y cono + costura tronco–cono');
-  casi(PF.sold.filete_m, Ph / 1000, 1e-4, 'soldadura de la silleta');
+/** Área del orificio en el cono: rejilla fina sobre su superficie (x, θ); dentro = a menos de rb del eje del injerto. */
+function orificioConoRejilla(R1, m, xj, rb, betaDeg, sentido, xmin, xmax, N = 2400) {
+  const beta = (betaDeg * PI) / 180;
+  const ux = sentido * Math.cos(beta);
+  const uy = Math.sin(beta);
+  const k = Math.sqrt(1 + m * m);
+  const x0 = xmin - 10;
+  const x1 = xmax + 10;
+  const thm = Math.asin(Math.min(1, (1.1 * rb) / (R1 - m * x1)));
+  const dx = (x1 - x0) / N;
+  const dth = (2 * thm) / N;
+  let area = 0;
+  for (let i = 0; i < N; i += 1) {
+    const x = x0 + (i + 0.5) * dx;
+    const r = R1 - m * x;
+    const X = x - xj;
+    for (let j = 0; j < N; j += 1) {
+      const th = -thm + (j + 0.5) * dth;
+      const py = r * Math.cos(th);
+      const pz = r * Math.sin(th);
+      const proy = X * ux + py * uy;
+      if (X * X + py * py + pz * pz - proy * proy < rb * rb) area += r * k * dx * dth;
+    }
+  }
+  return area;
+}
 
-  assert.equal(PF.n_piezas, 3);
-  assert.equal(PF.n_virolas, 3);
-  assert.equal(PF.n_juntas_internas, 2);
-  assert.equal(PF.extremos.length, 3);
-  assert.deepEqual(PF.extremos.map((x) => Number(x.D_ext_mm.toFixed(3))), [Number((D1 + 2 * E_16).toFixed(3)), Number((D2 + 2 * E_16).toFixed(3)), Number((d + 2 * E_16).toFixed(3))]);
-  // el rolado conserva el trabajo de cada pieza: cilindros (k = 1) y cono (k = k_conico)
-  casi(PF.n_virolas * PF.k_rolado * PF.L_virola_m, Lc / 1000 + Lr / 1000 + (M.proceso.rolado.k_conico * s) / 1000, 1e-9, 'trabajo de rolado');
+const CASOS_CONO = [ // R1, R2, L, rb, β°, sentido (−1 = hacia el extremo mayor, +1 = hacia el menor)
+  [153.16, 127.76, 300, 76.96, 45, -1], [153.16, 127.76, 300, 76.96, 45, 1], [153.16, 127.76, 400, 76.96, 30, -1],
+  [153.16, 127.76, 400, 76.96, 30, 1], [200, 120, 500, 80, 30, -1], [200, 120, 400, 60, 45, 1],
+];
+
+test('Silleta del injerto sobre el cono: t medio, t máximo, perímetro y orificio coinciden con la fuerza bruta (30° y 45°, hacia ambos extremos)', () => {
+  CASOS_CONO.forEach(([R1, R2, L, rb, b, sentido]) => {
+    const m = (R1 - R2) / L;
+    const beta = (b * PI) / 180;
+    const xj = G.cruceInjertoCono({ R1, m, beta, sentido, xc: L / 2 });
+    const g = G.silletaInjertoCono({ R1, m, xj, rb, beta, sentido });
+    assert.ok(g.ok);
+    const bruto = silletaBruta(R1, m, xj, rb, b, sentido);
+    const etiqueta = `R1=${R1} R2=${R2} L=${L} rb=${rb} β=${b} sentido=${sentido}`;
+    casi(g.t_med, bruto.t_med, 1e-9, `t medio · ${etiqueta}`);
+    casi(g.t_max, bruto.t_max, 1e-5, `t máximo · ${etiqueta}`);
+    casi(g.P_h, bruto.P_h, 1e-5, `perímetro de la silleta · ${etiqueta}`);
+    casi(g.A_orificio, orificioConoRejilla(R1, m, xj, rb, b, sentido, g.x_min, g.x_max), 1e-4, `orificio · ${etiqueta}`);
+    // la silleta queda centrada en el largo del cono
+    casi((g.x_min + g.x_max) / 2, L / 2, 5e-3, `centrada · ${etiqueta}`);
+  });
 });
 
-test('Reducción con injerto: el lado (der/izq) sólo identifica la pieza y no cambia ninguna cantidad', () => {
-  const base = { familia: 'REDUCCION_INJERTO', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 45 };
-  const der = G.perfilFabricacion({ ...base, lado: 'DER' }, E_16, M);
-  const izq = G.perfilFabricacion({ ...base, lado: 'IZQ' }, E_16, M);
+test('Silleta del injerto sobre el cono: si el cono casi es un cilindro coincide con el injerto simple (m → 0)', () => {
+  const D = 400;
+  const d = 200;
+  [30, 45, 60].forEach((b) => {
+    const Rm = (D + E_16) / 2;
+    const rb = (d + E_16) / 2;
+    const m = 1e-7;
+    const beta = (b * PI) / 180;
+    const xj = G.cruceInjertoCono({ R1: Rm, m, beta, sentido: -1, xc: 1000 });
+    const g = G.silletaInjertoCono({ R1: Rm, m, xj, rb, beta, sentido: -1 });
+    const cilindro = G.perfilFabricacion({ familia: 'RAMAL', D_mm: D, d_mm: d, L_cuerpo_mm: 2000, L_ramal_mm: 2000, beta_deg: b }, E_16, M);
+    casi(g.A_orificio, cilindro.A_orificio_m2 * 1e6, 1e-4, `orificio β=${b}`);
+    casi(g.t_med, cilindro.detalle.t_medio_mm, 1e-6, `t medio β=${b}`);
+    casi(g.t_max, cilindro.detalle.t_max_mm, 1e-3, `t máximo β=${b}`); // el máximo del cilindro es el extremo teórico; el discreto lo roza
+  });
+});
+
+test('Silleta del injerto sobre el cono: un injerto demasiado tendido o demasiado grande no tiene geometría', () => {
+  const R1 = 150;
+  const R2 = 100;
+  const m = (R1 - R2) / 100; // cono muy abierto: semiángulo 26.6°
+  const beta = (20 * PI) / 180; // más tendido que la generatriz del cono
+  const xj = G.cruceInjertoCono({ R1, m, beta, sentido: -1, xc: 50 });
+  const tendido = G.silletaInjertoCono({ R1, m, xj, rb: 20, beta, sentido: -1 });
+  assert.equal(tendido.ok, false);
+  assert.equal(tendido.motivo, 'tendido');
+  const beta45 = (45 * PI) / 180;
+  const grande = G.silletaInjertoCono({ R1, m: 0.05, xj: 0, rb: 400, beta: beta45, sentido: -1 });
+  assert.equal(grande.ok, false);
+});
+
+/* ---------- reducción con injerto (el injerto va SOBRE EL CONO) ---------- */
+
+const BASE_RI = { familia: 'REDUCCION_INJERTO', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 45 };
+
+test('Reducción con injerto: área, corte, soldadura y piezas recalculados de forma independiente (cono + pared del injerto − orificio)', () => {
+  [['MAYOR', 45, 400], ['MENOR', 45, 400], ['MAYOR', 30, 550], ['MENOR', 30, 550]].forEach(([inclinacion, b, L]) => {
+    const D1 = 400;
+    const D2 = 300;
+    const d = 150;
+    const sentido = inclinacion === 'MENOR' ? 1 : -1;
+    const PF = G.perfilFabricacion({ familia: 'REDUCCION_INJERTO', D1_mm: D1, D2_mm: D2, d_mm: d, beta_deg: b, sentido: inclinacion, lado: 'DER', L_reduccion_mm: L }, E_16, M);
+
+    const R1 = (D1 + E_16) / 2;
+    const R2 = (D2 + E_16) / 2;
+    const rb = (d + E_16) / 2;
+    const m = (R1 - R2) / L;
+    const beta = (b * PI) / 180;
+    const xj = G.cruceInjertoCono({ R1, m, beta, sentido, xc: L / 2 });
+    const motor = G.silletaInjertoCono({ R1, m, xj, rb, beta, sentido });
+    const bruto = silletaBruta(R1, m, xj, rb, b, sentido, 8000);
+    const Ao = orificioConoRejilla(R1, m, xj, rb, b, sentido, motor.x_min, motor.x_max);
+    const s = Math.hypot(L, R1 - R2);
+    const A_cono = PI * (R1 + R2) * s;
+    const L_r = PF.detalle.L_ramal_mm;
+    assert.ok(Math.abs(L_r - (bruto.t_max + 150)) < 1e-2, 'largo automático del injerto = generatriz más larga + 150 mm');
+    const A_injerto = 2 * PI * rb * (L_r - bruto.t_med);
+    const et = `${inclinacion} ${b}°`;
+    casi(PF.A_neta_m2 * 1e6, A_cono - Ao + A_injerto, 2e-4, `área neta · ${et}`);
+    casi(PF.detalle.A_cono_m2 * 1e6, A_cono, 1e-9, `cono · ${et}`);
+    casi(PF.A_orificio_m2 * 1e6, Ao, 1e-4, `orificio · ${et}`);
+
+    const corte = (PI * (R1 + R2) * 2 + 2 * s + bruto.P_h + 2 * (2 * PI * rb + L_r)) / 1000;
+    casi(PF.L_corte_m, corte, 2e-5, `corte · ${et}`);
+    casi(PF.sold.tope_m, (s + (L_r - bruto.t_med)) / 1000, 1e-6, `soldadura a tope · ${et}`);
+    casi(PF.sold.filete_m, bruto.P_h / 1000, 1e-5, `soldadura de silleta · ${et}`);
+    assert.equal(PF.n_piezas, 2);
+    assert.equal(PF.n_virolas, 2);
+    assert.equal(PF.n_juntas_internas, 1);
+    assert.equal(PF.extremos.length, 3);
+    assert.deepEqual(PF.extremos.map((x) => Number(x.D_ext_mm.toFixed(3))), [D1, D2, d].map((x) => Number((x + 2 * E_16).toFixed(3))));
+    casi(PF.n_virolas * PF.k_rolado * PF.L_virola_m, (M.proceso.rolado.k_conico * s + L_r) / 1000, 1e-9, `trabajo de rolado · ${et}`);
+  });
+});
+
+test('Reducción con injerto: el largo automático es el menor que aloja la silleta con la holgura de maestros', () => {
+  const margen = M.proceso.injerto_margen_cono_mm;
+  assert.equal(margen, 25);
+  [['MAYOR', 45], ['MENOR', 45], ['MAYOR', 30], ['MENOR', 30]].forEach(([inclinacion, b]) => {
+    const PF = G.perfilFabricacion({ ...BASE_RI, beta_deg: b, sentido: inclinacion }, E_16, M);
+    const d = PF.detalle;
+    assert.ok(d.x_silleta_min_mm >= margen - 1e-6, `holgura al extremo mayor · ${inclinacion} ${b}°`);
+    assert.ok(d.L_reduccion_mm - d.x_silleta_max_mm >= margen - 1e-6, `holgura al extremo menor · ${inclinacion} ${b}°`);
+    casi(d.L_reduccion_mm, d.L_reduccion_auto_mm, 1e-12);
+    // mínimo: con 2 mm menos de cono ya no cabe con holgura
+    assert.throws(() => G.perfilFabricacion({ ...BASE_RI, beta_deg: b, sentido: inclinacion, L_reduccion_mm: d.L_reduccion_mm - 2 }, E_16, M), /La reducción es corta para alojar el injerto/, `${inclinacion} ${b}°`);
+    assert.doesNotThrow(() => G.perfilFabricacion({ ...BASE_RI, beta_deg: b, sentido: inclinacion, L_reduccion_mm: d.L_reduccion_mm + 50 }, E_16, M));
+  });
+  // cuando el injerto es chico, manda el semiángulo de 15° (largo mínimo de una reducción) y no la silleta
+  const chico = G.perfilFabricacion({ familia: 'REDUCCION_INJERTO', D1_mm: 600, D2_mm: 200, d_mm: 80, beta_deg: 45 }, E_16, M);
+  casi(chico.detalle.semiangulo_deg, 15, 1e-9);
+  assert.ok(chico.detalle.holgura_mm > margen);
+});
+
+test('Reducción con injerto: un cono más largo se ve en la lámina y la silleta sigue en el centro', () => {
+  const corto = G.perfilFabricacion(BASE_RI, E_16, M);
+  const largo = G.perfilFabricacion({ ...BASE_RI, L_reduccion_mm: corto.detalle.L_reduccion_mm + 300 }, E_16, M);
+  assert.ok(largo.A_neta_m2 > corto.A_neta_m2);
+  casi((largo.detalle.x_silleta_min_mm + largo.detalle.x_silleta_max_mm) / 2, largo.detalle.L_reduccion_mm / 2, 5e-3);
+});
+
+test('Reducción con injerto: hacia qué extremo se inclina SÍ cambia el desarrollo (más orificio hacia el mayor); el lado (der/izq) no', () => {
+  [30, 45].forEach((b) => {
+    const mayor = G.perfilFabricacion({ ...BASE_RI, beta_deg: b, sentido: 'MAYOR', L_reduccion_mm: 500 }, E_16, M);
+    const menor = G.perfilFabricacion({ ...BASE_RI, beta_deg: b, sentido: 'MENOR', L_reduccion_mm: 500 }, E_16, M);
+    assert.ok(mayor.A_orificio_m2 > menor.A_orificio_m2 * 1.05, `β=${b}`);
+    assert.ok(mayor.sold.filete_m > menor.sold.filete_m, `β=${b}`);
+    assert.ok(mayor.detalle.t_max_mm > menor.detalle.t_max_mm, `β=${b}`);
+  });
   const sinLado = (PF) => JSON.stringify({ ...PF, detalle: { ...PF.detalle, lado: undefined } });
+  const der = G.perfilFabricacion({ ...BASE_RI, lado: 'DER' }, E_16, M);
+  const izq = G.perfilFabricacion({ ...BASE_RI, lado: 'IZQ' }, E_16, M);
   assert.equal(sinLado(der), sinLado(izq));
   assert.equal(der.detalle.lado, 'DER');
   assert.equal(izq.detalle.lado, 'IZQ');
-  assert.equal(G.perfilFabricacion({ ...base }, E_16, M).detalle.lado, 'DER', 'por omisión: derecho');
+  const omitido = G.perfilFabricacion({ ...BASE_RI }, E_16, M);
+  assert.equal(omitido.detalle.lado, 'DER', 'por omisión: derecho');
+  assert.equal(omitido.detalle.sentido, 'MAYOR', 'por omisión: hacia el extremo mayor');
 });
 
-test('Reducción con injerto: sólo 30° o 45° (lista de maestros), D2 < D1, d < D1 y L_ramal suficiente', () => {
-  const base = { familia: 'REDUCCION_INJERTO', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 45, L_ramal_mm: 600 };
-  const ok = (extra) => G.perfilFabricacion({ ...base, ...extra }, E_16, M);
-  assert.doesNotThrow(() => ok({ beta_deg: 30 }));
-  assert.doesNotThrow(() => ok({ beta_deg: '30' }), 'el ángulo llega como texto desde una lista de la interfaz');
-  assert.doesNotThrow(() => ok({ beta_deg: undefined }), 'sin ángulo: el de maestros (45°)');
-  [60, 90, 20, 0].forEach((b) => assert.throws(() => ok({ beta_deg: b }), /30° o 45°/, `β = ${b}`));
+test('Reducción con injerto: validaciones físicas (D2 < D1, injerto menor que el cono, largos suficientes, lado y sentido válidos)', () => {
+  const ok = (extra) => G.perfilFabricacion({ ...BASE_RI, ...extra }, E_16, M);
+  assert.doesNotThrow(() => ok({}));
   assert.throws(() => ok({ D2_mm: 304.8 }), /D2 debe ser menor que D1/);
   assert.throws(() => ok({ D2_mm: 400 }), /D2 debe ser menor que D1/);
-  assert.throws(() => ok({ d_mm: 304.8 }), /injerto debe ser de menor diámetro/);
-  assert.throws(() => ok({ L_ramal_mm: 100 }), /longitud del injerto debe exceder/);
-  assert.throws(() => ok({ lado: 'CENTRO' }), /derecho \(DER\) o izquierdo \(IZQ\)/);
+  assert.throws(() => ok({ d_mm: 300 }), /injerto debe ser de menor diámetro que la reducción/);
   assert.throws(() => ok({ D1_mm: 0 }), U.ErrorValidacion);
-  // la lista de ángulos es un dato de maestros: con otra lista cambia lo permitido
-  const M60 = crearMaestros({ proceso: { angulos_injerto_reduccion_deg: [30, 45, 60] } });
-  assert.doesNotThrow(() => G.perfilFabricacion({ ...base, beta_deg: 60 }, E_16, M60));
+  assert.throws(() => ok({ beta_deg: 10 }), /entre 20° y 90°/);
+  assert.throws(() => ok({ lado: 'CENTRO' }), /derecho \(DER\) o izquierdo \(IZQ\)/);
+  assert.throws(() => ok({ sentido: 'ARRIBA' }), /extremo mayor \(MAYOR\) o el menor \(MENOR\)/);
+  assert.throws(() => ok({ L_ramal_mm: 100 }), /longitud del injerto debe exceder/);
+  assert.throws(() => ok({ L_reduccion_mm: 120 }), /La reducción es corta para alojar el injerto: necesita al menos \d+ mm/);
+  // el ángulo llega como texto desde la lista de la interfaz
+  assert.doesNotThrow(() => ok({ beta_deg: '30' }));
+  assert.doesNotThrow(() => ok({ beta_deg: undefined }), 'sin ángulo: el de maestros (45°)');
 });
 
-test('Reducción con injerto: sin L_cuerpo ni L_ramal se usan los automáticos; un tramo corto advierte', () => {
-  const base = { familia: 'REDUCCION_INJERTO', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 45 };
-  const auto = G.perfilFabricacion(base, E_16, M);
-  // largo automático del injerto: generatriz más larga + tramo recto extra de maestros (150 mm), a cualquiera de los dos ángulos
+test('Reducción con injerto: sin largo del injerto se usa su generatriz más larga + el tramo recto de maestros; una reducción más corta que 15° de semiángulo advierte', () => {
   [30, 45].forEach((b) => {
-    const PF = G.perfilFabricacion({ ...base, beta_deg: b }, E_16, M);
-    const beta = (b * PI) / 180;
-    const tMax = ((304.8 + E_16) / 2 + ((152.4 + E_16) / 2) * Math.cos(beta)) / Math.sin(beta);
-    casi(PF.detalle.L_ramal_mm, tMax + 150, 1e-12, `β=${b}`);
+    const PF = G.perfilFabricacion({ ...BASE_RI, beta_deg: b }, E_16, M);
+    casi(PF.detalle.L_ramal_mm, PF.detalle.t_max_mm + 150, 1e-12, `β=${b}`);
     assert.equal(PF.advertencias.length, 0);
   });
-  const d_med = 152.4 + E_16;
-  casi(auto.detalle.L_cuerpo_mm, (1.25 * d_med) / Math.sin((45 * PI) / 180), 1e-12);
-  assert.equal(auto.advertencias.length, 0);
-  const corto = G.perfilFabricacion({ ...base, L_cuerpo_mm: 150 }, E_16, M);
-  assert.ok(corto.advertencias.some((x) => /tramo recto del tronco es corto/.test(x)));
-  const largo = G.perfilFabricacion({ ...base, L_cuerpo_mm: 800 }, E_16, M);
-  assert.ok(largo.A_neta_m2 > auto.A_neta_m2, 'más tronco, más lámina');
-});
-
-test('Reducción con injerto: el cono con semiángulo excesivo advierte (L_reduccion demasiado corta)', () => {
-  const base = { familia: 'REDUCCION_INJERTO', D1_mm: 400, D2_mm: 200, d_mm: 150, beta_deg: 45 };
-  assert.equal(G.perfilFabricacion(base, E_16, M).advertencias.length, 0);
-  assert.ok(G.perfilFabricacion({ ...base, L_reduccion_mm: 120 }, E_16, M).advertencias.some((x) => /Semiángulo/.test(x)));
-});
-
-test('Reducción con injerto: a 30° la silleta es más larga y abre más orificio que a 45°', () => {
-  const base = { familia: 'REDUCCION_INJERTO', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, L_cuerpo_mm: 600, L_ramal_mm: 600 };
-  const a30 = G.perfilFabricacion({ ...base, beta_deg: 30 }, E_16, M);
-  const a45 = G.perfilFabricacion({ ...base, beta_deg: 45 }, E_16, M);
-  assert.ok(a30.sold.filete_m > a45.sold.filete_m, 'más soldadura de silleta');
-  assert.ok(a30.A_orificio_m2 > a45.A_orificio_m2, 'más orificio');
-  assert.ok(a30.detalle.t_max_mm > a45.detalle.t_max_mm, 'el injerto necesita más largo');
+  // cono muy abierto: se captura un largo corto que sí aloja un injerto chico, pero pasa de 15° de semiángulo
+  const abierto = G.perfilFabricacion({ familia: 'REDUCCION_INJERTO', D1_mm: 600, D2_mm: 200, d_mm: 60, beta_deg: 45, L_reduccion_mm: 330 }, E_16, M);
+  assert.ok(abierto.advertencias.some((x) => /Semiángulo/.test(x)));
 });
 
 test('Pantalón (retirado): sigue calculando para abrir cotizaciones anteriores y avisa que es una familia retirada', () => {

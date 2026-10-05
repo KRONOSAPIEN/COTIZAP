@@ -36,6 +36,7 @@
     tipo_costura: [['A_TOPE', 'Soldada a tope'], ['TRASLAPE', 'Soldada a traslape'], ['PITTSBURGH', 'Engargolado Pittsburgh']],
     excentrica: [['NO', 'Concéntrica'], ['CARA_PLANA', 'Excéntrica · cara plana']],
     lado: [['DER', 'Derecho'], ['IZQ', 'Izquierdo']],
+    sentido_injerto: [['MAYOR', 'El extremo mayor (D1)'], ['MENOR', 'El extremo menor (D2)']],
     driver: [['PIEZA', 'Por pieza'], ['KG_NETO', 'Por kg neto'], ['KG_BRUTO', 'Por kg bruto'], ['M2_NETO', 'Por m² de lámina'], ['M_CORTE', 'Por m de corte'], ['M_SOLDADURA', 'Por m de soldadura']],
   };
 
@@ -60,7 +61,7 @@
       { id: 'D_mm', etiqueta: 'Diámetro', tipo: 'dim', visible: redonda, defecto: 304.8 },
       { id: 'a_mm', etiqueta: 'Ancho a (en el plano del giro)', tipo: 'dim', visible: rect, defecto: 400 },
       { id: 'b_mm', etiqueta: 'Alto b', tipo: 'dim', visible: rect, defecto: 300 },
-      { id: 'theta_deg', etiqueta: 'Ángulo del codo', tipo: 'num', unidad: '°', defecto: 90, min: 5, max: 180 },
+      { id: 'theta_deg', etiqueta: 'Ángulo del codo', tipo: 'select', opciones: 'angulos_codo', numerico: true, defecto: 90 },
       { id: 'k_R', etiqueta: 'Relación R/D', tipo: 'num', defecto: 1.5, min: 1, paso: 0.25, ayuda: 'Radio de eje ÷ diámetro (en rectangular: ÷ a)' },
       { id: 'n_gajos', etiqueta: 'Gajos', tipo: 'int', opcional: true, visible: redonda, min: 2, ayuda: 'Vacío = automático (α ≤ 22.5° por junta)' },
       { id: 'L_tangente_mm', etiqueta: 'Tangente en cada extremo', tipo: 'dim', opcional: true, visible: redonda },
@@ -82,17 +83,17 @@
       { id: 'd_mm', etiqueta: 'Diámetro del injerto', tipo: 'dim', defecto: 203.2 },
       { id: 'L_cuerpo_mm', etiqueta: 'Longitud del tronco', tipo: 'dim', defecto: 700 },
       { id: 'L_ramal_mm', etiqueta: 'Longitud del injerto', tipo: 'dim', defecto: 450, ayuda: 'Sobre su eje, desde el eje del tronco' },
-      { id: 'beta_deg', etiqueta: 'Ángulo del injerto β', tipo: 'num', unidad: '°', defecto: 45, min: 20, max: 90 },
+      { id: 'beta_deg', etiqueta: 'Ángulo del injerto', tipo: 'select', opciones: 'angulos_injerto', numerico: true, defecto: 45 },
     ],
-    REDUCCION_INJERTO: [
-      { id: 'D1_mm', etiqueta: 'Diámetro mayor D1 (tronco)', tipo: 'dim', defecto: 304.8 },
-      { id: 'D2_mm', etiqueta: 'Diámetro menor D2 (salida)', tipo: 'dim', defecto: 254 },
+    REDUCCION_INJERTO: [ // el injerto va SOBRE EL CONO de la reducción
+      { id: 'D1_mm', etiqueta: 'Diámetro mayor D1', tipo: 'dim', defecto: 304.8 },
+      { id: 'D2_mm', etiqueta: 'Diámetro menor D2', tipo: 'dim', defecto: 254 },
       { id: 'd_mm', etiqueta: 'Diámetro del injerto', tipo: 'dim', defecto: 152.4 },
       { id: 'beta_deg', etiqueta: 'Ángulo del injerto', tipo: 'select', opciones: 'angulos_injerto', numerico: true, defecto: 45 },
+      { id: 'sentido', etiqueta: 'El injerto se inclina hacia', tipo: 'select', opciones: 'sentido_injerto', defecto: 'MAYOR', ayuda: 'Cambia el desarrollo: el cono se abre o se cierra en ese sentido' },
       { id: 'lado', etiqueta: 'Lado del injerto', tipo: 'select', opciones: 'lado', defecto: 'DER', ayuda: 'Sólo identifica la pieza en el taller: no cambia el costo' },
-      { id: 'L_cuerpo_mm', etiqueta: 'Longitud del tramo recto de D1', tipo: 'dim', opcional: true, ayuda: 'Vacío = automático (el mínimo para alojar el injerto)' },
-      { id: 'L_ramal_mm', etiqueta: 'Longitud del injerto', tipo: 'dim', opcional: true, ayuda: 'Sobre su eje, desde el eje del tronco. Vacío = automático' },
-      { id: 'L_reduccion_mm', etiqueta: 'Longitud de la reducción', tipo: 'dim', opcional: true, ayuda: 'Vacío = automático con semiángulo de 15°' },
+      { id: 'L_reduccion_mm', etiqueta: 'Longitud de la reducción', tipo: 'dim', opcional: true, ayuda: 'Vacío = automático (la menor que aloja el injerto sobre el cono, con holgura)' },
+      { id: 'L_ramal_mm', etiqueta: 'Longitud del injerto', tipo: 'dim', opcional: true, ayuda: 'Sobre su eje, desde el eje de la reducción. Vacío = automático' },
     ],
     PANTALON: [ // retirado: sólo para editar cotizaciones anteriores
       { id: 'D_mm', etiqueta: 'Diámetro del tronco', tipo: 'dim', defecto: 500 },
@@ -182,7 +183,7 @@
       case 'RAMAL':
         return `${d(p.D_mm)} + injerto ${d(p.d_mm)} a ${p.beta_deg}°`;
       case 'REDUCCION_INJERTO':
-        return `${d(p.D1_mm)} → ${d(p.D2_mm)} + injerto ${d(p.d_mm)} a ${p.beta_deg}° ${p.lado === 'IZQ' ? 'izq.' : 'der.'}`;
+        return `${d(p.D1_mm)} → ${d(p.D2_mm)} + injerto ${d(p.d_mm)} a ${p.beta_deg}° ${p.lado === 'IZQ' ? 'izq.' : 'der.'}${p.sentido === 'MENOR' ? ' · hacia D2' : ''}`;
       case 'PANTALON':
         return `${d(p.D_mm)} → ${d(p.d1_mm)} + ${d(p.d2_mm)}`;
       case 'PERSONALIZADO':
