@@ -430,6 +430,8 @@ test('Silleta del injerto sobre el cono: un injerto demasiado tendido o demasiad
 /* ---------- reducción con injerto (el injerto va SOBRE EL CONO) ---------- */
 
 const BASE_RI = { familia: 'REDUCCION_INJERTO', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 45 };
+/** La inclinación del injerto la fija el taller en maestros (proceso.injerto_inclinado_hacia): 'MENOR' = de extremo mayor a menor. */
+const maestrosHacia = (hacia) => crearMaestros({ proceso: { injerto_inclinado_hacia: hacia } });
 
 test('Reducción con injerto: área, corte, soldadura y piezas recalculados de forma independiente (cono + pared del injerto − orificio)', () => {
   [['MAYOR', 45, 400], ['MENOR', 45, 400], ['MAYOR', 30, 550], ['MENOR', 30, 550]].forEach(([inclinacion, b, L]) => {
@@ -437,7 +439,7 @@ test('Reducción con injerto: área, corte, soldadura y piezas recalculados de f
     const D2 = 300;
     const d = 150;
     const sentido = inclinacion === 'MENOR' ? 1 : -1;
-    const PF = G.perfilFabricacion({ familia: 'REDUCCION_INJERTO', D1_mm: D1, D2_mm: D2, d_mm: d, beta_deg: b, sentido: inclinacion, L_reduccion_mm: L }, E_16, M);
+    const PF = G.perfilFabricacion({ familia: 'REDUCCION_INJERTO', D1_mm: D1, D2_mm: D2, d_mm: d, beta_deg: b, L_reduccion_mm: L }, E_16, maestrosHacia(inclinacion));
 
     const R1 = (D1 + E_16) / 2;
     const R2 = (D2 + E_16) / 2;
@@ -475,14 +477,14 @@ test('Reducción con injerto: el largo automático es el menor que aloja la sill
   const margen = M.proceso.injerto_margen_cono_mm;
   assert.equal(margen, 25);
   [['MAYOR', 45], ['MENOR', 45], ['MAYOR', 30], ['MENOR', 30]].forEach(([inclinacion, b]) => {
-    const PF = G.perfilFabricacion({ ...BASE_RI, beta_deg: b, sentido: inclinacion }, E_16, M);
+    const PF = G.perfilFabricacion({ ...BASE_RI, beta_deg: b }, E_16, maestrosHacia(inclinacion));
     const d = PF.detalle;
     assert.ok(d.x_silleta_min_mm >= margen - 1e-6, `holgura al extremo mayor · ${inclinacion} ${b}°`);
     assert.ok(d.L_reduccion_mm - d.x_silleta_max_mm >= margen - 1e-6, `holgura al extremo menor · ${inclinacion} ${b}°`);
     casi(d.L_reduccion_mm, d.L_reduccion_auto_mm, 1e-12);
     // mínimo: con 2 mm menos de cono ya no cabe con holgura
-    assert.throws(() => G.perfilFabricacion({ ...BASE_RI, beta_deg: b, sentido: inclinacion, L_reduccion_mm: d.L_reduccion_mm - 2 }, E_16, M), /La reducción es corta para alojar el injerto/, `${inclinacion} ${b}°`);
-    assert.doesNotThrow(() => G.perfilFabricacion({ ...BASE_RI, beta_deg: b, sentido: inclinacion, L_reduccion_mm: d.L_reduccion_mm + 50 }, E_16, M));
+    assert.throws(() => G.perfilFabricacion({ ...BASE_RI, beta_deg: b, L_reduccion_mm: d.L_reduccion_mm - 2 }, E_16, maestrosHacia(inclinacion)), /La reducción es corta para alojar el injerto/, `${inclinacion} ${b}°`);
+    assert.doesNotThrow(() => G.perfilFabricacion({ ...BASE_RI, beta_deg: b, L_reduccion_mm: d.L_reduccion_mm + 50 }, E_16, maestrosHacia(inclinacion)));
   });
   // cuando el injerto es chico, manda el semiángulo de 15° (largo mínimo de una reducción) y no la silleta
   const chico = G.perfilFabricacion({ familia: 'REDUCCION_INJERTO', D1_mm: 600, D2_mm: 200, d_mm: 80, beta_deg: 45 }, E_16, M);
@@ -497,28 +499,30 @@ test('Reducción con injerto: un cono más largo se ve en la lámina y la sillet
   casi((largo.detalle.x_silleta_min_mm + largo.detalle.x_silleta_max_mm) / 2, largo.detalle.L_reduccion_mm / 2, 5e-3);
 });
 
-test('Reducción con injerto: hacia qué extremo se inclina cambia el desarrollo (más orificio hacia el mayor)', () => {
+test('Reducción con injerto: el taller lo lleva de extremo mayor a menor (hacia D2); hacia D1 cambiaría el desarrollo (más orificio)', () => {
   [30, 45].forEach((b) => {
-    const mayor = G.perfilFabricacion({ ...BASE_RI, beta_deg: b, sentido: 'MAYOR', L_reduccion_mm: 500 }, E_16, M);
-    const menor = G.perfilFabricacion({ ...BASE_RI, beta_deg: b, sentido: 'MENOR', L_reduccion_mm: 500 }, E_16, M);
+    const mayor = G.perfilFabricacion({ ...BASE_RI, beta_deg: b, L_reduccion_mm: 500 }, E_16, maestrosHacia('MAYOR'));
+    const menor = G.perfilFabricacion({ ...BASE_RI, beta_deg: b, L_reduccion_mm: 500 }, E_16, maestrosHacia('MENOR'));
     assert.ok(mayor.A_orificio_m2 > menor.A_orificio_m2 * 1.05, `β=${b}`);
     assert.ok(mayor.sold.filete_m > menor.sold.filete_m, `β=${b}`);
     assert.ok(mayor.detalle.t_max_mm > menor.detalle.t_max_mm, `β=${b}`);
   });
+  assert.equal(M.proceso.injerto_inclinado_hacia, 'MENOR', 'dato de maestros: de extremo mayor a menor');
   const omitido = G.perfilFabricacion({ ...BASE_RI }, E_16, M);
-  assert.equal(omitido.detalle.sentido, 'MAYOR', 'por omisión: hacia el extremo mayor');
+  assert.equal(omitido.detalle.sentido, 'MENOR', 'por omisión: hacia el extremo menor (D2)');
+  assert.equal(JSON.stringify(omitido), JSON.stringify(G.perfilFabricacion({ ...BASE_RI }, E_16, maestrosHacia(' menor '))), 'el valor se lee sin importar mayúsculas ni espacios');
 });
 
-test('Reducción con injerto: ya no hay "lado" (der/izq); una cotización anterior que lo traía calcula exactamente igual', () => {
+test('Reducción con injerto: ya no hay "lado" (der/izq) ni "sentido" por partida; una cotización anterior que los traía calcula exactamente igual', () => {
   const sin = G.perfilFabricacion({ ...BASE_RI }, E_16, M);
-  ['DER', 'IZQ', 'CENTRO'].forEach((lado) => {
-    const con = G.perfilFabricacion({ ...BASE_RI, lado }, E_16, M);
-    assert.equal(JSON.stringify(con), JSON.stringify(sin), `el dato sobrante "${lado}" se ignora`);
+  [{ lado: 'DER' }, { lado: 'IZQ' }, { lado: 'CENTRO' }, { sentido: 'MAYOR' }, { sentido: 'MENOR' }, { sentido: 'ARRIBA' }].forEach((extra) => {
+    const con = G.perfilFabricacion({ ...BASE_RI, ...extra }, E_16, M);
+    assert.equal(JSON.stringify(con), JSON.stringify(sin), `el dato sobrante ${JSON.stringify(extra)} se ignora`);
   });
   assert.equal('lado' in sin.detalle, false, 'el detalle ya no trae lado');
 });
 
-test('Reducción con injerto: validaciones físicas (D2 < D1, injerto menor que el cono, largos suficientes, sentido válido)', () => {
+test('Reducción con injerto: validaciones físicas (D2 < D1, injerto menor que el cono, largos suficientes) y la inclinación de maestros', () => {
   const ok = (extra) => G.perfilFabricacion({ ...BASE_RI, ...extra }, E_16, M);
   assert.doesNotThrow(() => ok({}));
   assert.throws(() => ok({ D2_mm: 304.8 }), /D2 debe ser menor que D1/);
@@ -526,7 +530,7 @@ test('Reducción con injerto: validaciones físicas (D2 < D1, injerto menor que 
   assert.throws(() => ok({ d_mm: 300 }), /injerto debe ser de menor diámetro que la reducción/);
   assert.throws(() => ok({ D1_mm: 0 }), U.ErrorValidacion);
   assert.throws(() => ok({ beta_deg: 10 }), /entre 20° y 90°/);
-  assert.throws(() => ok({ sentido: 'ARRIBA' }), /extremo mayor \(MAYOR\) o el menor \(MENOR\)/);
+  assert.throws(() => G.perfilFabricacion({ ...BASE_RI }, E_16, maestrosHacia('ARRIBA')), /injerto inclinado hacia.*MENOR.*MAYOR/);
   assert.throws(() => ok({ L_ramal_mm: 100 }), /longitud del injerto debe exceder/);
   assert.throws(() => ok({ L_reduccion_mm: 120 }), /La reducción es corta para alojar el injerto: necesita al menos \d+ mm/);
   // el ángulo llega como texto desde la lista de la interfaz

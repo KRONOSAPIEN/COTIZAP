@@ -451,8 +451,9 @@
    * Reducción con injerto: el injerto (diámetro d, a 30° o 45°) va SOBRE EL CONO de la reducción D1 → D2. La pieza es
    * el cono con el orificio de la silleta más la pared del injerto: 2 piezas, 1 junta interna y 3 extremos bridados
    * (D1, D2 y d). La silleta se centra en el largo del cono; el largo de la reducción es el menor que la aloja con
-   * holgura a cada extremo (o el que se capture). Hacia qué extremo se inclina el injerto (sentido) cambia el
-   * desarrollo, porque el cono se ensancha o se cierra en ese sentido.
+   * holgura a cada extremo (o el que se capture). El taller siempre lo lleva de extremo mayor a menor: el injerto se
+   * inclina hacia D2 (dato de maestros proceso.injerto_inclinado_hacia; no se captura por partida). Hacia dónde se
+   * inclina cambia el desarrollo, porque el cono se ensancha o se cierra en ese sentido.
    */
   function reduccionInjerto(p, e, M) {
     const PF = nuevoPF('REDUCCION_INJERTO');
@@ -461,8 +462,8 @@
     const vacio = p.beta_deg === undefined || p.beta_deg === null || p.beta_deg === '';
     const beta_deg = vacio ? M.proceso.beta_ramal_defecto_deg : Number(p.beta_deg);
     exigir(beta_deg >= 20 && beta_deg <= 90, 'El ángulo del injerto β debe estar entre 20° y 90°.'); // límite del modelo; el taller maneja 30° y 45°
-    const inclinacion = p.sentido === undefined ? 'MAYOR' : p.sentido;
-    exigir(inclinacion === 'MAYOR' || inclinacion === 'MENOR', 'El injerto se inclina hacia el extremo mayor (MAYOR) o el menor (MENOR).');
+    const inclinacion = String(M.proceso.injerto_inclinado_hacia).trim().toUpperCase();
+    exigir(inclinacion === 'MAYOR' || inclinacion === 'MENOR', 'En las tablas maestras, "injerto inclinado hacia" debe ser MENOR (de extremo mayor a menor, como lo maneja el taller) o MAYOR.');
     const sentido = inclinacion === 'MENOR' ? 1 : -1;
 
     const dT = dimensionesRedondas(p.D1_mm, e, p.ref_diametro);

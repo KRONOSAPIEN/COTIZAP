@@ -247,7 +247,7 @@ test('Todas las familias cotizan y producen precio positivo con desglose consist
     { familia: 'TRANSICION', D_mm: 300, a_mm: 400, b_mm: 300 },
     { familia: 'RAMAL', D_mm: 400, d_mm: 200, L_cuerpo_mm: 800, L_ramal_mm: 500, beta_deg: 45 },
     { familia: 'REDUCCION_INJERTO', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 45 },
-    { familia: 'REDUCCION_INJERTO', D1_mm: 400, D2_mm: 300, d_mm: 200, beta_deg: 30, sentido: 'MENOR' },
+    { familia: 'REDUCCION_INJERTO', D1_mm: 400, D2_mm: 300, d_mm: 200, beta_deg: 30 },
     { familia: 'PANTALON', D_mm: 500, d1_mm: 354, d2_mm: 354, L_tronco_mm: 300, L1_mm: 500, L2_mm: 500 },
     { familia: 'PERSONALIZADO', A_neta_m2: 1.2, L_corte_m: 9, L_sold_tope_m: 4, n_piezas: 2, n_extremos: 2, D_ref_mm: 300 },
   ];
@@ -287,15 +287,34 @@ test('Reducción con injerto: usa su merma (28 %) y su dificultad de armado (1.9
   casi(r.qto.lam.m_bruta_kg, r.qto.lam.m_neta_kg / (1 - 0.28), 1e-12);
 });
 
-test('Reducción con injerto: ya no hay "lado"; una cotización anterior que lo traía cotiza igual, sin errores', () => {
+test('Reducción con injerto: ya no hay "lado" ni "sentido" por partida; una cotización anterior que los traía cotiza igual, sin errores', () => {
   const base = C.cotizarPartida({ ...redInj }, M);
-  ['DER', 'IZQ'].forEach((lado) => {
-    const r = C.cotizarPartida({ ...redInj, lado }, M);
-    assert.equal(r.ok, true);
-    assert.equal(r.precio.unitario, base.precio.unitario);
+  [{ lado: 'DER' }, { lado: 'IZQ' }, { sentido: 'MAYOR' }, { sentido: 'MENOR' }].forEach((extra) => {
+    const r = C.cotizarPartida({ ...redInj, ...extra }, M);
+    assert.equal(r.ok, true, JSON.stringify(extra));
+    assert.equal(r.precio.unitario, base.precio.unitario, JSON.stringify(extra));
     casi(r.peso.neto_unitario_kg, base.peso.neto_unitario_kg, 1e-12);
     assert.equal(JSON.stringify(r.qto.tmp.unitarios_min), JSON.stringify(base.qto.tmp.unitarios_min));
   });
+});
+
+test('Reducción con injerto: el injerto va de extremo mayor a menor (hacia D2); es un dato de maestros y cambia el precio unos puntos si se invirtiera', () => {
+  const base = C.cotizarPartida({ ...redInj }, M);
+  assert.equal(M.proceso.injerto_inclinado_hacia, 'MENOR');
+  assert.equal(base.geometria.detalle.sentido, 'MENOR');
+  const M2 = crearMaestros({ proceso: { injerto_inclinado_hacia: 'MAYOR' } });
+  const inv = C.cotizarPartida({ ...redInj }, M2);
+  assert.equal(inv.geometria.detalle.sentido, 'MAYOR');
+  const dif = inv.precio.unitario / base.precio.unitario - 1;
+  assert.ok(dif > 0.005 && dif < 0.1, `hacia D1 el orificio y la silleta crecen: ${(dif * 100).toFixed(2)} %`);
+});
+
+test('Reducción con injerto: un valor inválido de "injerto inclinado hacia" en maestros se avisa en las partidas de esa familia y no tumba las demás', () => {
+  const M3 = crearMaestros({ proceso: { injerto_inclinado_hacia: 'ARRIBA' } });
+  const r = C.cotizar({ partidas: [{ ...redInj }, { familia: 'RECTO', material_id: 'ACERO_CARBON', calibre: 16, D_mm: 304.8, L_mm: 3000, tipo_union: 'BRIDADO' }] }, M3);
+  assert.equal(r.totales.n_partidas_error, 1);
+  assert.match(r.partidas[0].errores[0], /injerto inclinado hacia/);
+  assert.equal(r.partidas[1].ok, true);
 });
 
 test('Reducción con injerto: la merma y la dificultad son datos de maestros, no del código', () => {

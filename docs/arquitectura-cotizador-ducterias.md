@@ -141,7 +141,7 @@
 | `REDUCCION` | `D1_mm`, `D2_mm`, `L_mm` (auto con semiángulo 15°), `excentrica` (`NO` `CARA_PLANA`) | |
 | `TRANSICION` | `D_mm` (extremo redondo), `a_mm`, `b_mm` (extremo rectangular), `H_mm` (auto) | Centrada. |
 | `RAMAL` (injerto simple) | `D_mm` (tronco), `d_mm` (injerto), `L_cuerpo_mm`, `L_ramal_mm`, `beta_deg` (**30 ó 45**; 45) | `L_ramal` se mide sobre el eje del injerto desde el eje del tronco. |
-| `REDUCCION_INJERTO` | `D1_mm`, `D2_mm` (< D1), `d_mm`, `beta_deg` (**30** ó **45**; 45), `sentido` (`MAYOR` `MENOR`; `MAYOR`), `L_reduccion_mm`, `L_ramal_mm` | El injerto va **sobre el cono**. Los dos largos son opcionales: vacíos → automáticos (§3.4.5). El sentido (hacia qué extremo se inclina) cambia el desarrollo. |
+| `REDUCCION_INJERTO` | `D1_mm`, `D2_mm` (< D1), `d_mm`, `beta_deg` (**30** ó **45**; 45), `L_reduccion_mm`, `L_ramal_mm` | El injerto va **sobre el cono** y siempre de extremo mayor a menor (inclinado hacia D2): es un dato de maestros (`proceso.injerto_inclinado_hacia`), no se captura por partida. Los dos largos son opcionales: vacíos → automáticos (§3.4.5). |
 | `PERSONALIZADO` | `A_neta_m2`, `L_corte_m`, `L_sold_tope_m`, `L_sold_filete_m`, `n_piezas`, `n_extremos`, `D_ref_mm` | Para campanas y piezas con desarrollo CAD. |
 | `COMPRADO` | `precio_compra_unitario`, `peso_kg` | Compuertas, flexibles, etc.: pasa por la pila sin mano de obra. |
 
@@ -300,7 +300,7 @@
 | V3 | Calibre más delgado que el mínimo para (diámetro, `servicio`) — tabla parametrizable `servicios`, **no normativa** hasta que se pueble con la norma interna | Advertencia |
 | V4 | Reducción: semiángulo `atan(δ/L)` ≤ 15° | Advertencia |
 | V5 | Injerto simple: β en la lista de maestros (`proceso.angulos_injerto_deg` = 30°, 45°); `d < D`; `L_ramal > t_max`; tramo de tronco suficiente para el orificio | Error / advertencia |
-| V6 | Reducción con injerto: β en la misma lista; `D2 < D1`; `d` menor que el diámetro del cono en su punto medio; `sentido` ∈ {`MAYOR`, `MENOR`}; la silleta cabe en el cono con la holgura de maestros (si se captura el largo); `L_ramal > t_max`; semiángulo del cono ≤ 15° | Error / advertencia |
+| V6 | Reducción con injerto: β en la misma lista; `D2 < D1`; `d` menor que el diámetro del cono en su punto medio; `proceso.injerto_inclinado_hacia` ∈ {`MAYOR`, `MENOR`}; la silleta cabe en el cono con la holgura de maestros (si se captura el largo); `L_ramal > t_max`; semiángulo del cono ≤ 15° | Error / advertencia |
 | V7 | Codo: θ en la lista de maestros (`proceso.angulos_codo_deg` = 30°, 45°, 60°, 90°); `n_gajos ≥ 2`; `R/D ≥ 1.0` | Error |
 | V8 | Merma en [0, 1) | Error |
 | V9 | `utilidad + comisión + otros < 100 %` del precio | Error |
@@ -454,7 +454,7 @@ La pieza es una reducción (cono de `D1` a `D2`) con el injerto de diámetro `d`
 **Intersección injerto–cono.** Con el eje del cono sobre `x` (radio `r(x) = R1 − m·x`, `m = (R1 − R2)/L`) y el eje del injerto cruzándolo en `(x_j, 0, 0)` a β, cada generatriz `φ` del injerto toca el cono a la distancia axial `t(φ)` de ese cruce. Es la raíz positiva de una cuadrática (cilindro ∩ cono es una cuádrica por recta):
 
 ```text
-u = (s·cosβ, sinβ, 0)            s = −1 si el injerto se inclina hacia el extremo MAYOR ; +1 hacia el MENOR
+u = (s·cosβ, sinβ, 0)            s = +1: el injerto se inclina hacia el extremo MENOR (de mayor a menor, como lo maneja el taller) ; −1: hacia el MAYOR
 A0 = R1 − m·x_j                  # radio del cono en el cruce
 c  = r_b·sinφ·u_x ,   d0 = A0 + m·u_y·r_b·sinφ
 a  = u_y² − m²·u_x²   (> 0 ⇔ tan β > m: el injerto sale más inclinado que la generatriz del cono)
@@ -467,7 +467,7 @@ A_orificio = | ∮ G(x) dθ | ,   G(x) = √(1 + m²)·(R1·x − m·x²/2)     
 
 Por cada punto de la silleta no se usan mallas: el orificio sale de una integral de línea de una función suave y periódica. Con `m → 0` el cono es un cilindro y los tres resultados coinciden con el injerto simple (§3.4.4).
 
-**Hacia qué extremo se inclina.** Con el injerto inclinado hacia el extremo mayor el ángulo efectivo con la pared es β − σ; hacia el menor, β + σ (σ = semiángulo del cono). Cambia el orificio (≈ 20 % a 45° y ≈ 35 % a 30°, para un cono de 5°), la silleta y el largo del cono, y el precio ≈ 3 %. Por omisión `sentido = MAYOR`: en colección de polvo el flujo sale por el extremo mayor y el injerto apunta hacia allá.
+**Hacia qué extremo se inclina.** El taller siempre lo lleva **de extremo mayor a menor**: el injerto se inclina hacia el extremo menor D2 (`proceso.injerto_inclinado_hacia = MENOR`, `s = +1`) y no se captura por partida; una cotización anterior que traía `sentido` lo ignora. Con el injerto hacia el extremo menor el ángulo efectivo con la pared es β + σ; hacia el mayor sería β − σ (σ = semiángulo del cono). Esa diferencia mueve el orificio (≈ 20 % más hacia el mayor a 45° y ≈ 37 % a 30°, para un cono de 5°), la silleta, el largo del cono y el precio (≈ 3 % a 45°, ≈ 5 % a 30°): por eso se deja como dato de maestros y se confirma con el taller (§10.5).
 
 **Largos (se pueden capturar; si se omiten son automáticos)**
 
@@ -976,7 +976,7 @@ La pieza nueva del taller resuelta de punta a punta, con los largos en automáti
 | `D1_mm` · `D2_mm` | 12 in = **304.8 mm** → 10 in = **254.0 mm** |
 | `d_mm` | 6 in = **152.4 mm** (injerto) |
 | `beta_deg` | **45°** (el taller maneja 30° o 45°) |
-| `sentido` | `MAYOR`: el injerto se inclina hacia el extremo mayor D1 (por omisión) |
+| Inclinación (maestros) | `proceso.injerto_inclinado_hacia = MENOR`: el injerto va de extremo mayor a menor, hacia D2 |
 | `L_reduccion_mm` · `L_ramal_mm` | vacíos → automáticos (paso 2) |
 | `tipo_union` | BRIDADO en los tres extremos (D1, D2 y el injerto) |
 | `pintura` · `riesgo` | PRIMARIO · MEDIO |
@@ -991,41 +991,41 @@ r_med (radio del cono a la mitad) = (R1 + R2) / 2 = 140.459 mm      k = r_b / r_
 **Paso 2 · Silleta sobre el cono y largo automático de la reducción**
 
 ```text
-Largo mínimo de la reducción                = el menor L que aloja la silleta con 25 mm de holgura a cada extremo  →  L = 288.67 mm  (piso de 15°: 94.79 mm)
-Cono: pendiente y semiángulo                = m = (R1 − R2) / L = 0.08799 ;  semiángulo = 5.03° ;  generatriz s = 289.79 mm
-Cruce de ejes (silleta centrada en L/2)     = x_j = 284.80 mm   (el eje del injerto cruza el eje del cono; puede caer fuera del cono)
-Silleta sobre el cono                       = x ∈ [25.00, 263.67] mm  →  holgura 25.00 mm a cada extremo
-t(φ): generatriz φ del injerto toca el cono = raíz positiva de  a·t² + b·t + g = 0 ,  a = sin²β − m²·cos²β = 0.49613
-t_med · t_max                               = 180.96 mm · 290.45 mm
-L_ramal (injerto)                           = t_max + 150 = 440.45 mm   (generatriz más larga + tramo recto de maestros)
+Largo mínimo de la reducción                = el menor L que aloja la silleta con 25 mm de holgura a cada extremo  →  L = 247.41 mm  (piso de 15°: 94.79 mm)
+Cono: pendiente y semiángulo                = m = (R1 − R2) / L = 0.10266 ;  semiángulo = 5.86° ;  generatriz s = 248.71 mm
+Cruce de ejes (silleta centrada en L/2)     = x_j = -16.76 mm   (el eje del injerto cruza el eje del cono; puede caer fuera del cono)
+Silleta sobre el cono                       = x ∈ [25.00, 222.41] mm  →  holgura 25.00 mm a cada extremo
+t(φ): generatriz φ del injerto toca el cono = raíz positiva de  a·t² + b·t + g = 0 ,  a = sin²β − m²·cos²β = 0.49473
+t_med · t_max                               = 184.41 mm · 261.27 mm
+L_ramal (injerto)                           = t_max + 150 = 411.27 mm   (generatriz más larga + tramo recto de maestros)
 ```
 
 **Paso 3 · Área por pieza y área neta**
 
 ```text
-A_cono     = π · (R1 + R2) · s = π · (153.159 + 127.759) · 289.79 = 0.25575 m²
-A_orificio = ∮ G(x) dθ sobre la silleta (G' = r·√(1 + m²)) = 0.03036 m²
-A_injerto  = π · d_med · (L_ramal − t_med) = π · 153.9189 · (440.45 − 180.96) = 0.12548 m²
-A_neta     = A_cono − A_orificio + A_injerto = 0.35087 m²
+A_cono     = π · (R1 + R2) · s = π · (153.159 + 127.759) · 248.71 = 0.21949 m²
+A_orificio = ∮ G(x) dθ sobre la silleta (G' = r·√(1 + m²)) = 0.02489 m²
+A_injerto  = π · d_med · (L_ramal − t_med) = π · 153.9189 · (411.27 − 184.41) = 0.10970 m²
+A_neta     = A_cono − A_orificio + A_injerto = 0.30430 m²
 ```
 
 **Paso 4 · Peso y merma (φ = 28 %)**
 
 ```text
-m_neta          = A_neta · w_a = 0.35087 · 11.9235 = 4.184 kg
-m_bruta         = m_neta / (1 − φ) = 4.184 / 0.72 = 5.811 kg
-Costo de lámina = 5.811 · 22.00 = 127.83 MXN
+m_neta          = A_neta · w_a = 0.30430 · 11.9235 = 3.628 kg
+m_bruta         = m_neta / (1 − φ) = 3.628 / 0.72 = 5.039 kg
+Costo de lámina = 5.039 · 22.00 = 110.86 MXN
 ```
 
 **Paso 5 · Corte, soldadura y armado**
 
 ```text
-P_h (perímetro de la silleta) = 639.91 mm   (suma de la polilínea de la silleta)
-L_corte                       = [π·(D1_med + D2_med) + 2·s] + P_h + 2·(π·d_med + L_ramal) = 4.8326 m
-Soldadura a tope              = s + (L_ramal − t_med) = 0.5493 m   (costura del cono + costura del injerto)
-Soldadura de filete           = P_h = 0.6399 m   (silleta del injerto)
+P_h (perímetro de la silleta) = 566.09 mm   (suma de la polilínea de la silleta)
+L_corte                       = [π·(D1_med + D2_med) + 2·s] + P_h + 2·(π·d_med + L_ramal) = 4.6182 m
+Soldadura a tope              = s + (L_ramal − t_med) = 0.4756 m   (costura del cono + costura del injerto)
+Soldadura de filete           = P_h = 0.5661 m   (silleta del injerto)
 Piezas · juntas internas      = 2 (cono e injerto) · 1 (silleta)
-Rolado equivalente            = n·k·L = 0.9041 m   (cono k = 1.6; injerto k = 1)
+Rolado equivalente            = n·k·L = 0.8092 m   (cono k = 1.6; injerto k = 1)
 Bridas                        = 3 aros (D1, D2 y d): 1089.8 mm · 930.2 mm · 611.0 mm
 ```
 
@@ -1033,21 +1033,21 @@ Bridas                        = 3 aros (D1, D2 y d): 1089.8 mm · 930.2 mm · 61
 
 | Indicador | Valor |
 | --- | --- |
-| Costo directo (CD) | 737.20 MXN |
-| Precio unitario antes de IVA | **1,382.76 MXN** |
-| Peso neto terminado (lámina + 3 aros) | 7.932 kg |
-| Precio por kg neto | 174.34 MXN/kg |
-| Horas de mano de obra directa (reales) | 2.627 h  (k_dif armado = 1.9) |
+| Costo directo (CD) | 712.25 MXN |
+| Precio unitario antes de IVA | **1,342.74 MXN** |
+| Peso neto terminado (lámina + 3 aros) | 7.376 kg |
+| Precio por kg neto | 182.03 MXN/kg |
+| Horas de mano de obra directa (reales) | 2.597 h  (k_dif armado = 1.9) |
 
 **Sensibilidad** (misma pieza, un solo cambio)
 
 | Variante | L reducción (mm) | Orificio (m²) | Precio (MXN) | vs. base |
 | --- | --- | --- | --- | --- |
-| Base: 45°, hacia el extremo mayor | 288.7 | 0.0304 | 1,382.76 | — |
-| 30°, hacia el extremo mayor | 396.3 | 0.0440 | 1,483.87 | +7.3 % |
-| 45°, hacia el extremo menor | 247.4 | 0.0249 | 1,342.74 | −2.9 % |
+| Base: 45°, de extremo mayor a menor (hacia D2) | 247.4 | 0.0249 | 1,342.74 | — |
+| 30°, hacia D2 | 320.7 | 0.0340 | 1,413.96 | +5.3 % |
+| 45°, si se inclinara hacia D1 (`MAYOR`) | 288.7 | 0.0304 | 1,382.76 | +3.0 % |
 
-**Lectura:** el precio por kg neto es **2.83×** el del tramo recto del Ejemplo A, por lo mismo que el codo: merma de 28 % contra 8 %, dificultad de armado 1.9 contra 1.0 y tres bridas en una pieza chica. A 30° la silleta es más larga y el cono también; hacia el extremo menor el cono "se cierra" y la silleta resulta más corta.
+**Lectura:** el precio por kg neto es **2.95×** el del tramo recto del Ejemplo A, por lo mismo que el codo: merma de 28 % contra 8 %, dificultad de armado 1.9 contra 1.0 y tres bridas en una pieza chica. A 30° la silleta es más larga y el cono también; hacia el extremo menor el cono "se cierra" y la silleta resulta más corta que si el injerto mirara hacia el mayor.
 
 ---
 
@@ -1179,7 +1179,7 @@ El taller definió: *injerto simple* (antes ramal en ángulo); *reducción con i
 
 | Supuesto | Valor usado | Dónde se cambia | Efecto si es distinto |
 | --- | --- | --- | --- |
-| Hacia dónde se inclina el injerto | Hacia el extremo **mayor** D1 (en colección de polvo el flujo sale por ahí) | Campo `sentido` de la partida | Hacia el menor: cono más corto y orificio ≈ 20 % menor (a 45°); el precio cambia ≈ 3 %. |
+| Cómo se lee «el injerto va de extremo mayor a menor» | El eje del injerto se inclina **hacia el extremo menor** D2, siguiendo el sentido mayor → menor | `proceso.injerto_inclinado_hacia` (`MENOR`; `MAYOR` lo invierte) | Si el taller lo inclina hacia el extremo mayor, poner `MAYOR`: el orificio crece ≈ 20 % (a 45°), el cono se alarga y el precio sube ≈ 3 %. |
 | Posición del injerto en el cono | Silleta centrada en el largo del cono | Geometría (§3.4.5) | Si el taller lo asienta más cerca de un extremo, cambia poco el área pero sí el largo mínimo. |
 | Largo de la reducción | El menor que aloja la silleta con **25 mm** de holgura a cada extremo (piso: 15° de semiángulo) | `proceso.injerto_margen_cono_mm`, o capturar `L_reduccion_mm` | Un cono más largo suma lámina; uno más corto de lo necesario se rechaza. |
 | Largo del injerto | Generatriz más larga + **150 mm** de tramo recto | `proceso.injerto_largo_extra_mm`, o capturar `L_ramal_mm` | Cambian lámina, corte y soldadura. |

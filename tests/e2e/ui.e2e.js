@@ -394,13 +394,7 @@ const ok = (cond, msg) => {
     ok(await p.locator('#dlg-prev .errores').count() === 0, 'con los valores por defecto calcula sin errores');
     ok((await p.locator('#f_L_ramal_mm').getAttribute('placeholder')) === 'auto' && (await p.locator('#f_L_reduccion_mm').getAttribute('placeholder')) === 'auto', 'los largos del injerto y de la reducción son automáticos por omisión');
     ok(await p.locator('#f_L_cuerpo_mm').count() === 0, 'ya no hay "tramo recto": el injerto va sobre el cono');
-    ok(JSON.stringify(await p.locator('#f_sentido option').allInnerTexts()) === JSON.stringify(['El extremo mayor (D1)', 'El extremo menor (D2)']), 'se elige hacia qué extremo se inclina el injerto');
-    ok(await p.locator('#f_sentido').inputValue() === 'MAYOR', 'por omisión: hacia el extremo mayor');
-    const precioMayor = await p.locator('#dlg-prev .prev-val').innerText();
-    await p.selectOption('#f_sentido', 'MENOR');
-    await p.waitForTimeout(100);
-    ok(await p.locator('#dlg-prev .errores').count() === 0 && (await p.locator('#dlg-prev .prev-val').innerText()) !== precioMayor, 'hacia el extremo menor también calcula, con otro precio');
-    await p.selectOption('#f_sentido', 'MAYOR');
+    ok(await p.locator('#f_sentido').count() === 0 && !/se inclina hacia/.test(await p.locator('#dlg-partida').innerText()), 'no se elige hacia qué extremo se inclina: el injerto siempre va de extremo mayor a menor');
     const precio45 = await p.locator('#dlg-prev .prev-val').innerText();
     await p.selectOption('#f_beta_deg', '30');
     await p.waitForTimeout(100);
@@ -432,7 +426,28 @@ const ok = (cond, msg) => {
     await p.locator('#lista-partidas .partida:has(.partida-meta:has-text("a 30°"))').click();
     await p.waitForTimeout(100);
     const detalle = await p.locator('#detalle').innerText();
-    ok(/Longitud de la reducción/.test(detalle) && /Área del injerto/.test(detalle) && /El injerto se inclina hacia\s*El extremo mayor/.test(detalle) && !/Lado del injerto/.test(detalle), 'el desglose muestra inclinación, reducción e injerto, y ya no el lado');
+    ok(/Longitud de la reducción/.test(detalle) && /Área del injerto/.test(detalle) && /El injerto se inclina hacia\s*El extremo menor \(D2\)/.test(detalle) && !/Lado del injerto/.test(detalle), 'el desglose dice que el injerto va hacia el extremo menor, y muestra reducción e injerto, sin lado');
+
+    // el injerto va de extremo mayor a menor por política del taller: es un dato de Tablas maestras, no una captura por partida
+    const idxRI = await estadoApp(p, () => window.COTIZAP.web.estadoApp.cot.partidas.findIndex((x) => x.familia === 'REDUCCION_INJERTO'));
+    const resRI = () => estadoApp(p, (k) => { const r = window.COTIZAP.web.estadoApp.res.partidas[k]; return { ok: r.ok, precio: r.ok ? r.precio.unitario : null, errores: r.errores || [] }; }, idxRI);
+    const basePrecio = (await resRI()).precio;
+    await p.click('#tab-maestros');
+    await p.fill('#maestros-buscar', 'injerto_inclinado_hacia');
+    const hacia = p.locator('input#m_proceso__injerto_inclinado_hacia');
+    ok(await hacia.inputValue() === 'MENOR', 'en Tablas maestras: "injerto inclinado hacia" = MENOR (de extremo mayor a menor)');
+    await hacia.fill('MAYOR');
+    await hacia.dispatchEvent('change');
+    const invertido = await resRI();
+    ok(invertido.ok && invertido.precio > basePrecio, 'si el taller lo cambiara a MAYOR, la reducción con injerto cuesta más y se recalcula al instante');
+    await hacia.fill('ARRIBA');
+    await hacia.dispatchEvent('change');
+    const malo = await resRI();
+    ok(!malo.ok && /injerto inclinado hacia/.test(malo.errores.join(' ')), 'un valor inválido se avisa con el nombre del dato de maestros');
+    await hacia.fill('MENOR');
+    await hacia.dispatchEvent('change');
+    ok((await resRI()).precio === basePrecio, 'al volver a MENOR el precio vuelve al de antes');
+    await p.click('#tab-cotizacion');
 
     // una cotización anterior con pantalón sigue calculando, rotulado como retirado
     const vieja = {
@@ -456,21 +471,25 @@ const ok = (cond, msg) => {
     ok(!(await p.locator('#dlg-familias .fam span').allInnerTexts()).some((n) => /Pantal/.test(n)), 'pero no se ofrece para partidas nuevas');
     await p.click('#dlg-cancelar');
 
-    // una cotización anterior que traía el lado (der/izq) del injerto: abre, calcula y ya no lo muestra
+    // una cotización anterior que traía el lado (der/izq) y el sentido del injerto: abre, calcula igual y ya no los muestra
     const conLado = {
       app: 'COTIZAP', version: 2,
       cotizacion: { cliente: 'Anterior', proyecto: '', fecha: '2026-01-01', vigencia_dias: 15, unidad_diam: 'in', unidad_long: 'mm', riesgo: 'MEDIO', servicio: 'POLVO',
-        partidas: [{ id: 'rl1', familia: 'REDUCCION_INJERTO', descripcion: 'Reducción con injerto izq. 30°', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 30, lado: 'IZQ', material_id: 'ACERO_CARBON', calibre: 16, cantidad: 1 }] },
+        partidas: [
+          { id: 'rl1', familia: 'REDUCCION_INJERTO', descripcion: 'Con lado y sentido', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 30, lado: 'IZQ', sentido: 'MAYOR', material_id: 'ACERO_CARBON', calibre: 16, cantidad: 1 },
+          { id: 'rl2', familia: 'REDUCCION_INJERTO', descripcion: 'Sin lado ni sentido', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 30, material_id: 'ACERO_CARBON', calibre: 16, cantidad: 1 },
+        ] },
       maestros: {},
     };
     await p.click('#btn-io');
     await p.fill('#io-texto', JSON.stringify(conLado));
     await p.click('#io-cargar');
     await p.waitForTimeout(150);
-    ok((await p.locator('#lista-partidas .partida-importe').innerText()).includes('$'), 'una cotización anterior con lado (der/izq) sigue calculando su precio');
+    const importes = await p.locator('#lista-partidas .partida-importe').allInnerTexts();
+    ok(importes.length === 2 && importes.every((x) => x.includes('$')) && importes[0] === importes[1], 'una cotización anterior con lado (der/izq) y sentido sigue calculando, y los ignora: cuesta lo mismo que la partida sin ellos');
     await p.locator('#lista-partidas .partida').first().locator('button[aria-label^="Editar"]').click();
     await p.waitForSelector('#dlg-partida[open]');
-    ok(await p.locator('#f_lado').count() === 0 && !/Lado del injerto/.test(await p.locator('#dlg-partida').innerText()), 'y al editarla ya no hay campo de lado');
+    ok(await p.locator('#f_lado').count() === 0 && await p.locator('#f_sentido').count() === 0 && !/Lado del injerto|se inclina hacia/.test(await p.locator('#dlg-partida').innerText()), 'y al editarla ya no hay campo de lado ni de inclinación');
     await p.click('#dlg-cancelar');
     await p.context().close();
   }
