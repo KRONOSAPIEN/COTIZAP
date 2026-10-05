@@ -158,8 +158,9 @@
       CODO: 0.2,
       REDUCCION: 0.18,
       TRANSICION: 0.22,
-      RAMAL: 0.25,
-      PANTALON: 0.28,
+      RAMAL: 0.25, // injerto simple
+      REDUCCION_INJERTO: 0.28,
+      PANTALON: 0.28, // familia retirada: sólo para abrir cotizaciones anteriores
       PERSONALIZADO: 0.15,
       PERFIL: 0.05,
     },
@@ -175,8 +176,10 @@
       alfa_max_junta_deg: 22.5,
       k_R_defecto: 1.5,
       beta_ramal_defecto_deg: 45,
-      k_entrepierna: 0.08,
-      tolerancia_area_pantalon: 0.15,
+      angulos_injerto_reduccion_deg: [30, 45], // ángulos del injerto en la reducción con injerto
+      injerto_largo_extra_mm: 150, // tramo recto del injerto más allá de su generatriz más larga, si no se captura su largo
+      k_entrepierna: 0.08, // pantalón (retirado)
+      tolerancia_area_pantalon: 0.15, // pantalón (retirado)
 
       costuras: {
         A_TOPE: { nombre: 'Soldada a tope', allowance_mm: 1.0, soldada: true, cordon: 'TOPE' },
@@ -216,7 +219,7 @@
         t_ajuste_aro_min: 4.0,
         t_fijacion_min: 0.4,
         t_formado_espiga_min: 3.0,
-        k_dif: { RECTO: 1.0, CODO: 1.35, REDUCCION: 1.2, TRANSICION: 1.5, RAMAL: 1.6, PANTALON: 1.9, PERSONALIZADO: 1.0 },
+        k_dif: { RECTO: 1.0, CODO: 1.35, REDUCCION: 1.2, TRANSICION: 1.5, RAMAL: 1.6, REDUCCION_INJERTO: 1.9, PANTALON: 1.9, PERSONALIZADO: 1.0 },
       },
 
       aros: { t_fijo_aro_min: 4.0, t_roll_aro_min_m: 2.5, holgura_corte_mm: 3.0 },

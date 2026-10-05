@@ -51,7 +51,8 @@
         P({ familia: 'RECTO', descripcion: 'Tramo recto Ø12″ × 3 m', D_mm: 304.8, L_mm: 3000, tipo_costura: 'A_TOPE', cantidad: 4 }),
         P({ familia: 'CODO', descripcion: 'Codo 90° · 5 gajos Ø12″', D_mm: 304.8, theta_deg: 90, k_R: 1.5, cantidad: 2 }),
         P({ familia: 'REDUCCION', descripcion: 'Reducción excéntrica Ø12″ → Ø8″', D1_mm: 304.8, D2_mm: 203.2, excentrica: 'CARA_PLANA' }),
-        P({ familia: 'RAMAL', descripcion: 'Ramal a 45° Ø8″ sobre Ø12″', D_mm: 304.8, d_mm: 203.2, L_cuerpo_mm: 700, L_ramal_mm: 450, beta_deg: 45, cantidad: 2 }),
+        P({ familia: 'RAMAL', descripcion: 'Injerto simple a 45° Ø8″ sobre Ø12″', D_mm: 304.8, d_mm: 203.2, L_cuerpo_mm: 700, L_ramal_mm: 450, beta_deg: 45, cantidad: 2 }),
+        P({ familia: 'REDUCCION_INJERTO', descripcion: 'Reducción con injerto der. 45° Ø12″ → Ø10″ + Ø6″', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 45, lado: 'DER' }),
         P({ familia: 'TRANSICION', descripcion: 'Transición Ø12″ → 400 × 300 mm', D_mm: 304.8, a_mm: 400, b_mm: 300 }),
         { id: idNuevo(), familia: 'COMPRADO', descripcion: 'Compuerta de guillotina Ø12″ (compra)', precio_compra_unitario: 1850, peso_kg: 9, cantidad: 1 },
       ],
@@ -78,6 +79,12 @@
     const c = leerLS(LLAVE_COT);
     estado.cot = c && Array.isArray(c.partidas) ? { ...cotizacionVacia(), ...c } : cotizacionEjemplo();
     migrarUnidades(estado.cot);
+    if (estado.cot.ejemplo === true) {
+      // La cotización de muestra que nadie ha tocado se renueva con la versión actual de la muestra (nombres de taller,
+      // partidas nuevas); se respetan los ajustes generales que ya hubiera cambiado.
+      const guardada = estado.cot;
+      estado.cot = { ...cotizacionEjemplo(), ...Object.fromEntries(['unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'fecha', 'vigencia_dias'].filter((k) => guardada[k] !== undefined).map((k) => [k, guardada[k]])) };
+    }
     estado.cot.partidas.forEach((p) => { if (!p.id) p.id = idNuevo(); });
     estado.sel = estado.cot.partidas.length ? estado.cot.partidas[0].id : null;
   }
@@ -128,7 +135,7 @@
   /* ================================================================== */
   /* Utilidades de presentación                                         */
   /* ================================================================== */
-  const NOMBRE_FAM = Object.fromEntries(W.FAMILIAS);
+  const NOMBRE_FAM = Object.fromEntries([...W.FAMILIAS, ...W.FAMILIAS_RETIRADAS]);
   const ETQ_OP = Object.fromEntries(W.OPERACIONES);
   const nombreMaterial = (p) => {
     const m = estado.M.materiales[p.material_id];
@@ -316,7 +323,7 @@
     if (!ps.length) {
       reemplazar(ul, h('li', { class: 'vacio' },
         h('p', { class: 'vacio-tit' }, 'Todavía no hay partidas'),
-        h('p', null, 'Agregue tramos rectos, codos, reducciones, transiciones, ramales o piezas compradas. El precio se calcula mientras captura.'),
+        h('p', null, 'Agregue tramos rectos, codos, reducciones, transiciones, injertos o piezas compradas. El precio se calcula mientras captura.'),
         h('button', { type: 'button', class: 'btn btn-primario', onclick: () => abrirDialogo(null) }, W.icono('mas'), 'Agregar la primera partida')));
       return;
     }
@@ -396,9 +403,12 @@
     H_mm: ['Longitud axial', 'mm', 1], H_defecto_mm: ['Longitud automática (15°)', 'mm', 1], A_triangulos_m2: ['Área de los 4 triángulos', 'm²', 4], A_conos_m2: ['Área de los 4 conos', 'm²', 4],
     P_rect_mm: ['Perímetro rectangular', 'mm', 1], P_redonda_mm: ['Perímetro redondo', 'mm', 1], generatriz_ref_mm: ['Generatriz de referencia', 'mm', 1],
     semiangulo_equiv_deg: ['Semiángulo equivalente', '°', 2], A_aprox_semisuma_m2: ['Revisión rápida ½(P₁+P₂)·s', 'm²', 4],
-    d_med_mm: ['Diámetro medio del ramal', 'mm', 3], k_d_sobre_D: ['k = d / D', '', 3], beta_deg: ['Ángulo β', '°', 1], t_medio_mm: ['Distancia media a la silleta', 'mm', 2],
-    t_max_mm: ['Distancia máxima a la silleta', 'mm', 2], A_cuerpo_m2: ['Área del cuerpo (sin orificio)', 'm²', 4], A_ramal_m2: ['Área del ramal', 'm²', 4],
+    d_med_mm: ['Diámetro medio del injerto', 'mm', 3], k_d_sobre_D: ['k = d / D', '', 3], beta_deg: ['Ángulo del injerto β', '°', 1], t_medio_mm: ['Distancia media a la silleta', 'mm', 2],
+    t_max_mm: ['Distancia máxima a la silleta', 'mm', 2], A_cuerpo_m2: ['Área del tronco (sin orificio)', 'm²', 4], A_ramal_m2: ['Área del injerto', 'm²', 4],
     K_orificio: ['Corrección K del orificio', '', 4], P_orificio_mm: ['Perímetro del orificio', 'mm', 1],
+    L_cuerpo_mm: ['Longitud del tramo recto de D1', 'mm', 1], L_cuerpo_auto_mm: ['Mínimo del tramo recto (automático)', 'mm', 1],
+    L_ramal_mm: ['Longitud del injerto', 'mm', 1], L_ramal_auto_mm: ['Longitud automática del injerto', 'mm', 1],
+    L_reduccion_mm: ['Longitud de la reducción', 'mm', 1], A_cono_m2: ['Área del cono de la reducción', 'm²', 4],
     k_entrepierna: ['Factor de entrepierna', '', 3], razon_areas_ramales_tronco: ['Σ áreas ramales / área del tronco', '', 3], A_tronco_m2: ['Área del tronco', 'm²', 4], A_ramales_m2: ['Área de los ramales', 'm²', 4],
   };
 
@@ -473,6 +483,8 @@
       if (typeof v === 'number') {
         const e = ETQ_DET[k];
         kvs.append(kv(e ? e[0] : k, W.num(v, e ? e[2] : 3), e ? e[1] : ''));
+      } else if (k === 'lado') {
+        kvs.append(kv('Lado del injerto', v === 'IZQ' ? 'Izquierdo' : 'Derecho'));
       } else if (k === 'patron' && v) {
         kvs.append(kv('Patrón plano · sector', W.num(v.sector_deg, 2), '°'), kv('Patrón plano · R1', W.num(v.R1_mm, 1), 'mm'), kv('Patrón plano · R2', W.num(v.R2_mm, 1), 'mm'));
       }
@@ -628,6 +640,7 @@
   function opcionesDe(clave) {
     const M = estado.M;
     if (clave === 'materiales') return Object.keys(M.materiales).map((k) => [k, M.materiales[k].nombre]);
+    if (clave === 'angulos_injerto') return M.proceso.angulos_injerto_reduccion_deg.map((a) => [String(a), `${a}°`]);
     if (clave === 'perfiles') return [['', 'Estándar del taller'], ...Object.keys(M.herrajes.perfiles).map((k) => [k, `${k} · ${M.herrajes.perfiles[k].descripcion}`])];
     return W.OPC[clave];
   }
@@ -678,7 +691,7 @@
       let v = el.value;
       if (c.tipo === 'select') {
         if (v === '') return;
-        p[c.id] = c.id === 'caras_pintadas' ? Number(v) : v;
+        p[c.id] = c.id === 'caras_pintadas' || c.numerico ? Number(v) : v;
         return;
       }
       if (c.tipo === 'calibre') {
@@ -759,7 +772,9 @@
 
   function renderFamilias() {
     const cont = $('#dlg-familias');
-    cont.replaceChildren(...W.FAMILIAS.map(([k, t]) => h('button', {
+    // Una familia retirada sólo aparece mientras se edita una partida anterior que la usa.
+    const familias = [...W.FAMILIAS, ...W.FAMILIAS_RETIRADAS.filter(([k]) => k === dlg.familia)];
+    cont.replaceChildren(...familias.map(([k, t]) => h('button', {
       type: 'button', class: `fam${k === dlg.familia ? ' act' : ''}`, role: 'radio', 'aria-checked': String(k === dlg.familia),
       onclick: () => cambiarFamilia(k),
     }, W.iconoFamilia(k), h('span', null, t))));

@@ -15,11 +15,13 @@
     ['CODO', 'Codo'],
     ['REDUCCION', 'Reducción'],
     ['TRANSICION', 'Transición'],
-    ['RAMAL', 'Ramal en ángulo'],
-    ['PANTALON', 'Pantalón'],
+    ['RAMAL', 'Injerto simple'],
+    ['REDUCCION_INJERTO', 'Reducción con injerto'],
     ['PERSONALIZADO', 'Personalizada'],
     ['COMPRADO', 'Comprado'],
   ];
+  /** Familias que ya no se ofrecen para partidas nuevas, pero que se siguen calculando para abrir cotizaciones anteriores. */
+  W.FAMILIAS_RETIRADAS = [['PANTALON', 'Pantalón (retirado)']];
 
   W.OPC = {
     forma: [['REDONDA', 'Redondo'], ['RECTANGULAR', 'Rectangular']],
@@ -33,6 +35,7 @@
     proceso_corte: [['', 'Automático'], ['GUILLOTINA', 'Guillotina'], ['PLASMA', 'Plasma CNC'], ['LASER', 'Láser']],
     tipo_costura: [['A_TOPE', 'Soldada a tope'], ['TRASLAPE', 'Soldada a traslape'], ['PITTSBURGH', 'Engargolado Pittsburgh']],
     excentrica: [['NO', 'Concéntrica'], ['CARA_PLANA', 'Excéntrica · cara plana']],
+    lado: [['DER', 'Derecho'], ['IZQ', 'Izquierdo']],
     driver: [['PIEZA', 'Por pieza'], ['KG_NETO', 'Por kg neto'], ['KG_BRUTO', 'Por kg bruto'], ['M2_NETO', 'Por m² de lámina'], ['M_CORTE', 'Por m de corte'], ['M_SOLDADURA', 'Por m de soldadura']],
   };
 
@@ -74,14 +77,24 @@
       { id: 'b_mm', etiqueta: 'Alto b (extremo rectangular)', tipo: 'dim', defecto: 300 },
       { id: 'H_mm', etiqueta: 'Longitud axial', tipo: 'dim', opcional: true, ayuda: 'Vacío = automático con semiángulo de 15°' },
     ],
-    RAMAL: [
-      { id: 'D_mm', etiqueta: 'Diámetro del cuerpo', tipo: 'dim', defecto: 304.8 },
-      { id: 'd_mm', etiqueta: 'Diámetro del ramal', tipo: 'dim', defecto: 203.2 },
-      { id: 'L_cuerpo_mm', etiqueta: 'Longitud del cuerpo', tipo: 'dim', defecto: 700 },
-      { id: 'L_ramal_mm', etiqueta: 'Longitud del ramal', tipo: 'dim', defecto: 450, ayuda: 'Sobre su eje, desde el eje del cuerpo' },
-      { id: 'beta_deg', etiqueta: 'Ángulo de entrada β', tipo: 'num', unidad: '°', defecto: 45, min: 20, max: 90 },
+    RAMAL: [ // injerto simple (en el motor: cuerpo = tronco, ramal = injerto)
+      { id: 'D_mm', etiqueta: 'Diámetro del tronco', tipo: 'dim', defecto: 304.8 },
+      { id: 'd_mm', etiqueta: 'Diámetro del injerto', tipo: 'dim', defecto: 203.2 },
+      { id: 'L_cuerpo_mm', etiqueta: 'Longitud del tronco', tipo: 'dim', defecto: 700 },
+      { id: 'L_ramal_mm', etiqueta: 'Longitud del injerto', tipo: 'dim', defecto: 450, ayuda: 'Sobre su eje, desde el eje del tronco' },
+      { id: 'beta_deg', etiqueta: 'Ángulo del injerto β', tipo: 'num', unidad: '°', defecto: 45, min: 20, max: 90 },
     ],
-    PANTALON: [
+    REDUCCION_INJERTO: [
+      { id: 'D1_mm', etiqueta: 'Diámetro mayor D1 (tronco)', tipo: 'dim', defecto: 304.8 },
+      { id: 'D2_mm', etiqueta: 'Diámetro menor D2 (salida)', tipo: 'dim', defecto: 254 },
+      { id: 'd_mm', etiqueta: 'Diámetro del injerto', tipo: 'dim', defecto: 152.4 },
+      { id: 'beta_deg', etiqueta: 'Ángulo del injerto', tipo: 'select', opciones: 'angulos_injerto', numerico: true, defecto: 45 },
+      { id: 'lado', etiqueta: 'Lado del injerto', tipo: 'select', opciones: 'lado', defecto: 'DER', ayuda: 'Sólo identifica la pieza en el taller: no cambia el costo' },
+      { id: 'L_cuerpo_mm', etiqueta: 'Longitud del tramo recto de D1', tipo: 'dim', opcional: true, ayuda: 'Vacío = automático (el mínimo para alojar el injerto)' },
+      { id: 'L_ramal_mm', etiqueta: 'Longitud del injerto', tipo: 'dim', opcional: true, ayuda: 'Sobre su eje, desde el eje del tronco. Vacío = automático' },
+      { id: 'L_reduccion_mm', etiqueta: 'Longitud de la reducción', tipo: 'dim', opcional: true, ayuda: 'Vacío = automático con semiángulo de 15°' },
+    ],
+    PANTALON: [ // retirado: sólo para editar cotizaciones anteriores
       { id: 'D_mm', etiqueta: 'Diámetro del tronco', tipo: 'dim', defecto: 500 },
       { id: 'd1_mm', etiqueta: 'Diámetro del ramal 1', tipo: 'dim', defecto: 354 },
       { id: 'd2_mm', etiqueta: 'Diámetro del ramal 2', tipo: 'dim', defecto: 354 },
@@ -110,7 +123,7 @@
     { id: 'material_id', etiqueta: 'Material', tipo: 'select', opciones: 'materiales' },
     { id: 'calibre', etiqueta: 'Calibre', tipo: 'calibre' },
     { id: 'espesor_mm', etiqueta: 'Espesor', tipo: 'num', unidad: 'mm', min: 0.2, paso: 0.01, visible: (v) => v.calibre === 'PROPIO' },
-    { id: 'ref_diametro', etiqueta: 'Dimensión nominal', tipo: 'select', opciones: 'ref_diametro', defecto: 'INTERIOR', familias: ['RECTO', 'CODO', 'REDUCCION', 'TRANSICION', 'RAMAL', 'PANTALON', 'PERSONALIZADO'] },
+    { id: 'ref_diametro', etiqueta: 'Dimensión nominal', tipo: 'select', opciones: 'ref_diametro', defecto: 'INTERIOR', familias: ['RECTO', 'CODO', 'REDUCCION', 'TRANSICION', 'RAMAL', 'REDUCCION_INJERTO', 'PANTALON', 'PERSONALIZADO'] },
     { id: 'tipo_union', etiqueta: 'Unión', tipo: 'select', opciones: 'tipo_union', defecto: 'BRIDADO' },
     { id: 'clase_sellado', etiqueta: 'Sellado', tipo: 'select', opciones: 'clase_sellado', defecto: 'C' },
     { id: 'pintura', etiqueta: 'Pintura', tipo: 'select', opciones: 'pintura', defecto: '' },
@@ -167,7 +180,9 @@
       case 'TRANSICION':
         return `${d(p.D_mm)} → ${s(p.a_mm)} × ${s(p.b_mm)}`;
       case 'RAMAL':
-        return `${d(p.D_mm)} + ramal ${d(p.d_mm)} a ${p.beta_deg}°`;
+        return `${d(p.D_mm)} + injerto ${d(p.d_mm)} a ${p.beta_deg}°`;
+      case 'REDUCCION_INJERTO':
+        return `${d(p.D1_mm)} → ${d(p.D2_mm)} + injerto ${d(p.d_mm)} a ${p.beta_deg}° ${p.lado === 'IZQ' ? 'izq.' : 'der.'}`;
       case 'PANTALON':
         return `${d(p.D_mm)} → ${d(p.d1_mm)} + ${d(p.d2_mm)}`;
       case 'PERSONALIZADO':

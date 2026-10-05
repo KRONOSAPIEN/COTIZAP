@@ -53,7 +53,7 @@ const ok = (cond, msg) => {
 
   console.log('1) Carga inicial');
   let page = await nuevaPagina();
-  ok(await page.locator('#lista-partidas .partida').count() === 6, 'la cotización de ejemplo trae 6 partidas');
+  ok(await page.locator('#lista-partidas .partida').count() === 7, 'la cotización de ejemplo trae 7 partidas');
   ok((await page.locator('.hero-val').innerText()).startsWith('$'), 'el total se muestra en pesos');
   ok(await page.locator('#aviso-ilustrativo').isVisible(), 'el aviso de valores ilustrativos está visible');
 
@@ -84,10 +84,10 @@ const ok = (cond, msg) => {
 
   console.log('3) Alta de cada familia con sus valores por defecto');
   await page.click('#btn-nueva');
-  for (const fam of ['Tramo recto', 'Codo', 'Reducción', 'Transición', 'Ramal en ángulo', 'Pantalón', 'Personalizada', 'Comprado']) {
+  for (const fam of ['Tramo recto', 'Codo', 'Reducción', 'Transición', 'Injerto simple', 'Reducción con injerto', 'Personalizada', 'Comprado']) {
     await page.click('#btn-agregar');
     await page.waitForSelector('#dlg-partida[open]');
-    await page.click(`.fam:has-text("${fam}")`);
+    await page.click(`.fam:has(span:text-is("${fam}"))`);
     await page.waitForTimeout(80);
     ok(await page.locator('#dlg-prev .errores').count() === 0, `${fam}: la vista previa calcula sin errores`);
     await page.click('#dlg-guardar');
@@ -95,9 +95,9 @@ const ok = (cond, msg) => {
   }
   ok(await page.locator('#lista-partidas .partida').count() === 8, 'las 8 familias quedaron en la lista');
 
-  console.log('4) Validación: un ramal demasiado corto no se puede guardar');
+  console.log('4) Validación: un injerto demasiado corto no se puede guardar');
   await page.click('#btn-agregar');
-  await page.click('.fam:has-text("Ramal")');
+  await page.click('.fam:has(span:text-is("Injerto simple"))');
   await page.fill('#f_L_ramal_mm', '100');
   await page.waitForTimeout(80);
   ok(await page.locator('#dlg-prev .errores').count() === 1, 'se muestra el error');
@@ -377,6 +377,93 @@ const ok = (cond, msg) => {
     await p.waitForSelector('#lista-partidas .partida');
     ok((await aceroGuardado(p)) === 26.5, 'la recuperación no se repite ni se pierde al recargar');
     await p.context().close();
+  }
+
+  console.log('15) Injerto simple y Reducción con injerto (30° o 45°, derecho o izquierdo)');
+  {
+    const p = await nuevaPagina();
+    await p.click('#btn-agregar');
+    await p.waitForSelector('#dlg-partida[open]');
+    const nombres = await p.locator('#dlg-familias .fam span').allInnerTexts();
+    ok(nombres.includes('Injerto simple') && nombres.includes('Reducción con injerto'), 'el selector ofrece Injerto simple y Reducción con injerto');
+    ok(!nombres.some((n) => /Pantal|Ramal/.test(n)), 'ya no ofrece Ramal en ángulo ni Pantalón');
+    await p.click('.fam:has(span:text-is("Reducción con injerto"))');
+    ok(JSON.stringify(await p.locator('#f_beta_deg option').allInnerTexts()) === JSON.stringify(['30°', '45°']), 'el ángulo del injerto es 30° o 45°');
+    ok(JSON.stringify(await p.locator('#f_lado option').allInnerTexts()) === JSON.stringify(['Derecho', 'Izquierdo']), 'el lado es derecho o izquierdo');
+    ok(await p.locator('#f_beta_deg').inputValue() === '45' && await p.locator('#f_lado').inputValue() === 'DER', 'por omisión: 45° derecho');
+    ok(await p.locator('#dlg-prev .errores').count() === 0, 'con los valores por defecto calcula sin errores');
+    ok((await p.locator('#f_L_ramal_mm').getAttribute('placeholder')) === 'auto' && (await p.locator('#f_L_cuerpo_mm').getAttribute('placeholder')) === 'auto', 'los largos del injerto son automáticos por omisión');
+    const precio45 = await p.locator('#dlg-prev .prev-val').innerText();
+    await p.selectOption('#f_beta_deg', '30');
+    await p.selectOption('#f_lado', 'IZQ');
+    await p.waitForTimeout(100);
+    ok(await p.locator('#dlg-prev .errores').count() === 0, 'a 30° izquierdo también calcula sin errores (el largo automático se ajusta)');
+    ok(precio45 !== '' && (await p.locator('#dlg-prev .prev-val').innerText()) !== '', 'la vista previa muestra el precio');
+    await p.click('#dlg-guardar');
+    await p.waitForTimeout(100);
+    const guardada = await estadoApp(p, () => {
+      const q = window.COTIZAP.web.estadoApp.cot.partidas.find((x) => x.familia === 'REDUCCION_INJERTO' && x.beta_deg === 30);
+      return q ? { beta: q.beta_deg, tipo: typeof q.beta_deg, lado: q.lado, id: q.id } : null;
+    });
+    ok(guardada && guardada.beta === 30 && guardada.tipo === 'number' && guardada.lado === 'IZQ', 'se guarda el ángulo como número y el lado');
+    ok(await p.locator('#lista-partidas .partida-meta:has-text("a 30° izq.")').count() === 1, 'la lista lo resume con el vocabulario del taller ("… a 30° izq.")');
+    ok(await p.locator('#lista-partidas .partida-meta:has-text("Injerto")').count() >= 2, 'el injerto simple y la reducción con injerto se rotulan como injertos');
+    // editar y guardar sin tocar nada deja la partida igual (ángulo y lado se conservan)
+    await p.locator(`#lista-partidas .partida:has(.partida-meta:has-text("a 30° izq."))`).locator('button[aria-label^="Editar"]').click();
+    await p.waitForSelector('#dlg-partida[open]');
+    ok(await p.locator('#f_beta_deg').inputValue() === '30' && await p.locator('#f_lado').inputValue() === 'IZQ', 'al editar, el ángulo y el lado vuelven como se guardaron');
+    // un injerto demasiado corto se rechaza con el nombre de taller
+    await p.fill('#f_L_ramal_mm', '100');
+    await p.waitForTimeout(100);
+    ok(/longitud del injerto debe exceder/.test(await p.locator('#dlg-prev .errores').innerText()), 'un injerto demasiado corto se rechaza: "La longitud del injerto debe exceder …"');
+    await p.click('#dlg-cancelar');
+    // el desglose habla de tronco e injerto
+    await p.locator('#lista-partidas .partida:has(.partida-meta:has-text("a 30° izq."))').click();
+    await p.waitForTimeout(100);
+    const detalle = await p.locator('#detalle').innerText();
+    ok(/Lado del injerto\s*Izquierdo/.test(detalle) && /Longitud de la reducción/.test(detalle) && /Área del injerto/.test(detalle), 'el desglose muestra lado, reducción e injerto');
+
+    // una cotización anterior con pantalón sigue calculando, rotulado como retirado
+    const vieja = {
+      app: 'COTIZAP', version: 2,
+      cotizacion: { cliente: 'Anterior', proyecto: '', fecha: '2026-01-01', vigencia_dias: 15, unidad_diam: 'in', unidad_long: 'mm', riesgo: 'MEDIO', servicio: 'POLVO',
+        partidas: [{ id: 'pv1', familia: 'PANTALON', D_mm: 500, d1_mm: 354, d2_mm: 354, L_tronco_mm: 300, L1_mm: 500, L2_mm: 500, material_id: 'ACERO_CARBON', calibre: 16, cantidad: 1 }] },
+      maestros: {},
+    };
+    await p.click('#btn-io');
+    await p.fill('#io-texto', JSON.stringify(vieja));
+    await p.click('#io-cargar');
+    await p.waitForTimeout(150);
+    ok(await p.locator('#lista-partidas .partida-titulo:has-text("Pantalón (retirado)")').count() === 1, 'el pantalón de una cotización anterior se sigue mostrando, como retirado');
+    ok((await p.locator('#lista-partidas .partida-importe').innerText()).includes('$'), 'y sigue calculando su precio');
+    await p.locator('#lista-partidas .partida').first().locator('button[aria-label^="Editar"]').click();
+    await p.waitForSelector('#dlg-partida[open]');
+    ok((await p.locator('#dlg-familias .fam span').allInnerTexts()).includes('Pantalón (retirado)'), 'al editarlo aparece su familia retirada');
+    await p.click('#dlg-cancelar');
+    await p.click('#btn-agregar');
+    await p.waitForSelector('#dlg-partida[open]');
+    ok(!(await p.locator('#dlg-familias .fam span').allInnerTexts()).some((n) => /Pantal/.test(n)), 'pero no se ofrece para partidas nuevas');
+    await p.click('#dlg-cancelar');
+    await p.context().close();
+  }
+
+  console.log('16) La muestra sin tocar se renueva; una cotización propia no se toca');
+  {
+    const partidaVieja = { id: 'r1', familia: 'RAMAL', descripcion: 'Ramal a 45° Ø8″ sobre Ø12″', D_mm: 304.8, d_mm: 203.2, L_cuerpo_mm: 700, L_ramal_mm: 450, beta_deg: 45, material_id: 'ACERO_CARBON', calibre: 16, cantidad: 2 };
+    const guardada = (ejemplo) => ({ cliente: ejemplo ? 'Cliente de ejemplo' : 'Mi cliente', proyecto: '', fecha: '2026-03-02', vigencia_dias: 30, unidad_diam: 'mm', unidad_long: 'm', riesgo: 'ALTO', servicio: 'POLVO', ejemplo, partidas: [partidaVieja] });
+    const sembrar = (cot) => async (ctx) => {
+      await ctx.addInitScript((c) => { if (!window.localStorage.getItem('__sembrado')) { window.localStorage.setItem('cotizap.cotizacion.v1', JSON.stringify(c)); window.localStorage.setItem('__sembrado', '1'); } }, cot);
+    };
+    const pm = await nuevaPagina({}, sembrar(guardada(true)));
+    const titulos = await pm.locator('#lista-partidas .partida-titulo').allInnerTexts();
+    ok(titulos.some((t) => /^Injerto simple a 45°/.test(t)) && titulos.some((t) => /^Reducción con injerto der\. 45°/.test(t)), 'la muestra de una versión anterior se renueva con los nombres y las partidas actuales');
+    ok(!titulos.some((t) => /^Ramal/.test(t)), 'ya no aparece "Ramal"');
+    ok(await pm.locator('#c_unidad_diam').inputValue() === 'mm' && await pm.locator('#c_unidad_long').inputValue() === 'm' && await pm.locator('#c_riesgo').inputValue() === 'ALTO' && await pm.locator('#c_vigencia_dias').inputValue() === '30', 'conserva los ajustes generales que ya había cambiado');
+    await pm.context().close();
+    const pp = await nuevaPagina({}, sembrar(guardada(false)));
+    const propios = await pp.locator('#lista-partidas .partida-titulo').allInnerTexts();
+    ok(propios.length === 1 && /^Ramal a 45°/.test(propios[0]), 'una cotización propia se deja tal cual');
+    await pp.context().close();
   }
 
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);

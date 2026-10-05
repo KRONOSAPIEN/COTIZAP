@@ -246,6 +246,8 @@ test('Todas las familias cotizan y producen precio positivo con desglose consist
     { familia: 'REDUCCION', D1_mm: 400, D2_mm: 200 },
     { familia: 'TRANSICION', D_mm: 300, a_mm: 400, b_mm: 300 },
     { familia: 'RAMAL', D_mm: 400, d_mm: 200, L_cuerpo_mm: 800, L_ramal_mm: 500, beta_deg: 45 },
+    { familia: 'REDUCCION_INJERTO', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 45, lado: 'DER' },
+    { familia: 'REDUCCION_INJERTO', D1_mm: 400, D2_mm: 300, d_mm: 200, beta_deg: 30, lado: 'IZQ', L_cuerpo_mm: 700, L_ramal_mm: 700 },
     { familia: 'PANTALON', D_mm: 500, d1_mm: 354, d2_mm: 354, L_tronco_mm: 300, L1_mm: 500, L2_mm: 500 },
     { familia: 'PERSONALIZADO', A_neta_m2: 1.2, L_corte_m: 9, L_sold_tope_m: 4, n_piezas: 2, n_extremos: 2, D_ref_mm: 300 },
   ];
@@ -257,6 +259,82 @@ test('Todas las familias cotizan y producen precio positivo con desglose consist
     casi(r.pila.C_base + r.pila.utilidad + r.pila.comision + r.pila.otros, r.pila.precio, 1e-12, `pila ${c.familia}`);
     assert.ok(r.peso.neto_total_kg > 0, c.familia);
   });
+});
+
+/* ====================================================================== */
+/* Injerto simple y reducción con injerto                                 */
+/* ====================================================================== */
+const redInj = {
+  familia: 'REDUCCION_INJERTO', material_id: 'ACERO_CARBON', calibre: 16, D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 45, lado: 'DER',
+  tipo_union: 'BRIDADO', servicio: 'POLVO', riesgo: 'MEDIO',
+};
+
+test('Nombres de taller: "Injerto simple" (id RAMAL) y "Reducción con injerto"', () => {
+  assert.equal(C.FAMILIAS.RAMAL, 'Injerto simple');
+  assert.equal(C.FAMILIAS.REDUCCION_INJERTO, 'Reducción con injerto');
+  assert.equal(C.cotizarPartida({ ...redInj }, M).descripcion, 'Reducción con injerto');
+  assert.equal(C.cotizarPartida({ ...redInj, descripcion: 'Inj. der. 45°' }, M).descripcion, 'Inj. der. 45°');
+});
+
+test('Reducción con injerto: usa su merma (28 %) y su dificultad de armado (1.9), con tres extremos bridados', () => {
+  const r = C.cotizarPartida({ ...redInj }, M);
+  casi(r.qto.lam.phi, M.merma.REDUCCION_INJERTO, 1e-12);
+  casi(r.qto.lam.phi, 0.28, 1e-12);
+  assert.equal(r.qto.tmp.detalle.k_dif_armado, 1.9);
+  assert.equal(r.qto.her.n_aros, 3);
+  assert.equal(r.geometria.extremos.length, 3);
+  // merma como rendimiento, como en toda familia
+  casi(r.qto.lam.m_bruta_kg, r.qto.lam.m_neta_kg / (1 - 0.28), 1e-12);
+});
+
+test('Reducción con injerto: el lado (der/izq) no cambia el precio ni ninguna cantidad', () => {
+  const der = C.cotizarPartida({ ...redInj, lado: 'DER' }, M);
+  const izq = C.cotizarPartida({ ...redInj, lado: 'IZQ' }, M);
+  assert.equal(der.precio.unitario, izq.precio.unitario);
+  casi(der.peso.neto_unitario_kg, izq.peso.neto_unitario_kg, 1e-12);
+  assert.equal(JSON.stringify(der.qto.tmp.unitarios_min), JSON.stringify(izq.qto.tmp.unitarios_min));
+});
+
+test('Reducción con injerto: la merma y la dificultad son datos de maestros, no del código', () => {
+  const M2 = crearMaestros({ merma: { REDUCCION_INJERTO: 0.35 }, proceso: { armado: { k_dif: { REDUCCION_INJERTO: 2.5 } } } });
+  const a = C.cotizarPartida({ ...redInj }, M);
+  const b = C.cotizarPartida({ ...redInj }, M2);
+  casi(b.qto.lam.phi, 0.35, 1e-12);
+  assert.equal(b.qto.tmp.detalle.k_dif_armado, 2.5);
+  assert.ok(b.precio.unitario > a.precio.unitario);
+});
+
+test('Reducción con injerto: pesa más que su reducción sola y que su injerto simple (suma de las dos piezas)', () => {
+  const ri = C.cotizarPartida({ ...redInj }, M);
+  const d = ri.geometria.detalle; // largos automáticos con los que se armó la pieza
+  const red = C.cotizarPartida({ ...redInj, familia: 'REDUCCION', D1_mm: 304.8, D2_mm: 254, L_mm: d.L_reduccion_mm }, M);
+  const inj = C.cotizarPartida({ ...redInj, familia: 'RAMAL', D_mm: 304.8, d_mm: 152.4, L_cuerpo_mm: d.L_cuerpo_mm, L_ramal_mm: d.L_ramal_mm }, M);
+  assert.ok(ri.qto.lam.m_neta_kg > red.qto.lam.m_neta_kg);
+  assert.ok(ri.qto.lam.m_neta_kg > inj.qto.lam.m_neta_kg);
+  casi(ri.qto.lam.m_neta_kg, red.qto.lam.m_neta_kg + inj.qto.lam.m_neta_kg, 1e-12, 'lámina neta = reducción + injerto');
+});
+
+test('Reducción con injerto: los datos inválidos devuelven errores claros sin tumbar el resto de la cotización', () => {
+  const r = C.cotizar({ partidas: [
+    { ...redInj, beta_deg: 60 },
+    { ...redInj, D2_mm: 400 },
+    { ...redInj, lado: 'CENTRO' },
+    { ...redInj },
+  ] }, M);
+  assert.equal(r.totales.n_partidas_error, 3);
+  assert.match(r.partidas[0].errores[0], /30° o 45°/);
+  assert.match(r.partidas[1].errores[0], /D2 debe ser menor que D1/);
+  assert.match(r.partidas[2].errores[0], /derecho \(DER\) o izquierdo \(IZQ\)/);
+  assert.equal(r.partidas[3].ok, true);
+});
+
+test('Pantalón (retirado): una cotización anterior que lo trae sigue calculando, con aviso de familia retirada', () => {
+  const r = C.cotizarPartida({
+    familia: 'PANTALON', material_id: 'ACERO_CARBON', calibre: 16, D_mm: 500, d1_mm: 354, d2_mm: 354, L_tronco_mm: 300, L1_mm: 500, L2_mm: 500,
+  }, M);
+  assert.ok(r.precio.unitario > 0);
+  assert.equal(r.descripcion, 'Pantalón (familia retirada)');
+  assert.ok(r.advertencias.some((x) => /Familia retirada/.test(x)));
 });
 
 test('Maestros: mezclar no muta la base y ajusta sólo lo indicado', () => {

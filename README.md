@@ -81,8 +81,8 @@ Cinco detalles se **supusieron** y conviene confirmarlos con el taller (se edita
 | Codo (segmentado y de radio) | longitud de eje exacta; factor `tan(α/2)/(α/2)` | exacta (verificada con malla 3D) |
 | Reducción (concéntrica y excéntrica) | tronco de cono, integral numérica | exacta (verificada con malla 3D) |
 | Transición redondo → rectángulo | triangulación estándar | exacta (verificada con malla 3D) |
-| Ramal en ángulo | promedio elíptico de la silleta | exacta (verificada) |
-| Pantalón (Y simétrica) | primitivas + factor de entrepierna | ±10 %, **requiere calibrar** |
+| Injerto simple (antes ramal en ángulo) | promedio elíptico de la silleta | exacta (verificada) |
+| Reducción con injerto (30° o 45°, derecho o izquierdo) | injerto simple sobre el tramo recto de D1 + cono concéntrico a D2 | exacta (suma de piezas verificadas); merma y dificultad por calibrar |
 | Personalizada | área desarrollada desde CAD | la que traiga el CAD |
 | Comprado | precio de compra | — |
 
@@ -100,7 +100,7 @@ scripts/construir.js                       empaquetado a un solo HTML
 
 ## Límites conocidos
 
-- Pantalón con geometría aproximada hasta calibrar `k_entrepierna` con desarrollos reales.
+- Reducción con injerto: se supone el injerto asentado en el tramo recto del diámetro mayor (no sobre el cono) y cono concéntrico; confirmar con el taller ([§10.5](docs/arquitectura-cotizador-ducterias.md#105-supuestos-de-la-reducción-con-injerto-por-confirmar-con-el-taller)). El pantalón se retiró de la interfaz; el motor lo conserva sólo para abrir cotizaciones anteriores.
 - Transiciones sólo centradas; ducto espiral, collarines y campanas se capturan como pieza *personalizada* o *comprada*.
 - El anidado de hojas está descrito en el documento pero no implementado: la merma es un porcentaje por familia (editable por partida).
 - Fuera de alcance: instalación, soportería, flete a obra.

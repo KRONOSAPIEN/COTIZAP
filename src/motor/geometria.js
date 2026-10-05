@@ -324,28 +324,32 @@
     return PF;
   }
 
+  /**
+   * Injerto simple (id interno RAMAL): tronco recto de diámetro D con un injerto de diámetro d que entra a un ángulo β.
+   * En el motor el tronco es el «cuerpo» y el injerto es el «ramal»; en el taller y en la interfaz, tronco e injerto.
+   */
   function ramal(p, e, M) {
     const PF = nuevoPF('RAMAL');
-    exigir(p.D_mm > 0 && p.d_mm > 0, 'Diámetros del cuerpo y del ramal deben ser mayores que 0.');
+    exigir(p.D_mm > 0 && p.d_mm > 0, 'Los diámetros del tronco y del injerto deben ser mayores que 0.');
     const dm = dimensionesRedondas(p.D_mm, e, p.ref_diametro);
     const db = dimensionesRedondas(p.d_mm, e, p.ref_diametro);
     const Rm = dm.D_med / 2;
     const rb = db.D_med / 2;
     const k = rb / Rm;
-    exigir(k < 1, 'El ramal debe ser de menor diámetro que el cuerpo principal.');
+    exigir(k < 1, 'El injerto debe ser de menor diámetro que el tronco.');
     const beta_deg = p.beta_deg || M.proceso.beta_ramal_defecto_deg;
-    exigir(beta_deg >= 20 && beta_deg <= 90, 'El ángulo de entrada β debe estar entre 20° y 90°.');
+    exigir(beta_deg >= 20 && beta_deg <= 90, 'El ángulo del injerto β debe estar entre 20° y 90°.');
     const beta = rad(beta_deg);
     const t_med = (Rm / sin(beta)) * razonElipticaE(k);
     const t_max = (Rm + rb * cos(beta)) / sin(beta);
     const L_r = p.L_ramal_mm;
-    exigir(L_r > t_max, `La longitud del ramal debe exceder ${t_max.toFixed(0)} mm (medida sobre su eje desde el eje del cuerpo).`);
+    exigir(L_r > t_max, `La longitud del injerto debe exceder ${t_max.toFixed(0)} mm (medida sobre su eje desde el eje del tronco).`);
     const L_c = p.L_cuerpo_mm;
-    exigir(L_c > 0, 'La longitud del cuerpo principal debe ser mayor que 0.');
+    exigir(L_c > 0, 'La longitud del tronco debe ser mayor que 0.');
     if (L_c < (1.25 * 2 * rb) / sin(beta)) {
-      PF.advertencias.push('El cuerpo principal es corto para alojar el orificio del ramal.');
+      PF.advertencias.push('El tramo recto del tronco es corto para alojar el injerto.');
     }
-    if (k > 0.8) PF.advertencias.push('Relación d/D > 0.8: revisar el diseño; la entrada pierde el comportamiento de ramal.');
+    if (k > 0.8) PF.advertencias.push('Relación d/D > 0.8: revisar el diseño; la entrada pierde el comportamiento de injerto.');
 
     const A_cuerpo = PI * dm.D_med * L_c;
     const A_ramal = PI * db.D_med * (L_r - t_med);
@@ -370,6 +374,74 @@
       D_med_mm: dm.D_med, d_med_mm: db.D_med, k_d_sobre_D: k, beta_deg, t_medio_mm: t_med, t_max_mm: t_max,
       A_cuerpo_m2: A_cuerpo / 1e6, A_ramal_m2: A_ramal / 1e6, K_orificio: K, P_orificio_mm: P_h,
     };
+    return PF;
+  }
+
+  /**
+   * Reducción con injerto: el tronco de diámetro mayor D1 lleva el injerto (diámetro d, a 30° o 45°, derecho o izquierdo)
+   * y se cierra con un cono concéntrico hasta D2. Es una composición de dos piezas ya verificadas por separado:
+   *   · injerto simple sobre un tramo recto de D1 (tronco − orificio + injerto)
+   *   · reducción concéntrica D1 → D2 (tronco de cono)
+   * más la costura circular que une el tramo recto con el cono. El lado (der/izq) sólo identifica la pieza: no cambia
+   * ninguna cantidad, porque el injerto sale del mismo tronco redondo.
+   */
+  function reduccionInjerto(p, e, M) {
+    const PF = nuevoPF('REDUCCION_INJERTO');
+    exigir(p.D1_mm > 0 && p.D2_mm > 0 && p.d_mm > 0, 'Los diámetros del tronco (D1 y D2) y del injerto deben ser mayores que 0.');
+    exigir(p.D2_mm < p.D1_mm, 'D2 debe ser menor que D1: el tronco se reduce de D1 a D2.');
+    const permitidos = M.proceso.angulos_injerto_reduccion_deg;
+    const beta_deg = p.beta_deg === undefined ? M.proceso.beta_ramal_defecto_deg : Number(p.beta_deg);
+    exigir(permitidos.includes(beta_deg), `El injerto de la reducción es a ${permitidos.join('° o ')}°.`);
+    const lado = p.lado === undefined ? 'DER' : p.lado;
+    exigir(lado === 'DER' || lado === 'IZQ', 'El lado del injerto es derecho (DER) o izquierdo (IZQ).');
+
+    const dT = dimensionesRedondas(p.D1_mm, e, p.ref_diametro);
+    const dS = dimensionesRedondas(p.D2_mm, e, p.ref_diametro);
+    const db = dimensionesRedondas(p.d_mm, e, p.ref_diametro);
+    const beta = rad(beta_deg);
+    // Largos automáticos (se pueden capturar): tramo recto mínimo para alojar el orificio con holgura, e injerto con
+    // un tramo recto extra más allá de su generatriz más larga (así un cambio de ángulo nunca deja un injerto corto).
+    const L_cuerpo_auto = (1.25 * db.D_med) / sin(beta);
+    const L_cuerpo = p.L_cuerpo_mm > 0 ? p.L_cuerpo_mm : L_cuerpo_auto;
+    const t_max = (dT.D_med / 2 + (db.D_med / 2) * cos(beta)) / sin(beta);
+    const L_ramal_auto = t_max + M.proceso.injerto_largo_extra_mm;
+    const L_ramal = p.L_ramal_mm > 0 ? p.L_ramal_mm : L_ramal_auto;
+    const R = ramal({
+      D_mm: p.D1_mm, d_mm: p.d_mm, L_cuerpo_mm: L_cuerpo, L_ramal_mm: L_ramal, beta_deg, ref_diametro: p.ref_diametro,
+    }, e, M);
+    const C = reduccion({
+      D1_mm: p.D1_mm, D2_mm: p.D2_mm, L_mm: p.L_reduccion_mm, ref_diametro: p.ref_diametro, excentrica: 'NO',
+    }, e, M);
+
+    PF.A_neta_m2 = R.A_neta_m2 + C.A_neta_m2;
+    PF.A_orificio_m2 = R.A_orificio_m2;
+    PF.n_piezas = R.n_piezas + C.n_piezas;
+    PF.n_virolas = R.n_virolas + C.n_virolas;
+    // El rolado se calcula con un solo (L_virola, k_rolado): se promedian ponderando por longitud rolada, de modo que
+    // n · k · L conserve el trabajo de rolado de cada pieza (cilindros k = 1, cono k = k_conico).
+    const rolado_m = R.n_virolas * R.L_virola_m + C.n_virolas * C.L_virola_m;
+    PF.L_virola_m = rolado_m / PF.n_virolas;
+    PF.k_rolado = (R.n_virolas * R.k_rolado * R.L_virola_m + C.n_virolas * C.k_rolado * C.L_virola_m) / rolado_m;
+    PF.L_corte_m = R.L_corte_m + C.L_corte_m;
+    PF.sold.tope_m = R.sold.tope_m + C.sold.tope_m + (PI * dT.D_med) / 1000; // + costura circular tronco–cono
+    PF.sold.filete_m = R.sold.filete_m;
+    PF.n_juntas_internas = R.n_juntas_internas + 1; // silleta del injerto + unión tronco–cono
+    PF.extremos = [extremoRedondo(dT), extremoRedondo(dS), extremoRedondo(db)];
+    PF.espigas_defecto = 3;
+    PF.D_ref_mm = (R.D_ref_mm * R.A_neta_m2 + C.D_ref_mm * C.A_neta_m2) / PF.A_neta_m2;
+    PF.detalle = {
+      ...R.detalle,
+      L_cuerpo_mm: L_cuerpo,
+      L_cuerpo_auto_mm: L_cuerpo_auto,
+      L_ramal_mm: L_ramal,
+      L_ramal_auto_mm: L_ramal_auto,
+      L_reduccion_mm: C.detalle.L_mm,
+      semiangulo_deg: C.detalle.semiangulo_deg,
+      generatriz_max_mm: C.detalle.generatriz_max_mm,
+      A_cono_m2: C.A_neta_m2,
+      lado,
+    };
+    PF.advertencias.push(...R.advertencias, ...C.advertencias);
     return PF;
   }
 
@@ -401,7 +473,7 @@
     PF.espigas_defecto = 3;
     PF.D_ref_mm = dT.D_med;
     PF.detalle = { k_entrepierna: k_ent, razon_areas_ramales_tronco: razon, A_tronco_m2: A_tronco / 1e6, A_ramales_m2: (A_r1 + A_r2) / 1e6 };
-    PF.advertencias.push('Pantalón: geometría aproximada (±10 %). Calibrar k_entrepierna con desarrollos reales.');
+    PF.advertencias.push('Familia retirada: sustituya el pantalón por una Reducción con injerto. Se conserva sólo para abrir cotizaciones anteriores (geometría aproximada, ±10 %).');
     return PF;
   }
 
@@ -435,7 +507,8 @@
       case 'REDUCCION': PF = reduccion(p, e, M); break;
       case 'TRANSICION': PF = transicion(p, e, M); break;
       case 'RAMAL': PF = ramal(p, e, M); break;
-      case 'PANTALON': PF = pantalon(p, e, M); break;
+      case 'REDUCCION_INJERTO': PF = reduccionInjerto(p, e, M); break;
+      case 'PANTALON': PF = pantalon(p, e, M); break; // retirada: sólo para abrir cotizaciones anteriores
       case 'PERSONALIZADO': PF = personalizado(p, e, M); break;
       default: throw new U.ErrorValidacion([`Familia desconocida: ${p.familia}`]);
     }
@@ -452,6 +525,6 @@
     areaTransicionRR,
     razonElipticaE,
     factorOrificio,
-    familias: { recto, codoRedondo, codoRect, reduccion, transicion, ramal, pantalon, personalizado },
+    familias: { recto, codoRedondo, codoRect, reduccion, transicion, ramal, reduccionInjerto, pantalon, personalizado },
   };
 }));

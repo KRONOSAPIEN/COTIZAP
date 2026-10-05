@@ -24,8 +24,9 @@
     CODO: 'Codo',
     REDUCCION: 'Reducción',
     TRANSICION: 'Transición redondo → rectángulo',
-    RAMAL: 'Ramal en ángulo',
-    PANTALON: 'Pantalón (Y simétrica)',
+    RAMAL: 'Injerto simple',
+    REDUCCION_INJERTO: 'Reducción con injerto',
+    PANTALON: 'Pantalón (familia retirada)',
     PERSONALIZADO: 'Pieza personalizada (CAD)',
     COMPRADO: 'Artículo comprado',
   };
