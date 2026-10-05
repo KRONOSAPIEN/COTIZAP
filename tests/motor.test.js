@@ -310,3 +310,116 @@ test('Indicadores: precio piso = costo base / (1 − comisión − otros); horas
   assert.ok(r.indicadores.precio_piso < r.precio.total_sin_redondeo);
   casi(r.indicadores.horas_mod_por_kg_neto, r.costos.h_MOD / r.peso.neto_total_kg, 1e-12);
 });
+
+/* ====================================================================== */
+/* Estándar del taller: solera 1½" × 3/16", barreno Ø3/8", tornillo 5/16" × 1¼" */
+/* ====================================================================== */
+const MAT = require('../src/motor/material');
+
+test('Solera 1½" × 3/16": peso lineal = ancho·espesor·ρ; fibra neutra y barreno al centro del ancho', () => {
+  const p = MAT.perfilDerivado(M, 'SOL38x4.8');
+  casi(p.area_mm2, 38.1 * 4.763, 1e-12);
+  casi(p.peso_kg_m, (38.1 * 4.763 * 7.85) / 1000, 1e-12);
+  casi(p.peso_kg_m, 1.4245, 1e-4, 'peso lineal');
+  casi(p.c_centroide_mm, 19.05, 1e-12);
+  casi(p.gramil_mm, 19.05, 1e-12);
+  assert.equal(p.tipo, 'SOLERA');
+});
+
+test('El taller usa la misma brida en todos los diámetros: solera 1½"×3/16", barreno Ø3/8", tornillo 5/16"×1¼"', () => {
+  [101.6, 203.2, 304.8, 609.6, 1219.2, 1828.8].forEach((D) => {
+    const r = C.cotizarPartida({ ...recto, D_mm: D }, M);
+    r.qto.her.aros.forEach((a) => {
+      assert.equal(a.perfil_id, 'SOL38x4.8', `Ø${D}`);
+      casi(a.diam_barreno_mm, 9.525, 1e-12);
+      assert.equal(a.barreno_desc, '3/8"');
+      assert.equal(a.tornillo_desc, '5/16" × 1¼"');
+      assert.equal(a.tornillo, '5/16x1-1/4');
+    });
+    assert.deepEqual(Object.keys(r.qto.her.tornillos_por_tipo), ['5/16x1-1/4']);
+  });
+});
+
+test('Aro de solera: L = π·(D_ext + ancho) + holgura; el círculo de barrenos coincide con la fibra neutra', () => {
+  const r = C.cotizarPartida({ ...recto }, M);
+  const D_ext = 304.8 + 2 * (0.0598 * 25.4);
+  const a = r.qto.her.aros[0];
+  casi(a.L_aro_mm, Math.PI * (D_ext + 38.1) + 3.0, 1e-12);
+  casi(a.P_perno_mm, Math.PI * (D_ext + 38.1), 1e-12, 'D_bc = D_ext + 2·g con g = ancho/2');
+  assert.equal(a.n_tornillos, 8);
+});
+
+test('Paso entre barrenos: n = múltiplo de 4 ≥ máx(4, ⌈π·D_bc / paso⌉)', () => {
+  const M2 = crearMaestros({ herrajes: { uniones: { BRIDADO: { paso_tornillo_mm: 100 } } } });
+  const n = (D, MM = M) => C.cotizarPartida({ ...recto, D_mm: D }, MM).qto.her.aros[0].n_tornillos;
+  assert.equal(n(304.8, M2), 12);   // π·346 / 100 = 10.9 → 11 → 12
+  assert.equal(n(101.6, M), 4);     // chico: mínimo 4
+  assert.equal(n(609.6, M) % 4, 0);
+});
+
+test('Cada aro se valoriza con el precio de SU perfil: solera ≠ ángulo', () => {
+  const sol = (precios) => C.cotizarPartida({ ...recto }, crearMaestros({ precios }));
+  const base = sol({});
+  casi(sol({ precio_kg_solera: M.precios.precio_kg_solera * 1.1 }).costos.materiales.perfiles, base.costos.materiales.perfiles * 1.1, 1e-12);
+  casi(sol({ precio_kg_perfil_angulo: 999 }).costos.materiales.perfiles, base.costos.materiales.perfiles, 1e-12, 'el precio del ángulo no afecta a la solera');
+  const ang = C.cotizarPartida({ ...recto, perfil_id: 'L38x3.2' }, crearMaestros({ precios: { precio_kg_solera: 999 } }));
+  const angBase = C.cotizarPartida({ ...recto, perfil_id: 'L38x3.2' }, M);
+  casi(ang.costos.materiales.perfiles, angBase.costos.materiales.perfiles, 1e-12, 'el precio de la solera no afecta al ángulo');
+  assert.equal(ang.qto.her.aros[0].perfil_id, 'L38x3.2');
+  assert.equal(ang.qto.her.aros[0].tornillo, 'M10');
+});
+
+test('El tornillo 5/16" × 1¼" se valoriza con su propia variable de precio', () => {
+  const base = C.cotizarPartida({ ...recto }, M);
+  const M2 = crearMaestros({ precios: { precio_juego_tornillo_5_16_x_1_1_4: M.precios.precio_juego_tornillo_5_16_x_1_1_4 * 1.1, precio_juego_tornillo_m10: 999 } });
+  const r = C.cotizarPartida({ ...recto }, M2);
+  casi(r.costos.materiales.tornilleria, base.costos.materiales.tornilleria * 1.1, 1e-12);
+  casi(base.costos.materiales.tornilleria, 8 * 1.05 * M.precios.precio_juego_tornillo_5_16_x_1_1_4, 1e-12);
+});
+
+test('Cierre del aro: se suelda a tope en el espesor de la solera (cordón y velocidad propios)', () => {
+  const r = C.cotizarPartida({ ...recto }, M);
+  const cierres = r.qto.her.sold_aros.cierres;
+  assert.equal(cierres.length, 2);
+  cierres.forEach((c) => { casi(c.L_m, 0.0381, 1e-12); casi(c.esp_mm, 4.763, 1e-12); });
+  const A_cierre = Math.max(2.0, 1.75 * 4.763 ** 2);
+  casi(r.qto.con.soldadura.m_depositado_cierres_g, 2 * 0.0381 * A_cierre * 7.85, 1e-12);
+  // velocidad de la tabla a 4.763 mm (extremo plano 0.24 m/min), más lenta que a 1.519 mm
+  casi(r.qto.tmp.detalle.t_arco_cierres_min, (2 * 0.0381) / 0.24, 1e-12);
+  assert.ok(r.qto.tmp.detalle.t_arco_cierres_min * 0.24 < r.qto.tmp.detalle.t_arco_chapa_min * r.qto.tmp.detalle.v_soldadura_m_min * 0.1);
+});
+
+test('Marco rectangular de solera: L = 2(a+b)_ext + 8c + 4·holgura; 4 cierres de una sección', () => {
+  const r = C.cotizarPartida({ ...recto, forma: 'RECTANGULAR', a_mm: 500, b_mm: 300, L_mm: 1200 }, M);
+  const e = 0.0598 * 25.4;
+  const a_ext = 500 + 2 * e;
+  const b_ext = 300 + 2 * e;
+  const aro = r.qto.her.aros[0];
+  casi(aro.L_aro_mm, 2 * (a_ext + b_ext) + 8 * 19.05 + 4 * 3.0, 1e-12);
+  casi(aro.P_perno_mm, 2 * (a_ext + b_ext) + 8 * 19.05, 1e-12);
+  assert.equal(aro.n_tornillos % 4, 0);
+  casi(r.qto.her.sold_aros.cierres[0].L_m, (4 * 38.1) / 1000, 1e-12);
+});
+
+test('Los aros de solera no pesan lo del ángulo: la brida estándar es más ligera que el ángulo 1½×1½×1/8', () => {
+  const sol = C.cotizarPartida({ ...recto }, M);
+  const ang = C.cotizarPartida({ ...recto, perfil_id: 'L38x3.2' }, M);
+  assert.ok(sol.qto.her.m_aros_neta_kg !== ang.qto.her.m_aros_neta_kg);
+  casi(sol.qto.her.m_aros_neta_kg, 2 * (sol.qto.her.aros[0].L_aro_mm / 1000) * 1.4245, 1e-4);
+});
+
+test('Pintura de aros: dos caras + canto exterior de la solera', () => {
+  const r = C.cotizarPartida({ ...recto }, M);
+  const D = 304.8 + 2 * (0.0598 * 25.4);
+  const Dre = D + 2 * 38.1;
+  const un_aro = ((Math.PI / 2) * (Dre * Dre - D * D) + Math.PI * Dre * 4.763) / 1e6;
+  casi(r.qto.her.A_pintura_aros_m2, 2 * un_aro, 1e-12);
+});
+
+test('ESPIGA no usa aros: no hay perfil, barrenos ni cierres', () => {
+  const r = C.cotizarPartida({ ...recto, tipo_union: 'ESPIGA' }, M);
+  assert.equal(r.qto.her.aros.length, 0);
+  assert.equal(r.qto.her.n_barrenos, 0);
+  assert.equal(r.qto.her.sold_aros.cierres.length, 0);
+  assert.equal(r.costos.materiales.perfiles, 0);
+});

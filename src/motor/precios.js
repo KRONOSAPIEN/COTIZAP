@@ -60,7 +60,8 @@
     /* Materiales */
     const lamina = n * lam.m_bruta_kg * precioDe(M, mat.precio_ref);
     const credito_chatarra = -n * C.recuperacion_chatarra_pct * lam.m_merma_kg * precioDe(M, mat.chatarra_ref);
-    const perfiles = n * her.m_aros_bruta_kg * (her.m_aros_bruta_kg > 0 ? precioDe(M, 'precio_kg_perfil_angulo') : 0);
+    // cada aro se valoriza con el precio de SU perfil (solera ≠ ángulo)
+    const perfiles = her.aros.reduce((acc, a) => acc + n * a.m_aro_bruta_kg * precioDe(M, a.precio_ref), 0);
     let tornilleria = 0;
     Object.keys(her.tornillos_por_tipo).forEach((tipo) => {
       const reserva = M.herrajes.uniones.BRIDADO.f_reserva_tornilleria;

@@ -57,16 +57,22 @@ const ok = (cond, msg) => {
     await page.selectOption('#c_unidad_diam', diam);
     await page.selectOption('#c_unidad_long', long);
     let iguales = true;
+    let exactos = true;
     const n = await page.locator('#lista-partidas .partida').count();
     for (let i = 0; i < n; i += 1) {
       const antes = await estadoApp(page, (k) => window.COTIZAP.web.estadoApp.res.partidas[k].precio.unitario, i);
+      const pAntes = await estadoApp(page, (k) => window.COTIZAP.web.estadoApp.cot.partidas[k], i);
       await editar(page, i);
       await page.click('#dlg-guardar');
       await page.waitForTimeout(80);
       const despues = await estadoApp(page, (k) => window.COTIZAP.web.estadoApp.res.partidas[k].precio.unitario, i);
+      const pDespues = await estadoApp(page, (k) => window.COTIZAP.web.estadoApp.cot.partidas[k], i);
       if (Math.abs(antes - despues) > 0.006) iguales = false;
+      // Un campo que el usuario no toca conserva su valor exacto en mm, aunque la unidad mostrada lo redondee.
+      if (Object.keys(pAntes).some((k) => typeof pAntes[k] === 'number' && pAntes[k] !== pDespues[k])) exactos = false;
     }
     ok(iguales, `unidades ${diam}/${long}: ninguna partida cambia de precio`);
+    ok(exactos, `unidades ${diam}/${long}: los valores numéricos no tocados se conservan exactos`);
   }
   await page.selectOption('#c_unidad_diam', 'in');
   await page.selectOption('#c_unidad_long', 'mm');
@@ -144,9 +150,27 @@ const ok = (cond, msg) => {
   await page.click('#btn-io');
   const json = await page.inputValue('#io-texto');
   ok(json.includes('"app": "COTIZAP"'), 'se genera el JSON de intercambio');
+  const intercambio = JSON.parse(json);
+  ok(intercambio.version === 2 && Object.keys(intercambio.maestros).length === 0, 'sin ediciones, los maestros se exportan como parche vacío');
   await page.click('#io-cargar');
   await page.waitForTimeout(100);
   ok(await page.locator('#dlg-io[open]').count() === 0, 'cargar el mismo JSON funciona');
+  // Un archivo de la versión 1 trae los herrajes de arranque viejos (ángulos por diámetro): debe mandar el estándar del taller.
+  const v1 = {
+    ...intercambio,
+    version: 1,
+    maestros: { precios: { precio_kg_acero_carbon: 25 }, herrajes: { seleccion_perfil: [{ hasta_mm: 150, perfil: 'L25x3.2' }, { hasta_mm: 99999, perfil: 'L38x3.2' }] } },
+  };
+  await page.click('#btn-io');
+  await page.fill('#io-texto', JSON.stringify(v1));
+  await page.click('#io-cargar');
+  await page.waitForTimeout(100);
+  const tras = await estadoApp(page, () => {
+    const a = window.COTIZAP.web.estadoApp;
+    return { acero: a.M.precios.precio_kg_acero_carbon, sel: a.M.herrajes.seleccion_perfil.map((f) => f.perfil) };
+  });
+  ok(tras.acero === 25, 'archivo v1: se conservan los precios editados');
+  ok(tras.sel.length === 1 && tras.sel[0] === 'SOL38x4.8', 'archivo v1: manda la brida estándar del taller, no los ángulos viejos');
   await page.click('#btn-io');
   await page.fill('#io-texto', '{ esto no es una cotización');
   await page.click('#io-cargar');

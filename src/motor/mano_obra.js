@@ -63,11 +63,15 @@
     const S = P.soldadura;
     const proc = S.procesos[mat.proceso_sold];
     if (!proc) throw new U.ErrorValidacion([`Proceso de soldadura desconocido: ${mat.proceso_sold}`]);
-    const L_tope = PF.sold.tope_m + her.sold_aros.tope_m;
+    const L_tope = PF.sold.tope_m;
     const L_fil = PF.sold.filete_m + her.sold_aros.filete_m;
-    const L_sold = L_tope + L_fil;
-    const v_sold = U.interpolar(S.v_m_min, e) * proc.v_mult;
-    const t_arco = L_sold / v_sold;
+    const L_cierres = her.sold_aros.cierres.reduce((s_, c) => s_ + c.L_m, 0);
+    const L_sold = L_tope + L_fil + L_cierres;
+    const vSold = (esp) => U.interpolar(S.v_m_min, esp) * proc.v_mult;
+    const t_arco_chapa = (L_tope + L_fil) / vSold(e);
+    // El cierre del aro se suelda en el espesor del perfil (más grueso que la lámina): su velocidad es menor.
+    const t_arco_cierres = her.sold_aros.cierres.reduce((s_, c) => s_ + c.L_m / vSold(c.esp_mm), 0);
+    const t_arco = t_arco_chapa + t_arco_cierres;
     const t_sold = (t_arco / proc.FO) * mat.f_sold;
 
     /* --- Engargolado (costuras mecánicas) --- */
@@ -97,8 +101,8 @@
       detalle: {
         proceso_corte: procCorte, v_corte_m_min: v_corte, L_corte_m, n_hojas_eq,
         v_rolado_m_min: v_rol, pasadas, k_dif_armado: k_dif, t_junta_min: t_junta,
-        proceso_soldadura: mat.proceso_sold, v_soldadura_m_min: v_sold, FO: proc.FO, L_soldadura_m: L_sold,
-        L_tope_m: L_tope, L_filete_m: L_fil, t_arco_min: t_arco,
+        proceso_soldadura: mat.proceso_sold, v_soldadura_m_min: vSold(e), FO: proc.FO, L_soldadura_m: L_sold,
+        L_tope_m: L_tope, L_filete_m: L_fil, L_cierres_m: L_cierres, t_arco_chapa_min: t_arco_chapa, t_arco_cierres_min: t_arco_cierres, t_arco_min: t_arco,
         peso_neto_total_kg: m_neta_total,
       },
     };

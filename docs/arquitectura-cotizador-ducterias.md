@@ -1,6 +1,6 @@
 # Arquitectura del Cotizador Maestro de Ducterías
 
-**COTIZAP · Especificación lógica, matemática y estructural · v1.0**
+**COTIZAP · Especificación lógica, matemática y estructural · v1.1**
 
 > Documento de arquitectura para analistas de datos y programadores. Define **qué se calcula, con qué fórmulas y con qué datos**, sin depender de una plataforma. La implementación de referencia (JavaScript sin dependencias) vive en `src/`, sus pruebas en `tests/`, y **todas las cifras de los ejemplos de este documento son la salida literal del motor**.
 >
@@ -31,6 +31,7 @@
 | Plataforma de implementación | **Núcleo agnóstico**: tablas maestras + funciones puras + pseudocódigo (§6). Implementación de referencia en JavaScript sin dependencias: motor (Node y navegador) y aplicación web que se abre con doble clic. El mapeo a Excel, React y Python está en §8.3. | §8.3 |
 | Factor de área del codo de 90° de 5 gajos | **No es un número fijo: se deriva exactamente.** Respecto a un tramo recto cuya longitud es el arco de eje (π/2·R): **F_arco = 1.0131**. En forma absoluta: **A = 7.4988·D²** con R/D = 1.5. El sobrecosto real de un codo no viene del área sino de la merma y la mano de obra (§3.4.1 y Ejemplo B). | §3.4.1 |
 | Diámetro y calibre del ejemplo | Ø12" (interior), calibre 16, acero al carbón, 3 m, bridado (los valores sugeridos en el prompt). | §7 |
+| Brida estándar del taller | **Una sola brida para todos los diámetros: aro de solera 1½" × 3/16", barreno Ø3/8", tornillo 5/16" × 1¼".** Se modela como el perfil `SOL38x4.8` (tipo solera, rolada "de canto"), que lleva en sus propias columnas el barreno y el tornillo; los ángulos quedan como opción por partida (`perfil_id`). Cinco supuestos de detalle están por confirmar con el taller (§10.4). | T4 · T5 · §3.5 · §10.4 |
 | Público objetivo | Ingenieros de ventas técnicas en México y desarrolladores internos. Moneda **MXN**, **IVA 16 %** aparte, **Factor de Salario Real (FSR)** para mano de obra. | `capas.iva_pct`, `mano_obra.FSR` |
 
 ### 0.2 Convenciones obligatorias (evitan los errores más caros)
@@ -51,7 +52,9 @@
 | **Gajo** | Segmento de un codo fabricado en piezas; los extremos son medios gajos. |
 | **Virola** | Cilindro (o cono) formado al rolar una plantilla de lámina. |
 | **Desarrollo / plantilla** | Forma plana de la lámina que, al rolarla o plegarla, produce la pieza. |
-| **Brida / aro** | Anillo de ángulo soldado al extremo del ducto para unir con tornillos. |
+| **Brida / aro** | Anillo de solera (barra plana de 1½" × 3/16", rolada "de canto") soldado al extremo del ducto; dos bridas se unen con tornillos de 5/16" × 1¼" en barrenos de Ø3/8". |
+| **Solera** | Barra plana de acero. La del taller mide 1½" × 3/16" = 38.1 × 4.763 mm; al rolarla de canto el ancho `b` queda en el plano radial. |
+| **Gramil (g)** | Distancia radial entre la pared exterior del ducto y el centro del barreno. En la solera del taller el barreno va al centro del ancho: g = b/2 = 19.05 mm. |
 | **Espiga** | Extremo macho que entra en el siguiente tramo (unión macho–hembra). |
 | **Merma (φ)** | Fracción del material comprado que no queda en la pieza. |
 | **QTO** | *Quantity take-off*: levantamiento de cantidades físicas, sin precios. |
@@ -123,7 +126,7 @@
 | `merma_pct` | fracción [0, 1) | — | por familia | Sustituye la merma de tabla para esa partida. |
 | `omitir_operaciones` | lista de operaciones | ver §4.4 | vacía | Operaciones subcontratadas (se anulan sus horas y consumibles). |
 | `subcontratos` | lista `{concepto, driver, precio}` | ver §4.4 | vacía | Costos de terceros por driver (kg, m², m de corte, pieza). |
-| `perfil_id` | texto | ver §2.2 (T4) | automático | Perfil de aro; por defecto se elige por diámetro. |
+| `perfil_id` | texto | ver §2.2 (T4) | `SOL38x4.8` | Perfil del aro. Por defecto, el estándar del taller (solera 1½" × 3/16", barreno Ø3/8", tornillo 5/16" × 1¼"). |
 
 **Entradas geométricas por familia** (todas las dimensiones en mm; la interfaz convierte pulgadas)
 
@@ -177,6 +180,7 @@
 | `precio_kg_chatarra_acero` | MXN/kg | 7.00 |
 | `precio_kg_chatarra_inox` | MXN/kg | 45.00 |
 | `precio_kg_perfil_angulo` | MXN/kg | 21.50 |
+| `precio_kg_solera` | MXN/kg | 21.00 |
 | `precio_kg_alambre_er70s6` | MXN/kg | 62.00 |
 | `precio_kg_varilla_er308l` | MXN/kg | 420.00 |
 | `precio_kg_varilla_er316l` | MXN/kg | 520.00 |
@@ -185,35 +189,37 @@
 | `precio_m_corte_guillotina` | MXN/m de corte | 0.30 |
 | `precio_m_corte_plasma` | MXN/m de corte | 3.50 |
 | `precio_m_corte_laser` | MXN/m de corte | 2.00 |
-| `precio_m_empaque_neopreno` | MXN/m | 18.00 |
+| `precio_m_empaque_neopreno` | MXN/m | 28.00 |
 | `precio_cartucho_sellador_300ml` | MXN/cartucho 300 mL | 120.00 |
 | `precio_pza_autotaladrante` | MXN/pza | 0.85 |
-| `precio_juego_tornillo_m8` | MXN/juego (tornillo+tuerca+2 arandelas) | 5.00 |
-| `precio_juego_tornillo_m10` | MXN/juego (tornillo+tuerca+2 arandelas) | 6.50 |
-| `precio_juego_tornillo_m12` | MXN/juego (tornillo+tuerca+2 arandelas) | 9.50 |
+| `precio_juego_tornillo_5_16_x_1_1_4` | MXN/juego (tornillo+tuerca+2 rondanas) | 4.50 |
+| `precio_juego_tornillo_m8` | MXN/juego (tornillo+tuerca+2 rondanas) | 5.00 |
+| `precio_juego_tornillo_m10` | MXN/juego (tornillo+tuerca+2 rondanas) | 6.50 |
+| `precio_juego_tornillo_m12` | MXN/juego (tornillo+tuerca+2 rondanas) | 9.50 |
 | `precio_L_primario` | MXN/L | 220.00 |
 | `precio_L_esmalte` | MXN/L | 260.00 |
 | `precio_L_diluyente` | MXN/L | 70.00 |
 
-**T4 · Perfiles de aros de brida** (el área, el peso lineal y el centroide se **derivan** de `ala` y `espesor`; no se capturan)
+**T4 · Perfiles de aros de brida.** La primera fila es el **estándar del taller** y se usa en todos los diámetros; las demás (ángulos) son opcionales por partida con `perfil_id`. El área, el peso lineal y el centroide se **derivan** de (tipo, ancho, espesor) y no se capturan; el gramil, el barreno, el tornillo y la variable de precio son datos del perfil. Fórmulas en §3.5.1.
 
-| `perfil_id` | Descripción | Área (mm²) | Peso (kg/m) | c centroide (mm) | Gramil g (mm) | Tornillo | Rango de D_ext (dimensión mayor) |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `L25x3.2` | Ángulo 1" × 1" × 1/8" | 151.2 | 1.187 | 7.51 | 14.0 | M8 | 0–150 mm |
-| `L38x3.2` | Ángulo 1½" × 1½" × 1/8" | 231.9 | 1.820 | 10.70 | 22.0 | M10 | 150–450 mm |
-| `L38x4.8` | Ángulo 1½" × 1½" × 3/16" | 340.3 | 2.671 | 11.27 | 22.0 | M10 | 450–900 mm |
-| `L51x4.8` | Ángulo 2" × 2" × 3/16" | 461.2 | 3.621 | 14.46 | 29.0 | M10 | 900–1500 mm |
-| `L64x6.4` | Ángulo 2½" × 2½" × 1/4" | 766.1 | 6.014 | 18.21 | 35.0 | M12 | > 1500 mm |
+| `perfil_id` | Descripción | Tipo | Ancho b (mm) | Espesor t (mm) | Área (mm²) | Peso (kg/m) | c centroide (mm) | Gramil g (mm) | Barreno | Tornillo | Precio del perfil | Uso |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `SOL38x4.8` | Solera 1½" × 3/16" | Solera | 38.10 | 4.763 | 181.5 | 1.4245 | 19.05 | 19.05 | Ø3/8" = 9.525 mm | 5/16" × 1¼" | `precio_kg_solera` | **Estándar del taller**: todos los diámetros |
+| `L25x3.2` | Ángulo 1" × 1" × 1/8" | Ángulo | 25.40 | 3.175 | 151.2 | 1.1870 | 7.51 | 14.00 | Ø9.000 mm | M8 | `precio_kg_perfil_angulo` | Alterno: se elige con `perfil_id` en la partida |
+| `L38x3.2` | Ángulo 1½" × 1½" × 1/8" | Ángulo | 38.10 | 3.175 | 231.9 | 1.8201 | 10.70 | 22.00 | Ø11.000 mm | M10 | `precio_kg_perfil_angulo` | Alterno: se elige con `perfil_id` en la partida |
+| `L38x4.8` | Ángulo 1½" × 1½" × 3/16" | Ángulo | 38.10 | 4.763 | 340.3 | 2.6710 | 11.27 | 22.00 | Ø11.000 mm | M10 | `precio_kg_perfil_angulo` | Alterno: se elige con `perfil_id` en la partida |
+| `L51x4.8` | Ángulo 2" × 2" × 3/16" | Ángulo | 50.80 | 4.763 | 461.2 | 3.6207 | 14.46 | 29.00 | Ø11.000 mm | M10 | `precio_kg_perfil_angulo` | Alterno: se elige con `perfil_id` en la partida |
+| `L64x6.4` | Ángulo 2½" × 2½" × 1/4" | Ángulo | 63.50 | 6.350 | 766.1 | 6.0141 | 18.21 | 35.00 | Ø14.000 mm | M12 | `precio_kg_perfil_angulo` | Alterno: se elige con `perfil_id` en la partida |
 
 **T5 · Uniones**
 
 | Parámetro | `BRIDADO` | `ESPIGA` | `LISO` |
 | --- | --- | --- | --- |
-| Elemento principal | aro de ángulo por extremo | prolongación macho `prof_espiga_mm` = 60 | — |
-| Fijación | tornillo + tuerca + 2 arandelas; paso máx. 150 mm; mín. 4; múltiplo de 4 | autotaladrante; paso máx. 150 mm; mín. 4 | — |
+| Elemento principal | aro de solera 1½" × 3/16" por extremo (estándar del taller) | prolongación macho `prof_espiga_mm` = 60 | — |
+| Fijación | barreno Ø3/8" + tornillo 5/16" × 1¼" + tuerca + 2 rondanas; paso máx. 150 mm; mín. 4; múltiplo de 4 | autotaladrante; paso máx. 150 mm; mín. 4 | — |
 | Reserva de herraje | 5 % | 5 % | — |
-| Empaque | sí (traslape 5 %) | no | no |
-| Soldadura de aro | filete continuo (`f_cont` = 1.0) | — | — |
+| Empaque | sí: cinta de neopreno 1½" × 1/8" sobre el círculo de barrenos (traslape 5 %) | no | no |
+| Soldadura de aro | filete continuo aro–ducto (`f_cont` = 1.0) + cierre a tope del aro | — | — |
 
 **T6 · Merma y dificultad por familia** (φ = fracción del material comprado que no queda en la pieza)
 
@@ -379,7 +385,7 @@ A      = π·λ·D_med² ≈ π·λ·D²
 
 > **Respuesta al campo `[COMPLETAR: Factor sugerido]`:** codo de 90° de 5 gajos, R/D = 1.5 → **`Área codo = Área tramo recto(L = π/2·R) × 1.0131`**, equivalente a `A = 7.4988·D²`. El codo liso de radio (prensado) vale exactamente `F = 1.0000` por el teorema de Pappus: `A = π·D_med·θ·R`.
 
-> **No confundir el factor geométrico con el factor de costo.** Un codo de 5 gajos sólo tiene ~1.3 % más lámina que su tramo recto equivalente, pero cuesta ≈ 2.6× más **por kg**. Ese sobrecosto sale de la merma (20 % vs 8 %), del corte perfilado, del armado (`k_dif`) y de la soldadura de `j` juntas elípticas, y se modela allí (§4), no inflando el área. El Ejemplo B lo cuantifica.
+> **No confundir el factor geométrico con el factor de costo.** Un codo de 5 gajos sólo tiene ~1.3 % más lámina que su tramo recto equivalente, pero cuesta ≈ 2.65× más **por kg**. Ese sobrecosto sale de la merma (20 % vs 8 %), del corte perfilado, del armado (`k_dif`) y de la soldadura de `j` juntas elípticas, y se modela allí (§4), no inflando el área. El Ejemplo B lo cuantifica.
 
 Perímetro de cada junta (elipse de semiejes `r/cos(α/2)` y `r`): `P_junta ≈ π·D_med·κ`, `κ = √(1 + tan²(α/2)/2)` (error < 0.04 % hasta α/2 = 22.5°).
 
@@ -458,43 +464,60 @@ Precisión esperada ±10 %: calibrar `k_ent` desarrollando 5–10 pantalones rea
 
 ### 3.5 Herrajes de unión: bridas, tornillería, empaque, sellador y espiga
 
-#### 3.5.1 Aros de brida (perfil de ángulo rolado "por el canto")
+#### 3.5.1 Aros de brida (solera de 1½" × 3/16" rolada "de canto")
+
+El aro se forma rolando la solera de canto: el ancho `b` queda en el plano radial (el aro "se para" sobre el ducto) y el espesor `t` en el eje.
 
 ```text
-c     = (ala·esp + ala² − esp²) / ( 2·(2·ala − esp) )      # centroide medido desde el dorso del ángulo, mm
-w_p   = esp·(2·ala − esp)·7.85 / 1000                       # peso lineal, kg/m
+SOLERA (estándar del taller)   b = 38.1 mm (ancho) ,  t = 4.763 mm (espesor)
+c     = b / 2                                               # centroide radial, mm  (19.05)
+A_p   = b · t                                               # área de la sección, mm²  (181.5)
+w_p   = b · t · 7.85 / 1000                                 # peso lineal, kg/m  (1.4245)
 L_aro = π·(D_ext + 2c) + holgura_corte                      # longitud de barra por aro, mm (fibra neutra ≈ centroide)
 m_aros_neta  = Σ_aros (L_aro/1000)·w_p
 m_aros_bruta = m_aros_neta / (1 − φ_perfil)                 # φ_perfil = 5 % (retazos de barra de 6 m)
 
 Marco rectangular:  L_marco = 2·(a_ext + b_ext) + 8c + 4·holgura_corte
+
+Perfil de ángulo (opcional, `tipo = ANGULO`; rola el ala de ancho b):
+  c   = (b·t + b² − t²) / ( 2·(2b − t) )                    # centroide medido desde el dorso del ángulo
+  w_p = t·(2b − t)·7.85 / 1000
 ```
 
-Despreciar `c` acortaría cada aro ≈ 6.5 % (≈ 67 mm en un Ø12"): el aro no cerraría sobre el ducto.
+Despreciar `c` acortaría cada aro ≈ 11 % (≈ 120 mm en un Ø12"): el aro no cerraría sobre el ducto.
 
-#### 3.5.2 Tornillería
+#### 3.5.2 Barrenos y tornillería
+
+El barreno (Ø3/8" = 9.525 mm, holgura diametral de 1/16" sobre el tornillo de 5/16") y el tornillo (5/16" × 1¼") son datos del perfil (T4). El barreno va al **centro del ancho** de la solera, de modo que el círculo de barrenos coincide con la fibra neutra del aro.
 
 ```text
-D_bc        = D_ext + 2·g                                   # círculo de tornillos; g = gramil del perfil (T4)
-n_tornillos = múltiplo_de_4_hacia_arriba( máx( n_mín , ⌈ π·D_bc / paso_máx ⌉ ) )     # por junta
+D_bc        = D_ext + 2·g                                   # círculo de barrenos; g = gramil del perfil (T4) = b/2
+n_tornillos = múltiplo_de_4_hacia_arriba( máx( n_mín , ⌈ π·D_bc / paso_máx ⌉ ) )     # por junta = barrenos por brida
 n_juntas_asignadas = 0.5 · n_extremos_bridados              # cada junta se comparte entre dos piezas
-juegos      = Σ_extremos 0.5·n_tornillos · (1 + f_reserva)  # juego = tornillo + tuerca + 2 arandelas
+juegos      = Σ_extremos 0.5·n_tornillos · (1 + f_reserva)  # juego = tornillo 5/16" × 1¼" + tuerca + 2 rondanas
 n_barrenos  = Σ_extremos n_tornillos                        # cada brida lleva sus barrenos
 Marco rectangular:  P_perno = 2·(a_ext + b_ext) + 8·g
 ```
 
+Los juegos se agrupan por tipo de tornillo del perfil y cada tipo se valoriza con su propia variable (`precio_juego_tornillo_5_16_x_1_1_4` para el estándar del taller).
+
 #### 3.5.3 Soldadura de aros
 
 ```text
-L_filete_aro = Σ_extremos f_cont · P_ext            # P_ext = π·D_ext ; f_cont = 1.0 (continuo, hermético)
-L_cierre_aro = Σ_extremos 2·ala                     # costura de cierre del aro (rect.: 4 esquinas × 2·ala)
+L_filete_aro = Σ_extremos f_cont · P_ext            # aro–ducto, al espesor de la LÁMINA ; P_ext = π·D_ext ; f_cont = 1.0 (continuo, hermético)
+L_cierre_aro = Σ_extremos b                         # costura a tope que cierra el aro: una sección de ancho b (rect.: 4 esquinas × b ; ángulo: 2b por cierre)
+A_cordón_cierre = máx( A_mín , k_tope · t² )        # con el espesor t de la SOLERA, no el de la lámina (4.763 mm → 39.7 mm²)
 ```
+
+El cierre del aro se suelda en un espesor mayor que el de la lámina, así que su cordón es más grande y su velocidad de avance menor (§4.1 y §4.3).
 
 #### 3.5.4 Empaque
 
 ```text
-L_empaque = Σ_extremos 0.5 · P_perno · (1 + f_traslape)          # m, una sola cinta por junta
+L_empaque = Σ_extremos 0.5 · P_perno · (1 + f_traslape)          # m, una sola cinta por junta, sobre el círculo de barrenos
 ```
+
+Se asume cinta de neopreno de 1½" × 1/8" (el ancho de la solera) y traslape de 5 % en el empalme (§10.4).
 
 #### 3.5.5 Sellador por clase (SMACNA)
 
@@ -534,7 +557,8 @@ Rolado       t = n_virolas · [ t_fijo_rolado + n_pasadas · k_rolado · L_virol
 Armado       t = k_dif[familia] · [ n_piezas·t_fijo_pieza + n_juntas_int·(t_junta_base + t_junta_por_m·D_ref)
                                     + n_aros·t_ajuste_aro + n_fijaciones·t_fijación + n_espigas·t_formado_espiga ]
 Aros         t = Σ_aros [ t_fijo_aro + t_roll_aro · L_aro/1000 ]
-Soldadura    t_arco = L_sold / ( v_sold(e) · v_mult(proceso) )                  # min con arco encendido
+Soldadura    t_arco = (L_tope + L_filete) / ( v_sold(e)·v_mult(proceso) )                # min con arco encendido, al espesor de la lámina
+                    + Σ_aros L_cierre / ( v_sold(t_perfil)·v_mult(proceso) )              # cierres de aro, al espesor de la solera
              t      = ( t_arco / FO ) · f_sold(material)                        # FO = factor de operación (arco encendido / tiempo total)
 Engargolado  t = n_piezas·t_fijo + L_engargolado / v_engargolado(e)             # costuras Pittsburgh
 Barrenado    t = n_barrenos · t_barreno
@@ -567,7 +591,7 @@ Longitudes en m salvo indicación; `κ = √(1 + tan²(α/2)/2)`.
 
 ```text
 A_cordón     = máx( A_mín , k_cordón · e² )                  # mm²   k_tope = 1.75 ; k_filete = 1.00 ; A_mín = 2.0
-m_depositado = Σ_j L_j[m] · A_cordón_j[mm²] · ρ_dep[g/cm³]   # g   (1 m · 1 mm² = 1 cm³)
+m_depositado = Σ_j L_j[m] · A_cordón_j[mm²] · ρ_dep[g/cm³]   # g   (1 m · 1 mm² = 1 cm³) ; los cierres de aro usan A_cordón del espesor de la solera
 kg_alambre   = m_depositado / ( 1000 · η_dep )               # microalambre (GMAW) o varilla (GTAW); η_dep = 0.93 | 0.98
 V_gas        = t_arco · Q_gas · (1 + f_pre/post) / 1000      # m³ de gas de protección
 
@@ -600,8 +624,8 @@ Ejemplos: pintura electrostática maquilada (`omitir: pintura`, driver `M2_NETO`
 ```text
 CD = Materiales + Consumibles + Mano de obra + Equipo + Herramienta menor + Subcontratos
 
-Materiales  = m_bruta·precio_kg_<material> − crédito_chatarra + m_aros_bruta·precio_kg_perfil
-              + juegos·precio_juego_tornillo + L_empaque·precio_m_empaque + V_sellador·precio_mL_sellador
+Materiales  = m_bruta·precio_kg_<material> − crédito_chatarra + Σ_aros m_aro_bruta·precio_kg_<perfil>     # solera: precio_kg_solera
+              + Σ_tipos juegos·precio_juego_<tornillo> + L_empaque·precio_m_empaque + V_sellador·precio_mL_sellador
               + fijaciones·precio_pza + flete_material% · (lámina + perfil)
 Herramienta menor = herramienta_menor_pct · Mano de obra
 ```
@@ -731,38 +755,40 @@ m_merma         = m_bruta − m_neta = 2.996 kg
 Costo de lámina = m_bruta · precio_kg_acero_carbon = 37.455 · 22.00 = 824.02 MXN
 ```
 
-**Paso 5 · Aros de brida** (perfil `L38x3.2`: D_ext = 307.8 mm ≤ 450 mm)
+**Paso 5 · Aros de brida** — estándar del taller, perfil `SOL38x4.8` = Solera 1½" × 3/16" (el mismo para cualquier diámetro)
 
 ```text
-c (centroide del ángulo) = (ala·esp + ala² − esp²) / (2·(2·ala − esp)) = 10.698 mm
-w_p (peso lineal)        = esp·(2·ala − esp)·7.85 / 1000 = 1.8201 kg/m
-L_aro                    = π·(D_ext + 2c) + 3.0 = π·(307.8378 + 21.397) + 3.0 = 1037.32 mm
-m_aros_neta              = 2 · 1.0373 m · 1.8201 kg/m = 3.776 kg
-m_aros_bruta             = m_aros_neta / (1 − 0.05) = 3.975 kg
-Costo de perfil          = 3.975 · 21.50 = 85.46 MXN
+b × t (solera)       = 1½" × 3/16" = 38.100 × 4.763 mm   (el ancho b queda en el plano radial: la solera se rola "de canto")
+c (centroide radial) = b / 2 = 19.050 mm
+w_p (peso lineal)    = b · t · 7.85 / 1000 = 38.100 · 4.763 · 7.85 / 1000 = 1.4245 kg/m
+L_aro                = π·(D_ext + 2c) + 3.0 = π·(307.8378 + 38.100) + 3.0 = 1089.80 mm
+m_aros_neta          = 2 · 1.0898 m · 1.4245 kg/m = 3.105 kg
+m_aros_bruta         = m_aros_neta / (1 − 0.05) = 3.268 kg
+Costo de perfil      = 3.268 · precio_kg_solera 21.00 = 68.64 MXN
 ```
 
-**Paso 6 · Tornillería, empaque y sellador**
+**Paso 6 · Barrenos, tornillería, empaque y sellador** (barreno Ø3/8" = 9.525 mm · tornillo 5/16" × 1¼")
 
 ```text
-D_bc (círculo de tornillos) = D_ext + 2g = 307.8378 + 2·22 = 351.838 mm  →  π·D_bc = 1105.33 mm
-n_tornillos por junta       = ⌈1105.33 / 150⌉ = 8  →  múltiplo de 4 ≥ máx(4, 8) = 8
-n_juntas_asignadas          = 2 extremos · 0.5 = 1.0
-Juegos de tornillería       = 8 · 1.05 (reserva) = 8.4  →  · 6.50 = 54.60 MXN
-n_barrenos                  = 2 aros · 8 = 16
-L_empaque                   = 1 junta · 1105.33 mm · 1.05 / 1000 = 1.1606 m  →  · 18.00 = 20.89 MXN
-L_sellado (clase C)         = 1 junta · π·D_ext / 1000 = 0.9671 m
-V_sellador                  = 0.9671 m · 20 mL/m · 1.15 = 22.24 mL  →  · (120.00 / 300) = 8.90 MXN
+D_bc (círculo de barrenos) = D_ext + 2g = 307.8378 + 2·19.05 = 345.938 mm  →  π·D_bc = 1086.80 mm   (barreno al centro de la solera: g = b/2)
+n_barrenos por brida       = ⌈1086.80 / 150⌉ = 8  →  múltiplo de 4 ≥ máx(4, 8) = 8
+n_juntas_asignadas         = 2 extremos · 0.5 = 1.0
+Juegos de tornillería      = 8 · 1.05 (reserva) = 8.4  →  · 4.50 = 37.80 MXN   (juego = tornillo 5/16" × 1¼" + tuerca + 2 rondanas)
+n_barrenos (total)         = 2 aros · 8 = 16
+L_empaque                  = 1 junta · 1086.80 mm · 1.05 / 1000 = 1.1411 m  →  · 28.00 = 31.95 MXN
+L_sellado (clase C)        = 1 junta · π·D_ext / 1000 = 0.9671 m
+V_sellador                 = 0.9671 m · 20 mL/m · 1.15 = 22.24 mL  →  · (120.00 / 300) = 8.90 MXN
 ```
 
 **Paso 7 · Longitudes de proceso**
 
 ```text
-L_corte              = 2·(B + L) / 1000 = 2·(963.329 + 3 000) / 1000 = 7.9267 m
-L_soldadura (tope)   = costura longitudinal 3.0000 + cierre de aros 2·(2·ala)/1000 = 0.1524  →  3.1524 m
-L_soldadura (filete) = aro-ducto 2·π·D_ext / 1000 = 1.9342 m
-L_soldadura total    = 5.0866 m
-A_pintura            = π·D_ext·L + 2 aros·(caras + canto) = 3.0746 m²
+L_corte                      = 2·(B + L) / 1000 = 2·(963.329 + 3 000) / 1000 = 7.9267 m
+L_soldadura (tope, lámina)   = costura longitudinal de la virola = 3.0000 m
+L_soldadura (filete)         = aro–ducto 2·π·D_ext / 1000 = 1.9342 m
+L_soldadura (cierres de aro) = 2 aros · b / 1000 = 0.0762 m   (a tope, al espesor de la solera: 4.763 mm)
+L_soldadura total            = 5.0104 m
+A_pintura                    = π·D_ext·L + 2 aros·(caras + canto) = 3.0784 m²
 ```
 
 **Paso 8 · Tiempos estándar por operación** (η_taller = 0.8)
@@ -772,28 +798,29 @@ A_pintura            = π·D_ext·L + 2 aros·(caras + canto) = 3.0746 m²
 | Corte (guillotina) | 0.8455 hojas · 4.0 min + 7.927 m / 7.975 m/min | 4.38 |
 | Rolado | 1 virola · (3.0 + 3 pasadas · 3.0 m / 5.962 m/min) | 4.51 |
 | Armado y punteo | 1 pieza · 6.0 + 2 aros · 4.0 | 14.00 |
-| Aros de brida | 2 · (4.0 + 2.5 min/m · 1.0373 m) | 13.19 |
-| Soldadura | t_arco = 5.087 m / 0.497 m/min = 10.24 min;  ÷ FO (0.4) | 25.59 |
-| Barrenado | 16 barrenos · 0.35 min | 5.60 |
+| Aros de brida | 2 · (4.0 + 2.5 min/m · 1.0898 m) | 13.45 |
+| Soldadura | t_arco = (4.934 m / 0.497 m/min) + (0.0762 m / 0.240 m/min en 4.763 mm) = 9.93 + 0.32 = 10.25 min;  ÷ FO (0.4) | 25.62 |
+| Barrenado | 16 barrenos Ø3/8" · 0.35 min | 5.60 |
 | Acabado | 0.25 · t_soldadura | 6.40 |
-| Pintura | 3.0746 m² · (4.0 preparación + 1 mano · 3.0) | 21.52 |
-| Inspección y embalaje | 3.0 + 0.05 min/kg · 38.235 kg | 4.91 |
-| **Total estándar** |  | **100.09** |
+| Pintura | 3.0784 m² · (4.0 preparación + 1 mano · 3.0) | 21.55 |
+| Inspección y embalaje | 3.0 + 0.05 min/kg · 37.564 kg | 4.88 |
+| **Total estándar** |  | **100.38** |
 
-`t_real = t_estándar / η = 100.09 / 0.8 = 125.11 min = 2.0852 h`
+`t_real = t_estándar / η = 100.38 / 0.8 = 125.48 min = 2.0913 h`
 
 **Paso 9 · Consumibles**
 
 ```text
-A_cordón tope        = máx(2.0, 1.75·e²) = máx(2.0, 4.037) = 4.037 mm²
-A_cordón filete      = máx(2.0, 1.00·e²) = máx(2.0, 2.307) = 2.307 mm²
-m_depositado         = (3.1524 · 4.037 + 1.9342 · 2.307) · 7.85 = 134.94 g
-Microalambre         = 134.94 / (1000 · 0.93) = 0.1451 kg  →  · 62.00 = 9.00 MXN
-Gas de protección    = 10.24 min · 15 L/min · 1.10 / 1000 = 0.1689 m³  →  · 145.00 = 24.49 MXN
-Consumibles de corte = 7.9267 m · 0.30 = 2.38 MXN
-Cobertura de pintura = 10·55 / 50 = 11.0 m²/L teórica;  · 0.65 = 7.15 m²/L práctica
-Pintura              = 3.0746 / 7.15 = 0.4300 L;  diluyente 10 % = 0.0430 L
-Costo de pintura     = 0.4300 · 220 + 0.0430 · 70 = 97.61 MXN
+A_cordón tope          = máx(2.0, 1.75·e²) = máx(2.0, 4.037) = 4.037 mm²
+A_cordón filete        = máx(2.0, 1.00·e²) = máx(2.0, 2.307) = 2.307 mm²
+A_cordón cierre de aro = máx(2.0, 1.75·t²) = máx(2.0, 39.701) = 39.701 mm²   (con el espesor t de la solera)
+m_depositado           = (3.0000·4.037 + 1.9342·2.307) · 7.85 + 0.0762·39.701 · 7.85 = 130.11 + 23.75 = 153.86 g
+Microalambre           = 153.86 / (1000 · 0.93) = 0.1654 kg  →  · 62.00 = 10.26 MXN
+Gas de protección      = 10.25 min · 15 L/min · 1.10 / 1000 = 0.1691 m³  →  · 145.00 = 24.51 MXN
+Consumibles de corte   = 7.9267 m · 0.30 = 2.38 MXN
+Cobertura de pintura   = 10·55 / 50 = 11.0 m²/L teórica;  · 0.65 = 7.15 m²/L práctica
+Pintura                = 3.0784 / 7.15 = 0.4305 L;  diluyente 10 % = 0.0431 L
+Costo de pintura       = 0.4305 · 220 + 0.0431 · 70 = 97.73 MXN
 ```
 
 **Paso 10 · Costo directo (CD)**
@@ -803,55 +830,55 @@ Costo de pintura     = 0.4300 · 220 + 0.0430 · 70 = 97.61 MXN
 | Corte | 5.47 | 93.00 | 45 | 12.58 |
 | Rolado | 5.64 | 96.88 | 55 | 14.27 |
 | Armado y punteo | 17.50 | 100.75 | 25 | 36.68 |
-| Aros de brida | 16.48 | 100.75 | 40 | 38.67 |
-| Soldadura | 31.98 | 116.25 | 45 | 85.96 |
+| Aros de brida | 16.81 | 100.75 | 40 | 39.44 |
+| Soldadura | 32.02 | 116.25 | 45 | 86.05 |
 | Barrenado | 7.00 | 87.19 | 25 | 13.09 |
-| Acabado | 8.00 | 87.19 | 20 | 14.28 |
-| Pintura | 26.90 | 93.00 | 40 | 59.63 |
-| Inspección y embalaje | 6.14 | 87.19 | 0 | 8.92 |
+| Acabado | 8.00 | 87.19 | 20 | 14.30 |
+| Pintura | 26.94 | 93.00 | 40 | 59.71 |
+| Inspección y embalaje | 6.10 | 87.19 | 0 | 8.86 |
 
 | Concepto | MXN |
 | --- | --- |
 | Lámina (37.455 kg brutos) | 824.02 |
-| Perfil de aros | 85.46 |
-| Tornillería | 54.60 |
-| Empaque | 20.89 |
+| Perfil de aros | 68.64 |
+| Tornillería | 37.80 |
+| Empaque | 31.95 |
 | Sellador | 8.90 |
-| Flete de entrada (2 % de lámina + perfil) | 18.19 |
-| **Subtotal materiales** | **1,012.05** |
-| Alambre + gas + consumibles de corte + pintura | 133.47 |
-| Mano de obra directa | 209.03 |
-| Equipo (hora-máquina) | 75.06 |
-| Herramienta menor (3 % de MO) | 6.27 |
-| **COSTO DIRECTO (CD)** | **1,435.88** |
+| Flete de entrada (2 % de lámina + perfil) | 17.85 |
+| **Subtotal materiales** | **989.15** |
+| Alambre + gas + consumibles de corte + pintura | 134.88 |
+| Mano de obra directa | 209.65 |
+| Equipo (hora-máquina) | 75.33 |
+| Herramienta menor (3 % de MO) | 6.29 |
+| **COSTO DIRECTO (CD)** | **1,415.30** |
 
 **Paso 11 · Pila de precio**
 
 | Capa | Fórmula | MXN |
 | --- | --- | --- |
-| CD |  | 1,435.88 |
-| CI de fábrica | GIF · h_MOD = 85.00 · 2.0852 | 177.24 |
-| CI de administración | 8 % · CD | 114.87 |
-| Imprevistos (riesgo MEDIO) | 4 % · (CD + CI) | 69.12 |
-| **Costo total C_T** | CD + CI + imprevistos | **1,797.11** |
-| Financiamiento | C_T · 14 % · 45/365 = C_T · 1.726 % | 31.02 |
-| **Costo base** | C_T + financiamiento | **1,828.13** |
-| **PRECIO antes de IVA** | C_base / (1 − 0.20 − 0.02) = 1,828.13 / 0.78 | **2,343.75** |
-|   ↳ utilidad (20 % del precio) |  | 468.75 |
-|   ↳ comisión de ventas (2 % del precio) |  | 46.88 |
-| IVA 16 % |  | 375.00 |
-| **Total con IVA** |  | **2,718.75** |
+| CD |  | 1,415.30 |
+| CI de fábrica | GIF · h_MOD = 85.00 · 2.0913 | 177.76 |
+| CI de administración | 8 % · CD | 113.22 |
+| Imprevistos (riesgo MEDIO) | 4 % · (CD + CI) | 68.25 |
+| **Costo total C_T** | CD + CI + imprevistos | **1,774.53** |
+| Financiamiento | C_T · 14 % · 45/365 = C_T · 1.726 % | 30.63 |
+| **Costo base** | C_T + financiamiento | **1,805.16** |
+| **PRECIO antes de IVA** | C_base / (1 − 0.20 − 0.02) = 1,805.16 / 0.78 | **2,314.30** |
+|   ↳ utilidad (20 % del precio) |  | 462.86 |
+|   ↳ comisión de ventas (2 % del precio) |  | 46.29 |
+| IVA 16 % |  | 370.29 |
+| **Total con IVA** |  | **2,684.59** |
 
 **Resultado e indicadores de control**
 
 | Indicador | Valor |
 | --- | --- |
-| Precio unitario antes de IVA | **2,343.75 MXN** |
-| Peso neto terminado (lámina + aros) | 38.235 kg |
-| Precio por kg neto | 61.30 MXN/kg |
-| Precio por metro lineal | 781.25 MXN/m |
-| Horas de mano de obra directa (reales) | 2.085 h |
-| Margen de contribución (P − CD)/P | 38.7 % |
+| Precio unitario antes de IVA | **2,314.30 MXN** |
+| Peso neto terminado (lámina + aros) | 37.564 kg |
+| Precio por kg neto | 61.61 MXN/kg |
+| Precio por metro lineal | 771.43 MXN/m |
+| Horas de mano de obra directa (reales) | 2.091 h |
+| Margen de contribución (P − CD)/P | 38.8 % |
 | Markup sobre costo total | 30.4 % |
 | Costo de la merma en lámina | 2.996 kg · 22.00 = 65.92 MXN |
 
@@ -878,15 +905,15 @@ L_corte = π·D_med·(2·j·κ + 2) + 2·L_eje = 11.154 m ;  L_soldadura (chapa)
 | Área neta de lámina (m²) | 2.8900 | 0.7001 |
 | Merma φ | 8 % | 20 % |
 | Lámina bruta (kg) | 37.455 | 10.435 |
-| Peso neto terminado, con aros (kg) | 38.235 | 12.124 |
-| Longitud de soldadura total (m) | 5.09 | 6.70 |
-| Horas de MOD reales (h) | 2.09 | 3.60 |
-| Costo directo CD (MXN) | 1,435.88 | 1,014.17 |
-| Precio antes de IVA (MXN) | 2,343.75 | 1,900.87 |
-| Precio por kg neto (MXN/kg) | 61.30 | 156.79 |
-| Horas MOD por kg neto (h/kg) | 0.055 | 0.297 |
+| Peso neto terminado, con aros (kg) | 37.564 | 11.453 |
+| Longitud de soldadura total (m) | 5.01 | 6.63 |
+| Horas de MOD reales (h) | 2.09 | 3.61 |
+| Costo directo CD (MXN) | 1,415.30 | 993.59 |
+| Precio antes de IVA (MXN) | 2,314.30 | 1,871.42 |
+| Precio por kg neto (MXN/kg) | 61.61 | 163.40 |
+| Horas MOD por kg neto (h/kg) | 0.056 | 0.315 |
 
-**Lectura:** el área del codo es sólo 1.3 % mayor que la de un tramo recto de igual longitud de eje (F_arco = 1.0131), pero su **precio por kg neto es 2.56×** el del tramo recto y su **costo directo por m² de lámina es 2.92×**. El sobrecosto no está en el área: está en la merma (20 % vs 8 %), en el corte perfilado, en el armado (k_dif = 1.35) y en la soldadura de 4 juntas elípticas.
+**Lectura:** el área del codo es sólo 1.3 % mayor que la de un tramo recto de igual longitud de eje (F_arco = 1.0131), pero su **precio por kg neto es 2.65×** el del tramo recto y su **costo directo por m² de lámina es 2.90×**. El sobrecosto no está en el área: está en la merma (20 % vs 8 %), en el corte perfilado, en el armado (k_dif = 1.35) y en la soldadura de 4 juntas elípticas.
 
 ---
 
@@ -894,7 +921,7 @@ L_corte = π·D_med·(2·j·κ + 2) + 2·L_eje = 11.154 m ;  L_soldadura (chapa)
 
 ### 8.1 Modelo de datos
 
-Modelo lógico recomendado. La aplicación de referencia (`src/web/`) guarda las cotizaciones y los maestros editados en el navegador (`localStorage`) y exporta/importa JSON; un despliegue multiusuario debe llevar este modelo a una base de datos.
+Modelo lógico recomendado. La aplicación de referencia (`src/web/`) guarda las cotizaciones y los maestros editados en el navegador (`localStorage`) y exporta/importa JSON; un despliegue multiusuario debe llevar este modelo a una base de datos. Los maestros se guardan como **parche** respecto a los valores de arranque (`diferencia` / `mezclar` en `src/motor/util.js`) y no como copia completa: si los valores de arranque cambian (p. ej. al adoptar un estándar nuevo de bridas), quien no editó esa celda recibe el valor nuevo en lugar de quedarse con el viejo.
 
 ```text
  Maestros ──1:N──▶ Cotización ──1:N──▶ Partida ──1:1──▶ ResultadoPartida
@@ -943,6 +970,8 @@ Modelo lógico recomendado. La aplicación de referencia (`src/web/`) guarda las
 - **Vector de referencia (*golden test*):** el Ejemplo A de §7.1. `tests/ejemplo_recto.test.js` lo recalcula **de forma independiente** con aritmética directa, línea por línea, y lo compara contra el motor.
 - **Oráculos geométricos independientes:** codo, reducción excéntrica, transición y ramal se comparan contra mallas 3D y promedios numéricos de fuerza bruta (`tests/geometria.test.js`). **Toda familia nueva debe traer su oráculo independiente.**
 - **Pruebas de política:** separación cantidades/precios, identidades de la pila (`P·(1 − u − c − o) = C_base`), cargo mínimo, subcontratos, validaciones, uniones, materiales (`tests/motor.test.js`).
+- **Estándar de bridas del taller** (`tests/motor.test.js`): la solera de 1½" × 3/16" pesa `b·t·ρ`; el taller usa la misma brida (barreno Ø3/8", tornillo 5/16" × 1¼") en todos los diámetros; `L_aro = π·(D_ext + b) + holgura`; nº de barrenos múltiplo de 4 por paso; cada aro se valoriza con el precio de su propio perfil y el tornillo con el suyo; el cierre del aro se suelda a tope al espesor de la solera; marco rectangular; y `ESPIGA` no genera aros ni barrenos.
+- **Persistencia de maestros** (`tests/util.test.js`): `mezclar(base, diferencia(base, actual))` reconstruye lo editado y los valores de arranque nuevos no quedan enmascarados.
 - **Interfaz de extremo a extremo (opcional, Playwright):** `tests/e2e/ui.e2e.js` da de alta cada familia, edita y guarda cada partida **sin cambios** en tres combinaciones de unidades y exige que el precio no se mueva (el formulario no pierde datos), y recorre validaciones, subcontratos, tablas maestras, persistencia, guardar/cargar y pantalla móvil.
 
 ---
@@ -952,7 +981,7 @@ Modelo lógico recomendado. La aplicación de referencia (`src/web/`) guarda las
 | Criterio | Cumplimiento | Dónde |
 | --- | --- | --- |
 | ¿Están claramente definidas las fórmulas para convertir diámetros y longitudes en peso (kg) de lámina? | Sí: `D_med = D_int + e` → `B = π·D_med + a_costura` → `A_neta = B·L` → `m_neta = A_neta·ρ·e/1000` → `m_bruta = m_neta/(1 − φ)`; por familia para accesorios. | §3.1–3.4 · Pasos 1–4 del Ejemplo A |
-| ¿Se incluyó la lógica para calcular bridas, tornillería y selladores? | Sí: longitud de aro por centroide, perfil por diámetro, nº de tornillos por paso con redondeo a múltiplos de 4, empaque, sellador por clase SMACNA A/B/C, espiga y sus fijaciones. | §3.5 · Pasos 5–6 del Ejemplo A |
+| ¿Se incluyó la lógica para calcular bridas, tornillería y selladores? | Sí: aro de solera 1½" × 3/16" (estándar del taller) con longitud por centroide, barreno Ø3/8" y tornillo 5/16" × 1¼" como datos del perfil, nº de barrenos por paso con redondeo a múltiplos de 4, cierre del aro al espesor de la solera, empaque, sellador por clase SMACNA A/B/C, espiga y sus fijaciones. | §3.5 · Pasos 5–7 del Ejemplo A |
 | ¿El ejemplo práctico se resuelve paso a paso sin saltarse factores de merma? | Sí: Paso 4 aplica φ = 8 % a la lámina y 5 % al perfil; sellador 15 %, tornillería 5 %, empaque 5 %, pintura por eficiencia de transferencia y gas por pre/post-flujo. | §7.1 |
 | No asumir precios estáticos | Todos los precios son variables `precio_*` leídas de la tabla T3; ninguna fórmula contiene un precio. | §2.2 · §5 |
 | Factor de merma obligatorio | `φ` por familia + override por partida + modo de anidado opcional. | §3.3 · T6 |
@@ -973,7 +1002,7 @@ Modelo lógico recomendado. La aplicación de referencia (`src/web/`) guarda las
 | `k_dif`, `k_entrepierna` | Horas reales por familia vs. horas estimadas | Por familia |
 | Salarios, FSR, `GIF_por_hora_MOD` | Nómina real y contabilidad de costos | Anual / trimestral |
 | Tabla `servicios` (calibre mínimo) | Norma interna / SMACNA / ACGIH aplicable | Al adoptar la norma |
-| Selección de perfil y gramiles | Estándar de bridas del taller | Al adoptar el estándar |
+| Datos de detalle del estándar de bridas (paso entre barrenos, soldadura del aro, empaque, posición del barreno) | Confirmar con el taller los supuestos de §10.4 | Una vez, y al cambiar el estándar |
 
 **Lazo de retroalimentación:** al cerrar cada orden se registran horas y kg reales (`Calibracion`); la desviación sistemática por operación o familia ajusta velocidades, φ y `k_dif`. Meta operativa: desviación de horas ≤ ±15 % y de peso bruto ≤ ±5 % por familia.
 
@@ -993,3 +1022,15 @@ Modelo lógico recomendado. La aplicación de referencia (`src/web/`) guarda las
 3. Importar áreas desarrolladas desde DXF/CAD hacia `PERSONALIZADO`.
 4. Implementar el modo de anidado de hoja (§3.3) cuando exista el layout real.
 5. Conectar `Calibracion` al cierre de órdenes de producción.
+
+### 10.4 Supuestos del estándar de bridas por confirmar con el taller
+
+El taller definió tres datos: **solera 1½" × 3/16", barreno Ø3/8" y tornillo 5/16" × 1¼", en todos los ductos.** El resto del modelo de la brida se **supuso** y se edita en los maestros (T4 y T5); conviene confirmarlo, porque mueve tornillería, empaque y soldadura:
+
+| Supuesto | Valor usado | Dónde se cambia | Efecto si es distinto |
+| --- | --- | --- | --- |
+| Paso máximo entre barrenos | 150 mm (≈ 6"); barrenos por brida = múltiplo de 4, mínimo 4 | `uniones.BRIDADO.paso_tornillo_mm` | Más barrenos: más tornillería, barrenado y empaque. |
+| Posición del barreno | Al centro del ancho de la solera (g = 19.05 mm) | `perfiles.SOL38x4.8.gramil_mm` | Cambia el círculo de barrenos, el empaque y el nº de barrenos. |
+| Soldadura del aro | Filete continuo exterior aro–ducto (`f_cont` = 1.0) y cierre a tope de una sección (b) | `uniones.BRIDADO.f_cont_soldadura_aro` | Un cordón intermitente (p. ej. 0.5) baja soldadura y consumibles, pero la junta deja de ser hermética sin sellador. |
+| Empaque | Cinta de neopreno 1½" × 1/8" sobre el círculo de barrenos, traslape 5 % | `precio_m_empaque_neopreno` · `f_traslape_empaque` | Si el taller sella sólo con sellador, poner el precio del empaque en 0. |
+| Juego de tornillería | Tornillo 5/16" × 1¼" + tuerca + 2 rondanas, con 5 % de reserva | `precio_juego_tornillo_5_16_x_1_1_4` · `f_reserva_tornilleria` | Si la tornillería se compra por piezas, sumar el precio de cada pieza al juego. |

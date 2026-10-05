@@ -71,6 +71,38 @@
 
   const clonar = (o) => JSON.parse(JSON.stringify(o));
 
+  /** Igualdad profunda para datos JSON (objetos, arreglos y primitivos). */
+  function igual(a, b) {
+    if (a === b) return true;
+    if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;
+    if (Array.isArray(a) !== Array.isArray(b)) return false;
+    if (Array.isArray(a)) return a.length === b.length && a.every((x, i) => igual(x, b[i]));
+    const ka = Object.keys(a);
+    const kb = Object.keys(b);
+    return ka.length === kb.length && ka.every((k) => Object.prototype.hasOwnProperty.call(b, k) && igual(a[k], b[k]));
+  }
+
+  /**
+   * Parche mínimo que lleva de `base` a `actual` ({} si son iguales). Los arreglos se reemplazan completos.
+   * Guardar sólo el parche permite que los valores de arranque nuevos lleguen a quien no los editó:
+   *   mezclar(base, diferencia(base, actual)) ≡ actual
+   */
+  function diferencia(base, actual) {
+    const parche = {};
+    Object.keys(actual).forEach((k) => {
+      const a = actual[k];
+      const b = base ? base[k] : undefined;
+      const objeto = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+      if (objeto(a) && objeto(b)) {
+        const sub = diferencia(b, a);
+        if (Object.keys(sub).length) parche[k] = sub;
+      } else if (!igual(a, b)) {
+        parche[k] = clonar(a);
+      }
+    });
+    return parche;
+  }
+
   /** Mezcla profunda: valores de `parche` sobreescriben a `base` (no muta). */
   function mezclar(base, parche) {
     if (parche === undefined || parche === null) return clonar(base);
@@ -89,6 +121,6 @@
 
   return {
     PI, MM_POR_PULGADA, enMm, enPulgadas, rad, grados, ErrorValidacion,
-    simpson, interpolar, techoMultiplo, redondear, suma, clonar, mezclar,
+    simpson, interpolar, techoMultiplo, redondear, suma, clonar, mezclar, igual, diferencia,
   };
 }));

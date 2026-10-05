@@ -2,7 +2,8 @@
 /**
  * VECTOR DE PRUEBA (golden test) — Ejemplo A del documento de arquitectura.
  *
- * Tramo recto de 3 m · Ø12" (interior) · calibre 16 · acero al carbón · bridado ambos extremos ·
+ * Tramo recto de 3 m · Ø12" (interior) · calibre 16 · acero al carbón · bridado ambos extremos
+ * (estándar del taller: solera 1½" × 3/16", barreno Ø3/8", tornillo 5/16" × 1¼") ·
  * sellado clase C · primario · servicio POLVO · riesgo MEDIO · 1 pieza.
  *
  * El oráculo recalcula TODO paso a paso con aritmética directa (sin llamar a las funciones del motor)
@@ -65,22 +66,22 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   casi(r.qto.lam.m_bruta_kg, m_bruta);
   const costo_lamina = m_bruta * P.precio_kg_acero_carbon;
 
-  /* Paso 5 · aros de brida: perfil L38×3.2 (selección por D_ext ≤ 450 mm) */
-  const ala = 38.1; const esp = 3.175; const gramil = 22.0;
-  const w = (esp * (2 * ala - esp) * 7.85) / 1000;
-  const c = (ala * esp + ala * ala - esp * esp) / (2 * (2 * ala - esp));
+  /* Paso 5 · aros de brida: solera 1½" × 3/16" rolada de canto (centroide y barreno al centro del ancho) */
+  const ancho = 38.1; const esp = 4.763; const gramil = ancho / 2;
+  const w = (ancho * esp * 7.85) / 1000;
+  const c = ancho / 2;
   const L_aro = PI * (D_ext + 2 * c) + 3.0;
   const m_aros_neta = (2 * L_aro * w) / 1000;
   const m_aros_bruta = m_aros_neta / (1 - 0.05);
   casi(r.qto.her.m_aros_neta_kg, m_aros_neta);
   casi(r.qto.her.m_aros_bruta_kg, m_aros_bruta);
-  const costo_perfiles = m_aros_bruta * P.precio_kg_perfil_angulo;
+  const costo_perfiles = m_aros_bruta * P.precio_kg_solera;
 
   /* Paso 6 · tornillería: 8 por junta; 2 extremos × 0.5 junta = 1 junta; reserva 5 % */
   const P_perno = PI * (D_ext + 2 * gramil);
   const n_tornillos = Math.ceil(Math.max(4, Math.ceil(P_perno / 150 - 1e-9)) / 4 - 1e-9) * 4;
   assert.equal(n_tornillos, 8);
-  const costo_tornilleria = n_tornillos * 1.0 * 1.05 * P.precio_juego_tornillo_m10;
+  const costo_tornilleria = n_tornillos * 1.0 * 1.05 * P.precio_juego_tornillo_5_16_x_1_1_4;
 
   /* Paso 7 · empaque (1 junta · perímetro de tornillos · 1.05) */
   const L_emp = (1.0 * P_perno * 1.05) / 1000;
@@ -96,9 +97,10 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
 
   /* Paso 10 · longitudes de proceso */
   const L_corte = (2 * (B + 3000)) / 1000;
-  const L_tope = 3.0 + (2 * 2 * ala) / 1000;
-  const L_fil = (2 * PI * D_ext) / 1000;
-  const L_sold = L_tope + L_fil;
+  const L_tope = 3.0;                           // costura longitudinal de la lámina
+  const L_fil = (2 * PI * D_ext) / 1000;        // filete aro-ducto (continuo)
+  const L_cierres = (2 * ancho) / 1000;         // cierre de cada aro: una sección de solera
+  const L_sold = L_tope + L_fil + L_cierres;
   casi(r.qto.tmp.detalle.L_soldadura_m, L_sold);
 
   /* Paso 11 · tiempos estándar (min) */
@@ -108,12 +110,14 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   const t_rolado = 1 * (3.0 + (3 * 1 * 3.0) / interp([[0.6, 8], [1.0, 7], [1.5, 6], [2.0, 5], [3.0, 3.5], [4.5, 2.5]], e));
   const t_armado = 1.0 * (1 * 6.0 + 0 * 0 + 2 * 4.0);
   const t_aros = 2 * (4.0 + 2.5 * (L_aro / 1000));
-  const v_sold = interp([[0.6, 0.9], [1.0, 0.7], [1.5, 0.5], [2.0, 0.42], [3.0, 0.32], [4.5, 0.24]], e) * 1.0;
-  const t_arco = L_sold / v_sold;
+  const tablaVs = [[0.6, 0.9], [1.0, 0.7], [1.5, 0.5], [2.0, 0.42], [3.0, 0.32], [4.5, 0.24]];
+  const v_sold = interp(tablaVs, e) * 1.0;
+  const v_cierre = interp(tablaVs, esp) * 1.0;   // el cierre se suelda en el espesor de la solera
+  const t_arco = (L_tope + L_fil) / v_sold + L_cierres / v_cierre;
   const t_sold = (t_arco / 0.4) * 1.0;
   const t_barren = 16 * 0.35;
   const t_acab = 0.25 * t_sold;
-  const A_aro_pint = ((PI / 2) * ((D_ext + 2 * ala) ** 2 - D_ext ** 2) + PI * (D_ext + 2 * ala) * esp) / 1e6;
+  const A_aro_pint = ((PI / 2) * ((D_ext + 2 * ancho) ** 2 - D_ext ** 2) + PI * (D_ext + 2 * ancho) * esp) / 1e6;
   const A_pint = PI * D_ext * 3.0 / 1000 + 2 * A_aro_pint;
   const t_pint = A_pint * (4.0 + 1 * 3.0);
   const t_qc = 3.0 + 0.05 * (m_neta + m_aros_neta);
@@ -125,7 +129,8 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   /* Paso 12 · consumibles */
   const A_tope = Math.max(2.0, 1.75 * e * e);
   const A_fil = Math.max(2.0, 1.0 * e * e);
-  const kg_alambre = ((L_tope * A_tope + L_fil * A_fil) * 7.85) / 1000 / 0.93;
+  const A_cierre = Math.max(2.0, 1.75 * esp * esp);  // cordón a tope en el espesor de la solera
+  const kg_alambre = ((L_tope * A_tope + L_fil * A_fil + L_cierres * A_cierre) * 7.85) / 1000 / 0.93;
   const V_gas = (t_arco * 15 * 1.1) / 1000;
   const costo_alambre = kg_alambre * P.precio_kg_alambre_er70s6;
   const costo_gas = V_gas * P.precio_m3_gas_mezcla_ar_co2;
@@ -206,10 +211,10 @@ const GOLDEN = {
   A_neta_m2: 2.89,
   m_neta_kg: 34.459,
   m_bruta_kg: 37.455,
-  L_aro_mm: 1037.3,
+  L_aro_mm: 1089.8,
   n_tornillos: 8,
-  horas_mod_reales: 2.085,
-  CD: 1435.88,
-  C_T: 1797.11,
-  precio_unitario: 2343.75,
+  horas_mod_reales: 2.091,
+  CD: 1415.3,
+  C_T: 1774.53,
+  precio_unitario: 2314.3,
 };

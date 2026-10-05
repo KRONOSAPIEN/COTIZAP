@@ -14,7 +14,8 @@
   const SOLO_COPIAR = !!root.COTIZAP_ENTORNO_ARTIFACT; // en un visor restringido no hay descargas ni impresión
 
   const LLAVE_COT = 'cotizap.cotizacion.v1';
-  const LLAVE_MAE = 'cotizap.maestros.v1';
+  // v2: se guarda sólo el PARCHE de lo que el usuario editó (v1 guardaba el objeto completo y dejaba fijos los valores de arranque viejos)
+  const LLAVE_MAE = 'cotizap.maestros.v2';
 
   /* ================================================================== */
   /* Estado y persistencia                                              */
@@ -50,8 +51,8 @@
 
   function cargarEstado() {
     const base = C.maestros.crearMaestros();
-    const m = leerLS(LLAVE_MAE);
-    estado.M = m ? U.mezclar(base, m) : base;
+    const parche = leerLS(LLAVE_MAE);
+    estado.M = parche ? U.mezclar(base, parche) : base;
     const c = leerLS(LLAVE_COT);
     estado.cot = c && Array.isArray(c.partidas) ? { ...cotizacionVacia(), ...c } : cotizacionEjemplo();
     migrarUnidades(estado.cot);
@@ -68,9 +69,12 @@
   }
   const unidades = () => ({ diam: estado.cot.unidad_diam, long: estado.cot.unidad_long });
 
+  /** Sólo lo que el usuario cambió respecto de los valores de arranque. */
+  const parcheMaestros = () => U.diferencia(C.maestros.crearMaestros(), estado.M);
+
   function persistir() {
     guardarLS(LLAVE_COT, estado.cot);
-    guardarLS(LLAVE_MAE, estado.M);
+    guardarLS(LLAVE_MAE, parcheMaestros());
   }
 
   function calcular() {
@@ -454,7 +458,7 @@
     if (her.n_aros) {
       kvs.append(
         kv('Aros de brida', String(her.n_aros)),
-        kv('Barra neta / bruta', `${W.num(her.m_aros_neta_kg, 3)} / ${W.num(her.m_aros_bruta_kg, 3)}`, 'kg'),
+        kv('Perfil de aros, neto / bruto', `${W.num(her.m_aros_neta_kg, 3)} / ${W.num(her.m_aros_bruta_kg, 3)}`, 'kg'),
         kv('Juegos de tornillería (asignados)', W.num(her.n_tornillos_asignados, 1)),
         kv('Barrenos', String(her.n_barrenos)),
         kv('Empaque', W.num(her.L_empaque_m, 3), 'm'));
@@ -468,9 +472,11 @@
       kv('Corte', `${W.num(con.corte.L_corte_m, 3)} m · ${con.corte.proceso}`),
       kv('Superficie a pintar', W.num(f.qto.pint.A_pint_m2, 3), 'm²'),
       kv('Pintura / diluyente', `${W.num(con.pintura.L_pintura, 3)} / ${W.num(con.pintura.L_diluyente, 3)}`, 'L'));
+    const barreno = (a) => (a.barreno_desc ? `Ø${a.barreno_desc} (${W.num(a.diam_barreno_mm, 2)} mm)` : `Ø${W.num(a.diam_barreno_mm, 2)} mm`);
     const aros = her.aros.length
-      ? tabla([{ t: 'Aro' }, { t: 'Perfil' }, { t: 'Barra', num: true }, { t: 'Tornillos', num: true }, { t: 'Peso', num: true }],
-        her.aros.map((a, i) => [`#${i + 1}`, a.perfil_id, `${W.num(a.L_aro_mm, 1)} mm`, String(a.n_tornillos), `${W.num(a.m_aro_kg, 3)} kg`])) : null;
+      ? tabla([{ t: 'Aro' }, { t: 'Perfil' }, { t: 'Barra', num: true }, { t: 'Barrenos', num: true }, { t: 'Tornillo' }, { t: 'Peso', num: true }],
+        her.aros.map((a, i) => [`#${i + 1}`, a.descripcion || a.perfil_id, `${W.num(a.L_aro_mm, 1)} mm`,
+          `${a.n_tornillos} × ${barreno(a)}`, a.tornillo_desc, `${W.num(a.m_aro_kg, 3)} kg`])) : null;
     return [h('div', { class: 'dos-col' }, h('div', null, h('h4', null, 'Herrajes de unión'), kvs), h('div', null, h('h4', null, 'Consumibles'), cons)), aros];
   }
 
@@ -579,7 +585,7 @@
   function opcionesDe(clave) {
     const M = estado.M;
     if (clave === 'materiales') return Object.keys(M.materiales).map((k) => [k, M.materiales[k].nombre]);
-    if (clave === 'perfiles') return [['', 'Automático por diámetro'], ...Object.keys(M.herrajes.perfiles).map((k) => [k, `${k} · ${M.herrajes.perfiles[k].descripcion}`])];
+    if (clave === 'perfiles') return [['', 'Estándar del taller'], ...Object.keys(M.herrajes.perfiles).map((k) => [k, `${k} · ${M.herrajes.perfiles[k].descripcion}`])];
     return W.OPC[clave];
   }
 
@@ -598,6 +604,8 @@
       ctl = h('select', { id, name: c.id }, ops.map(([v, t]) => h('option', { value: v, selected: String(valor) === String(v) }, t)));
     } else if (c.tipo === 'dim') {
       ctl = h('input', { id, name: c.id, type: 'text', inputmode: 'decimal', autocomplete: 'off', value: valor === undefined || valor === '' ? '' : aUnidad(valor, c.eje), placeholder: c.opcional ? 'auto' : '' });
+      // El campo muestra el valor redondeado a la unidad elegida; si el usuario no lo toca, al guardar se conserva el valor exacto en mm.
+      if (valor !== undefined && valor !== '') { ctl.dataset.mm = String(valor); ctl.dataset.texto = ctl.value; }
     } else if (c.tipo === 'text') {
       ctl = h('input', { id, name: c.id, type: 'text', autocomplete: 'off', value: valor || '' });
     } else {
@@ -636,7 +644,10 @@
         return;
       }
       if (v === '') return;
-      if (c.tipo === 'dim') { v = W.leerNumero(v); p[c.id] = Number.isNaN(v) ? undefined : deUnidad(v, c.eje); } else if (c.tipo === 'pct') p[c.id] = Number(v) / 100;
+      if (c.tipo === 'dim') {
+        if (el.dataset.mm !== undefined && v === el.dataset.texto) p[c.id] = Number(el.dataset.mm); // campo sin tocar: valor exacto
+        else { v = W.leerNumero(v); p[c.id] = Number.isNaN(v) ? undefined : deUnidad(v, c.eje); }
+      } else if (c.tipo === 'pct') p[c.id] = Number(v) / 100;
       else p[c.id] = Number(v);
     });
     p.descripcion = ($('#f_descripcion') || { value: '' }).value.trim();
@@ -851,7 +862,7 @@
   }
 
   function jsonIntercambio() {
-    return JSON.stringify({ app: 'COTIZAP', version: 1, exportado: new Date().toISOString(), cotizacion: estado.cot, maestros: estado.M }, null, 2);
+    return JSON.stringify({ app: 'COTIZAP', version: 2, exportado: new Date().toISOString(), cotizacion: estado.cot, maestros: parcheMaestros() }, null, 2);
   }
 
   async function copiar(texto, area) {
@@ -866,13 +877,19 @@
     if (!obj || !obj.cotizacion || !Array.isArray(obj.cotizacion.partidas)) { toast('El archivo no contiene una cotización de COTIZAP'); return false; }
     estado.cot = { ...cotizacionVacia(), ...obj.cotizacion };
     estado.cot.partidas.forEach((p) => { if (!p.id) p.id = idNuevo(); });
-    if (obj.maestros) estado.M = U.mezclar(C.maestros.crearMaestros(), obj.maestros);
+    // La versión 1 exportaba los maestros completos, con los herrajes de arranque de entonces (ángulos por diámetro):
+    // se descartan para que mande el estándar de bridas del taller; precios, tarifas y procesos sí se respetan.
+    const antigua = !!obj.maestros && !(Number(obj.version) >= 2);
+    if (obj.maestros) {
+      const { herrajes, ...resto } = obj.maestros;
+      estado.M = U.mezclar(C.maestros.crearMaestros(), antigua ? resto : obj.maestros);
+    }
     estado.sel = estado.cot.partidas[0] ? estado.cot.partidas[0].id : null;
     persistir();
     sincronizarEncabezado();
     render();
     if (root.COTIZAP.web.maestrosUI) root.COTIZAP.web.maestrosUI.render();
-    toast('Cotización cargada');
+    toast(antigua ? 'Cotización cargada · archivo de una versión anterior: se aplicó la brida estándar del taller' : 'Cotización cargada');
     return true;
   }
 

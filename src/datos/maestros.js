@@ -24,7 +24,7 @@
 
   const base = {
     meta: {
-      version: '1.0.0-ilustrativo',
+      version: '1.1.0-ilustrativo',
       moneda: 'MXN',
       aviso: 'Valores ilustrativos. Sustituir por precios, tarifas y tiempos reales antes de cotizar.',
     },
@@ -40,6 +40,7 @@
       precio_kg_chatarra_acero: 7.0,
       precio_kg_chatarra_inox: 45.0,
       precio_kg_perfil_angulo: 21.5,
+      precio_kg_solera: 21.0,
       precio_kg_alambre_er70s6: 62.0,
       precio_kg_varilla_er308l: 420.0,
       precio_kg_varilla_er316l: 520.0,
@@ -48,9 +49,10 @@
       precio_m_corte_guillotina: 0.3,
       precio_m_corte_plasma: 3.5,
       precio_m_corte_laser: 2.0,
-      precio_m_empaque_neopreno: 18.0,
+      precio_m_empaque_neopreno: 28.0, // cinta de neopreno 1½" × 1/8" (38 × 3 mm) para la cara de la brida
       precio_cartucho_sellador_300ml: 120.0,
       precio_pza_autotaladrante: 0.85,
+      precio_juego_tornillo_5_16_x_1_1_4: 4.5, // tornillo 5/16" × 1¼" + tuerca + 2 rondanas planas
       precio_juego_tornillo_m8: 5.0,
       precio_juego_tornillo_m10: 6.5,
       precio_juego_tornillo_m12: 9.5,
@@ -251,26 +253,48 @@
     /* HERRAJES DE UNIÓN                                                  */
     /* ------------------------------------------------------------------ */
     herrajes: {
-      /* Ángulos laminados para aros de brida. peso, centroide y área se derivan de (ala, espesor). */
+      /* Perfiles para aros de brida (el aro se rola "de canto": el ancho queda en el plano radial).
+         ESTÁNDAR DEL TALLER: solera de 1½" × 3/16", barreno de 3/8", tornillo de 5/16" × 1¼", para todos los diámetros.
+         tipo SOLERA = barra plana (barreno al centro: gramil = ancho/2); tipo ANGULO = ala radial de un ángulo.
+         Peso lineal, área y centroide se derivan de (tipo, ancho, espesor); no se capturan.
+         `tornillo` apunta a `tornillo_precio_ref`; `precio_ref` al precio por kg del perfil. */
       perfiles: {
-        'L25x3.2': { descripcion: 'Ángulo 1" × 1" × 1/8"', ala_mm: 25.4, esp_mm: 3.175, gramil_mm: 14.0, tornillo: 'M8' },
-        'L38x3.2': { descripcion: 'Ángulo 1½" × 1½" × 1/8"', ala_mm: 38.1, esp_mm: 3.175, gramil_mm: 22.0, tornillo: 'M10' },
-        'L38x4.8': { descripcion: 'Ángulo 1½" × 1½" × 3/16"', ala_mm: 38.1, esp_mm: 4.763, gramil_mm: 22.0, tornillo: 'M10' },
-        'L51x4.8': { descripcion: 'Ángulo 2" × 2" × 3/16"', ala_mm: 50.8, esp_mm: 4.763, gramil_mm: 29.0, tornillo: 'M10' },
-        'L64x6.4': { descripcion: 'Ángulo 2½" × 2½" × 1/4"', ala_mm: 63.5, esp_mm: 6.35, gramil_mm: 35.0, tornillo: 'M12' },
+        'SOL38x4.8': {
+          tipo: 'SOLERA', descripcion: 'Solera 1½" × 3/16"', ancho_mm: 38.1, esp_mm: 4.763, gramil_mm: 19.05,
+          tornillo: '5/16x1-1/4', tornillo_desc: '5/16" × 1¼"', diam_barreno_mm: 9.525, barreno_desc: '3/8"', precio_ref: 'precio_kg_solera',
+        },
+        'L25x3.2': {
+          tipo: 'ANGULO', descripcion: 'Ángulo 1" × 1" × 1/8"', ancho_mm: 25.4, esp_mm: 3.175, gramil_mm: 14.0,
+          tornillo: 'M8', tornillo_desc: 'M8', diam_barreno_mm: 9.0, precio_ref: 'precio_kg_perfil_angulo',
+        },
+        'L38x3.2': {
+          tipo: 'ANGULO', descripcion: 'Ángulo 1½" × 1½" × 1/8"', ancho_mm: 38.1, esp_mm: 3.175, gramil_mm: 22.0,
+          tornillo: 'M10', tornillo_desc: 'M10', diam_barreno_mm: 11.0, precio_ref: 'precio_kg_perfil_angulo',
+        },
+        'L38x4.8': {
+          tipo: 'ANGULO', descripcion: 'Ángulo 1½" × 1½" × 3/16"', ancho_mm: 38.1, esp_mm: 4.763, gramil_mm: 22.0,
+          tornillo: 'M10', tornillo_desc: 'M10', diam_barreno_mm: 11.0, precio_ref: 'precio_kg_perfil_angulo',
+        },
+        'L51x4.8': {
+          tipo: 'ANGULO', descripcion: 'Ángulo 2" × 2" × 3/16"', ancho_mm: 50.8, esp_mm: 4.763, gramil_mm: 29.0,
+          tornillo: 'M10', tornillo_desc: 'M10', diam_barreno_mm: 11.0, precio_ref: 'precio_kg_perfil_angulo',
+        },
+        'L64x6.4': {
+          tipo: 'ANGULO', descripcion: 'Ángulo 2½" × 2½" × 1/4"', ancho_mm: 63.5, esp_mm: 6.35, gramil_mm: 35.0,
+          tornillo: 'M12', tornillo_desc: 'M12', diam_barreno_mm: 14.0, precio_ref: 'precio_kg_perfil_angulo',
+        },
       },
-      /* Selección automática por dimensión mayor exterior del extremo. Sustituir por el estándar del taller. */
+      /* Selección automática por dimensión mayor exterior del extremo: el taller usa una sola brida para todo.
+         Para un caso especial se elige otro perfil en la partida (perfil_id). */
       seleccion_perfil: [
-        { hasta_mm: 150, perfil: 'L25x3.2' },
-        { hasta_mm: 450, perfil: 'L38x3.2' },
-        { hasta_mm: 900, perfil: 'L38x4.8' },
-        { hasta_mm: 1500, perfil: 'L51x4.8' },
-        { hasta_mm: 99999, perfil: 'L64x6.4' },
+        { hasta_mm: 99999, perfil: 'SOL38x4.8' },
       ],
-      tornillo_precio_ref: { M8: 'precio_juego_tornillo_m8', M10: 'precio_juego_tornillo_m10', M12: 'precio_juego_tornillo_m12' },
+      tornillo_precio_ref: {
+        '5/16x1-1/4': 'precio_juego_tornillo_5_16_x_1_1_4', M8: 'precio_juego_tornillo_m8', M10: 'precio_juego_tornillo_m10', M12: 'precio_juego_tornillo_m12',
+      },
       uniones: {
         BRIDADO: {
-          nombre: 'Bridado (aro de ángulo + tornillería + empaque)',
+          nombre: 'Bridado (aro de solera + tornillería + empaque)',
           paso_tornillo_mm: 150, n_min_tornillos: 4, multiplo_tornillos: 4,
           f_reserva_tornilleria: 0.05, f_traslape_empaque: 0.05, f_cont_soldadura_aro: 1.0,
         },

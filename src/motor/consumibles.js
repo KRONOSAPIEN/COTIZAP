@@ -23,10 +23,15 @@
     /* Soldadura */
     const A_tope = Math.max(S.A_cordon_min_mm2, S.k_cordon.TOPE * e * e);
     const A_fil = Math.max(S.A_cordon_min_mm2, S.k_cordon.FILETE * e * e);
-    const L_tope = PF.sold.tope_m + her.sold_aros.tope_m;
-    const L_fil = PF.sold.filete_m + her.sold_aros.filete_m;
+    const L_tope = tmp.detalle.L_tope_m;
+    const L_fil = tmp.detalle.L_filete_m;
     // 1 m · 1 mm² = 1 cm³  →  gramos = longitud[m] · área[mm²] · ρ[g/cm³]
-    const m_dep_g = (L_tope * A_tope + L_fil * A_fil) * S.rho_dep_g_cm3;
+    const m_dep_chapa_g = (L_tope * A_tope + L_fil * A_fil) * S.rho_dep_g_cm3;
+    // La costura de cierre de cada aro lleva el cordón del espesor del PERFIL.
+    const m_dep_cierres_g = her.sold_aros.cierres.reduce(
+      (s_, c) => s_ + c.L_m * Math.max(S.A_cordon_min_mm2, S.k_cordon.TOPE * c.esp_mm * c.esp_mm) * S.rho_dep_g_cm3, 0,
+    );
+    const m_dep_g = m_dep_chapa_g + m_dep_cierres_g;
     const kg_alambre = m_dep_g / 1000 / proc.eta_dep;
     const V_gas_m3 = (tmp.detalle.t_arco_min * proc.Q_gas_L_min * (1 + proc.f_pre_post)) / 1000;
 
@@ -45,7 +50,8 @@
 
     return {
       soldadura: {
-        A_cordon_tope_mm2: A_tope, A_cordon_filete_mm2: A_fil, m_depositado_g: m_dep_g, kg_alambre, V_gas_m3,
+        A_cordon_tope_mm2: A_tope, A_cordon_filete_mm2: A_fil, m_depositado_chapa_g: m_dep_chapa_g, m_depositado_cierres_g: m_dep_cierres_g,
+        m_depositado_g: m_dep_g, kg_alambre, V_gas_m3,
         alambre_ref: mat.alambre_ref, gas_ref: mat.gas_ref, eta_dep: proc.eta_dep,
       },
       pintura: { capas, L_pintura, L_diluyente },

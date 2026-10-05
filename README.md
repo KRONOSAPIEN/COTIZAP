@@ -16,7 +16,7 @@ Cotizador para ducterías de lámina (colección de polvo y control ambiental). 
 
 ## Empezar
 
-**Usar la app.** Abra `src/web/index.html` en el navegador (doble clic). No necesita servidor ni instalación; las cotizaciones y las tablas maestras editadas se guardan en el propio navegador. Arranca con una cotización de ejemplo para explorar el cálculo. Las tipografías (Barlow, IBM Plex Mono) se piden a Google Fonts; sin conexión se usan las del sistema.
+**Usar la app.** Abra `src/web/index.html` en el navegador (doble clic). No necesita servidor ni instalación; las cotizaciones y las tablas maestras editadas se guardan en el propio navegador (de las tablas sólo se guarda lo que usted cambió, así que los valores de arranque nuevos le llegan solos). Arranca con una cotización de ejemplo para explorar el cálculo. Las tipografías (Barlow, IBM Plex Mono) se piden a Google Fonts; sin conexión se usan las del sistema.
 
 1. **Tablas maestras** → capture precios, tarifas y velocidades reales.
 2. **Cotización** → *Agregar partida*, elija la familia y capture dimensiones; el precio se recalcula mientras escribe.
@@ -44,13 +44,19 @@ const r = cotizarPartida({
   D_mm: 304.8, L_mm: 3000, tipo_union: 'BRIDADO', cantidad: 1,
 }, M);
 
-console.log(r.precio.unitario);            // 2343.75 MXN
-console.log(r.peso.neto_total_kg);         // 38.235 kg
+console.log(r.precio.unitario);            // 2314.3 MXN
+console.log(r.peso.neto_total_kg);         // 37.564 kg (lámina + aros de brida)
 console.log(r.pila);                       // CD, CI, imprevistos, financiamiento, utilidad…
 console.log(r.qto);                        // cantidades físicas, sin precios
 ```
 
 `cotizar({ riesgo, servicio, partidas }, M)` cotiza varias partidas y suma IVA. Una partida con datos inválidos devuelve sus errores sin tumbar a las demás.
+
+## Brida estándar del taller
+
+Todos los ductos se unen con **bridas de solera 1½" × 3/16", barreno Ø3/8" y tornillo 5/16" × 1¼"**, sin importar el diámetro. Así viene precargado (perfil `SOL38x4.8` en `src/datos/maestros.js`): la solera se rola de canto, el barreno va al centro de su ancho y cada junta lleva múltiplo de 4 tornillos. Los ángulos siguen disponibles como opción por partida (*Perfil de aros*).
+
+Cinco detalles se **supusieron** y conviene confirmarlos con el taller (se editan en las tablas maestras): paso máximo entre barrenos (150 mm), posición del barreno (al centro de la solera), soldadura continua aro–ducto, empaque de neopreno 1½" × 1/8" y juego de tornillería (tornillo + tuerca + 2 rondanas). Ver [§10.4 del documento](docs/arquitectura-cotizador-ducterias.md#104-supuestos-del-estándar-de-bridas-por-confirmar-con-el-taller).
 
 ## Familias de pieza
 

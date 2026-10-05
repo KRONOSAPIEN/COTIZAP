@@ -31,19 +31,26 @@
     return pulg * U.MM_POR_PULGADA;
   }
 
-  /** Propiedades derivadas de un ángulo de lados iguales: área, peso lineal y centroide. */
+  /**
+   * Propiedades derivadas de un perfil de brida (el aro se rola "de canto": el ancho queda en el plano radial).
+   *   SOLERA : barra plana ancho × espesor → área = b·t ; centroide radial = b/2 ; gramil = b/2 (barreno al centro).
+   *   ANGULO : ala radial de un ángulo de lados iguales → área = t·(2b − t) ; centroide medido desde el dorso.
+   */
   function perfilDerivado(M, id) {
     const base = M.herrajes.perfiles[id];
     exigir(base, `Perfil inexistente: ${id}`);
-    const b = base.ala_mm;
+    const b = base.ancho_mm;
     const t = base.esp_mm;
-    const area = t * (2 * b - t);
+    exigir(b > 0 && t > 0, `El perfil ${id} necesita ancho_mm y esp_mm mayores que 0.`);
+    const solera = base.tipo === 'SOLERA';
+    const area = solera ? b * t : t * (2 * b - t);
     return {
       id,
       ...base,
+      gramil_mm: base.gramil_mm === undefined ? b / 2 : base.gramil_mm,
       area_mm2: area,
       peso_kg_m: (area * DENSIDAD_ACERO_PERFIL_G_CM3) / 1000,
-      c_centroide_mm: (b * t + b * b - t * t) / (2 * (2 * b - t)),
+      c_centroide_mm: solera ? b / 2 : (b * t + b * b - t * t) / (2 * (2 * b - t)),
     };
   }
 
@@ -71,15 +78,17 @@
   function geometriaAro(ext, perfil, holgura_mm) {
     const c = perfil.c_centroide_mm;
     const g = perfil.gramil_mm;
-    const b = perfil.ala_mm;
+    const b = perfil.ancho_mm;
     const t = perfil.esp_mm;
+    // Costura de cierre del aro: la solera se suelda a tope en una sola sección (b); el ángulo en sus dos alas (2b).
+    const seccion_cierre = perfil.tipo === 'SOLERA' ? b : 2 * b;
     if (ext.forma === 'REDONDA') {
       const D = ext.D_ext_mm;
       const Dre = D + 2 * b;
       return {
         L_aro_mm: PI * (D + 2 * c) + holgura_mm,
         P_perno_mm: PI * (D + 2 * g),
-        L_cierre_mm: 2 * b,
+        L_cierre_mm: seccion_cierre,
         A_pintura_m2: ((PI / 2) * (Dre * Dre - D * D) + PI * Dre * t) / 1e6,
       };
     }
@@ -88,14 +97,14 @@
     return {
       L_aro_mm: 2 * (a + h) + 8 * c + 4 * holgura_mm,
       P_perno_mm: 2 * (a + h) + 8 * g,
-      L_cierre_mm: 4 * 2 * b,
+      L_cierre_mm: 4 * seccion_cierre,
       A_pintura_m2: (2 * ((a + 2 * b) * (h + 2 * b) - a * h) + 2 * ((a + 2 * b) + (h + 2 * b)) * t) / 1e6,
     };
   }
 
   /**
    * Herrajes de unión por unidad de partida.
-   *   BRIDADO: aros de ángulo + tornillería + empaque (+ sellador según clase).
+   *   BRIDADO: aros (solera o ángulo) + tornillería + empaque (+ sellador según clase).
    *   ESPIGA : prolongación macho + fijaciones + sellador.
    *   LISO   : sin herraje.
    * Cada junta se comparte entre dos extremos: se asigna 0.5 junta de tornillería, empaque y sellador por extremo.
@@ -126,7 +135,7 @@
       n_fijaciones: 0,
       A_espiga_m2: 0,
       L_corte_extra_m: 0,
-      sold_aros: { tope_m: 0, filete_m: 0 },
+      sold_aros: { filete_m: 0, cierres: [] }, // cierres: costura a tope del aro, con el espesor del PERFIL (no el de la lámina)
       A_pintura_aros_m2: 0,
     };
 
@@ -139,13 +148,16 @@
         const n_raw = Math.ceil(g.P_perno_mm / U_.paso_tornillo_mm - 1e-9);
         const n_tornillos = U.techoMultiplo(Math.max(U_.n_min_tornillos, n_raw), U_.multiplo_tornillos);
         const L_aro_m = g.L_aro_mm / 1000;
+        const m_aro = L_aro_m * perfil.peso_kg_m;
         out.aros.push({
-          perfil_id: perfil.id, tornillo: perfil.tornillo, L_aro_mm: g.L_aro_mm, P_perno_mm: g.P_perno_mm,
-          n_tornillos, m_aro_kg: L_aro_m * perfil.peso_kg_m, c_centroide_mm: perfil.c_centroide_mm, peso_kg_m: perfil.peso_kg_m,
+          perfil_id: perfil.id, tipo: perfil.tipo, descripcion: perfil.descripcion, ancho_mm: perfil.ancho_mm, esp_mm: perfil.esp_mm,
+          tornillo: perfil.tornillo, tornillo_desc: perfil.tornillo_desc || perfil.tornillo, diam_barreno_mm: perfil.diam_barreno_mm, barreno_desc: perfil.barreno_desc,
+          precio_ref: perfil.precio_ref, L_aro_mm: g.L_aro_mm, P_perno_mm: g.P_perno_mm, n_tornillos,
+          m_aro_kg: m_aro, m_aro_bruta_kg: m_aro / (1 - M.merma.PERFIL), c_centroide_mm: perfil.c_centroide_mm, gramil_mm: perfil.gramil_mm, peso_kg_m: perfil.peso_kg_m,
         });
         out.n_aros += 1;
         out.L_aros_m += L_aro_m;
-        out.m_aros_neta_kg += L_aro_m * perfil.peso_kg_m;
+        out.m_aros_neta_kg += m_aro;
         out.tornillos_por_tipo[perfil.tornillo] = (out.tornillos_por_tipo[perfil.tornillo] || 0) + 0.5 * n_tornillos;
         out.n_tornillos_asignados += 0.5 * n_tornillos;
         out.n_barrenos += n_tornillos;
@@ -153,10 +165,10 @@
         if (p.usa_empaque !== false) out.L_empaque_m += (0.5 * g.P_perno_mm * (1 + U_.f_traslape_empaque)) / 1000;
         if (clase !== 'NINGUNA') out.L_sellado_m += (0.5 * ext.P_ext_mm) / 1000;
         out.sold_aros.filete_m += (U_.f_cont_soldadura_aro * ext.P_ext_mm) / 1000;
-        out.sold_aros.tope_m += g.L_cierre_mm / 1000;
+        out.sold_aros.cierres.push({ L_m: g.L_cierre_mm / 1000, esp_mm: perfil.esp_mm });
         out.A_pintura_aros_m2 += g.A_pintura_m2;
       });
-      out.m_aros_bruta_kg = out.m_aros_neta_kg / (1 - M.merma.PERFIL);
+      out.m_aros_bruta_kg = out.aros.reduce((acc, a) => acc + a.m_aro_bruta_kg, 0);
     }
 
     if (tipo === 'ESPIGA') {
