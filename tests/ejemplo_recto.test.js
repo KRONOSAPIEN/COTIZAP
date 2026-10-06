@@ -5,7 +5,8 @@
  * Tramo recto de 3 m · Ø12" (interior) · calibre 16 · acero al carbón · bridado (estándar del taller: solera 1½" × 3/16",
  * barreno Ø3/8", tornillo 5/16" × 1¼") · sellado clase C · primario · servicio POLVO · riesgo MEDIO · 1 pieza.
  * Armado por yardas de 4 ft (1 220 mm): 3 000 mm = 2 yardas completas + un tramo de ajuste de 560 mm, engargolados en una
- * sola pieza; el extremo del ajuste va sin brida (se corta en campo), así que la pieza lleva UNA brida.
+ * sola pieza. El extremo del ajuste no lleva brida de taller (se corta en campo): la pieza lleva UNA brida fabricada y, por
+ * omisión, el taller manda SUELTO el aro del otro extremo con sus tornillos y su empaque (sólo material, sin fabricarlos).
  *
  * El oráculo recalcula TODO paso a paso con aritmética directa (sin llamar a las funciones del motor)
  * y compara contra la salida del motor. Los valores monetarios dependen de las tablas maestras
@@ -58,10 +59,12 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   const L_capa = anillos.reduce((a, x) => a + x, 0);
   assert.equal(L_capa, 3000);
   const n_juntas = n_anillos - 1;               // juntas engargoladas entre los anillos de la pieza
-  const n_bridas = 1;                           // la pieza trae el ajuste: su extremo libre va sin brida
+  const n_bridas = 1;                           // brida de taller: la pieza trae el ajuste y su extremo libre no la lleva…
+  const n_sueltas = 1;                          // …se manda suelta (por omisión): aro, tornillos y empaque, sin fabricarlos
   assert.equal(r.geometria.n_piezas, 1);
   assert.equal(r.geometria.n_virolas, n_anillos);
   assert.equal(r.geometria.extremos.length, n_bridas);
+  assert.equal(r.geometria.extremos_sueltos.length, n_sueltas);
 
   /* Paso 3 · desarrollo (plantilla) y área neta */
   const P_med = PI * D_med;
@@ -85,34 +88,40 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   const w = (ancho * esp * 7.85) / 1000;
   const c = ancho / 2;
   const L_aro = PI * (D_ext + 2 * c) + 3.0;
-  const m_aros_neta = (n_bridas * L_aro * w) / 1000;
+  const m_aro = (L_aro * w) / 1000;
+  const m_aros_neta = n_bridas * m_aro;          // los aros que se fabrican en taller
   const m_aros_bruta = m_aros_neta / (1 - 0.05);
+  const m_sueltos_neta = n_sueltas * m_aro;      // el aro suelto es el mismo aro, pero no se fabrica: sólo se compra
+  const m_sueltos_bruta = m_sueltos_neta / (1 - 0.05);
   casi(r.qto.her.m_aros_neta_kg, m_aros_neta);
   casi(r.qto.her.m_aros_bruta_kg, m_aros_bruta);
+  casi(r.qto.her.m_aros_sueltos_neta_kg, m_sueltos_neta);
+  casi(r.qto.her.m_aros_sueltos_bruta_kg, m_sueltos_bruta);
+  casi(r.peso.neto_unitario_kg, m_neta + m_aros_neta + m_sueltos_neta, 1e-12, 'el peso que se manda incluye el aro suelto');
   // la solera estándar se cotiza por barra y con IVA: $/kg = (precio / (1 + IVA)) / (kg/m · largo de la barra)
   const barra = M.proveedor.barras.SOL_1_1_2X3_16;
   const precio_kg_solera = (barra.precio / (1 + M.proveedor.iva_incluido_pct)) / (w * (barra.largo_mm / 1000));
-  const costo_perfiles = m_aros_bruta * precio_kg_solera;
+  const costo_perfiles = (m_aros_bruta + m_sueltos_bruta) * precio_kg_solera;
 
-  /* Paso 7 · tornillería: 8 por junta; cada brida aporta media junta; reserva 5 % */
+  /* Paso 7 · tornillería: 8 por junta; cada brida —de taller o suelta— aporta media junta; reserva 5 % */
   const P_perno = PI * (D_ext + 2 * gramil);
   const n_tornillos = Math.ceil(Math.max(4, Math.ceil(P_perno / 150 - 1e-9)) / 4 - 1e-9) * 4;
   assert.equal(n_tornillos, 8);
-  const juntas_asignadas = n_bridas * 0.5;
+  const juntas_asignadas = (n_bridas + n_sueltas) * 0.5;
   const costo_tornilleria = n_tornillos * juntas_asignadas * 1.05 * P.precio_juego_tornillo_5_16_x_1_1_4;
 
-  /* Paso 8 · empaque (media junta por brida · perímetro de tornillos · 1.05) */
+  /* Paso 8 · empaque (media junta por brida, de taller o suelta · perímetro de tornillos · 1.05) */
   const L_emp = (juntas_asignadas * P_perno * 1.05) / 1000;
   const costo_empaque = L_emp * P.precio_m_empaque_neopreno;
 
-  /* Paso 9 · sellador clase C: media junta por brida + las juntas engargoladas entre yardas (también son transversales) */
+  /* Paso 9 · sellador clase C: media junta por brida de taller (la suelta se sella en obra) + las juntas engargoladas entre yardas (también son transversales) */
   const L_eng_circ = (n_juntas * P_med) / 1000;
-  const L_sel = (juntas_asignadas * PI * D_ext) / 1000 + L_eng_circ;
+  const L_sel = (n_bridas * 0.5 * PI * D_ext) / 1000 + L_eng_circ;
   casi(r.qto.her.L_sellado_m, L_sel);
   const V_sel = L_sel * 20 * 1.15;
   const costo_sellador = V_sel * (P.precio_cartucho_sellador_300ml / 300);
 
-  /* Paso 10 · flete de entrada sobre lámina y perfil */
+  /* Paso 10 · flete de entrada sobre lámina y perfil (también el del aro suelto) */
   const costo_flete = 0.02 * (costo_lamina + costo_perfiles);
 
   /* Paso 11 · longitudes de proceso */
@@ -206,15 +215,41 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   casi(r.pila.utilidad / r.pila.precio, 0.2, 1e-12);
 });
 
-test('Ejemplo A — con brida en ambos extremos el tramo lleva dos aros y cuesta más (pero no cambia la lámina)', () => {
-  const uno = C.cotizarPartida(entrada, M);
-  const dos = C.cotizarPartida({ ...entrada, ajuste_sin_brida: false }, M);
-  assert.equal(uno.qto.her.n_aros, 1);
-  assert.equal(dos.qto.her.n_aros, 2);
-  casi(dos.qto.her.m_aros_neta_kg, 2 * uno.qto.her.m_aros_neta_kg, 1e-12);
-  casi(dos.geometria.A_neta_m2, uno.geometria.A_neta_m2, 1e-12);
-  casi(dos.costos.materiales.lamina, uno.costos.materiales.lamina, 1e-12);
-  assert.ok(dos.precio.unitario > uno.precio.unitario);
+/* Los tres modos del extremo del ajuste: el vector de cada uno (CD, C_T y precio con el mismo método del documento). */
+const MODOS = {
+  SIN_BRIDA: { n_aros: 1, n_sueltos: 0, horas: 1.878, CD: 2119.08, C_T: 2546.2, precio: 3320.71 },
+  SUELTA: { n_aros: 1, n_sueltos: 1, horas: 1.878, CD: 2195.99, C_T: 2632.58, precio: 3433.36 },
+  CON_BRIDA: { n_aros: 2, n_sueltos: 0, horas: 2.312, CD: 2448.54, C_T: 2954.56, precio: 3853.28 },
+};
+
+test('Ejemplo A — el extremo del ajuste: sin brida, brida suelta (por omisión) o brida de taller', () => {
+  Object.entries(MODOS).forEach(([modo, v]) => {
+    const r = C.cotizarPartida({ ...entrada, extremo_ajuste: modo }, M);
+    const f = (x, d) => Number(x.toFixed(d));
+    assert.deepEqual({
+      n_aros: r.qto.her.n_aros, n_sueltos: r.qto.her.aros_sueltos.length, horas: f(r.costos.h_MOD, 3), CD: f(r.costos.CD, 2), C_T: f(r.pila.C_T, 2), precio: r.precio.unitario,
+    }, v, modo);
+  });
+  // por omisión manda la tabla maestra: brida suelta
+  assert.equal(C.cotizarPartida(entrada, M).precio.unitario, MODOS.SUELTA.precio);
+  const sin = C.cotizarPartida({ ...entrada, extremo_ajuste: 'SIN_BRIDA' }, M);
+  const suelta = C.cotizarPartida(entrada, M);
+  const con = C.cotizarPartida({ ...entrada, extremo_ajuste: 'CON_BRIDA' }, M);
+  // el ducto es el mismo en los tres: misma área, misma lámina
+  [suelta, con].forEach((x) => {
+    casi(x.geometria.A_neta_m2, sin.geometria.A_neta_m2, 1e-12);
+    casi(x.costos.materiales.lamina, sin.costos.materiales.lamina, 1e-12);
+  });
+  // la brida de taller trae dos aros; la suelta, uno de taller y uno suelto (el mismo aro)
+  casi(con.qto.her.m_aros_neta_kg, 2 * sin.qto.her.m_aros_neta_kg, 1e-12);
+  casi(suelta.qto.her.m_aros_sueltos_neta_kg, sin.qto.her.m_aros_neta_kg, 1e-12);
+  // suelta = el material de la brida de taller (perfil, tornillos, empaque y flete) sin mano de obra, soldadura, pintura ni sellador
+  casi(suelta.costos.materiales.perfiles, con.costos.materiales.perfiles, 1e-12);
+  casi(suelta.costos.materiales.tornilleria, con.costos.materiales.tornilleria, 1e-12);
+  casi(suelta.costos.materiales.empaque, con.costos.materiales.empaque, 1e-12);
+  casi(suelta.costos.materiales.sellador, sin.costos.materiales.sellador, 1e-12);
+  casi(suelta.costos.h_MOD, sin.costos.h_MOD, 1e-12);
+  assert.ok(sin.precio.unitario < suelta.precio.unitario && suelta.precio.unitario < con.precio.unitario);
 });
 
 test('Ejemplo A — la merma NO se omite: con φ=0 el costo de lámina baja exactamente φ', () => {
@@ -235,12 +270,13 @@ const GOLDEN = {
   n_anillos: 3,
   n_piezas: 1,
   n_aros: 1,
+  n_aros_sueltos: 1,
   L_aro_mm: 1089.8,
   n_tornillos: 8,
   horas_mod_reales: 1.878,
-  CD: 2119.08,
-  C_T: 2546.2,
-  precio_unitario: 3320.71,
+  CD: 2195.99,
+  C_T: 2632.58,
+  precio_unitario: 3433.36,
 };
 
 test('Ejemplo A — vector de referencia (valores redondeados que cita el documento)', () => {
@@ -256,6 +292,7 @@ test('Ejemplo A — vector de referencia (valores redondeados que cita el docume
     n_anillos: r.geometria.n_virolas,
     n_piezas: r.geometria.n_piezas,
     n_aros: r.qto.her.n_aros,
+    n_aros_sueltos: r.qto.her.aros_sueltos.length,
     L_aro_mm: f(r.qto.her.aros[0].L_aro_mm, 1),
     n_tornillos: r.qto.her.aros[0].n_tornillos,
     horas_mod_reales: f(r.costos.h_MOD, 3),

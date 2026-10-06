@@ -19,7 +19,7 @@ Cotizador para ducterías de lámina (colección de polvo y control ambiental). 
 **Usar la app.** Abra `src/web/index.html` en el navegador (doble clic). No necesita servidor ni instalación; la cotización se guarda en el propio navegador y las tablas maestras se guardan solas cada vez que las cambia (ver [Dónde se guardan los precios](#dónde-se-guardan-los-precios)). Arranca con una cotización de ejemplo para explorar el cálculo. Las tipografías (Barlow, IBM Plex Mono) se piden a Google Fonts; sin conexión se usan las del sistema.
 
 1. **Tablas maestras** → capture precios, tarifas y velocidades reales.
-2. **Cotización** → en el encabezado ajuste, para esa cotización, el **margen de utilidad, la comisión, el descuento y los días de cobro** (y, en *Más parámetros de precio*, administración, financiamiento e IVA) sin ir a las tablas maestras; luego *Agregar partida*, elija la familia y capture dimensiones; el precio se recalcula mientras escribe.
+2. **Cotización** → en el encabezado elija el **ancho de la yarda** (3 ó 4 pies) de los tramos rectos y ajuste, para esa cotización, el **margen de utilidad, la comisión, el descuento y los días de cobro** (y, en *Más parámetros de precio*, administración, financiamiento e IVA) sin ir a las tablas maestras; luego *Agregar partida*, elija la familia y capture dimensiones; el precio se recalcula mientras escribe.
 3. Seleccione una partida para ver el desglose: geometría, merma, tiempos, consumibles y cada capa del precio.
 4. *Imprimir propuesta* genera la hoja para el cliente (sin costos internos). *Guardar y cargar* exporta/importa JSON y copia un CSV de partidas para Excel.
 
@@ -44,8 +44,8 @@ const r = cotizarPartida({
   D_mm: 304.8, L_mm: 3000, tipo_union: 'BRIDADO', cantidad: 1,
 }, M);
 
-console.log(r.precio.unitario);            // 3320.71 MXN (mano de obra a $500/h; una sola brida: el tramo de ajuste va sin brida)
-console.log(r.peso.neto_total_kg);         // 36.011 kg (lámina + aro de brida)
+console.log(r.precio.unitario);            // 3433.36 MXN (mano de obra a $500/h; una brida de taller y, en el extremo del ajuste, el aro suelto)
+console.log(r.peso.neto_total_kg);         // 37.564 kg (lámina + aro de brida + aro suelto)
 console.log(r.pila);                       // CD, CI, imprevistos, financiamiento, utilidad…
 console.log(r.qto);                        // cantidades físicas, sin precios
 ```
@@ -107,15 +107,25 @@ Las reglas completas están en [§2.3 del documento](docs/arquitectura-cotizador
 El taller no rola un tramo de 3 m de una pieza: rola **yardas**, anillos del **ancho de la lámina** (914 mm = 3 ft ó 1 220 mm = 4 ft), y las **engargola** entre sí. El cotizador arma el tramo con la misma regla:
 
 1. Primero **piezas de hasta 3 yardas** engargoladas, con **brida en ambos extremos**.
-2. Con lo que falta, una última pieza: las yardas completas que sobren y un **tramo de ajuste** (menos de una yarda), que va **sin brida** en su extremo libre para cortarlo y ponerlo en campo ajustando la distancia. (Si el trabajo pide brida en ambos extremos se elige en la partida.)
+2. Con lo que falta, una última pieza: las yardas completas que sobren y un **tramo de ajuste** (menos de una yarda). Su extremo libre **no lleva brida de taller**: se corta y se pone en campo ajustando la distancia.
 
-| Largo | Yarda | Armado | Anillos | Bridas |
-| --- | --- | --- | --- | --- |
-| 3 660 mm | 1 220 | 3 yardas (1 pieza) | 3 | 2 |
-| 3 000 mm | 1 220 | 2 yardas + ajuste de 560 mm (1 pieza) | 3 | 1 |
-| 10 000 mm | 1 220 | 2 × 3 yardas y 2 yardas + ajuste de 240 mm | 9 | 5 |
+| Largo | Yarda | Armado | Anillos | Bridas de taller | Aros sueltos |
+| --- | --- | --- | --- | --- | --- |
+| 3 660 mm | 1 220 | 3 yardas (1 pieza) | 3 | 2 | 0 |
+| 3 000 mm | 1 220 | 2 yardas + ajuste de 560 mm (1 pieza) | 3 | 1 | 1 |
+| 10 000 mm | 1 220 | 2 × 3 yardas y 2 yardas + ajuste de 240 mm | 9 | 5 | 1 |
 
-Cada yarda se **rola por separado** (tiempo fijo por anillo), las juntas entre yardas son **engargolado** (con sellador), cada plantilla de una yarda sale con un solo tajo a lo ancho de la hoja y el precio de la lámina se busca con ese ancho de hoja. En la partida se elige el **ancho de la yarda** y el **tramo de ajuste**; el desglose muestra el armado con un diagrama (anillos, bridas y el extremo libre sin brida) y avisa que la brida de ese extremo no está en el precio. Los parámetros están en *Tablas maestras → Proceso de fabricación → armado yardas*; el documento explica la regla ([§3.2](docs/arquitectura-cotizador-ducterias.md#32-tramo-recto-armado-por-yardas)) y sus supuestos por confirmar ([§10.9](docs/arquitectura-cotizador-ducterias.md#109-supuestos-del-armado-por-yardas-por-confirmar)).
+**Quién elige el ancho de la yarda.** Lo decide quien diseña (3 ft ó 4 ft): se elige **una vez en el encabezado de la cotización** y lo heredan todos los tramos rectos, o **por partida** (la partida manda). Si nadie elige, rige el de las tablas (1 220 mm).
+
+**Qué se cotiza en el extremo libre del ajuste** (*Extremo del tramo de ajuste*, por partida; el predeterminado está en *Tablas maestras*):
+
+| Opción | Qué cotiza | Ejemplo A (3 m, Ø12″) |
+| --- | --- | --- |
+| **Brida suelta** (predeterminada) | El taller manda el **aro, los tornillos y el empaque sueltos**, para ponerlos en obra: se cobra **sólo el material**, sin mano de obra, soldadura, pintura ni sellador | $3,433.36 |
+| Sin brida | Nada: la brida de ese extremo no está en el precio | $3,320.71 |
+| Brida de taller | Se fabrica y se suelda en taller, como en los demás extremos | $3,853.28 |
+
+Cada yarda se **rola por separado** (tiempo fijo por anillo), las juntas entre yardas son **engargolado** (con sellador), cada plantilla de una yarda sale con un solo tajo a lo ancho de la hoja y el precio de la lámina se busca con ese ancho de hoja. El desglose muestra el armado con un diagrama (anillos, bridas de taller, el extremo libre y su aro suelto), la tabla de piezas y el aro suelto en los herrajes (con sus barrenos «en obra»). Los parámetros están en *Tablas maestras → Proceso de fabricación → armado yardas*; el documento explica la regla ([§3.2](docs/arquitectura-cotizador-ducterias.md#32-tramo-recto-armado-por-yardas)), la brida suelta ([§3.5.7](docs/arquitectura-cotizador-ducterias.md#357-brida-suelta-extremo-libre-del-tramo-de-ajuste)) y sus supuestos por confirmar ([§10.9](docs/arquitectura-cotizador-ducterias.md#109-supuestos-del-armado-por-yardas-por-confirmar)). Una cotización guardada con la opción anterior (*sí/no* para la brida del ajuste) se convierte sola: *sí* = sin brida, *no* = brida de taller.
 
 ## Brida estándar del taller
 

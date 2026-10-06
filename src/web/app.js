@@ -85,7 +85,7 @@
       // La cotización de muestra que nadie ha tocado se renueva con la versión actual de la muestra (nombres de taller,
       // partidas nuevas); se respetan los ajustes generales que ya hubiera cambiado.
       const guardada = estado.cot;
-      estado.cot = { ...cotizacionEjemplo(), ...Object.fromEntries(['unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'fecha', 'vigencia_dias', 'parametros'].filter((k) => guardada[k] !== undefined).map((k) => [k, guardada[k]])) };
+      estado.cot = { ...cotizacionEjemplo(), ...Object.fromEntries(['unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'fecha', 'vigencia_dias', 'parametros', 'yarda_mm'].filter((k) => guardada[k] !== undefined).map((k) => [k, guardada[k]])) };
     }
     estado.sel = estado.cot.partidas.length ? estado.cot.partidas[0].id : null;
   }
@@ -118,10 +118,13 @@
     if (!Object.keys(M.capas.imprevistos_pct).includes(cot.riesgo)) cot.riesgo = vacia.riesgo;
     if (!Object.keys(M.servicios).includes(cot.servicio)) cot.servicio = vacia.servicio;
     if (cot.parametros !== undefined && !esObjeto(cot.parametros)) delete cot.parametros;
+    // Ancho de la yarda de la cotización: sólo vale uno dentro de los límites de las tablas (vacío o inválido = el de las tablas)
+    const yarda = C.cotizador.yardaDeCotizacion(cot, M).yarda_mm;
+    if (yarda === undefined) delete cot.yarda_mm; else cot.yarda_mm = yarda;
     cot.ejemplo = cot.ejemplo === true;
     const vistos = new Set();
     cot.partidas = c.partidas.filter(esObjeto).map((p) => {
-      const q = { ...p };
+      const q = { ...C.validacion.migrarPartida({ ...p }) }; // lo guardado con campos de versiones anteriores pasa a los de hoy
       if (q.descripcion !== undefined && typeof q.descripcion !== 'string') q.descripcion = typeof q.descripcion === 'number' ? String(q.descripcion) : '';
       while (typeof q.id !== 'string' || !q.id || vistos.has(q.id)) q.id = idNuevo();
       vistos.add(q.id);
@@ -163,7 +166,7 @@
   function calcular() {
     const cot = estado.cot;
     try {
-      estado.res = C.cotizador.cotizar({ riesgo: cot.riesgo, servicio: cot.servicio, parametros: cot.parametros, partidas: cot.partidas }, estado.M);
+      estado.res = C.cotizador.cotizar({ riesgo: cot.riesgo, servicio: cot.servicio, parametros: cot.parametros, yarda_mm: cot.yarda_mm, partidas: cot.partidas }, estado.M);
     } catch (err) {
       // No debería pasar (cotizar() atrapa lo que falle en cada partida): si pasa, la pantalla sigue viva y lo dice.
       const msg = `No se pudo calcular la cotización (${String((err && err.message) || err)}). Revise las tablas maestras.`;
@@ -303,6 +306,17 @@
       const el = $(`#c_${k}`);
       if (el && document.activeElement !== el) el.value = c[k] === undefined ? '' : c[k];
     });
+    // Ancho de la yarda: las opciones salen de las tablas maestras (pueden cambiar) y un ancho guardado que no está en la lista se muestra tal cual
+    const sel = $('#c_yarda_mm');
+    const valor = c.yarda_mm === undefined ? '' : String(c.yarda_mm);
+    let ops = opcionesDe('yardas_cotizacion');
+    if (valor !== '' && !ops.some(([v]) => v === valor)) ops = [...ops, [valor, `${valor} mm`]];
+    const firma = JSON.stringify(ops);
+    if (sel.dataset.ops !== firma) {
+      sel.dataset.ops = firma;
+      sel.replaceChildren(...ops.map(([v, t]) => h('option', { value: v }, t)));
+    }
+    if (document.activeElement !== sel) sel.value = valor;
   }
 
   function enlazarEncabezado() {
@@ -314,6 +328,11 @@
         persistir();
         render();
       });
+    });
+    $('#c_yarda_mm').addEventListener('change', (ev) => {
+      if (ev.target.value === '') delete estado.cot.yarda_mm; else estado.cot.yarda_mm = Number(ev.target.value);
+      persistir();
+      render();
     });
   }
 
@@ -603,7 +622,10 @@
     return grupos.map((g) => (g.n > 1 ? `${g.n} × ${una(g.q)}` : una(g.q))).join(' y ');
   }
 
-  /** Diagrama del armado: cada yarda un anillo, las piezas con sus bridas (barras) y el extremo libre del ajuste, sin brida. */
+  /** Lo que lleva el extremo libre del ajuste, para el rótulo y la lectura en voz alta. */
+  const libreTexto = (arm) => (arm.modo === 'SUELTA' ? 'con la brida suelta (se manda sin fabricar, para ponerla en obra)' : 'sin brida');
+
+  /** Diagrama del armado: cada yarda un anillo, las piezas con sus bridas (barras) y el extremo libre del ajuste, sin brida de taller (con su aro suelto, si se manda). */
   function svgArmado(arm) {
     const NS = 'http://www.w3.org/2000/svg';
     const el = (tag, at, txt) => { const e = document.createElementNS(NS, tag); Object.keys(at).forEach((k) => e.setAttribute(k, at[k])); if (txt !== undefined) e.textContent = txt; return e; };
@@ -617,7 +639,7 @@
     const escala = (ANCHO - 2 * MARGEN - huecos * SEP) / largoDibujado;
     const svg = el('svg', {
       viewBox: `0 0 ${ANCHO} ${Y0 + ALTO_ANILLO + 46}`, class: 'arm', role: 'img',
-      'aria-label': `Armado: ${armadoTexto(arm)}. ${arm.n_piezas} ${arm.n_piezas === 1 ? 'pieza' : 'piezas'}, ${arm.n_bridas} ${arm.n_bridas === 1 ? 'brida' : 'bridas'}${arm.extremo_libre ? ', el extremo del ajuste sin brida' : ''}.`,
+      'aria-label': `Armado: ${armadoTexto(arm)}. ${arm.n_piezas} ${arm.n_piezas === 1 ? 'pieza' : 'piezas'}, ${arm.n_bridas} ${arm.n_bridas === 1 ? 'brida' : 'bridas'} de taller${arm.extremo_libre ? `, el extremo del ajuste ${libreTexto(arm)}` : ''}.`,
     });
     let x = MARGEN;
     piezas.forEach((q, i) => {
@@ -637,7 +659,8 @@
       if (q.bridas === 2) svg.append(el('rect', { x: x - 2, y: Y0 - 6, width: 4, height: ALTO_ANILLO + 12, class: 'arm-brida' }));
       else {
         svg.append(el('line', { x1: x, x2: x, y1: Y0 - 6, y2: Y0 + ALTO_ANILLO + 6, class: 'arm-libre' }));
-        svg.append(el('text', { x, y: Y0 + ALTO_ANILLO + 36, class: 'arm-txt arm-txt-adv', 'text-anchor': 'end' }, 'sin brida'));
+        if (q.sueltas > 0) svg.append(el('rect', { x: x + 5, y: Y0 - 6, width: 4, height: ALTO_ANILLO + 12, class: 'arm-suelta' })); // el aro, aparte: no se suelda en taller
+        svg.append(el('text', { x, y: Y0 + ALTO_ANILLO + 36, class: 'arm-txt arm-txt-adv', 'text-anchor': 'end' }, q.sueltas > 0 ? 'brida suelta' : 'sin brida'));
       }
       // El rótulo largo si cabe bajo la pieza; si no, el corto («3», «2+aj.»)
       const largo = q.ajuste_mm > 0 ? `${q.yardas ? `${q.yardas} + ` : ''}ajuste ${W.num(q.ajuste_mm, 0)} mm` : `${q.yardas} ${q.yardas === 1 ? 'yarda' : 'yardas'}`;
@@ -652,13 +675,20 @@
   function detalleArmado(f) {
     const arm = f.geometria.detalle.armado;
     const filas = arm.piezas.length > 12 ? arm.piezas.slice(0, 11) : arm.piezas;
+    const bridas = (q) => (q.bridas === 1 ? (q.sueltas > 0 ? '1 + 1 suelta' : '1 (extremo libre sin brida)') : String(q.bridas));
     const tabla_ = tabla([{ t: 'Pieza' }, { t: 'Yardas', num: true }, { t: 'Largo', num: true }, { t: 'Juntas engargoladas', num: true }, { t: 'Bridas', num: true }],
-      [...filas.map((q, i) => [`#${i + 1}`, q.ajuste_mm > 0 ? `${q.yardas}${q.yardas ? ' + ' : ''}ajuste` : String(q.yardas), `${W.num(q.largo_mm, 0)} mm`, String(q.juntas), q.bridas === 1 ? '1 (extremo libre sin brida)' : String(q.bridas)]),
+      [...filas.map((q, i) => [`#${i + 1}`, q.ajuste_mm > 0 ? `${q.yardas ? `${q.yardas} + ` : ''}ajuste` : String(q.yardas), `${W.num(q.largo_mm, 0)} mm`, String(q.juntas), bridas(q)]),
         ...(arm.piezas.length > filas.length ? [['…', '', '', '', '']] : []),
-        { clase: 'total', celdas: ['Total', `${arm.n_completas}${arm.ajuste_mm > 0 ? ' + ajuste' : ''}`, `${W.num(arm.L_capa_mm, 0)} mm`, String(arm.n_juntas), String(arm.n_bridas)] }]);
+        { clase: 'total', celdas: ['Total', `${arm.n_completas}${arm.ajuste_mm > 0 ? ' + ajuste' : ''}`, `${W.num(arm.L_capa_mm, 0)} mm`, String(arm.n_juntas), `${arm.n_bridas}${arm.n_sueltas ? ` + ${arm.n_sueltas} ${arm.n_sueltas === 1 ? 'suelta' : 'sueltas'}` : ''}`] }]);
     const notas = [];
-    notas.push(`Yardas de ${W.num(arm.yarda_mm, 0)} mm (el ancho de la hoja): cada una se rola por separado y se engargolan hasta ${estado.M.proceso.armado_yardas.yardas_por_pieza_max} por pieza; las piezas llevan brida en ambos extremos.`);
-    if (arm.extremo_libre) notas.push(`El tramo de ajuste (${W.num(arm.ajuste_mm, 0)} mm, menos de una yarda) va sin brida en su extremo libre para cortarlo y ponerlo en campo: la brida y la junta de ese extremo no están en este precio.`);
+    notas.push(`Yardas de ${W.num(arm.yarda_mm, 0)} mm (el ancho de la hoja): cada una se rola por separado y se engargolan hasta ${estado.M.proceso.armado_yardas.yardas_por_pieza_max} por pieza; las piezas llevan brida de taller en ambos extremos.`);
+    if (arm.extremo_libre && arm.modo === 'SUELTA') {
+      notas.push(`El tramo de ajuste (${W.num(arm.ajuste_mm, 0)} mm, menos de una yarda) lleva brida de taller sólo en el extremo de las yardas. En el otro, que se corta y se ajusta en campo, no se fabrica brida: el taller manda suelto el aro con sus tornillos y su empaque (sólo material, sin mano de obra), para ponerlo en obra.`);
+    } else if (arm.extremo_libre) {
+      notas.push(`El tramo de ajuste (${W.num(arm.ajuste_mm, 0)} mm, menos de una yarda) va sin brida en su extremo libre para cortarlo y ponerlo en campo: la brida y la junta de ese extremo no están en este precio.`);
+    } else if (arm.ajuste_mm > 0) {
+      notas.push(`Se pidió brida de taller en ambos extremos del tramo de ajuste (${W.num(arm.ajuste_mm, 0)} mm): no queda un extremo libre para ajustar la distancia en campo.`);
+    }
     return h('div', { class: 'arm-fig' },
       h('h4', null, 'Armado por yardas'),
       h('p', { class: 'arm-resumen' }, armadoTexto(arm)),
@@ -719,12 +749,19 @@
     const con = f.qto.con;
     const kvs = h('dl', { class: 'kvs' });
     kvs.append(kv('Unión', her.tipo_union), kv('Clase de sellado', her.clase_sellado));
-    if (her.n_aros) {
+    const sueltos = her.aros_sueltos.length;
+    if (her.n_aros || sueltos) {
       kvs.append(
-        kv('Aros de brida', String(her.n_aros)),
-        kv('Perfil de aros, neto / bruto', `${W.num(her.m_aros_neta_kg, 3)} / ${W.num(her.m_aros_bruta_kg, 3)}`, 'kg'),
+        kv(sueltos ? 'Aros de brida de taller' : 'Aros de brida', String(her.n_aros)),
+        kv('Perfil de aros, neto / bruto', `${W.num(her.m_aros_neta_kg, 3)} / ${W.num(her.m_aros_bruta_kg, 3)}`, 'kg'));
+      if (sueltos) {
+        kvs.append(
+          kv('Aros sueltos (sin fabricar)', String(sueltos)),
+          kv('Perfil de aros sueltos, neto / bruto', `${W.num(her.m_aros_sueltos_neta_kg, 3)} / ${W.num(her.m_aros_sueltos_bruta_kg, 3)}`, 'kg'));
+      }
+      kvs.append(
         kv('Juegos de tornillería (asignados)', W.num(her.n_tornillos_asignados, 1)),
-        kv('Barrenos', String(her.n_barrenos)),
+        kv('Barrenos (en taller)', String(her.n_barrenos)),
         kv('Empaque', W.num(her.L_empaque_m, 3), 'm'));
     }
     if (her.n_espigas) kvs.append(kv('Espigas', String(her.n_espigas)), kv('Fijaciones', String(her.n_fijaciones)), kv('Lámina extra de espiga', W.num(her.A_espiga_m2, 4), 'm²'));
@@ -737,10 +774,12 @@
       kv('Superficie a pintar', W.num(f.qto.pint.A_pint_m2, 3), 'm²'),
       kv('Pintura / diluyente', `${W.num(con.pintura.L_pintura, 3)} / ${W.num(con.pintura.L_diluyente, 3)}`, 'L'));
     const barreno = (a) => (a.barreno_desc ? `Ø${a.barreno_desc} (${W.num(a.diam_barreno_mm, 2)} mm)` : `Ø${W.num(a.diam_barreno_mm, 2)} mm`);
-    const aros = her.aros.length
-      ? tabla([{ t: 'Aro' }, { t: 'Perfil' }, { t: 'Barra', num: true }, { t: 'Barrenos', num: true }, { t: 'Tornillo' }, { t: 'Peso', num: true }],
-        her.aros.map((a, i) => [`#${i + 1}`, a.descripcion || a.perfil_id, `${W.num(a.L_aro_mm, 1)} mm`,
-          `${a.n_tornillos} × ${barreno(a)}`, a.tornillo_desc, `${W.num(a.m_aro_kg, 3)} kg`])) : null;
+    const filasAros = [
+      ...her.aros.map((a, i) => [`#${i + 1}`, a.descripcion || a.perfil_id, `${W.num(a.L_aro_mm, 1)} mm`, `${a.n_tornillos} × ${barreno(a)}`, a.tornillo_desc, `${W.num(a.m_aro_kg, 3)} kg`]),
+      // el aro suelto no se barrena ni se suelda en taller: los barrenos se hacen en obra
+      ...her.aros_sueltos.map((a, i) => [`Suelto #${i + 1}`, a.descripcion || a.perfil_id, `${W.num(a.L_aro_mm, 1)} mm`, `${a.n_tornillos} × ${barreno(a)} (en obra)`, a.tornillo_desc, `${W.num(a.m_aro_kg, 3)} kg`]),
+    ];
+    const aros = filasAros.length ? tabla([{ t: 'Aro' }, { t: 'Perfil' }, { t: 'Barra', num: true }, { t: 'Barrenos', num: true }, { t: 'Tornillo' }, { t: 'Peso', num: true }], filasAros) : null;
     return [h('div', { class: 'dos-col' }, h('div', null, h('h4', null, 'Herrajes de unión'), kvs), h('div', null, h('h4', null, 'Consumibles'), cons)), aros];
   }
 
@@ -772,7 +811,7 @@
     const fuente = (p) => (p.fuente === 'PROVEEDOR' ? ` (${p.descripcion} · ${W.mxn(p.precio)} con IVA)` : ' (precio por kg de la tabla)');
     base.lamina = `${W.num(q.lam.m_bruta_kg * n, 3)} kg × ${W.mxn(pu.lamina.precio_kg)}/kg${fuente(pu.lamina)}`;
     const porPerfil = {};
-    q.her.aros.forEach((a) => { porPerfil[a.perfil_id] = (porPerfil[a.perfil_id] || 0) + a.m_aro_bruta_kg * n; });
+    [...q.her.aros, ...q.her.aros_sueltos].forEach((a) => { porPerfil[a.perfil_id] = (porPerfil[a.perfil_id] || 0) + a.m_aro_bruta_kg * n; });
     const ids = Object.keys(porPerfil);
     if (ids.length) base.perfiles = ids.map((id) => `${W.num(porPerfil[id], 3)} kg × ${W.mxn(pu.perfiles[id].precio_kg)}/kg${fuente(pu.perfiles[id])}`).join(' · ');
     return base;
@@ -868,10 +907,17 @@
     if (clave === 'materiales') return Object.keys(M.materiales).map((k) => [k, M.materiales[k].nombre]);
     if (clave === 'angulos_injerto') return M.proceso.angulos_injerto_deg.map((a) => [String(a), `${a}°`]);
     if (clave === 'angulos_codo') return M.proceso.angulos_codo_deg.map((a) => [String(a), `${a}°`]);
-    if (clave === 'yardas') {
+    if (clave === 'yardas' || clave === 'yardas_cotizacion') {
+      // «yardas_cotizacion» es el encabezado (vacío = el de las tablas); «yardas», la partida (vacío = el de la cotización)
       const AY = M.proceso.armado_yardas;
       const pies = (mm) => { const ft = mm / 304.8; return Math.abs(ft - Math.round(ft)) < 0.02 ? ` · ${Math.round(ft)} ft` : ''; };
-      return [['', `Predeterminada · ${W.num(AY.yarda_defecto_mm, 0)} mm${pies(AY.yarda_defecto_mm)}`], ...AY.yardas_mm.map((y) => [String(y), `${W.num(y, 0)} mm${pies(y)}`])];
+      const ancho = (mm) => `${W.num(mm, 0)} mm${pies(mm)}`;
+      const vigente = clave === 'yardas' && estado.res && estado.res.yarda_mm !== undefined ? estado.res.yarda_mm : AY.yarda_defecto_mm;
+      return [['', clave === 'yardas' ? `Según la cotización · ${ancho(vigente)}` : `Predeterminada · ${ancho(AY.yarda_defecto_mm)}`], ...AY.yardas_mm.map((y) => [String(y), ancho(y)])];
+    }
+    if (clave === 'ajuste') {
+      const nombre = Object.fromEntries(W.OPC.ajuste);
+      return [['', `Predeterminado · ${nombre[M.proceso.armado_yardas.extremo_ajuste_defecto] || '—'}`], ...W.OPC.ajuste];
     }
     if (clave === 'perfiles') return [['', 'Estándar del taller'], ...Object.keys(M.herrajes.perfiles).map((k) => [k, `${k} · ${M.herrajes.perfiles[k].descripcion}`])];
     return W.OPC[clave];
@@ -927,7 +973,7 @@
       if (el.validity && el.validity.badInput) dlg.invalidos.push(`${c.etiqueta}: lo escrito no es un número.`);
       if (c.tipo === 'select') {
         if (v === '') return;
-        p[c.id] = c.id === 'caras_pintadas' || c.numerico ? Number(v) : c.booleano ? v === 'true' : v;
+        p[c.id] = c.id === 'caras_pintadas' || c.numerico ? Number(v) : v;
         return;
       }
       if (c.tipo === 'calibre') {
@@ -994,8 +1040,10 @@
         h('div', { class: 'grid-campos' },
           crearControl({ id: 'descripcion', etiqueta: 'Descripción', tipo: 'text' }, v.descripcion),
           crearControl({ id: 'cantidad', etiqueta: 'Cantidad', tipo: 'int', min: 1, paso: 1 }, v.cantidad))),
-      h('fieldset', null, h('legend', null, fam === 'COMPRADO' ? 'Artículo comprado' : 'Dimensiones'), grid(W.CAMPOS[fam])),
+      h('fieldset', null, h('legend', null, fam === 'COMPRADO' ? 'Artículo comprado' : 'Dimensiones'), grid(W.CAMPOS[fam].filter((c) => c.grupo !== 'armado'))),
     ];
+    const armado = W.CAMPOS[fam].filter((c) => c.grupo === 'armado');
+    if (armado.length) partes.push(h('fieldset', null, h('legend', null, 'Armado por yardas'), h('div', { class: 'grid-campos grid-armado' }, armado.map((c) => crearControl(c, v[c.id])))));
     if (fam !== 'COMPRADO') {
       partes.push(h('fieldset', null, h('legend', null, 'Material y proceso'), grid(W.CAMPOS_MATERIAL.filter((c) => !c.familias || c.familias.includes(fam)))));
       const subs = (v.subcontratos || []).map(filaSub);
@@ -1053,6 +1101,7 @@
     }
     try {
       const defs = { riesgo: estado.cot.riesgo, servicio: estado.cot.servicio };
+      if (p.familia === 'RECTO' && estado.res.yarda_mm !== undefined) defs.yarda_mm = estado.res.yarda_mm; // lo que decide la cotización, si la partida no elige
       const f = C.cotizador.cotizarPartida({ ...defs, ...p }, estado.res.maestros);
       const ind = f.indicadores;
       cont.replaceChildren(tit,

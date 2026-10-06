@@ -25,7 +25,7 @@
 
   const base = {
     meta: {
-      version: '1.4.0',
+      version: '1.5.0',
       moneda: 'MXN',
       aviso: 'Mano de obra y lámina/perfiles del proveedor son reales; el resto son valores ilustrativos. Revisar antes de cotizar.',
     },
@@ -211,15 +211,20 @@
       hoja: { ancho_mm: 1219, largo_mm: 3048 },
 
       // Armado del tramo recto por «yardas». Una yarda es un anillo rolado del ANCHO de la lámina (914 mm = 3 ft ó 1 220 mm = 4 ft),
-      // para aprovechar toda la hoja. Las yardas se engargolan entre sí en piezas de hasta `yardas_por_pieza_max`, con brida en
-      // ambos extremos; lo que falta se arma con las yardas completas que sobren y un tramo de ajuste (menos de una yarda) que
-      // va SIN brida en su extremo libre, para cortarlo y ponerlo en campo. Se puede pedir brida en ambos extremos por partida.
+      // para aprovechar toda la hoja; el ingeniero que diseña elige el ancho al cotizar (o por partida). Las yardas se engargolan
+      // entre sí en piezas de hasta `yardas_por_pieza_max`, con brida en ambos extremos; lo que falta se arma con las yardas
+      // completas que sobren y un tramo de ajuste (menos de una yarda) cuyo extremo libre NO lleva brida de taller, para cortarlo
+      // y ponerlo en campo. Qué se cotiza en ese extremo (`extremo_ajuste_defecto`; la partida puede pedir otro):
+      //   SUELTA    — el taller manda el aro de solera, los tornillos y el empaque sueltos, para ponerlos en obra (sólo material);
+      //   SIN_BRIDA — nada: la brida de ese extremo no está en este precio;
+      //   CON_BRIDA — brida fabricada y soldada en taller, como en los demás extremos.
       armado_yardas: {
-        yardas_mm: [914, 1220], // anchos de lámina que se eligen al capturar la partida
-        yarda_defecto_mm: 1220, // la que se usa si la partida no elige
+        yardas_mm: [914, 1220], // anchos de lámina que se eligen al capturar (cotización o partida)
+        yarda_defecto_mm: 1220, // la que se usa si no se elige
         yardas_por_pieza_max: 3, // yardas engargoladas en una pieza con bridas en ambos extremos
         ajuste_tolerancia_mm: 25, // un sobrante menor que esto no es un tramo de ajuste (2 735 mm son 3 yardas de 914, no 2 y un ajuste)
         junta_entre_yardas: 'PITTSBURGH', // cómo se unen las yardas de una pieza: clave de proceso.costuras (engargolado; una soldada las soldaría)
+        extremo_ajuste_defecto: 'SUELTA', // SUELTA | SIN_BRIDA | CON_BRIDA: qué lleva el extremo libre del tramo de ajuste
       },
       semiangulo_max_deg: 15,
       alfa_max_junta_deg: 22.5,

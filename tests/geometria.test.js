@@ -92,11 +92,14 @@ test('Tramo recto redondo: A = (π·D_med + holgura de costura)·L', () => {
   const PF = G.perfilFabricacion({ familia: 'RECTO', D_mm: 304.8, L_mm: 3000 }, E_16, M);
   const Dmed = 304.8 + E_16;
   casi(PF.A_neta_m2, ((PI * Dmed + 1.0) * 3000) / 1e6, 1e-12);
-  // 3 000 mm en yardas de 1 220 mm: 2 yardas y un tramo de ajuste de 560 mm, en una sola pieza con brida sólo en el extremo de las yardas
+  // 3 000 mm en yardas de 1 220 mm: 2 yardas y un tramo de ajuste de 560 mm, en una sola pieza con brida de taller sólo en el
+  // extremo de las yardas; el extremo del ajuste lleva, por omisión, la brida suelta (el aro se manda sin fabricar)
   assert.equal(PF.n_piezas, 1);
   assert.equal(PF.n_virolas, 3);
   assert.equal(PF.extremos.length, 1);
+  assert.equal(PF.extremos_sueltos.length, 1);
   assert.equal(PF.detalle.armado.extremo_libre, true);
+  assert.equal(PF.detalle.armado.modo, 'SUELTA');
 });
 
 /* ---------- Armado por yardas: la regla del taller ---------- */
@@ -104,32 +107,36 @@ test('Tramo recto redondo: A = (π·D_med + holgura de costura)·L', () => {
 /**
  * Oráculo del armado: construye el tramo pieza por pieza con un lazo (el motor lo calcula en forma cerrada), tal como lo
  * cuenta el taller: primero piezas de `maxY` yardas mientras quepan; con lo que falta, las yardas completas y un tramo de
- * ajuste engargolados en una pieza; el extremo del ajuste va sin brida.
+ * ajuste engargolados en una pieza; el extremo del ajuste no lleva brida de taller (SUELTA: se manda su aro; SIN_BRIDA: nada;
+ * CON_BRIDA: sí lleva).
  */
-function oraculoArmado(L, Y, maxY, tol, sinBridaEnAjuste) {
+function oraculoArmado(L, Y, maxY, tol, modo) {
   const piezas = [];
   let falta = L;
   while (falta >= maxY * Y - tol) { piezas.push({ yardas: maxY, ajuste: 0 }); falta -= maxY * Y; }
-  if (piezas.length * maxY * Y > 0 && falta <= tol) return resumenOraculo(piezas, Y, sinBridaEnAjuste); // lo que sobra cabe en la tolerancia
+  if (piezas.length * maxY * Y > 0 && falta <= tol) return resumenOraculo(piezas, Y, modo); // lo que sobra cabe en la tolerancia
   let yardas = 0;
   while (falta >= Y - tol && yardas < maxY && falta > 0) { yardas += 1; falta -= Y; }
   const ajuste = yardas > 0 ? (falta > tol ? falta : 0) : falta;
   if (yardas > 0 || ajuste > 0) piezas.push({ yardas, ajuste });
-  return resumenOraculo(piezas, Y, sinBridaEnAjuste);
+  return resumenOraculo(piezas, Y, modo);
 }
-function resumenOraculo(piezas, Y, sinBridaEnAjuste) {
-  const q = piezas.map((x) => ({ ...x, anillos: x.yardas + (x.ajuste > 0 ? 1 : 0), bridas: x.ajuste > 0 && sinBridaEnAjuste ? 1 : 2 }));
+function resumenOraculo(piezas, Y, modo) {
+  const q = piezas.map((x) => ({
+    ...x, anillos: x.yardas + (x.ajuste > 0 ? 1 : 0), bridas: x.ajuste > 0 && modo !== 'CON_BRIDA' ? 1 : 2, sueltas: x.ajuste > 0 && modo === 'SUELTA' ? 1 : 0,
+  }));
   return {
     piezas: q,
     anillos: q.reduce((a, x) => a + x.anillos, 0),
     bridas: q.reduce((a, x) => a + x.bridas, 0),
+    sueltas: q.reduce((a, x) => a + x.sueltas, 0),
     juntas: q.reduce((a, x) => a + x.anillos - 1, 0),
     L_capa: q.reduce((a, x) => a + x.yardas * Y + x.ajuste, 0),
   };
 }
 
-test('Armado por yardas: los casos del taller (3 yardas por pieza; el ajuste va sin brida)', () => {
-  const arm = (L, Y, libre = true) => G.distribuirYardas(L, Y, 3, 25, libre);
+test('Armado por yardas: los casos del taller (3 yardas por pieza; el extremo del ajuste sin brida de taller)', () => {
+  const arm = (L, Y, modo = 'SIN_BRIDA') => G.distribuirYardas(L, Y, 3, 25, modo);
   const forma = (a) => a.piezas.map((q) => `${q.yardas}${q.ajuste_mm ? `+${q.ajuste_mm}` : ''}/${q.bridas}`).join(' | ');
   // exactamente 3 yardas: una pieza con brida en ambos extremos
   let a = arm(3660, 1220);
@@ -159,12 +166,44 @@ test('Armado por yardas: los casos del taller (3 yardas por pieza; el ajuste va 
   assert.equal(forma(arm(2735, 914)), '3/2');
   assert.equal(forma(arm(2760, 914)), '3/2');
   assert.equal(forma(arm(2770, 914)), '3/2 | 0+28/1');
-  // pedir brida en ambos extremos (aunque haya ajuste)
-  a = arm(3000, 1220, false);
-  assert.equal(forma(a), '2+560/2'); assert.equal(a.n_bridas, 2); assert.equal(a.extremo_libre, false);
+  // pedir brida de taller en ambos extremos (aunque haya ajuste)
+  a = arm(3000, 1220, 'CON_BRIDA');
+  assert.equal(forma(a), '2+560/2'); assert.equal(a.n_bridas, 2); assert.equal(a.n_sueltas, 0); assert.equal(a.extremo_libre, false); assert.equal(a.modo, 'CON_BRIDA');
   // con otro máximo de yardas por pieza
-  assert.equal(forma(G.distribuirYardas(10000, 1220, 2, 25, true)), '2/2 | 2/2 | 2/2 | 2/2 | 0+240/1'); // 8 yardas = 4 piezas de 2
-  assert.equal(forma(G.distribuirYardas(10000, 1220, 1, 25, true)), '1/2 | 1/2 | 1/2 | 1/2 | 1/2 | 1/2 | 1/2 | 1/2 | 0+240/1');
+  assert.equal(forma(G.distribuirYardas(10000, 1220, 2, 25, 'SIN_BRIDA')), '2/2 | 2/2 | 2/2 | 2/2 | 0+240/1'); // 8 yardas = 4 piezas de 2
+  assert.equal(forma(G.distribuirYardas(10000, 1220, 1, 25, 'SIN_BRIDA')), '1/2 | 1/2 | 1/2 | 1/2 | 1/2 | 1/2 | 1/2 | 1/2 | 0+240/1');
+});
+
+test('Armado por yardas: el extremo del ajuste — brida suelta, sin brida o con brida de taller', () => {
+  const arm = (L, Y, modo) => G.distribuirYardas(L, Y, 3, 25, modo);
+  // SUELTA: la pieza del ajuste lleva brida de taller sólo en el extremo de las yardas y se manda un aro suelto para el otro
+  let a = arm(3000, 1220, 'SUELTA');
+  assert.deepEqual([a.n_bridas, a.n_sueltas, a.extremo_libre, a.modo], [1, 1, true, 'SUELTA']);
+  assert.deepEqual(a.piezas.map((q) => [q.bridas, q.sueltas]), [[1, 1]]);
+  // SIN_BRIDA: lo mismo, sin el aro suelto
+  a = arm(3000, 1220, 'SIN_BRIDA');
+  assert.deepEqual([a.n_bridas, a.n_sueltas, a.extremo_libre, a.modo], [1, 0, true, 'SIN_BRIDA']);
+  // Sólo la pieza del ajuste tiene un extremo libre: el resto de las piezas lleva brida en ambos extremos y ningún aro suelto
+  a = arm(10000, 914, 'SUELTA'); // 3 | 3 | 3 | 1 yarda + ajuste de 860
+  assert.deepEqual(a.piezas.map((q) => [q.bridas, q.sueltas]), [[2, 0], [2, 0], [2, 0], [1, 1]]);
+  assert.equal(a.n_bridas, 7);
+  assert.equal(a.n_sueltas, 1);
+  // Sin tramo de ajuste (o sólo yardas completas) no hay extremo libre en ningún modo
+  ['SUELTA', 'SIN_BRIDA', 'CON_BRIDA'].forEach((modo) => {
+    a = arm(3660, 1220, modo);
+    assert.deepEqual([a.n_bridas, a.n_sueltas, a.extremo_libre], [2, 0, false], modo);
+    a = arm(2735, 914, modo); // dentro de la tolerancia: tres yardas completas
+    assert.deepEqual([a.n_bridas, a.n_sueltas, a.extremo_libre], [2, 0, false], modo);
+  });
+  // Un tramo más corto que una yarda es todo ajuste: una brida de taller y un aro suelto
+  a = arm(500, 914, 'SUELTA');
+  assert.deepEqual([a.n_piezas, a.n_bridas, a.n_sueltas], [1, 1, 1]);
+  // El modo cambia sólo los extremos: el armado (anillos, juntas, largo cortado) es el mismo
+  const [s, n, c] = ['SUELTA', 'SIN_BRIDA', 'CON_BRIDA'].map((m) => arm(7000, 1220, m));
+  [n, c].forEach((x) => assert.deepEqual([x.anillos, x.n_juntas, x.L_capa_mm, x.n_piezas], [s.anillos, s.n_juntas, s.L_capa_mm, s.n_piezas]));
+  assert.equal(c.n_bridas, s.n_bridas + 1);
+  // Un modo que no existe (o el sí/no de la versión anterior) no se interpreta: se rechaza
+  [undefined, null, true, false, 'suelta', 'NINGUNO', 1].forEach((x) => assert.throws(() => arm(3000, 1220, x), /extremo del tramo de ajuste/, String(x)));
 });
 
 test('Armado por yardas: coincide con el oráculo que arma pieza por pieza (miles de largos y yardas al azar)', () => {
@@ -175,13 +214,15 @@ test('Armado por yardas: coincide con el oráculo que arma pieza por pieza (mile
     const maxY = 1 + Math.floor(azar() * 4);
     const tol = [0, 10, 25, 60][Math.floor(azar() * 4)];
     const L = Math.round((50 + azar() * 30000) * 10) / 10;
-    const libre = azar() < 0.8;
-    const a = G.distribuirYardas(L, Y, maxY, tol, libre);
-    const o = oraculoArmado(L, Y, maxY, tol, libre);
-    const dicho = `L=${L} Y=${Y} máx=${maxY} tol=${tol}`;
+    const modo = G.EXTREMOS_AJUSTE[Math.floor(azar() * 3)];
+    const libre = modo !== 'CON_BRIDA';
+    const a = G.distribuirYardas(L, Y, maxY, tol, modo);
+    const o = oraculoArmado(L, Y, maxY, tol, modo);
+    const dicho = `L=${L} Y=${Y} máx=${maxY} tol=${tol} modo=${modo}`;
     assert.deepEqual(a.piezas.map((q) => [q.yardas, q.ajuste_mm > 0 ? 1 : 0]), o.piezas.map((q) => [q.yardas, q.ajuste > 0 ? 1 : 0]), dicho);
     assert.equal(a.n_anillos, o.anillos, dicho);
     assert.equal(a.n_bridas, o.bridas, dicho);
+    assert.equal(a.n_sueltas, o.sueltas, dicho);
     assert.equal(a.n_juntas, o.juntas, dicho);
     casi(a.L_capa_mm, o.L_capa, 1e-12, dicho);
     // Invariantes de la regla
@@ -192,6 +233,7 @@ test('Armado por yardas: coincide con el oráculo que arma pieza por pieza (mile
       assert.ok(q.ajuste_mm === 0 || k === a.piezas.length - 1, `sólo la última pieza trae el ajuste: ${dicho}`);
       assert.ok(q.yardas === maxY || k === a.piezas.length - 1, `todas las piezas, menos la última, son de ${maxY} yardas: ${dicho}`);
       assert.equal(q.bridas, q.ajuste_mm > 0 && libre ? 1 : 2, dicho);
+      assert.equal(q.sueltas, q.ajuste_mm > 0 && modo === 'SUELTA' ? 1 : 0, dicho);
       assert.equal(q.juntas, q.n_anillos - 1, dicho);
     });
     assert.equal(a.anillos.length, a.n_anillos);
@@ -218,19 +260,32 @@ test('Tramo recto por yardas: cantidades físicas (anillos, corte a lo ancho de 
   assert.equal(PF.n_engargolados, 2, 'una operación de engargolado por junta');
   assert.equal(PF.n_juntas_internas, 0, 'las juntas engargoladas no son juntas de armado soldadas');
   assert.equal(PF.extremos.length, 1);
+  assert.equal(PF.extremos_sueltos.length, 1, 'y su otro extremo, por omisión, lleva la brida suelta');
   assert.equal(PF.ancho_hoja_mm, 1220, 'la hoja es del ancho de la yarda');
   casi(PF.A_ext_m2, (PI * (Dmed + E_16) * 3000) / 1e6, 1e-12);
   assert.equal(PF.espigas_defecto, 1);
-  // Con brida en ambos extremos hay un extremo más y lo demás no cambia
-  const ambos = G.perfilFabricacion({ familia: 'RECTO', D_mm: D, L_mm: 3000, yarda_mm: 1220, ajuste_sin_brida: false }, E_16, M);
+  // Con brida de taller en ambos extremos hay un extremo más (y ya no hay aro suelto); lo demás no cambia
+  const ambos = G.perfilFabricacion({ familia: 'RECTO', D_mm: D, L_mm: 3000, yarda_mm: 1220, extremo_ajuste: 'CON_BRIDA' }, E_16, M);
   assert.equal(ambos.extremos.length, 2);
+  assert.equal(ambos.extremos_sueltos.length, 0);
   casi(ambos.A_neta_m2, PF.A_neta_m2, 1e-12);
   assert.equal(ambos.n_virolas, 3);
+  // Sin brida: el aro suelto desaparece y no se agrega ninguna brida de taller
+  const sin = G.perfilFabricacion({ familia: 'RECTO', D_mm: D, L_mm: 3000, yarda_mm: 1220, extremo_ajuste: 'SIN_BRIDA' }, E_16, M);
+  assert.deepEqual([sin.extremos.length, sin.extremos_sueltos.length], [1, 0]);
+  // El extremo del ajuste por omisión sale de las tablas maestras
+  const sinPorTabla = G.perfilFabricacion({ familia: 'RECTO', D_mm: D, L_mm: 3000, yarda_mm: 1220 }, E_16, crearMaestros({ proceso: { armado_yardas: { extremo_ajuste_defecto: 'SIN_BRIDA' } } }));
+  assert.deepEqual([sinPorTabla.extremos.length, sinPorTabla.extremos_sueltos.length], [1, 0]);
+  // …y la partida manda sobre las tablas
+  const pedida = G.perfilFabricacion({ familia: 'RECTO', D_mm: D, L_mm: 3000, yarda_mm: 1220, extremo_ajuste: 'SUELTA' }, E_16, crearMaestros({ proceso: { armado_yardas: { extremo_ajuste_defecto: 'SIN_BRIDA' } } }));
+  assert.deepEqual([pedida.extremos.length, pedida.extremos_sueltos.length], [1, 1]);
+  assert.throws(() => G.perfilFabricacion({ familia: 'RECTO', D_mm: D, L_mm: 3000, extremo_ajuste: 'NINGUNO' }, E_16, M), /extremo del tramo de ajuste «NINGUNO»/);
   // El ancho de la yarda por omisión sale de las tablas maestras
   const por914 = G.perfilFabricacion({ familia: 'RECTO', D_mm: D, L_mm: 3000 }, E_16, crearMaestros({ proceso: { armado_yardas: { yarda_defecto_mm: 914 } } }));
   assert.equal(por914.detalle.yarda_mm, 914);
   assert.equal(por914.n_piezas, 2);
   assert.equal(por914.extremos.length, 3);
+  assert.equal(por914.extremos_sueltos.length, 1);
   assert.equal(por914.n_virolas, 4);
 });
 
@@ -258,12 +313,14 @@ test('Tramo recto: sin ajuste, con yardas de 3 y de 4 ft, y el aviso cuando la p
   const sinAjuste = G.perfilFabricacion({ familia: 'RECTO', D_mm: 600, L_mm: 3660, yarda_mm: 1220 }, E_16, M);
   assert.equal(sinAjuste.n_piezas, 1);
   assert.equal(sinAjuste.extremos.length, 2);
+  assert.equal(sinAjuste.extremos_sueltos.length, 0, 'sin tramo de ajuste no hay brida suelta');
   assert.equal(sinAjuste.detalle.armado.extremo_libre, false);
   // a un tramo largo le tocan varias piezas de 3 yardas
   const largo = G.perfilFabricacion({ familia: 'RECTO', D_mm: 600, L_mm: 7000, yarda_mm: 914 }, E_16, M);
   assert.deepEqual(largo.detalle.armado.piezas.map((q) => q.yardas), [3, 3, 1]);
   assert.equal(largo.n_piezas, 3);
   assert.equal(largo.extremos.length, 5);
+  assert.equal(largo.extremos_sueltos.length, 1);
   // Ø1 200: la plantilla (≈3 800 mm) no cabe en una hoja de 10 ft: se avisa
   const grande = G.perfilFabricacion({ familia: 'RECTO', D_mm: 1200, L_mm: 1220, yarda_mm: 1220 }, E_16, M);
   assert.match(grande.advertencias.join(' '), /plantilla de cada yarda .* más larga que la hoja/);

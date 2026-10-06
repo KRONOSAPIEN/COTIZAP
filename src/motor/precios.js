@@ -77,9 +77,9 @@
     const pLamina = precioLamina(M, q.p, mat, q.PF && q.PF.ancho_hoja_mm);
     const lamina = n * lam.m_bruta_kg * pLamina.precio_kg;
     const credito_chatarra = -n * C.recuperacion_chatarra_pct * lam.m_merma_kg * precioDe(M, mat.chatarra_ref);
-    // cada aro se valoriza con el precio de SU perfil (solera ≠ ángulo)
+    // cada aro se valoriza con el precio de SU perfil (solera ≠ ángulo); los aros sueltos también son material comprado
     const pPerfiles = {};
-    const perfiles = her.aros.reduce((acc, a) => {
+    const perfiles = [...her.aros, ...her.aros_sueltos].reduce((acc, a) => {
       if (!pPerfiles[a.perfil_id]) pPerfiles[a.perfil_id] = precioPerfil(M, a);
       return acc + n * a.m_aro_bruta_kg * pPerfiles[a.perfil_id].precio_kg;
     }, 0);

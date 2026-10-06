@@ -55,7 +55,7 @@ function generador(semilla) {
       const p = { familia: 'RECTO', forma: rect ? 'RECTANGULAR' : 'REDONDA', L_mm: r1(u(100, 12000)), tipo_costura: pick(['A_TOPE', 'TRASLAPE', 'PITTSBURGH']) };
       if (rect) { p.a_mm = r1(u(100, 2500)); p.b_mm = r1(u(100, 2500)); } else p.D_mm = r1(u(50, 2000));
       const yd = maybe(0.5, () => pick([914, 1220])); if (yd) p.yarda_mm = yd;
-      if (rnd() < 0.2) p.ajuste_sin_brida = false;
+      const ea = maybe(0.5, () => pick(['SUELTA', 'SIN_BRIDA', 'CON_BRIDA'])); if (ea) p.extremo_ajuste = ea;
       return p;
     },
     CODO() {
@@ -328,8 +328,12 @@ test('Ancho de la yarda y tramo de ajuste: límites, tipo y valores de las tabla
   [100, 299, 2001, 1e6, -914].forEach((y) => assert.throws(() => C.cotizarPartida({ ...R, yarda_mm: y }, M), /Ancho de la yarda: debe estar entre 300 mm y 2000 mm/, `yarda ${y}`));
   assert.doesNotThrow(() => C.cotizarPartida({ ...R, yarda_mm: 914 }, M));
   assert.doesNotThrow(() => C.cotizarPartida({ ...R, yarda_mm: '1220' }, M), 'también como texto');
-  ['no', 0, 1, 'false', [], {}].forEach((x) => assert.throws(() => C.cotizarPartida({ ...R, ajuste_sin_brida: x }, M), /Tramo de ajuste sin brida/, `ajuste_sin_brida ${JSON.stringify(x)}`));
+  // el extremo del ajuste: sólo SUELTA, SIN_BRIDA o CON_BRIDA (vacío = lo que digan las tablas)
+  ['no', 'suelta', 'SUELTO', 0, 1, true, false, [], {}, ['SUELTA']].forEach((x) => assert.throws(() => C.cotizarPartida({ ...R, extremo_ajuste: x }, M), /Extremo del tramo de ajuste: .* no existe \(use SUELTA, SIN_BRIDA, CON_BRIDA\)/, `extremo_ajuste ${JSON.stringify(x)}`));
+  ['SUELTA', 'SIN_BRIDA', 'CON_BRIDA', '', null, undefined].forEach((x) => assert.doesNotThrow(() => C.cotizarPartida({ ...R, extremo_ajuste: x }, M), String(x)));
+  // el sí/no de la versión anterior sólo se entiende como sí/no (un texto cualquiera no se interpreta como nada: se descarta, no se inventa)
   [true, false].forEach((x) => assert.doesNotThrow(() => C.cotizarPartida({ ...R, ajuste_sin_brida: x }, M)));
+  ['no', 0, 'false', [], {}].forEach((x) => assert.equal(C.cotizarPartida({ ...R, ajuste_sin_brida: x }, M).entrada.extremo_ajuste, undefined, `ajuste_sin_brida ${JSON.stringify(x)} no se interpreta`));
   // los datos del armado de las tablas maestras
   const malo = (parche) => { const Mx = crearMaestros(); Object.keys(parche).forEach((k) => { Mx.proceso.armado_yardas[k] = parche[k]; }); return V.problemasMaestros(Mx).map(V.textoProblema).join(' | '); };
   assert.match(malo({ yardas_por_pieza_max: 0 }), /yardas por pieza max: debe ser un número mayor que 0/);
@@ -339,6 +343,8 @@ test('Ancho de la yarda y tramo de ajuste: límites, tipo y valores de las tabla
   assert.match(malo({ yardas_mm: [] }), /yardas mm: debe ser una lista/);
   assert.match(malo({ yardas_mm: [914, 0] }), /yardas mm › 1: debe ser un número mayor que 0/);
   assert.match(malo({ junta_entre_yardas: 'PEGAMENTO' }), /junta entre yardas: debe ser un tipo de costura/);
+  ['suelta', 'NINGUNA', '', 5, null].forEach((x) => assert.match(malo({ extremo_ajuste_defecto: x }), /extremo ajuste defecto: debe ser SUELTA, SIN_BRIDA, CON_BRIDA/, `defecto ${JSON.stringify(x)}`));
+  ['SUELTA', 'SIN_BRIDA', 'CON_BRIDA'].forEach((x) => assert.equal(malo({ extremo_ajuste_defecto: x }), '', x));
   assert.match(malo({ ajuste_tolerancia_mm: -1 }), /ajuste tolerancia mm: no puede ser negativo/);
   assert.equal(malo({}), '');
   const Mx = crearMaestros(); Mx.proceso.armado_yardas.yardas_por_pieza_max = 0;
@@ -348,7 +354,7 @@ test('Ancho de la yarda y tramo de ajuste: límites, tipo y valores de las tabla
   // un parche viejo con la longitud máxima por pieza (3 000 mm) la pierde: ahora manda el armado por yardas
   assert.equal('L_max_pieza_mm' in crearMaestros({ proceso: { L_max_pieza_mm: 2000 } }).proceso, false);
   // un parche con la tabla del armado rota se reemplaza por la de arranque
-  assert.deepEqual(crearMaestros({ proceso: { armado_yardas: { yardas_mm: 'x', yardas_por_pieza_max: '3', junta_entre_yardas: 5 } } }).proceso.armado_yardas, M.proceso.armado_yardas);
+  assert.deepEqual(crearMaestros({ proceso: { armado_yardas: { yardas_mm: 'x', yardas_por_pieza_max: '3', junta_entre_yardas: 5, extremo_ajuste_defecto: 7 } } }).proceso.armado_yardas, M.proceso.armado_yardas);
 });
 
 /* ---------- 4 · tablas maestras ---------- */

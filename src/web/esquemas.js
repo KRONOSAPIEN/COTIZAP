@@ -2,6 +2,7 @@
  * COTIZAP · web/esquemas.js — Definición declarativa de los formularios de partida.
  * Cada campo: { id, etiqueta, tipo, ... }.  tipos: dim (mm ⇄ in) · num · int · pct · select · text · calibre
  * `opcional` = vacío significa "automático" (el motor usa su valor por defecto).
+ * `grupo: 'armado'` = el campo va en su propio cuadro («Armado por yardas»), no con las dimensiones.
  */
 (function (root) {
   'use strict';
@@ -35,7 +36,8 @@
     proceso_corte: [['', 'Automático'], ['GUILLOTINA', 'Guillotina'], ['PLASMA', 'Plasma CNC'], ['LASER', 'Láser']],
     tipo_costura: [['A_TOPE', 'Soldada a tope'], ['TRASLAPE', 'Soldada a traslape'], ['PITTSBURGH', 'Engargolado Pittsburgh']],
     excentrica: [['NO', 'Concéntrica'], ['CARA_PLANA', 'Excéntrica · cara plana']],
-    ajuste: [['', 'Extremo libre sin brida'], ['false', 'Brida en ambos extremos']],
+    // Extremo libre del tramo de ajuste (el de las tablas maestras se ofrece aparte, como «Predeterminado»)
+    ajuste: [['SUELTA', 'Brida suelta (aro, tornillos y empaque)'], ['SIN_BRIDA', 'Sin brida (fuera de este precio)'], ['CON_BRIDA', 'Brida de taller en ambos extremos']],
     driver: [['PIEZA', 'Por pieza'], ['KG_NETO', 'Por kg neto'], ['KG_BRUTO', 'Por kg bruto'], ['M2_NETO', 'Por m² de lámina'], ['M_CORTE', 'Por m de corte'], ['M_SOLDADURA', 'Por m de soldadura']],
   };
 
@@ -54,12 +56,12 @@
       { id: 'L_mm', etiqueta: 'Longitud total', tipo: 'dim', defecto: 3000 },
       { id: 'tipo_costura', etiqueta: 'Costura longitudinal', tipo: 'select', opciones: 'tipo_costura', defecto: 'A_TOPE' },
       {
-        id: 'yarda_mm', etiqueta: 'Ancho de la yarda', tipo: 'select', opciones: 'yardas', numerico: true, sufijoFuera: ' mm',
+        id: 'yarda_mm', grupo: 'armado', etiqueta: 'Ancho de la yarda', tipo: 'select', opciones: 'yardas', numerico: true, sufijoFuera: ' mm',
         ayuda: 'La yarda es un anillo rolado del ancho de la lámina; se engargolan hasta 3 por pieza',
       },
       {
-        id: 'ajuste_sin_brida', etiqueta: 'Tramo de ajuste', tipo: 'select', opciones: 'ajuste', booleano: true,
-        ayuda: 'Lo que sobra de yardas completas es el tramo de ajuste (menos de una yarda): su extremo libre va sin brida para cortarlo en campo',
+        id: 'extremo_ajuste', grupo: 'armado', etiqueta: 'Extremo del tramo de ajuste', tipo: 'select', opciones: 'ajuste',
+        ayuda: 'Lo que sobra de yardas completas es el tramo de ajuste (menos de una yarda): su extremo libre no lleva brida de taller, para cortarlo y ponerlo en campo',
       },
     ],
     CODO: [

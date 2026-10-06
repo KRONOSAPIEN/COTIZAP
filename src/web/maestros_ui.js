@@ -53,6 +53,16 @@
     o[ruta[ruta.length - 1]] = valor;
   }
 
+  // Datos de texto que sólo admiten ciertos valores: se eligen de una lista (si se tecleara «suelta» en vez de «SUELTA», el
+  // cálculo se detendría hasta corregirlo). Cada lista se arma al dibujar el campo: puede depender de otras tablas.
+  const OPCIONES_TEXTO = {
+    'proceso.armado_yardas.extremo_ajuste_defecto': () => W.OPC.ajuste,
+    'proceso.armado_yardas.junta_entre_yardas': () => {
+      const c = W.estadoApp.M.proceso.costuras;
+      return Object.keys(c).map((k) => [k, c[k] && c[k].nombre ? c[k].nombre : k]);
+    },
+  };
+
   function fila(ruta, valor, etiquetaPropia) {
     const k = ruta[ruta.length - 1];
     const pct = esPct(ruta) && typeof valor === 'number';
@@ -60,10 +70,17 @@
     const mostrado = pct ? Number((valor * 100).toFixed(6)) : valor;
     const id = `m_${ruta.join('__')}`;
     const buscar = `${ruta.join(' ')} ${etiqueta(ruta.join(' '))} ${etiquetaPropia || ''}`.toLowerCase();
-    const ctl = typeof valor === 'number'
-      ? h('input', { id, type: 'number', step: 'any', value: String(mostrado), dataset: { ruta: JSON.stringify(ruta), tipo: pct ? 'pct' : 'num' } })
-      : h('input', { id, type: 'text', value: String(valor), dataset: { ruta: JSON.stringify(ruta), tipo: 'txt' } });
-    return h('div', { class: 'm-fila', dataset: { buscar } },
+    const lista = typeof valor === 'string' && OPCIONES_TEXTO[ruta.join('.')] ? OPCIONES_TEXTO[ruta.join('.')]() : null;
+    let ctl;
+    if (lista) {
+      const ops = lista.some(([v]) => v === valor) ? lista : [[valor, `${valor} (no válido)`], ...lista]; // un valor guardado que no está en la lista se muestra, marcado
+      ctl = h('select', { id, dataset: { ruta: JSON.stringify(ruta), tipo: 'txt' } }, ops.map(([v, t]) => h('option', { value: v, selected: v === valor }, t)));
+    } else if (typeof valor === 'number') {
+      ctl = h('input', { id, type: 'number', step: 'any', value: String(mostrado), dataset: { ruta: JSON.stringify(ruta), tipo: pct ? 'pct' : 'num' } });
+    } else {
+      ctl = h('input', { id, type: 'text', value: String(valor), dataset: { ruta: JSON.stringify(ruta), tipo: 'txt' } });
+    }
+    return h('div', { class: lista ? 'm-fila m-fila-lista' : 'm-fila', dataset: { buscar } },
       h('label', { for: id }, h('span', { class: etiquetaPropia ? 'm-et m-et-txt' : 'm-et' }, etiquetaPropia || (typeof k === 'number' ? `#${k + 1}` : String(k)))),
       h('div', { class: 'm-ctl' }, ctl, un ? h('span', { class: 'sufijo' }, un) : h('span', { class: 'sufijo' })));
   }
@@ -193,7 +210,7 @@
   /** En sólo lectura (o sin poder guardar) los campos se muestran pero no se editan. */
   function aplicarBloqueo() {
     const bloquear = !!(ultimoEstado.info && ultimoEstado.info.soloLectura);
-    $$('#maestros-cuerpo input').forEach((i) => { i.disabled = bloquear; });
+    $$('#maestros-cuerpo input, #maestros-cuerpo select').forEach((i) => { i.disabled = bloquear; });
     const reset = $('#maestros-reset');
     if (reset) reset.disabled = bloquear;
   }

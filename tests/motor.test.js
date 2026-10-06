@@ -16,9 +16,9 @@ const casi = (real, esperado, tol = 1e-9, msg = '') => {
   assert.ok(Math.abs(real - esperado) <= tol * Math.max(1, Math.abs(esperado)), `${msg} esperado ${esperado}, obtenido ${real}`);
 };
 
-// 3 000 mm de ducto con brida en ambos extremos (sin la regla del tramo de ajuste sin brida, que se prueba aparte): 2 aros, 1 junta
+// 3 000 mm de ducto con brida de taller en ambos extremos (sin la regla del extremo del tramo de ajuste, que se prueba aparte): 2 aros, 1 junta
 const recto = {
-  familia: 'RECTO', material_id: 'ACERO_CARBON', calibre: 16, D_mm: 304.8, L_mm: 3000, tipo_union: 'BRIDADO', servicio: 'POLVO', riesgo: 'MEDIO', ajuste_sin_brida: false,
+  familia: 'RECTO', material_id: 'ACERO_CARBON', calibre: 16, D_mm: 304.8, L_mm: 3000, tipo_union: 'BRIDADO', servicio: 'POLVO', riesgo: 'MEDIO', extremo_ajuste: 'CON_BRIDA',
 };
 const codo = {
   familia: 'CODO', material_id: 'ACERO_CARBON', calibre: 16, D_mm: 304.8, theta_deg: 90, tipo_union: 'BRIDADO', servicio: 'POLVO', riesgo: 'MEDIO',
@@ -592,11 +592,11 @@ test('ESPIGA no usa aros: no hay perfil, barrenos ni cierres', () => {
 
 /* ---------- Armado por yardas (regla del taller) ---------- */
 
-const rectoYardas = { ...recto, ajuste_sin_brida: undefined }; // por omisión: el tramo de ajuste va sin brida
+const rectoYardas = { ...recto, extremo_ajuste: undefined }; // por omisión: el extremo del ajuste va como dicen las tablas (brida suelta)
 
-test('Tramo de ajuste: por omisión su extremo va sin brida, y con él una brida menos de todo lo que lleva una brida', () => {
-  const sin = C.cotizarPartida(rectoYardas, M); // 3 000 mm en yardas de 1 220 = 2 yardas + ajuste de 560: 1 brida
-  const con = C.cotizarPartida({ ...rectoYardas, ajuste_sin_brida: false }, M); // 2 bridas
+test('Tramo de ajuste: sin brida, con brida de taller o con brida suelta — cuánto cambia cada cosa', () => {
+  const sin = C.cotizarPartida({ ...rectoYardas, extremo_ajuste: 'SIN_BRIDA' }, M); // 3 000 mm en yardas de 1 220 = 2 yardas + ajuste de 560: 1 brida
+  const con = C.cotizarPartida({ ...rectoYardas, extremo_ajuste: 'CON_BRIDA' }, M); // 2 bridas de taller
   assert.equal(sin.qto.her.n_aros, 1);
   assert.equal(con.qto.her.n_aros, 2);
   casi(sin.qto.her.m_aros_neta_kg * 2, con.qto.her.m_aros_neta_kg, 1e-12);
@@ -610,15 +610,109 @@ test('Tramo de ajuste: por omisión su extremo va sin brida, y con él una brida
   // la lámina no cambia: el ducto es el mismo
   casi(sin.costos.materiales.lamina, con.costos.materiales.lamina, 1e-12);
   assert.ok(sin.precio.unitario < con.precio.unitario);
-  // un tramo que cae justo en yardas completas lleva brida en ambos extremos, sin pedirlo
+  assert.equal(sin.qto.her.aros_sueltos.length, 0);
+  // un tramo que cae justo en yardas completas lleva brida en ambos extremos, sin pedirlo (y ningún aro suelto)
   const justo = C.cotizarPartida({ ...rectoYardas, L_mm: 3660 }, M);
   assert.equal(justo.qto.her.n_aros, 2);
+  assert.equal(justo.qto.her.aros_sueltos.length, 0);
   assert.equal(justo.geometria.detalle.armado.extremo_libre, false);
 });
 
+test('Brida suelta (por omisión): el taller manda el aro, los tornillos y el empaque sin fabricarlos — sólo material, nada de mano de obra', () => {
+  const sin = C.cotizarPartida({ ...rectoYardas, extremo_ajuste: 'SIN_BRIDA' }, M);
+  const con = C.cotizarPartida({ ...rectoYardas, extremo_ajuste: 'CON_BRIDA' }, M);
+  const suelta = C.cotizarPartida(rectoYardas, M); // sin pedirlo: manda la tabla maestra (SUELTA)
+  const her = suelta.qto.her;
+  assert.equal(suelta.geometria.detalle.armado.modo, 'SUELTA');
+  // Una brida de taller (la del extremo de las yardas) y un aro suelto idéntico al de taller
+  assert.equal(her.n_aros, 1);
+  assert.equal(her.aros_sueltos.length, 1);
+  assert.equal(her.aros_sueltos[0].suelta, true);
+  assert.equal(her.aros[0].suelta, false);
+  casi(her.aros_sueltos[0].L_aro_mm, her.aros[0].L_aro_mm, 1e-12);
+  casi(her.m_aros_sueltos_neta_kg, her.m_aros_neta_kg, 1e-12);
+  casi(her.m_aros_sueltos_bruta_kg, her.m_aros_bruta_kg, 1e-12);
+  // Lo que se fabrica no cambia respecto de «sin brida»: ni barrenos, ni soldadura de aros, ni pintura de aros
+  assert.equal(her.n_barrenos, sin.qto.her.n_barrenos);
+  assert.equal(her.sold_aros.cierres.length, 1);
+  casi(her.sold_aros.filete_m, sin.qto.her.sold_aros.filete_m, 1e-12);
+  casi(her.A_pintura_aros_m2, sin.qto.her.A_pintura_aros_m2, 1e-12);
+  casi(her.L_aros_m, sin.qto.her.L_aros_m, 1e-12);
+  // El material de su junta sí está: el aro, la media tornillería y el medio empaque de ese extremo; el sellador no (se pone en obra)
+  casi(her.n_tornillos_asignados, con.qto.her.n_tornillos_asignados, 1e-12);
+  casi(her.L_empaque_m, con.qto.her.L_empaque_m, 1e-12);
+  casi(her.L_sellado_m, sin.qto.her.L_sellado_m, 1e-12);
+  casi(suelta.costos.materiales.perfiles, con.costos.materiales.perfiles, 1e-12);
+  casi(suelta.costos.materiales.tornilleria, con.costos.materiales.tornilleria, 1e-12);
+  casi(suelta.costos.materiales.empaque, con.costos.materiales.empaque, 1e-12);
+  casi(suelta.costos.materiales.sellador, sin.costos.materiales.sellador, 1e-12);
+  casi(suelta.costos.materiales.flete, con.costos.materiales.flete, 1e-12, 'el flete va sobre lámina y perfiles: también sobre el aro suelto');
+  // Ninguna hora de taller ni consumible: horas, mano de obra, equipo y consumibles son los de «sin brida»
+  Object.keys(sin.costos.horas_std).forEach((op) => casi(suelta.costos.horas_std[op], sin.costos.horas_std[op], 1e-12, op));
+  assert.deepEqual(suelta.costos.consumibles, sin.costos.consumibles);
+  casi(suelta.costos.subtotales.mano_obra, sin.costos.subtotales.mano_obra, 1e-12);
+  casi(suelta.costos.subtotales.equipo, sin.costos.subtotales.equipo, 1e-12);
+  // El aumento de costo directo es exactamente el material del aro (perfil + tornillería + empaque + su flete)
+  const dif = (campo) => suelta.costos.materiales[campo] - sin.costos.materiales[campo];
+  casi(suelta.costos.CD - sin.costos.CD, dif('perfiles') + dif('tornilleria') + dif('empaque') + dif('flete'), 1e-12);
+  assert.ok(dif('perfiles') > 0 && dif('tornilleria') > 0 && dif('empaque') > 0 && dif('flete') > 0);
+  // Cuesta más que no mandarla y bastante menos que fabricarla y soldarla en taller
+  assert.ok(sin.precio.unitario < suelta.precio.unitario && suelta.precio.unitario < con.precio.unitario);
+  assert.ok((suelta.precio.unitario - sin.precio.unitario) < 0.4 * (con.precio.unitario - sin.precio.unitario), 'el aro suelto es el material; fabricarlo es sobre todo mano de obra');
+  // El peso que se manda incluye el aro suelto
+  casi(suelta.peso.neto_unitario_kg - sin.peso.neto_unitario_kg, her.m_aros_sueltos_neta_kg, 1e-12);
+  casi(suelta.peso.aros_sueltos_neto_kg, her.m_aros_sueltos_neta_kg, 1e-12);
+  assert.equal(sin.peso.aros_sueltos_neto_kg, 0);
+  // Se multiplica por la cantidad como todo el material
+  const cinco = C.cotizarPartida({ ...rectoYardas, cantidad: 5 }, M);
+  casi(cinco.costos.materiales.perfiles, 5 * suelta.costos.materiales.perfiles, 1e-12);
+  casi(cinco.costos.materiales.tornilleria, 5 * suelta.costos.materiales.tornilleria, 1e-12);
+});
+
+test('Brida suelta: sigue las demás opciones de la unión (sin empaque, perfil de ángulo, unión de espiga, tablas maestras)', () => {
+  // sin empaque: tampoco va el empaque del extremo suelto
+  const sinEmp = C.cotizarPartida({ ...rectoYardas, usa_empaque: false }, M);
+  assert.equal(sinEmp.qto.her.L_empaque_m, 0);
+  assert.equal(sinEmp.qto.her.aros_sueltos.length, 1);
+  // perfil de ángulo: el aro suelto es del mismo perfil que el de taller y se valoriza con su precio
+  const ang = C.cotizarPartida({ ...rectoYardas, perfil_id: 'L38x4.8' }, M);
+  assert.equal(ang.qto.her.aros_sueltos[0].perfil_id, 'L38x4.8');
+  assert.deepEqual(Object.keys(ang.costos.precios_usados.perfiles), ['L38x4.8']);
+  // unión de espiga o lisa: no hay aros, ni de taller ni sueltos
+  ['ESPIGA', 'LISO'].forEach((tipo) => {
+    const r = C.cotizarPartida({ ...rectoYardas, tipo_union: tipo }, M);
+    assert.equal(r.qto.her.aros_sueltos.length, 0, tipo);
+    assert.equal(r.costos.materiales.perfiles, 0, tipo);
+  });
+  // lo que diga la tabla maestra manda cuando la partida no pide nada; lo que pida la partida manda sobre la tabla
+  const Msin = crearMaestros({ proceso: { armado_yardas: { extremo_ajuste_defecto: 'SIN_BRIDA' } } });
+  assert.equal(C.cotizarPartida(rectoYardas, Msin).qto.her.aros_sueltos.length, 0);
+  assert.equal(C.cotizarPartida({ ...rectoYardas, extremo_ajuste: 'SUELTA' }, Msin).qto.her.aros_sueltos.length, 1);
+  const Mcon = crearMaestros({ proceso: { armado_yardas: { extremo_ajuste_defecto: 'CON_BRIDA' } } });
+  assert.equal(C.cotizarPartida(rectoYardas, Mcon).qto.her.n_aros, 2);
+  // Una tabla maestra con un valor que no existe se señala con su ruta (no se calcula con un valor inventado)
+  const Mmal = U.clonar(M);
+  Mmal.proceso.armado_yardas.extremo_ajuste_defecto = 'suelta';
+  assert.throws(() => C.cotizarPartida(rectoYardas, Mmal), /extremo ajuste defecto: debe ser SUELTA, SIN_BRIDA, CON_BRIDA; vale suelta/);
+  // La partida con un valor que no existe también se rechaza
+  assert.throws(() => C.cotizarPartida({ ...rectoYardas, extremo_ajuste: 'NINGUNO' }, M), /Extremo del tramo de ajuste: «NINGUNO» no existe \(use SUELTA, SIN_BRIDA, CON_BRIDA\)/);
+});
+
+test('Partidas guardadas con la versión anterior (ajuste_sin_brida sí/no) conservan lo que significaban', () => {
+  const si = C.cotizarPartida({ ...rectoYardas, ajuste_sin_brida: true }, M);
+  const no = C.cotizarPartida({ ...rectoYardas, ajuste_sin_brida: false }, M);
+  assert.equal(si.entrada.extremo_ajuste, 'SIN_BRIDA');
+  assert.equal(no.entrada.extremo_ajuste, 'CON_BRIDA');
+  assert.ok(!('ajuste_sin_brida' in si.entrada) && !('ajuste_sin_brida' in no.entrada));
+  casi(si.precio.importe, C.cotizarPartida({ ...rectoYardas, extremo_ajuste: 'SIN_BRIDA' }, M).precio.importe, 1e-12);
+  casi(no.precio.importe, C.cotizarPartida({ ...rectoYardas, extremo_ajuste: 'CON_BRIDA' }, M).precio.importe, 1e-12);
+  // si trae las dos, manda la nueva
+  assert.equal(C.cotizarPartida({ ...rectoYardas, ajuste_sin_brida: true, extremo_ajuste: 'SUELTA' }, M).entrada.extremo_ajuste, 'SUELTA');
+});
+
 test('Yardas: cada una se rola aparte y las juntas entre ellas se engargolan (más anillos, más tiempo de rolado y de engargolado)', () => {
-  const por1220 = C.cotizarPartida({ ...rectoYardas, ajuste_sin_brida: false, yarda_mm: 1220 }, M); // 3 anillos
-  const por914 = C.cotizarPartida({ ...rectoYardas, ajuste_sin_brida: false, yarda_mm: 914 }, M); // 4 anillos
+  const por1220 = C.cotizarPartida({ ...rectoYardas, extremo_ajuste: 'CON_BRIDA', yarda_mm: 1220 }, M); // 3 anillos
+  const por914 = C.cotizarPartida({ ...rectoYardas, extremo_ajuste: 'CON_BRIDA', yarda_mm: 914 }, M); // 4 anillos
   assert.equal(por1220.geometria.n_virolas, 3);
   assert.equal(por914.geometria.n_virolas, 4);
   // el mismo ducto: misma área y misma lámina
@@ -639,7 +733,7 @@ test('Yardas: cada una se rola aparte y las juntas entre ellas se engargolan (m�
 });
 
 test('Sellado clase C: también se sellan las juntas engargoladas entre yardas (son transversales); NINGUNA no sella nada', () => {
-  const sel = (clase, yarda) => C.cotizarPartida({ ...rectoYardas, ajuste_sin_brida: false, yarda_mm: yarda, clase_sellado: clase }, M).qto.her.L_sellado_m;
+  const sel = (clase, yarda) => C.cotizarPartida({ ...rectoYardas, extremo_ajuste: 'CON_BRIDA', yarda_mm: yarda, clase_sellado: clase }, M).qto.her.L_sellado_m;
   const P_med = Math.PI * (304.8 + 0.0598 * 25.4);
   const D_ext = 304.8 + 2 * 0.0598 * 25.4;
   casi(sel('C', 1220), (1 * Math.PI * D_ext) / 1000 + (2 * P_med) / 1000, 1e-12, '1 junta de bridas + 2 juntas engargoladas');
@@ -647,17 +741,98 @@ test('Sellado clase C: también se sellan las juntas engargoladas entre yardas (
   casi(sel('C', 914) - sel('C', 1220), (Math.PI * D_ext) / 1000, 1e-12);
   assert.equal(sel('NINGUNA', 1220), 0);
   // la costura longitudinal soldada a tope no se sella; con Pittsburgh se suma desde la clase B
-  const B = (tc) => C.cotizarPartida({ ...rectoYardas, ajuste_sin_brida: false, clase_sellado: 'B', tipo_costura: tc }, M).qto.her.L_sellado_m;
+  const B = (tc) => C.cotizarPartida({ ...rectoYardas, extremo_ajuste: 'CON_BRIDA', clase_sellado: 'B', tipo_costura: tc }, M).qto.her.L_sellado_m;
   casi(B('PITTSBURGH') - B('A_TOPE'), 3.0, 1e-12);
 });
 
-test('Tramo recto largo: piezas de 3 yardas con brida en ambos extremos y el ajuste sin brida; el precio crece sin saltos locos', () => {
+test('Tramo recto largo: piezas de 3 yardas con brida en ambos extremos y el ajuste con brida suelta; el precio crece sin saltos locos', () => {
   const r = C.cotizarPartida({ ...rectoYardas, L_mm: 10000 }, M); // 8 yardas de 1 220 + ajuste de 240: [3][3][2+240]
   assert.deepEqual(r.geometria.detalle.armado.piezas.map((q) => `${q.yardas}${q.ajuste_mm ? `+${q.ajuste_mm}` : ''}`), ['3', '3', '2+240']);
   assert.equal(r.qto.her.n_aros, 5);
+  assert.equal(r.qto.her.aros_sueltos.length, 1);
   assert.equal(r.geometria.n_virolas, 9);
   casi(r.geometria.A_neta_m2, ((Math.PI * (304.8 + 0.0598 * 25.4) + 1.0) * 10000) / 1e6, 1e-12);
   // el precio por metro lineal de un tramo largo no se dispara frente al de uno corto (las bridas son por pieza, no por metro)
   const corto = C.cotizarPartida({ ...rectoYardas, L_mm: 3660 }, M);
   assert.ok(r.indicadores.precio_por_m_lineal < corto.indicadores.precio_por_m_lineal * 1.1);
+});
+
+test('Ancho de la yarda de la cotización: lo heredan los tramos rectos que no traen el suyo (el ingeniero elige 3 ó 4 pies)', () => {
+  const R = { ...rectoYardas, descripcion: 'Tramo' };
+  const cot = (yarda, partidas) => C.cotizar({ yarda_mm: yarda, partidas }, M);
+  // 3 000 mm: con yardas de 1 220 = 2 yardas y ajuste (1 pieza, 3 anillos); con 914 = 3 yardas y ajuste aparte (2 piezas, 4 anillos)
+  const c914 = cot(914, [R]);
+  const c1220 = cot(1220, [R]);
+  assert.equal(c914.partidas[0].geometria.n_piezas, 2);
+  assert.equal(c914.partidas[0].entrada.yarda_mm, 914);
+  assert.equal(c1220.partidas[0].geometria.n_piezas, 1);
+  assert.equal(c914.partidas[0].geometria.n_virolas, 4);
+  // igual que pedirlo en la partida
+  casi(c914.partidas[0].precio.importe, C.cotizarPartida({ ...R, yarda_mm: 914 }, M).precio.importe, 1e-12);
+  // sin elegir, mandan las tablas maestras (1 220 mm)
+  casi(cot(undefined, [R]).partidas[0].precio.importe, c1220.partidas[0].precio.importe, 1e-12);
+  casi(cot('', [R]).partidas[0].precio.importe, c1220.partidas[0].precio.importe, 1e-12);
+  // la partida que trae su propio ancho lo conserva
+  const mixta = cot(914, [R, { ...R, yarda_mm: 1220 }, { ...R, yarda_mm: '' }, { ...R, yarda_mm: 0 }]);
+  assert.deepEqual(mixta.partidas.map((f) => f.entrada.yarda_mm), [914, 1220, 914, 914]);
+  assert.deepEqual(mixta.partidas.map((f) => f.geometria.n_piezas), [2, 1, 2, 2]);
+  // sólo el tramo recto se arma por yardas: las demás familias no reciben el dato
+  const otras = cot(914, [{ ...codo }, { ...R, forma: 'RECTANGULAR', D_mm: undefined, a_mm: 400, b_mm: 300, tipo_costura: 'PITTSBURGH' }]);
+  assert.equal(otras.partidas[0].ok, true);
+  assert.ok(!('yarda_mm' in otras.partidas[0].entrada), 'el codo no lleva ancho de yarda');
+  assert.equal(otras.partidas[1].entrada.yarda_mm, 914, 'el tramo recto rectangular también se arma por yardas');
+  // un número en texto vale (viene de un archivo)
+  assert.equal(cot('914', [R]).partidas[0].entrada.yarda_mm, 914);
+  // un ancho absurdo se ignora con un aviso: no se calcula con él
+  [5000, 10, -914, 'abc', [914], {}, true, NaN].forEach((x) => {
+    const r = cot(x, [R]);
+    assert.equal(r.partidas[0].ok, true, String(x));
+    assert.equal(r.partidas[0].entrada.yarda_mm, undefined, String(x));
+    casi(r.partidas[0].precio.importe, c1220.partidas[0].precio.importe, 1e-12, String(x));
+    assert.ok(r.avisos.some((a) => /Ancho de la yarda: .* no es válido \(debe estar entre 300 y 2000 mm\)/.test(a)), `aviso para ${String(x)}`);
+  });
+  assert.equal(cot(914, [R]).avisos.length, 0);
+});
+
+test('El resultado de cotizar() dice qué ancho de yarda rige en la cotización, y la función que lo decide se puede consultar', () => {
+  const R = { ...rectoYardas };
+  assert.equal(C.cotizar({ yarda_mm: 914, partidas: [R] }, M).yarda_mm, 914);
+  assert.equal(C.cotizar({ yarda_mm: '914', partidas: [R] }, M).yarda_mm, 914, 'un texto numérico se convierte');
+  assert.equal(C.cotizar({ partidas: [R] }, M).yarda_mm, undefined, 'sin ancho propio rige el de las tablas');
+  assert.equal(C.cotizar({ yarda_mm: 5000, partidas: [R] }, M).yarda_mm, undefined, 'un ancho inválido no rige');
+  // yardaDeCotizacion: { yarda_mm } si vale, { aviso } si no, {} si está vacío
+  assert.deepEqual(C.yardaDeCotizacion({}, M), {});
+  assert.deepEqual(C.yardaDeCotizacion({ yarda_mm: '' }, M), {});
+  assert.deepEqual(C.yardaDeCotizacion({ yarda_mm: null }, M), {});
+  assert.deepEqual(C.yardaDeCotizacion({ yarda_mm: 1220 }, M), { yarda_mm: 1220 });
+  assert.deepEqual(C.yardaDeCotizacion({ yarda_mm: 300 }, M), { yarda_mm: 300 }, 'los límites son inclusivos');
+  assert.deepEqual(C.yardaDeCotizacion({ yarda_mm: 2000 }, M), { yarda_mm: 2000 });
+  [299.9, 2000.1, 0, -5, 'x', '', NaN, Infinity, [], {}, true].forEach((x) => {
+    const r = C.yardaDeCotizacion({ yarda_mm: x }, M);
+    if (x === '') assert.deepEqual(r, {});
+    else {
+      assert.equal(r.yarda_mm, undefined, String(x));
+      assert.match(r.aviso, /Ancho de la yarda: .* no es válido \(debe estar entre 300 y 2000 mm\)/, String(x));
+    }
+  });
+  // los límites salen de las tablas maestras
+  const ancho = crearMaestros({ proceso: { limites: { yarda_max_mm: 1500 } } });
+  assert.equal(C.yardaDeCotizacion({ yarda_mm: 1600 }, ancho).yarda_mm, undefined);
+  assert.equal(C.yardaDeCotizacion({ yarda_mm: 1400 }, ancho).yarda_mm, 1400);
+});
+
+test('migrarPartida: el sí/no de la versión anterior pasa a extremo_ajuste sin tocar la partida recibida', () => {
+  const V = require('../src/motor/validacion');
+  const vieja = { familia: 'RECTO', ajuste_sin_brida: true };
+  const nueva = V.migrarPartida(vieja);
+  assert.deepEqual(nueva, { familia: 'RECTO', extremo_ajuste: 'SIN_BRIDA' });
+  assert.deepEqual(vieja, { familia: 'RECTO', ajuste_sin_brida: true }, 'no muta la recibida');
+  assert.equal(V.migrarPartida({ ajuste_sin_brida: false }).extremo_ajuste, 'CON_BRIDA');
+  assert.equal(V.migrarPartida({ ajuste_sin_brida: false, extremo_ajuste: 'SUELTA' }).extremo_ajuste, 'SUELTA', 'lo nuevo manda');
+  assert.equal(V.migrarPartida({ ajuste_sin_brida: false, extremo_ajuste: '' }).extremo_ajuste, 'CON_BRIDA', 'un vacío no cuenta como valor');
+  ['no', 0, null, [], {}].forEach((x) => assert.deepEqual(V.migrarPartida({ ajuste_sin_brida: x }), {}, `${JSON.stringify(x)} se descarta`));
+  // sin el campo viejo devuelve la misma partida; lo que no es una partida pasa tal cual
+  const sin = { familia: 'CODO' };
+  assert.equal(V.migrarPartida(sin), sin);
+  [null, undefined, 5, 'x', []].forEach((x) => assert.equal(V.migrarPartida(x), x));
 });

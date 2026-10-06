@@ -16,12 +16,12 @@
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('./util'), require('./mano_obra'), require('./precios'));
+    module.exports = factory(require('./util'), require('./mano_obra'), require('./precios'), require('./geometria'));
   } else {
     root.COTIZAP = root.COTIZAP || {};
-    root.COTIZAP.validacion = factory(root.COTIZAP.util, root.COTIZAP.manoObra, root.COTIZAP.precios);
+    root.COTIZAP.validacion = factory(root.COTIZAP.util, root.COTIZAP.manoObra, root.COTIZAP.precios, root.COTIZAP.geometria);
   }
-}(typeof self !== 'undefined' ? self : this, function (U, MO, PRE) {
+}(typeof self !== 'undefined' ? self : this, function (U, MO, PRE, GEO) {
   'use strict';
 
   const esObjeto = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
@@ -119,7 +119,7 @@
   };
 
   /** Campos sí/no de una partida que se fabrica. */
-  const BOOLEANOS = { usa_empaque: 'Empaque', ajuste_sin_brida: 'Tramo de ajuste sin brida' };
+  const BOOLEANOS = { usa_empaque: 'Empaque' };
 
   /** Campos que valen para toda partida que se fabrica (todas menos COMPRADO). */
   const CAMPOS_FABRICADA = {
@@ -168,7 +168,7 @@
         ['proceso_corte', claves(sub(sub(M.proceso, 'corte'), 'v_m_min')), 'Proceso de corte'],
         ['perfil_id', claves(sub(M.herrajes, 'perfiles')), 'Perfil de aros']);
       if (fam === 'RECTO' || fam === 'CODO') lista.push(['forma', ['REDONDA', 'RECTANGULAR'], 'Sección']);
-      if (fam === 'RECTO') lista.push(['tipo_costura', claves(sub(M.proceso, 'costuras')), 'Tipo de costura']);
+      if (fam === 'RECTO') lista.push(['tipo_costura', claves(sub(M.proceso, 'costuras')), 'Tipo de costura'], ['extremo_ajuste', GEO.EXTREMOS_AJUSTE, 'Extremo del tramo de ajuste']);
       if (fam === 'REDUCCION') lista.push(['excentrica', ['NO', 'CARA_PLANA'], 'Tipo de reducción']);
     }
     lista.push(['riesgo', claves(sub(M.capas, 'imprevistos_pct')), 'Clase de riesgo']);
@@ -205,13 +205,25 @@
   }
 
   /**
+   * Una partida guardada por una versión anterior, con los campos de hoy: el extremo del tramo de ajuste se guardaba como
+   * sí/no (`ajuste_sin_brida`): sí = SIN_BRIDA, no = CON_BRIDA (lo que no es sí/no se descarta). No muta la partida recibida.
+   */
+  function migrarPartida(p) {
+    if (!tiene(p, 'ajuste_sin_brida')) return p;
+    const q = { ...p };
+    if (typeof q.ajuste_sin_brida === 'boolean' && vacio(q.extremo_ajuste)) q.extremo_ajuste = q.ajuste_sin_brida ? 'SIN_BRIDA' : 'CON_BRIDA';
+    delete q.ajuste_sin_brida;
+    return q;
+  }
+
+  /**
    * Revisa una partida contra las tablas y la devuelve normalizada: { p, errores }. `p` es una copia: los números que
    * venían como texto numérico pasan a número, los vacíos opcionales («», null) se quitan y las listas se copian.
    */
   function normalizarPartida(entrada, M) {
     const errores = [];
     if (!esObjeto(entrada)) return { p: {}, errores: ['La partida no es válida (se esperaba un objeto con sus datos).'] };
-    const p = { ...entrada };
+    const p = migrarPartida({ ...entrada });
     const fam = p.familia;
     if (typeof fam !== 'string' || !tiene(CAMPOS_FAMILIA, fam)) {
       errores.push(`Familia desconocida: ${texto(fam)}`);
@@ -380,6 +392,7 @@
         if (!Array.isArray(AY.yardas_mm) || !AY.yardas_mm.length) agregar(['proceso', 'armado_yardas', 'yardas_mm'], 'debe ser una lista con al menos un ancho de yarda');
         if (typeof AY.yardas_por_pieza_max === 'number' && !Number.isInteger(AY.yardas_por_pieza_max)) agregar(['proceso', 'armado_yardas', 'yardas_por_pieza_max'], `debe ser un número entero (vale ${texto(AY.yardas_por_pieza_max)})`);
         if (typeof AY.junta_entre_yardas !== 'string' || !tiene(M.proceso.costuras, AY.junta_entre_yardas)) agregar(['proceso', 'armado_yardas', 'junta_entre_yardas'], `debe ser un tipo de costura de «proceso › costuras» (${claves(M.proceso.costuras).join(', ')}); vale ${texto(AY.junta_entre_yardas)}`);
+        if (typeof AY.extremo_ajuste_defecto !== 'string' || !GEO.EXTREMOS_AJUSTE.includes(AY.extremo_ajuste_defecto)) agregar(['proceso', 'armado_yardas', 'extremo_ajuste_defecto'], `debe ser ${GEO.EXTREMOS_AJUSTE.join(', ')}; vale ${texto(AY.extremo_ajuste_defecto)}`);
         if (esObjeto(Lm) && typeof Lm.yarda_min_mm === 'number' && typeof Lm.yarda_max_mm === 'number') {
           const anchos = [...(Array.isArray(AY.yardas_mm) ? AY.yardas_mm : []).map((v, i) => [v, ['yardas_mm', i]]), [AY.yarda_defecto_mm, ['yarda_defecto_mm']]];
           anchos.forEach(([v, ruta]) => {
@@ -424,6 +437,6 @@
   }
 
   return {
-    aNumero, normalizarPartida, problemasMaestros, textoProblema, exigePositivo, noFinitos, limitesDe,
+    aNumero, migrarPartida, normalizarPartida, problemasMaestros, textoProblema, exigePositivo, noFinitos, limitesDe,
   };
 }));

@@ -228,7 +228,7 @@
     const q = levantarCantidades(p, M);
     const costos = PRE.valorizar(q, M);
     const capas = PRE.pila(costos.CD, costos.h_MOD, p.riesgo, M);
-    const peso_unit = q.lam.m_neta_kg + q.her.m_aros_neta_kg;
+    const peso_unit = q.lam.m_neta_kg + q.her.m_aros_neta_kg + q.her.m_aros_sueltos_neta_kg; // lo que se manda: incluye los aros sueltos
     const cierre = cerrarPrecio(p, costos, capas, M, {});
     const importe = cierre.precio.importe;
     cierre.indicadores.precio_por_kg_neto = peso_unit > 0 ? importe / (peso_unit * p.cantidad) : null;
@@ -253,6 +253,7 @@
         lamina_neta_kg: q.lam.m_neta_kg,
         lamina_bruta_unitaria_kg: q.lam.m_bruta_kg,
         aros_neto_kg: q.her.m_aros_neta_kg,
+        aros_sueltos_neto_kg: q.her.m_aros_sueltos_neta_kg,
       },
       ...cierre,
     });
@@ -260,6 +261,19 @@
 
   const esObjeto = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
   const sinValor = (v) => v === undefined || v === null || v === '';
+
+  /**
+   * Ancho de la yarda de la cotización (914 mm = 3 ft ó 1 220 mm = 4 ft, lo elige el ingeniero que diseña): lo heredan los
+   * tramos rectos que no traen el suyo. Vacío = el de las tablas maestras. Un valor inválido (no numérico, fuera de los
+   * límites de la yarda) se ignora y se avisa. Devuelve { yarda_mm, aviso }, cada uno undefined si no aplica.
+   */
+  function yardaDeCotizacion(cot, M) {
+    if (sinValor(cot.yarda_mm)) return {};
+    const L = VAL.limitesDe(M);
+    const v = typeof cot.yarda_mm === 'number' || typeof cot.yarda_mm === 'string' ? VAL.aNumero(cot.yarda_mm) : NaN;
+    if (Number.isFinite(v) && v > 0 && !(v < L.yarda_min_mm) && !(v > L.yarda_max_mm)) return { yarda_mm: v };
+    return { aviso: `Ancho de la yarda: «${String(cot.yarda_mm)}» no es válido (debe estar entre ${L.yarda_min_mm} y ${L.yarda_max_mm} mm); se usa el de las tablas maestras.` };
+  }
 
   /**
    * Cotización completa: lista de partidas + totales con IVA. Nunca lanza por una partida: la que no se puede calcular
@@ -274,9 +288,12 @@
     // Valores de la cotización que heredan las partidas que no los traen (o los dejan vacíos: «según la cotización»)
     const defs = { riesgo: c.riesgo || 'MEDIO', servicio: c.servicio, ...(esObjeto(c.defaults) ? c.defaults : {}) };
     Object.keys(defs).forEach((k) => sinValor(defs[k]) && delete defs[k]);
+    const yarda = yardaDeCotizacion(c, M);
     const heredar = (p) => {
       const fusion = { ...defs, ...p };
       Object.keys(defs).forEach((k) => { if (sinValor(p[k])) fusion[k] = defs[k]; });
+      // sólo el tramo recto se arma por yardas; en la partida, vacío o 0 significa «según la cotización»
+      if (p.familia === 'RECTO' && yarda.yarda_mm !== undefined && (sinValor(p.yarda_mm) || VAL.aNumero(p.yarda_mm) === 0)) fusion.yarda_mm = yarda.yarda_mm;
       return fusion;
     };
     const lista = Array.isArray(c.partidas) ? c.partidas : [];
@@ -303,6 +320,7 @@
     // Utilidad real = lo que queda del precio descontado después de la comisión y de todo el costo (C_base, con financiamiento)
     const utilidad = ok.reduce((s, f) => s + f.precio.importe * (1 - ef.descuento_pct) * (1 - C.comision_ventas_pct_precio - C.otros_pct_precio) - f.pila.C_base, 0);
     const avisos = [...ef.avisos];
+    if (yarda.aviso) avisos.push(yarda.aviso);
     if (problemas.length) {
       avisos.push(`Tablas maestras con ${problemas.length === 1 ? 'un valor no válido' : `${problemas.length} valores no válidos`}: ${VAL.textoProblema(problemas[0])}${problemas.length > 1 ? ' (y otros)' : ''}.`);
     }
@@ -311,6 +329,7 @@
       maestros: M, // las tablas con las capas de esta cotización: lo que usó cada partida
       capas: C,
       parametros: ef.aplicados,
+      yarda_mm: yarda.yarda_mm, // el ancho de yarda propio de la cotización (undefined = el de las tablas maestras)
       avisos,
       totales: {
         subtotal, descuento_pct: ef.descuento_pct, descuento, subtotal_neto,
@@ -328,6 +347,6 @@
   }
 
   return {
-    FAMILIAS, PARAMETROS_COTIZACION, parametroDeMaestros, maestrosEfectivos, validarPartida, levantarCantidades, cotizarPartida, cotizar,
+    FAMILIAS, PARAMETROS_COTIZACION, parametroDeMaestros, maestrosEfectivos, yardaDeCotizacion, validarPartida, levantarCantidades, cotizarPartida, cotizar,
   };
 }));

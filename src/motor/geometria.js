@@ -76,7 +76,8 @@
       n_engargolados: null, // operaciones de engargolado (una por costura o junta); null = una por pieza
       ancho_hoja_mm: 0, // ancho de la hoja de la que sale la pieza (0 = el de la hoja estándar): en el tramo recto es la yarda
       n_juntas_internas: 0,
-      extremos: [],
+      extremos: [], // extremos con brida (o espiga) fabricada en taller
+      extremos_sueltos: [], // extremos cuya brida se manda suelta, para ponerla en obra: sólo material (aro, tornillos y empaque)
       espigas_defecto: 0,
       D_ref_mm: 0,
       A_ext_m2: 0,
@@ -140,17 +141,29 @@
   }
 
   /**
+   * Qué se cotiza en el extremo libre del tramo de ajuste:
+   *   SUELTA    — el taller manda el aro de solera, los tornillos y el empaque sueltos, para ponerlos en obra (sólo material);
+   *   SIN_BRIDA — nada: la brida de ese extremo no está en el precio;
+   *   CON_BRIDA — brida fabricada y soldada en taller, como en los demás extremos.
+   */
+  const EXTREMOS_AJUSTE = ['SUELTA', 'SIN_BRIDA', 'CON_BRIDA'];
+
+  /**
    * Armado de un tramo recto por «yardas», como lo hace el taller. Una yarda es un anillo rolado del ANCHO de la lámina
    * (914 mm = 3 ft ó 1 220 mm = 4 ft): así se aprovecha toda la hoja.
    *   · Las yardas se engargolan entre sí en piezas de hasta `maxY` (3): primero salen las piezas de 3 yardas.
    *   · Lo que falta son las yardas completas que sobren (0, 1 ó 2) y un tramo de ajuste —menos de una yarda— engargolado a ellas.
-   *   · Cada pieza lleva brida en ambos extremos, menos la que trae el tramo de ajuste: su extremo libre va SIN brida, para
-   *     cortarlo y ponerlo en campo ajustando la distancia (`sinBridaEnAjuste` = false pide brida en ambos).
+   *   · Cada pieza lleva brida en ambos extremos, menos la que trae el tramo de ajuste: su extremo libre NO lleva brida de
+   *     taller, para cortarlo y ponerlo en campo ajustando la distancia. `modo` (EXTREMOS_AJUSTE) dice qué se cotiza allí: la
+   *     brida suelta (el aro y su herraje, sin fabricar), nada, o la brida de taller como en los demás extremos.
    * `tol` (mm): un sobrante menor que esto no es tramo de ajuste (a ±tol de un múltiplo de la yarda se cuentan yardas completas).
-   * Devuelve { yarda_mm, largo_mm, n_completas, ajuste_mm, L_capa_mm, anillos: [mm…], piezas: [{ yardas, ajuste_mm, n_anillos,
-   * largo_mm, bridas, juntas }], n_anillos, n_piezas, n_bridas, n_juntas, extremo_libre }.
+   * Devuelve { modo, yarda_mm, largo_mm, n_completas, ajuste_mm, L_capa_mm, anillos: [mm…], piezas: [{ yardas, ajuste_mm,
+   * n_anillos, largo_mm, bridas (de taller), sueltas (aros sueltos), juntas }], n_anillos, n_piezas, n_bridas, n_sueltas,
+   * n_juntas, extremo_libre }.
    */
-  function distribuirYardas(L, Y, maxY, tol, sinBridaEnAjuste) {
+  function distribuirYardas(L, Y, maxY, tol, modo) {
+    exigir(EXTREMOS_AJUSTE.includes(modo), `El extremo del tramo de ajuste «${modo}» no existe (use ${EXTREMOS_AJUSTE.join(', ')}).`);
+    const libre = modo !== 'CON_BRIDA'; // el extremo del ajuste queda sin brida de taller
     const tope = Math.max(1, Math.floor(maxY));
     const { n_completas, ajuste } = partirEnYardas(L, Y, tol);
     const grupos = [];
@@ -162,12 +175,20 @@
       const n_anillos = g.yardas + (g.ajuste_mm > 0 ? 1 : 0);
       for (let j = 0; j < g.yardas; j += 1) anillos.push(Y);
       if (g.ajuste_mm > 0) anillos.push(g.ajuste_mm);
+      const conAjuste = g.ajuste_mm > 0;
       return {
-        yardas: g.yardas, ajuste_mm: g.ajuste_mm, n_anillos, largo_mm: g.yardas * Y + g.ajuste_mm, bridas: g.ajuste_mm > 0 && sinBridaEnAjuste ? 1 : 2, juntas: n_anillos - 1,
+        yardas: g.yardas,
+        ajuste_mm: g.ajuste_mm,
+        n_anillos,
+        largo_mm: g.yardas * Y + g.ajuste_mm,
+        bridas: conAjuste && libre ? 1 : 2,
+        sueltas: conAjuste && modo === 'SUELTA' ? 1 : 0,
+        juntas: n_anillos - 1,
       };
     });
     const suma = (campo) => piezas.reduce((acc, q) => acc + q[campo], 0);
     return {
+      modo,
       yarda_mm: Y,
       largo_mm: L,
       n_completas,
@@ -178,8 +199,9 @@
       n_anillos: anillos.length,
       n_piezas: piezas.length,
       n_bridas: suma('bridas'),
+      n_sueltas: suma('sueltas'),
       n_juntas: suma('juntas'),
-      extremo_libre: ajuste > 0 && sinBridaEnAjuste,
+      extremo_libre: ajuste > 0 && libre,
     };
   }
 
@@ -202,7 +224,8 @@
     const cuenta = partirEnYardas(L_total, Y, AY.ajuste_tolerancia_mm);
     const n_cuenta = cuenta.n_completas + (cuenta.ajuste > 0 ? 1 : 0);
     exigir(n_cuenta <= tope, `Un tramo de ${L_total} mm en yardas de ${Y} mm serían ${n_cuenta} anillos (el máximo es ${tope}): revise la longitud total y el ancho de la yarda.`);
-    const arm = distribuirYardas(L_total, Y, AY.yardas_por_pieza_max, AY.ajuste_tolerancia_mm, p.ajuste_sin_brida !== false);
+    const modo = p.extremo_ajuste || AY.extremo_ajuste_defecto || 'SUELTA';
+    const arm = distribuirYardas(L_total, Y, AY.yardas_por_pieza_max, AY.ajuste_tolerancia_mm, modo);
     const L_capa = arm.L_capa_mm; // lo que realmente se corta: las yardas completas y el ajuste
     const n_cost = forma === 'REDONDA' ? 1 : (p.n_costuras_long || 1);
 
@@ -233,7 +256,11 @@
     // el tramo de ajuste, más angosto que la hoja, necesita además el corte a lo largo de la hoja (B en total) y su tajo.
     PF.L_corte_m = (arm.n_completas * n_cost * Y + (arm.ajuste_mm > 0 ? B + n_cost * arm.ajuste_mm : 0)) / 1000;
     PF.extremos = [];
-    arm.piezas.forEach((q) => { for (let i = 0; i < q.bridas; i += 1) PF.extremos.push(extremo); }); // sólo los extremos con brida
+    PF.extremos_sueltos = [];
+    arm.piezas.forEach((q) => {
+      for (let i = 0; i < q.bridas; i += 1) PF.extremos.push(extremo); // brida fabricada en taller
+      for (let i = 0; i < q.sueltas; i += 1) PF.extremos_sueltos.push(extremo); // aro suelto, para ponerlo en obra
+    });
     PF.espigas_defecto = arm.n_piezas;
     PF.A_ext_m2 = (extremo.P_ext_mm * L_capa) / 1e6;
     PF.ancho_hoja_mm = Y;
@@ -715,6 +742,7 @@
   return {
     perfilFabricacion,
     distribuirYardas,
+    EXTREMOS_AJUSTE,
     dimensionesRedondas,
     dimensionesRect,
     areaTroncoOblicuo,

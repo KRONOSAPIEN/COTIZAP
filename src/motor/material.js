@@ -104,7 +104,8 @@
 
   /**
    * Herrajes de unión por unidad de partida.
-   *   BRIDADO: aros (solera o ángulo) + tornillería + empaque (+ sellador según clase).
+   *   BRIDADO: aros (solera o ángulo) + tornillería + empaque (+ sellador según clase). Las bridas de taller (`PF.extremos`)
+   *            se fabrican; las SUELTAS (`PF.extremos_sueltos`) se mandan sin fabricar, para ponerlas en obra: sólo material.
    *   ESPIGA : prolongación macho + fijaciones + sellador.
    *   LISO   : sin herraje.
    * Cada junta se comparte entre dos extremos: se asigna 0.5 junta de tornillería, empaque y sellador por extremo.
@@ -124,6 +125,9 @@
       L_aros_m: 0,
       m_aros_neta_kg: 0,
       m_aros_bruta_kg: 0,
+      aros_sueltos: [], // aros que el taller manda sueltos para ponerlos en obra: sólo material, sin fabricarlos
+      m_aros_sueltos_neta_kg: 0,
+      m_aros_sueltos_bruta_kg: 0,
       tornillos_por_tipo: {},
       n_tornillos_asignados: 0,
       n_barrenos: 0,
@@ -141,7 +145,10 @@
 
     if (tipo === 'BRIDADO') {
       const holgura = M.proceso.aros.holgura_corte_mm;
-      PF.extremos.forEach((ext) => {
+      // Una brida del extremo `ext`. La de taller se fabrica (aro rolado, barrenado y soldado al ducto) y sella su media junta;
+      // la SUELTA se manda sin fabricar para ponerla en obra: se cobra sólo su material (aro, tornillos y empaque), sin tiempos,
+      // soldadura, pintura ni sellador.
+      const brida = (ext, suelta) => {
         const dim_mayor = ext.forma === 'REDONDA' ? ext.D_ext_mm : Math.max(ext.a_ext_mm, ext.b_ext_mm);
         const perfil = seleccionarPerfil(M, dim_mayor, p.perfil_id);
         const g = geometriaAro(ext, perfil, holgura);
@@ -149,25 +156,36 @@
         const n_tornillos = U.techoMultiplo(Math.max(U_.n_min_tornillos, n_raw), U_.multiplo_tornillos);
         const L_aro_m = g.L_aro_mm / 1000;
         const m_aro = L_aro_m * perfil.peso_kg_m;
-        out.aros.push({
+        const aro = {
           perfil_id: perfil.id, tipo: perfil.tipo, descripcion: perfil.descripcion, ancho_mm: perfil.ancho_mm, esp_mm: perfil.esp_mm,
           tornillo: perfil.tornillo, tornillo_desc: perfil.tornillo_desc || perfil.tornillo, diam_barreno_mm: perfil.diam_barreno_mm, barreno_desc: perfil.barreno_desc,
           precio_ref: perfil.precio_ref, L_aro_mm: g.L_aro_mm, P_perno_mm: g.P_perno_mm, n_tornillos,
           m_aro_kg: m_aro, m_aro_bruta_kg: m_aro / (1 - M.merma.PERFIL), c_centroide_mm: perfil.c_centroide_mm, gramil_mm: perfil.gramil_mm, peso_kg_m: perfil.peso_kg_m,
-        });
+          suelta,
+        };
+        // Material de la junta que lleva toda brida: media tornillería y medio empaque (la otra mitad es del extremo con que se une)
+        out.tornillos_por_tipo[perfil.tornillo] = (out.tornillos_por_tipo[perfil.tornillo] || 0) + 0.5 * n_tornillos;
+        out.n_tornillos_asignados += 0.5 * n_tornillos;
+        out.n_juntas_asignadas += 0.5;
+        if (p.usa_empaque !== false) out.L_empaque_m += (0.5 * g.P_perno_mm * (1 + U_.f_traslape_empaque)) / 1000;
+        if (suelta) {
+          out.aros_sueltos.push(aro);
+          out.m_aros_sueltos_neta_kg += m_aro;
+          out.m_aros_sueltos_bruta_kg += aro.m_aro_bruta_kg;
+          return;
+        }
+        out.aros.push(aro);
         out.n_aros += 1;
         out.L_aros_m += L_aro_m;
         out.m_aros_neta_kg += m_aro;
-        out.tornillos_por_tipo[perfil.tornillo] = (out.tornillos_por_tipo[perfil.tornillo] || 0) + 0.5 * n_tornillos;
-        out.n_tornillos_asignados += 0.5 * n_tornillos;
         out.n_barrenos += n_tornillos;
-        out.n_juntas_asignadas += 0.5;
-        if (p.usa_empaque !== false) out.L_empaque_m += (0.5 * g.P_perno_mm * (1 + U_.f_traslape_empaque)) / 1000;
         if (clase !== 'NINGUNA') out.L_sellado_m += (0.5 * ext.P_ext_mm) / 1000;
         out.sold_aros.filete_m += (U_.f_cont_soldadura_aro * ext.P_ext_mm) / 1000;
         out.sold_aros.cierres.push({ L_m: g.L_cierre_mm / 1000, esp_mm: perfil.esp_mm });
         out.A_pintura_aros_m2 += g.A_pintura_m2;
-      });
+      };
+      PF.extremos.forEach((ext) => brida(ext, false));
+      (PF.extremos_sueltos || []).forEach((ext) => brida(ext, true));
       out.m_aros_bruta_kg = out.aros.reduce((acc, a) => acc + a.m_aro_bruta_kg, 0);
     }
 
