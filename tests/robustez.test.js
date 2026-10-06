@@ -54,7 +54,8 @@ function generador(semilla) {
       const rect = rnd() < 0.3;
       const p = { familia: 'RECTO', forma: rect ? 'RECTANGULAR' : 'REDONDA', L_mm: r1(u(100, 12000)), tipo_costura: pick(['A_TOPE', 'TRASLAPE', 'PITTSBURGH']) };
       if (rect) { p.a_mm = r1(u(100, 2500)); p.b_mm = r1(u(100, 2500)); } else p.D_mm = r1(u(50, 2000));
-      const lm = maybe(0.2, () => r1(u(500, 3000))); if (lm) p.L_max_pieza_mm = lm;
+      const yd = maybe(0.5, () => pick([914, 1220])); if (yd) p.yarda_mm = yd;
+      if (rnd() < 0.2) p.ajuste_sin_brida = false;
       return p;
     },
     CODO() {
@@ -215,7 +216,7 @@ test('Medidas obligatorias: cero, negativas, «casi cero» y descomunales (1e12)
 });
 
 test('Campos opcionales: vacío («», null, undefined) significa «automático»; cero y valores raros no se cuelan', () => {
-  const OPCIONALES = { RECTO: ['L_max_pieza_mm'], CODO: ['n_gajos', 'L_tangente_mm'], REDUCCION: ['L_mm'], TRANSICION: ['H_mm', 'n_costuras_long'], COMPRADO: ['peso_kg'] };
+  const OPCIONALES = { RECTO: ['yarda_mm'], CODO: ['n_gajos', 'L_tangente_mm'], REDUCCION: ['L_mm'], TRANSICION: ['H_mm', 'n_costuras_long'], COMPRADO: ['peso_kg'] };
   Object.entries(OPCIONALES).forEach(([nombre, campos]) => campos.forEach((campo) => {
     const base = { ...PLANTILLAS[nombre] };
     delete base[campo];
@@ -306,21 +307,48 @@ test('Geometría: una dimensión exterior menor que el doble del espesor no tien
   assert.throws(() => C.cotizarPartida({ ...PLANTILLAS.RECTO, calibre: 'PROPIO', espesor_mm: 50, ref_diametro: 'EXTERIOR', D_mm: 60 }, M), /diámetro exterior/);
 });
 
-test('Geometría: un tramo recto no se parte en un número desorbitado de piezas', () => {
-  const chico = crearMaestros({ proceso: { L_max_pieza_mm: 1 } }); // 3 000 mm en piezas de 1 mm = 3 000 piezas > 1 000
-  assert.throws(() => C.cotizarPartida(PLANTILLAS.RECTO, chico), /3000 piezas \(el máximo es 1000\)/);
-  const diminuto = crearMaestros({ proceso: { L_max_pieza_mm: 1e-9 } }); // sin tope serían 3e12 piezas
-  assert.throws(() => C.cotizarPartida(PLANTILLAS.RECTO, diminuto), U.ErrorValidacion);
+test('Geometría: un tramo recto no se parte en un número desorbitado de anillos', () => {
+  const pocos = crearMaestros({ proceso: { limites: { piezas_max: 50 } } }); // 100 m en yardas de 1 220 mm = 82 anillos > 50
+  assert.throws(() => C.cotizarPartida({ ...PLANTILLAS.RECTO, L_mm: 100000 }, pocos), /82 anillos \(el máximo es 50\)/);
+  assert.doesNotThrow(() => C.cotizarPartida({ ...PLANTILLAS.RECTO, L_mm: 50000 }, pocos));
   // la geometría sola (sin pasar por la validación de la partida) también se defiende, incluso sin límites en los maestros
   const sinLimites = crearMaestros();
   delete sinLimites.proceso.limites;
-  assert.throws(() => G.perfilFabricacion({ ...PLANTILLAS.RECTO, L_mm: 1e12, L_max_pieza_mm: 1 }, 1.5, sinLimites), /piezas/);
-  assert.throws(() => G.perfilFabricacion({ ...PLANTILLAS.RECTO, L_max_pieza_mm: -5 }, 1.5, M), /longitud máxima por pieza/);
+  assert.throws(() => G.perfilFabricacion({ ...PLANTILLAS.RECTO, L_mm: 1e12, yarda_mm: 300 }, 1.5, sinLimites), /anillos/);
   assert.throws(() => G.perfilFabricacion({ ...PLANTILLAS.PERSONALIZADO, n_extremos: 1e12 }, 1.5, M), /extremos/);
-  // un tramo largo pero razonable (100 m) se calcula
+  // un tramo largo pero razonable (100 m con yardas de 1 220 mm) se calcula: 27 piezas de 3 yardas + el ajuste de 1 180 mm
   const largo = C.cotizarPartida({ ...PLANTILLAS.RECTO, L_mm: 100000 }, M);
-  assert.equal(largo.geometria.n_piezas, 34);
+  assert.equal(largo.geometria.n_virolas, 82);
+  assert.equal(largo.geometria.n_piezas, 28);
   assert.deepEqual(noFinitos(largo), []);
+});
+
+test('Ancho de la yarda y tramo de ajuste: límites, tipo y valores de las tablas', () => {
+  const R = PLANTILLAS.RECTO;
+  [100, 299, 2001, 1e6, -914].forEach((y) => assert.throws(() => C.cotizarPartida({ ...R, yarda_mm: y }, M), /Ancho de la yarda: debe estar entre 300 mm y 2000 mm/, `yarda ${y}`));
+  assert.doesNotThrow(() => C.cotizarPartida({ ...R, yarda_mm: 914 }, M));
+  assert.doesNotThrow(() => C.cotizarPartida({ ...R, yarda_mm: '1220' }, M), 'también como texto');
+  ['no', 0, 1, 'false', [], {}].forEach((x) => assert.throws(() => C.cotizarPartida({ ...R, ajuste_sin_brida: x }, M), /Tramo de ajuste sin brida/, `ajuste_sin_brida ${JSON.stringify(x)}`));
+  [true, false].forEach((x) => assert.doesNotThrow(() => C.cotizarPartida({ ...R, ajuste_sin_brida: x }, M)));
+  // los datos del armado de las tablas maestras
+  const malo = (parche) => { const Mx = crearMaestros(); Object.keys(parche).forEach((k) => { Mx.proceso.armado_yardas[k] = parche[k]; }); return V.problemasMaestros(Mx).map(V.textoProblema).join(' | '); };
+  assert.match(malo({ yardas_por_pieza_max: 0 }), /yardas por pieza max: debe ser un número mayor que 0/);
+  assert.match(malo({ yardas_por_pieza_max: 2.5 }), /yardas por pieza max: debe ser un número entero/);
+  assert.match(malo({ yarda_defecto_mm: 0 }), /yarda defecto mm: debe ser un número mayor que 0/);
+  assert.match(malo({ yarda_defecto_mm: 5000 }), /yarda defecto mm: debe estar entre 300 y 2000 mm/);
+  assert.match(malo({ yardas_mm: [] }), /yardas mm: debe ser una lista/);
+  assert.match(malo({ yardas_mm: [914, 0] }), /yardas mm › 1: debe ser un número mayor que 0/);
+  assert.match(malo({ junta_entre_yardas: 'PEGAMENTO' }), /junta entre yardas: debe ser un tipo de costura/);
+  assert.match(malo({ ajuste_tolerancia_mm: -1 }), /ajuste tolerancia mm: no puede ser negativo/);
+  assert.equal(malo({}), '');
+  const Mx = crearMaestros(); Mx.proceso.armado_yardas.yardas_por_pieza_max = 0;
+  assert.throws(() => C.cotizarPartida(R, Mx), /Tablas maestras · proceso › armado yardas › yardas por pieza max/);
+  assert.equal(V.exigePositivo(['proceso', 'armado_yardas', 'yardas_por_pieza_max']), true);
+  assert.equal(V.exigePositivo(['proceso', 'armado_yardas', 'yardas_mm', 0]), true);
+  // un parche viejo con la longitud máxima por pieza (3 000 mm) la pierde: ahora manda el armado por yardas
+  assert.equal('L_max_pieza_mm' in crearMaestros({ proceso: { L_max_pieza_mm: 2000 } }).proceso, false);
+  // un parche con la tabla del armado rota se reemplaza por la de arranque
+  assert.deepEqual(crearMaestros({ proceso: { armado_yardas: { yardas_mm: 'x', yardas_por_pieza_max: '3', junta_entre_yardas: 5 } } }).proceso.armado_yardas, M.proceso.armado_yardas);
 });
 
 /* ---------- 4 · tablas maestras ---------- */

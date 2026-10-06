@@ -108,11 +108,26 @@ test('El cálculo usa la hoja cotizada de ese material y calibre (la del tamaño
   assert.equal(PROV.perfilDe(M, 'L51x4.8').id, 'ANG_2X3_16');
   assert.equal(PROV.perfilDe(M, 'L25x3.2'), null);
   const usos = Object.fromEntries(todos().map((r) => [r.id, r.uso]));
+  // la hoja de 3 ft (914 mm) también se usa: es la de las yardas de 3 ft
   assert.deepEqual(Object.keys(usos).filter((k) => usos[k] === 'CALCULO').sort(),
-    ['ANG_1_1_2X3_16', 'ANG_2X3_16', 'GALV_C22_4X10', 'GALV_C24_4X10', 'NEGRA_C12_4X10', 'SOL_1_1_2X3_16']);
+    ['ANG_1_1_2X3_16', 'ANG_2X3_16', 'GALV_C22_4X10', 'GALV_C24_4X10', 'NEGRA_C12_3X10', 'NEGRA_C12_4X10', 'SOL_1_1_2X3_16']);
   assert.equal(usos.CANAL_U_6, 'REFERENCIA');
   assert.equal(usos.PLACA_3_16_4X8, 'REFERENCIA');
-  assert.equal(usos.NEGRA_C12_3X10, 'REFERENCIA', 'otro tamaño de la misma lámina');
+  assert.equal(usos.NEGRA_C12_4X8, 'REFERENCIA', 'otro largo de la misma lámina: no es la hoja de ninguna yarda');
+  assert.equal(usos.NEGRA_C12_3X8, 'REFERENCIA');
+});
+
+test('La lámina de una yarda es la hoja de ese ancho (3 ft = 914 mm, 4 ft = 1 220 mm); sin esa hoja cotizada, la estándar', () => {
+  assert.equal(PROV.laminaDe(M, 'ACERO_CARBON', 12, 914).id, 'NEGRA_C12_3X10');
+  assert.equal(PROV.laminaDe(M, 'ACERO_CARBON', 12, 1220).id, 'NEGRA_C12_4X10', '1 220 y 1 219 son la misma hoja de 4 ft');
+  assert.equal(PROV.laminaDe(M, 'ACERO_CARBON', 12).id, 'NEGRA_C12_4X10', 'sin ancho, la hoja estándar del taller');
+  assert.equal(PROV.laminaDe(M, 'GALVANIZADO', 22, 914).id, 'GALV_C22_4X10', 'no hay galvanizada de 3 ft cotizada: se usa la de 4 ft');
+  // por kg cuestan lo mismo (el proveedor cobra por área): cambiar de ancho de hoja no mueve el precio de la lámina
+  casi(PROV.laminaDe(M, 'ACERO_CARBON', 12, 914).precio_kg, PROV.laminaDe(M, 'ACERO_CARBON', 12, 1220).precio_kg, 1e-3);
+  // y el desglose de una partida dice cuál usó
+  const p = (yarda) => C.cotizarPartida({ familia: 'RECTO', material_id: 'ACERO_CARBON', calibre: 12, D_mm: 304.8, L_mm: 3660, yarda_mm: yarda, tipo_union: 'LISO', servicio: 'POLVO', riesgo: 'MEDIO', cantidad: 1 }, M);
+  assert.equal(p(914).costos.precios_usados.lamina.id, 'NEGRA_C12_3X10');
+  assert.equal(p(1220).costos.precios_usados.lamina.id, 'NEGRA_C12_4X10');
 });
 
 test('Un precio inválido (0, negativo o sin medidas) no se usa: el cálculo cae a la tabla por kg', () => {

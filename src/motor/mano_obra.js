@@ -40,7 +40,7 @@
     if (!tablaV) throw new U.ErrorValidacion([`Proceso de corte desconocido: ${procCorte}`]);
     const v_corte = U.interpolar(tablaV, e);
     const L_corte_m = PF.L_corte_m + her.L_corte_extra_m;
-    const A_hoja_m2 = (P.hoja.ancho_mm * P.hoja.largo_mm) / 1e6;
+    const A_hoja_m2 = ((PF.ancho_hoja_mm || P.hoja.ancho_mm) * P.hoja.largo_mm) / 1e6; // en el tramo recto la hoja es del ancho de la yarda
     const n_hojas_eq = lam.A_bruta_m2 / A_hoja_m2;
     const t_corte = n_hojas_eq * P.corte.t_manejo_hoja_min + L_corte_m / v_corte;
     const setup_corte = procCorte === 'GUILLOTINA' ? 0 : P.corte.t_prog_cnc_min;
@@ -78,7 +78,8 @@
     /* --- Engargolado (costuras mecánicas) --- */
     const E = P.engargolado;
     const v_eng = U.interpolar(E.v_m_min, e);
-    const t_engargolado = PF.engargolado_m > 0 ? PF.n_piezas * E.t_fijo_pieza_min + PF.engargolado_m / v_eng : 0;
+    const n_engargolados = PF.n_engargolados === null ? PF.n_piezas : PF.n_engargolados; // una operación por costura o junta engargolada
+    const t_engargolado = PF.engargolado_m > 0 ? n_engargolados * E.t_fijo_pieza_min + PF.engargolado_m / v_eng : 0;
 
     /* --- Barrenado --- */
     const t_barrenado = her.n_barrenos * P.barrenado.t_barreno_min;

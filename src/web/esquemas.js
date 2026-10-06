@@ -35,6 +35,7 @@
     proceso_corte: [['', 'Automático'], ['GUILLOTINA', 'Guillotina'], ['PLASMA', 'Plasma CNC'], ['LASER', 'Láser']],
     tipo_costura: [['A_TOPE', 'Soldada a tope'], ['TRASLAPE', 'Soldada a traslape'], ['PITTSBURGH', 'Engargolado Pittsburgh']],
     excentrica: [['NO', 'Concéntrica'], ['CARA_PLANA', 'Excéntrica · cara plana']],
+    ajuste: [['', 'Extremo libre sin brida'], ['false', 'Brida en ambos extremos']],
     driver: [['PIEZA', 'Por pieza'], ['KG_NETO', 'Por kg neto'], ['KG_BRUTO', 'Por kg bruto'], ['M2_NETO', 'Por m² de lámina'], ['M_CORTE', 'Por m de corte'], ['M_SOLDADURA', 'Por m de soldadura']],
   };
 
@@ -52,14 +53,21 @@
       { id: 'b_mm', etiqueta: 'Alto b', tipo: 'dim', visible: rect, defecto: 300 },
       { id: 'L_mm', etiqueta: 'Longitud total', tipo: 'dim', defecto: 3000 },
       { id: 'tipo_costura', etiqueta: 'Costura longitudinal', tipo: 'select', opciones: 'tipo_costura', defecto: 'A_TOPE' },
-      { id: 'L_max_pieza_mm', etiqueta: 'Longitud máx. por pieza', tipo: 'dim', opcional: true, ayuda: 'Vacío = valor de maestros (3 000 mm)' },
+      {
+        id: 'yarda_mm', etiqueta: 'Ancho de la yarda', tipo: 'select', opciones: 'yardas', numerico: true, sufijoFuera: ' mm',
+        ayuda: 'La yarda es un anillo rolado del ancho de la lámina; se engargolan hasta 3 por pieza',
+      },
+      {
+        id: 'ajuste_sin_brida', etiqueta: 'Tramo de ajuste', tipo: 'select', opciones: 'ajuste', booleano: true,
+        ayuda: 'Lo que sobra de yardas completas es el tramo de ajuste (menos de una yarda): su extremo libre va sin brida para cortarlo en campo',
+      },
     ],
     CODO: [
       { id: 'forma', etiqueta: 'Sección', tipo: 'select', opciones: 'forma', defecto: 'REDONDA' },
       { id: 'D_mm', etiqueta: 'Diámetro', tipo: 'dim', visible: redonda, defecto: 304.8 },
       { id: 'a_mm', etiqueta: 'Ancho a (en el plano del giro)', tipo: 'dim', visible: rect, defecto: 400 },
       { id: 'b_mm', etiqueta: 'Alto b', tipo: 'dim', visible: rect, defecto: 300 },
-      { id: 'theta_deg', etiqueta: 'Ángulo del codo', tipo: 'select', opciones: 'angulos_codo', numerico: true, defecto: 90 },
+      { id: 'theta_deg', etiqueta: 'Ángulo del codo', tipo: 'select', opciones: 'angulos_codo', numerico: true, sufijoFuera: '° (no permitido)', defecto: 90 },
       { id: 'k_R', etiqueta: 'Relación R/D', tipo: 'num', defecto: 1.5, min: 1, paso: 0.25, ayuda: 'Radio de eje ÷ diámetro (en rectangular: ÷ a)' },
       { id: 'n_gajos', etiqueta: 'Gajos', tipo: 'int', opcional: true, visible: redonda, min: 2, ayuda: 'Vacío = automático (α ≤ 22.5° por junta)' },
       { id: 'L_tangente_mm', etiqueta: 'Tangente en cada extremo', tipo: 'dim', opcional: true, visible: redonda },
@@ -81,13 +89,13 @@
       { id: 'd_mm', etiqueta: 'Diámetro del injerto', tipo: 'dim', defecto: 203.2 },
       { id: 'L_cuerpo_mm', etiqueta: 'Longitud del tronco', tipo: 'dim', defecto: 700 },
       { id: 'L_ramal_mm', etiqueta: 'Longitud del injerto', tipo: 'dim', defecto: 450, ayuda: 'Sobre su eje, desde el eje del tronco' },
-      { id: 'beta_deg', etiqueta: 'Ángulo del injerto', tipo: 'select', opciones: 'angulos_injerto', numerico: true, defecto: 45 },
+      { id: 'beta_deg', etiqueta: 'Ángulo del injerto', tipo: 'select', opciones: 'angulos_injerto', numerico: true, sufijoFuera: '° (no permitido)', defecto: 45 },
     ],
     REDUCCION_INJERTO: [ // el injerto va SOBRE EL CONO de la reducción
       { id: 'D1_mm', etiqueta: 'Diámetro mayor D1', tipo: 'dim', defecto: 304.8 },
       { id: 'D2_mm', etiqueta: 'Diámetro menor D2', tipo: 'dim', defecto: 254 },
       { id: 'd_mm', etiqueta: 'Diámetro del injerto', tipo: 'dim', defecto: 152.4 },
-      { id: 'beta_deg', etiqueta: 'Ángulo del injerto', tipo: 'select', opciones: 'angulos_injerto', numerico: true, defecto: 45 },
+      { id: 'beta_deg', etiqueta: 'Ángulo del injerto', tipo: 'select', opciones: 'angulos_injerto', numerico: true, sufijoFuera: '° (no permitido)', defecto: 45 },
       { id: 'L_reduccion_mm', etiqueta: 'Longitud de la reducción', tipo: 'dim', opcional: true, ayuda: 'Vacío = automático (la menor que aloja el injerto sobre el cono, con holgura)' },
       { id: 'L_ramal_mm', etiqueta: 'Longitud del injerto', tipo: 'dim', opcional: true, ayuda: 'Sobre su eje, desde el eje de la reducción. Vacío = automático' },
     ],

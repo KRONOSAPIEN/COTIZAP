@@ -77,7 +77,7 @@
     RECTO: (p) => ({
       ...medidas(p),
       L_mm: largo('Longitud total'),
-      L_max_pieza_mm: largo('Longitud máxima por pieza', { cero: true }),
+      yarda_mm: campo('num', 'Ancho de la yarda', 'yarda_min_mm', 'yarda_max_mm', { u: 'mm', cero: true }),
       ...(p.forma === 'RECTANGULAR' ? { n_costuras_long: entero('Costuras longitudinales', 1, 8) } : {}),
     }),
     CODO: (p) => ({
@@ -117,6 +117,9 @@
       peso_kg: real('Peso unitario', 0, 1e6, 'kg'),
     }),
   };
+
+  /** Campos sí/no de una partida que se fabrica. */
+  const BOOLEANOS = { usa_empaque: 'Empaque', ajuste_sin_brida: 'Tramo de ajuste sin brida' };
 
   /** Campos que valen para toda partida que se fabrica (todas menos COMPRADO). */
   const CAMPOS_FABRICADA = {
@@ -247,8 +250,10 @@
       if (vacio(p.caras_pintadas)) delete p.caras_pintadas;
       else if (aNumero(p.caras_pintadas) === 1 || aNumero(p.caras_pintadas) === 2) p.caras_pintadas = aNumero(p.caras_pintadas);
       else errores.push(`Caras pintadas: debe ser 1 o 2 (trae «${texto(p.caras_pintadas)}»).`);
-      if (vacio(p.usa_empaque)) delete p.usa_empaque;
-      else if (typeof p.usa_empaque !== 'boolean') errores.push(`Empaque: «${texto(p.usa_empaque)}» no es sí/no.`);
+      Object.keys(BOOLEANOS).forEach((k) => {
+        if (vacio(p[k])) delete p[k];
+        else if (typeof p[k] !== 'boolean') errores.push(`${BOOLEANOS[k]}: «${texto(p[k])}» no es sí/no.`);
+      });
       revisarListas(p, errores);
     }
 
@@ -266,7 +271,8 @@
   // Números que deben ser MAYORES que 0: entran como divisor (velocidad, eficiencia, rendimiento…) o dan forma a algo (paso
   // de tornillos, tamaño de hoja, densidad). Un cero aquí produce NaN o un precio infinito. `*` = cualquier clave.
   const POSITIVOS = [
-    'proceso.eficiencia_taller', 'proceso.hoja.ancho_mm', 'proceso.hoja.largo_mm', 'proceso.L_max_pieza_mm',
+    'proceso.eficiencia_taller', 'proceso.hoja.ancho_mm', 'proceso.hoja.largo_mm',
+    'proceso.armado_yardas.yarda_defecto_mm', 'proceso.armado_yardas.yardas_por_pieza_max', 'proceso.armado_yardas.yardas_mm.*',
     'proceso.semiangulo_max_deg', 'proceso.alfa_max_junta_deg', 'proceso.k_R_defecto',
     'proceso.rolado.n_pasadas', 'proceso.rolado.n_pasadas_plegado', 'proceso.rolado.k_conico',
     'proceso.soldadura.procesos.*.v_mult', 'proceso.soldadura.procesos.*.FO', 'proceso.soldadura.procesos.*.eta_dep', 'proceso.soldadura.rho_dep_g_cm3',
@@ -281,7 +287,7 @@
   const CELDAS_POSITIVAS = ['calibres.*.*', 'proceso.corte.v_m_min.*.*.*', 'proceso.rolado.v_m_min.*.*', 'proceso.engargolado.v_m_min.*.*', 'proceso.soldadura.v_m_min.*.*'];
   const aRegExp = (patron) => new RegExp(`^${patron.replace(/\./g, '\\.').replace(/\*/g, '[^.]+')}$`);
   const RE_POSITIVOS = [...POSITIVOS, ...CELDAS_POSITIVAS].map(aRegExp);
-  const LIMITES_REQUERIDOS = ['cantidad_max', 'seccion_min_mm', 'seccion_max_mm', 'largo_min_mm', 'largo_max_mm', 'espesor_min_mm', 'espesor_max_mm', 'piezas_max'];
+  const LIMITES_REQUERIDOS = ['cantidad_max', 'seccion_min_mm', 'seccion_max_mm', 'largo_min_mm', 'largo_max_mm', 'espesor_min_mm', 'espesor_max_mm', 'piezas_max', 'yarda_min_mm', 'yarda_max_mm'];
 
   /** ¿La celda de las tablas en esa ruta debe ser mayor que 0? (el editor de la interfaz lo usa para rechazar un cero al teclear) */
   const exigePositivo = (ruta) => {
@@ -363,9 +369,23 @@
       if (!esObjeto(Lm)) agregar(['proceso', 'limites'], 'falta la tabla de límites de captura');
       else {
         LIMITES_REQUERIDOS.forEach((k) => { if (typeof Lm[k] !== 'number') agregar(['proceso', 'limites', k], 'falta el límite'); });
-        [['seccion_min_mm', 'seccion_max_mm'], ['largo_min_mm', 'largo_max_mm'], ['espesor_min_mm', 'espesor_max_mm']].forEach(([a, b]) => {
+        [['seccion_min_mm', 'seccion_max_mm'], ['largo_min_mm', 'largo_max_mm'], ['espesor_min_mm', 'espesor_max_mm'], ['yarda_min_mm', 'yarda_max_mm']].forEach(([a, b]) => {
           if (typeof Lm[a] === 'number' && typeof Lm[b] === 'number' && Lm[a] >= Lm[b]) agregar(['proceso', 'limites', a], `debe ser menor que «${b.replace(/_/g, ' ')}»`);
         });
+      }
+      // Armado por yardas: la lista de anchos, el entero de yardas por pieza y la junta (una costura que exista)
+      const AY = M.proceso.armado_yardas;
+      if (!esObjeto(AY)) agregar(['proceso', 'armado_yardas'], 'falta la tabla del armado por yardas');
+      else {
+        if (!Array.isArray(AY.yardas_mm) || !AY.yardas_mm.length) agregar(['proceso', 'armado_yardas', 'yardas_mm'], 'debe ser una lista con al menos un ancho de yarda');
+        if (typeof AY.yardas_por_pieza_max === 'number' && !Number.isInteger(AY.yardas_por_pieza_max)) agregar(['proceso', 'armado_yardas', 'yardas_por_pieza_max'], `debe ser un número entero (vale ${texto(AY.yardas_por_pieza_max)})`);
+        if (typeof AY.junta_entre_yardas !== 'string' || !tiene(M.proceso.costuras, AY.junta_entre_yardas)) agregar(['proceso', 'armado_yardas', 'junta_entre_yardas'], `debe ser un tipo de costura de «proceso › costuras» (${claves(M.proceso.costuras).join(', ')}); vale ${texto(AY.junta_entre_yardas)}`);
+        if (esObjeto(Lm) && typeof Lm.yarda_min_mm === 'number' && typeof Lm.yarda_max_mm === 'number') {
+          const anchos = [...(Array.isArray(AY.yardas_mm) ? AY.yardas_mm : []).map((v, i) => [v, ['yardas_mm', i]]), [AY.yarda_defecto_mm, ['yarda_defecto_mm']]];
+          anchos.forEach(([v, ruta]) => {
+            if (typeof v === 'number' && (v < Lm.yarda_min_mm || v > Lm.yarda_max_mm)) agregar(['proceso', 'armado_yardas', ...ruta], `debe estar entre ${Lm.yarda_min_mm} y ${Lm.yarda_max_mm} mm, los límites de la yarda (vale ${v})`);
+          });
+        }
       }
     }
 

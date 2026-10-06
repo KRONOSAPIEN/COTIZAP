@@ -148,7 +148,7 @@
   function aplicarRemoto(remoto, arranque) {
     const base = C.maestros.crearMaestros();
     const ediciones = U.diferencia(U.mezclar(base, arranque), estado.M);
-    estado.M = U.mezclar(U.mezclar(base, C.maestros.migrarParche(remoto)), ediciones);
+    estado.M = U.mezclar(C.maestros.crearMaestros(remoto), ediciones); // lo del almacén compartido también se sanea: puede traerlo otra versión o un colaborador
     persistir();
     render();
     if (estado.tab === 'maestros' && W.maestrosUI) {
@@ -530,7 +530,8 @@
   /* ================================================================== */
   const ETQ_DET = {
     D_int_mm: ['Diámetro interior', 'mm', 2], D_med_mm: ['Diámetro medio (fibra neutra)', 'mm', 3], D_ext_mm: ['Diámetro exterior', 'mm', 3],
-    ancho_plantilla_mm: ['Ancho de plantilla B', 'mm', 3], allowance_costura_mm: ['Holgura de costura', 'mm', 1], L_pieza_mm: ['Longitud por pieza', 'mm', 1],
+    ancho_plantilla_mm: ['Ancho de plantilla B', 'mm', 3], allowance_costura_mm: ['Holgura de costura', 'mm', 1],
+    yarda_mm: ['Ancho de la yarda (hoja)', 'mm', 0], n_anillos: ['Yardas (anillos rolados)', '', 0], n_juntas_yardas: ['Juntas engargoladas entre yardas', '', 0], L_capa_mm: ['Largo que se corta', 'mm', 1],
     n_costuras: ['Costuras longitudinales', '', 0], a_med_mm: ['Ancho medio a', 'mm', 2], b_med_mm: ['Alto medio b', 'mm', 2], P_med_mm: ['Perímetro medio', 'mm', 1],
     n_gajos: ['Gajos', '', 0], n_juntas: ['Juntas elípticas', '', 0], alfa_deg: ['Desviación por junta α', '°', 2], R_mm: ['Radio de eje R', 'mm', 1],
     l_gajo_mm: ['Longitud de eje de un gajo', 'mm', 2], L_eje_mm: ['Longitud total de eje', 'mm', 2], L_tangentes_mm: ['Tangentes', 'mm', 1],
@@ -550,51 +551,120 @@
     k_entrepierna: ['Factor de entrepierna', '', 3], razon_areas_ramales_tronco: ['Σ áreas ramales / área del tronco', '', 3], A_tronco_m2: ['Área del tronco', 'm²', 4], A_ramales_m2: ['Área de los ramales', 'm²', 4],
   };
 
-  /** Plantilla de un tramo recto sobre la hoja estándar, a escala. */
+  /**
+   * Plantillas de un tramo recto sobre la hoja, a escala. La yarda ES el ancho de la hoja (914 ó 1 220 mm): cada plantilla
+   * (perímetro B × yarda) ocupa todo el ancho y se corta con un tajo a lo ancho; a lo largo de la hoja caben floor(largo / B).
+   */
   function svgHoja(f) {
     const d = f.geometria.detalle;
-    const hoja = estado.M.proceso.hoja;
-    const largoH = hoja.largo_mm;
-    const anchoH = hoja.ancho_mm;
+    const largoH = estado.M.proceso.hoja.largo_mm;
+    const anchoH = d.yarda_mm;
     const B = d.ancho_plantilla_mm;
-    const Lp = d.L_pieza_mm;
-    const nx = Math.floor(largoH / Lp + 1e-9);
-    const ny = Math.floor(anchoH / B + 1e-9);
-    const cabe = nx >= 1 && ny >= 1;
+    const nx = Math.floor(largoH / B + 1e-9);
+    const cabe = nx >= 1;
     const W_ = 320;
     const s = W_ / largoH;
     const alto = anchoH * s;
     const NS = 'http://www.w3.org/2000/svg';
     const el = (tag, at) => { const e = document.createElementNS(NS, tag); Object.keys(at).forEach((k) => e.setAttribute(k, at[k])); return e; };
-    const svg = el('svg', { viewBox: `0 0 ${W_ + 20} ${alto + 34}`, class: 'hoja', role: 'img', 'aria-label': `Plantilla de ${W.num(B, 0)} por ${W.num(Lp, 0)} mm sobre hoja de ${anchoH} por ${largoH} mm` });
+    const svg = el('svg', { viewBox: `0 0 ${W_ + 20} ${alto + 34}`, class: 'hoja', role: 'img', 'aria-label': `Plantillas de ${W.num(B, 0)} por ${W.num(anchoH, 0)} mm sobre hoja de ${W.num(anchoH, 0)} por ${W.num(largoH, 0)} mm` });
     svg.append(el('rect', { x: 10, y: 6, width: W_, height: alto, class: 'hoja-borde' }));
-    let usadas = 0;
     if (cabe) {
-      for (let iy = 0; iy < Math.min(ny, 4); iy += 1) {
-        for (let ix = 0; ix < Math.min(nx, 4); ix += 1) {
-          svg.append(el('rect', { x: 10 + ix * Lp * s, y: 6 + iy * B * s, width: Lp * s, height: B * s, class: 'hoja-pieza' }));
-          usadas += 1;
-        }
-      }
-      const t = el('text', { x: 10 + (Lp * s) / 2, y: 6 + (B * s) / 2 + 4, class: 'hoja-txt', 'text-anchor': 'middle' });
-      t.textContent = `${W.num(B, 0)} × ${W.num(Lp, 0)} mm`;
+      for (let ix = 0; ix < nx; ix += 1) svg.append(el('rect', { x: 10 + ix * B * s, y: 6, width: B * s, height: alto, class: 'hoja-pieza' }));
+      const t = el('text', { x: 10 + (B * s) / 2, y: 6 + alto / 2 + 4, class: 'hoja-txt', 'text-anchor': 'middle' });
+      t.textContent = `${W.num(B, 0)} × ${W.num(anchoH, 0)} mm`;
       svg.append(t);
     } else {
-      svg.append(el('rect', { x: 10, y: 6, width: Math.min(Lp * s, W_), height: Math.min(B * s, alto), class: 'hoja-fuera' }));
+      svg.append(el('rect', { x: 10, y: 6, width: Math.min(B * s, W_), height: alto, class: 'hoja-fuera' }));
     }
     const pie = el('text', { x: 10, y: alto + 24, class: 'hoja-txt' });
     pie.textContent = `Hoja ${W.num(anchoH, 0)} × ${W.num(largoH, 0)} mm`;
     svg.append(pie);
-    const aprov = cabe ? (nx * ny * B * Lp) / (anchoH * largoH) : 0;
-    return { svg, cabe, aprov, porHoja: nx * ny, usadas };
+    return { svg, cabe, aprov: cabe ? (nx * B) / largoH : 0, porHoja: nx };
   }
 
   function seccionHoja(f) {
     const r = svgHoja(f);
     const info = r.cabe
-      ? h('p', { class: 'nota' }, `Caben ${r.porHoja} ${r.porHoja === 1 ? 'plantilla' : 'plantillas'} por hoja: aprovechamiento geométrico ${W.pct(r.aprov, 1)}. La merma de tabla (${W.pct(f.qto.lam.phi, 0)}) supone reaprovechar parte del retazo en piezas pequeñas.`)
-      : h('p', { class: 'nota nota-adv' }, W.icono('aviso'), 'La plantilla excede la hoja estándar: use otro ancho de hoja o de rollo, o reduzca la longitud por pieza.');
+      ? h('p', { class: 'nota' }, `Caben ${r.porHoja} ${r.porHoja === 1 ? 'plantilla' : 'plantillas'} por hoja (una por yarda, con un tajo a lo ancho): aprovechamiento geométrico ${W.pct(r.aprov, 1)}. La merma de tabla (${W.pct(f.qto.lam.phi, 0)}) supone reaprovechar parte del retazo en piezas pequeñas.`)
+      : h('p', { class: 'nota nota-adv' }, W.icono('aviso'), 'La plantilla de la yarda es más larga que la hoja: cada anillo saldría de varias plantillas, con más costuras longitudinales de las cotizadas.');
     return h('div', { class: 'hoja-fig' }, h('div', { class: 'hoja-env' }, r.svg), info);
+  }
+
+  /** «2 × 3 yardas y 2 yardas + ajuste de 240 mm»: las piezas separadas por «y»; dentro de una pieza, «+» (engargoladas). */
+  function armadoTexto(arm) {
+    const yardas = (n) => `${n} ${n === 1 ? 'yarda' : 'yardas'}`;
+    const una = (q) => (q.ajuste_mm > 0 ? `${q.yardas ? `${yardas(q.yardas)} + ` : ''}ajuste de ${W.num(q.ajuste_mm, 0)} mm` : yardas(q.yardas));
+    const grupos = [];
+    arm.piezas.forEach((q) => {
+      const g = grupos.find((x) => x.q.yardas === q.yardas && x.q.ajuste_mm === q.ajuste_mm);
+      if (g) g.n += 1; else grupos.push({ n: 1, q });
+    });
+    return grupos.map((g) => (g.n > 1 ? `${g.n} × ${una(g.q)}` : una(g.q))).join(' y ');
+  }
+
+  /** Diagrama del armado: cada yarda un anillo, las piezas con sus bridas (barras) y el extremo libre del ajuste, sin brida. */
+  function svgArmado(arm) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const el = (tag, at, txt) => { const e = document.createElementNS(NS, tag); Object.keys(at).forEach((k) => e.setAttribute(k, at[k])); if (txt !== undefined) e.textContent = txt; return e; };
+    // Con muchas piezas se dibujan las primeras y las últimas (el diagrama es un esquema, no un plano)
+    const MAX = 7;
+    const piezas = arm.piezas.length > MAX ? [...arm.piezas.slice(0, 4), null, ...arm.piezas.slice(-2)] : arm.piezas;
+    const SEP = 10; const MARGEN = 12; const ANCHO = 440; const ALTO_ANILLO = 28; const Y0 = 14;
+    const reales = piezas.filter(Boolean);
+    const largoDibujado = reales.reduce((a, q) => a + q.largo_mm, 0);
+    const huecos = piezas.length - 1;
+    const escala = (ANCHO - 2 * MARGEN - huecos * SEP) / largoDibujado;
+    const svg = el('svg', {
+      viewBox: `0 0 ${ANCHO} ${Y0 + ALTO_ANILLO + 46}`, class: 'arm', role: 'img',
+      'aria-label': `Armado: ${armadoTexto(arm)}. ${arm.n_piezas} ${arm.n_piezas === 1 ? 'pieza' : 'piezas'}, ${arm.n_bridas} ${arm.n_bridas === 1 ? 'brida' : 'bridas'}${arm.extremo_libre ? ', el extremo del ajuste sin brida' : ''}.`,
+    });
+    let x = MARGEN;
+    piezas.forEach((q, i) => {
+      if (q === null) {
+        svg.append(el('text', { x: x + SEP / 2, y: Y0 + ALTO_ANILLO / 2 + 6, class: 'arm-txt', 'text-anchor': 'middle' }, '···'));
+        x += SEP;
+        return;
+      }
+      const x0 = x;
+      const anillos = [...Array(q.yardas).fill(arm.yarda_mm), ...(q.ajuste_mm > 0 ? [q.ajuste_mm] : [])];
+      anillos.forEach((mm, k) => {
+        const parcial = q.ajuste_mm > 0 && k === anillos.length - 1;
+        svg.append(el('rect', { x, y: Y0, width: mm * escala, height: ALTO_ANILLO, class: parcial ? 'arm-ajuste' : 'arm-anillo' }));
+        x += mm * escala;
+      });
+      svg.append(el('rect', { x: x0 - 2, y: Y0 - 6, width: 4, height: ALTO_ANILLO + 12, class: 'arm-brida' }));
+      if (q.bridas === 2) svg.append(el('rect', { x: x - 2, y: Y0 - 6, width: 4, height: ALTO_ANILLO + 12, class: 'arm-brida' }));
+      else {
+        svg.append(el('line', { x1: x, x2: x, y1: Y0 - 6, y2: Y0 + ALTO_ANILLO + 6, class: 'arm-libre' }));
+        svg.append(el('text', { x, y: Y0 + ALTO_ANILLO + 36, class: 'arm-txt arm-txt-adv', 'text-anchor': 'end' }, 'sin brida'));
+      }
+      // El rótulo largo si cabe bajo la pieza; si no, el corto («3», «2+aj.»)
+      const largo = q.ajuste_mm > 0 ? `${q.yardas ? `${q.yardas} + ` : ''}ajuste ${W.num(q.ajuste_mm, 0)} mm` : `${q.yardas} ${q.yardas === 1 ? 'yarda' : 'yardas'}`;
+      const corto = q.ajuste_mm > 0 ? `${q.yardas ? `${q.yardas}+` : ''}aj.` : String(q.yardas);
+      svg.append(el('text', { x: (x0 + x) / 2, y: Y0 + ALTO_ANILLO + 22, class: 'arm-txt', 'text-anchor': 'middle' }, largo.length * 5.6 <= x - x0 ? largo : corto));
+      x += i < piezas.length - 1 ? SEP : 0;
+    });
+    return svg;
+  }
+
+  /** Armado por yardas de un tramo recto: diagrama, piezas y qué lleva cada una. */
+  function detalleArmado(f) {
+    const arm = f.geometria.detalle.armado;
+    const filas = arm.piezas.length > 12 ? arm.piezas.slice(0, 11) : arm.piezas;
+    const tabla_ = tabla([{ t: 'Pieza' }, { t: 'Yardas', num: true }, { t: 'Largo', num: true }, { t: 'Juntas engargoladas', num: true }, { t: 'Bridas', num: true }],
+      [...filas.map((q, i) => [`#${i + 1}`, q.ajuste_mm > 0 ? `${q.yardas}${q.yardas ? ' + ' : ''}ajuste` : String(q.yardas), `${W.num(q.largo_mm, 0)} mm`, String(q.juntas), q.bridas === 1 ? '1 (extremo libre sin brida)' : String(q.bridas)]),
+        ...(arm.piezas.length > filas.length ? [['…', '', '', '', '']] : []),
+        { clase: 'total', celdas: ['Total', `${arm.n_completas}${arm.ajuste_mm > 0 ? ' + ajuste' : ''}`, `${W.num(arm.L_capa_mm, 0)} mm`, String(arm.n_juntas), String(arm.n_bridas)] }]);
+    const notas = [];
+    notas.push(`Yardas de ${W.num(arm.yarda_mm, 0)} mm (el ancho de la hoja): cada una se rola por separado y se engargolan hasta ${estado.M.proceso.armado_yardas.yardas_por_pieza_max} por pieza; las piezas llevan brida en ambos extremos.`);
+    if (arm.extremo_libre) notas.push(`El tramo de ajuste (${W.num(arm.ajuste_mm, 0)} mm, menos de una yarda) va sin brida en su extremo libre para cortarlo y ponerlo en campo: la brida y la junta de ese extremo no están en este precio.`);
+    return h('div', { class: 'arm-fig' },
+      h('h4', null, 'Armado por yardas'),
+      h('p', { class: 'arm-resumen' }, armadoTexto(arm)),
+      h('div', { class: 'arm-env' }, svgArmado(arm)),
+      tabla_,
+      notas.map((n) => h('p', { class: 'nota' }, n)));
   }
 
   function detalleResumen(f) {
@@ -639,6 +709,7 @@
       kv('Merma en kg', W.num(lam.m_merma_kg, 3), 'kg'));
     return [
       h('div', { class: 'dos-col' }, h('div', null, h('h4', null, 'Geometría'), kvs), h('div', null, h('h4', null, 'Peso y merma'), mat)),
+      f.familia === 'RECTO' ? detalleArmado(f) : null,
       f.familia === 'RECTO' ? seccionHoja(f) : null,
     ];
   }
@@ -797,6 +868,11 @@
     if (clave === 'materiales') return Object.keys(M.materiales).map((k) => [k, M.materiales[k].nombre]);
     if (clave === 'angulos_injerto') return M.proceso.angulos_injerto_deg.map((a) => [String(a), `${a}°`]);
     if (clave === 'angulos_codo') return M.proceso.angulos_codo_deg.map((a) => [String(a), `${a}°`]);
+    if (clave === 'yardas') {
+      const AY = M.proceso.armado_yardas;
+      const pies = (mm) => { const ft = mm / 304.8; return Math.abs(ft - Math.round(ft)) < 0.02 ? ` · ${Math.round(ft)} ft` : ''; };
+      return [['', `Predeterminada · ${W.num(AY.yarda_defecto_mm, 0)} mm${pies(AY.yarda_defecto_mm)}`], ...AY.yardas_mm.map((y) => [String(y), `${W.num(y, 0)} mm${pies(y)}`])];
+    }
     if (clave === 'perfiles') return [['', 'Estándar del taller'], ...Object.keys(M.herrajes.perfiles).map((k) => [k, `${k} · ${M.herrajes.perfiles[k].descripcion}`])];
     return W.OPC[clave];
   }
@@ -814,7 +890,7 @@
     if (c.tipo === 'select' || c.tipo === 'calibre') {
       let ops = c.tipo === 'calibre' ? opcionesCalibre(dlg.valores.material_id) : opcionesDe(c.opciones);
       // Un ángulo guardado que ya no está en la lista del taller se muestra tal cual, marcado, para que se vea qué hay que corregir.
-      if (c.numerico && valor !== undefined && valor !== '' && !ops.some(([v]) => String(v) === String(valor))) ops = [[String(valor), `${valor}° (no permitido)`], ...ops];
+      if (c.numerico && valor !== undefined && valor !== '' && !ops.some(([v]) => String(v) === String(valor))) ops = [[String(valor), `${valor}${c.sufijoFuera || ''}`], ...ops];
       ctl = h('select', { id, name: c.id }, ops.map(([v, t]) => h('option', { value: v, selected: String(valor) === String(v) }, t)));
     } else if (c.tipo === 'dim') {
       ctl = h('input', { id, name: c.id, type: 'text', inputmode: 'decimal', autocomplete: 'off', value: valor === undefined || valor === '' ? '' : aUnidad(valor, c.eje), placeholder: c.opcional ? 'auto' : '' });
@@ -851,7 +927,7 @@
       if (el.validity && el.validity.badInput) dlg.invalidos.push(`${c.etiqueta}: lo escrito no es un número.`);
       if (c.tipo === 'select') {
         if (v === '') return;
-        p[c.id] = c.id === 'caras_pintadas' || c.numerico ? Number(v) : v;
+        p[c.id] = c.id === 'caras_pintadas' || c.numerico ? Number(v) : c.booleano ? v === 'true' : v;
         return;
       }
       if (c.tipo === 'calibre') {
@@ -986,6 +1062,7 @@
           kv('Precio por kg', ind.precio_por_kg_neto ? W.mxn(ind.precio_por_kg_neto) : '—'),
           kv('Mano de obra', W.num(ind.horas_mod_reales, 2), 'h'),
           f.geometria ? kv('Área de lámina', W.num(f.geometria.A_neta_m2, 3), 'm²') : null,
+          f.familia === 'RECTO' ? kv('Armado', armadoTexto(f.geometria.detalle.armado)) : null,
           f.qto ? kv('Lámina bruta', W.num(f.qto.lam.m_bruta_kg, 2), 'kg') : null),
         f.advertencias.length ? h('ul', { class: 'avisos' }, f.advertencias.map((a) => h('li', null, W.icono('aviso'), h('span', null, a)))) : h('p', { class: 'nota ok' }, W.icono('check'), 'Datos consistentes'));
       dlg.error = null;

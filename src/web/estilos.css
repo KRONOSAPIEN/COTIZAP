@@ -387,6 +387,19 @@ main { padding: 16px 24px 48px; max-width: 1540px; margin-inline: auto; }
 .hoja-fuera { fill: color-mix(in srgb, var(--crit) 15%, transparent); stroke: var(--crit); stroke-width: 1.4; }
 .hoja-txt { fill: var(--fg-2); font: 500 11px var(--font-ui); }
 
+/* Armado por yardas del tramo recto */
+.arm-fig { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.arm-fig h4 { margin: 0; }
+.arm-resumen { margin: 0; font: 600 14px var(--font-ui); color: var(--fg); }
+.arm-env { max-width: 640px; }
+.arm { width: 100%; height: auto; display: block; }
+.arm-anillo { fill: color-mix(in srgb, var(--s1) 18%, transparent); stroke: var(--s1); stroke-width: 1.2; }
+.arm-ajuste { fill: color-mix(in srgb, var(--s4) 26%, transparent); stroke: var(--s4); stroke-width: 1.2; }
+.arm-brida { fill: var(--fg-2); }
+.arm-libre { stroke: var(--fg-3); stroke-width: 1.6; stroke-dasharray: 3 3; }
+.arm-txt { fill: var(--fg-2); font: 500 11px var(--font-ui); }
+.arm-txt-adv { fill: var(--warn); }
+
 /* -------------------------------------------------------------------------- diálogos */
 dialog {
   border: 0; padding: 0; border-radius: 16px; color: var(--fg); background: var(--surface);

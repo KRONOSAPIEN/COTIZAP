@@ -16,8 +16,9 @@ const casi = (real, esperado, tol = 1e-9, msg = '') => {
   assert.ok(Math.abs(real - esperado) <= tol * Math.max(1, Math.abs(esperado)), `${msg} esperado ${esperado}, obtenido ${real}`);
 };
 
+// 3 000 mm de ducto con brida en ambos extremos (sin la regla del tramo de ajuste sin brida, que se prueba aparte): 2 aros, 1 junta
 const recto = {
-  familia: 'RECTO', material_id: 'ACERO_CARBON', calibre: 16, D_mm: 304.8, L_mm: 3000, tipo_union: 'BRIDADO', servicio: 'POLVO', riesgo: 'MEDIO',
+  familia: 'RECTO', material_id: 'ACERO_CARBON', calibre: 16, D_mm: 304.8, L_mm: 3000, tipo_union: 'BRIDADO', servicio: 'POLVO', riesgo: 'MEDIO', ajuste_sin_brida: false,
 };
 const codo = {
   familia: 'CODO', material_id: 'ACERO_CARBON', calibre: 16, D_mm: 304.8, theta_deg: 90, tipo_union: 'BRIDADO', servicio: 'POLVO', riesgo: 'MEDIO',
@@ -184,11 +185,16 @@ test('Clases de sellado SMACNA: A ≥ B ≥ C ≥ NINGUNA (costura engargolada c
   casi(a - b, 0.5, 1e-12);
 });
 
-test('Costura soldada vs engargolada: Pittsburgh no suelda la costura y suma tiempo de engargolado', () => {
+test('Costura soldada vs engargolada: Pittsburgh no suelda la costura longitudinal y suma tiempo de engargolado', () => {
   const sol = C.cotizarPartida({ ...recto, material_id: 'GALVANIZADO', calibre: 20, servicio: 'VENTILACION', tipo_union: 'ESPIGA' }, M);
   const eng = C.cotizarPartida({ ...recto, material_id: 'GALVANIZADO', calibre: 20, servicio: 'VENTILACION', tipo_union: 'ESPIGA', tipo_costura: 'PITTSBURGH' }, M);
-  assert.equal(sol.qto.tmp.unitarios_min.engargolado, 0);
-  assert.ok(eng.qto.tmp.unitarios_min.engargolado > 0);
+  // Las yardas de una pieza siempre se engargolan entre sí: hay engargolado aun con la costura longitudinal soldada...
+  assert.ok(sol.qto.tmp.unitarios_min.engargolado > 0);
+  assert.equal(sol.qto.PF.engargolado_long_m, 0);
+  casi(sol.qto.PF.engargolado_m, sol.qto.PF.engargolado_circ_m, 1e-12);
+  // ...y con costura Pittsburgh se suma el de la costura de cada anillo
+  assert.ok(eng.qto.tmp.unitarios_min.engargolado > sol.qto.tmp.unitarios_min.engargolado);
+  casi(eng.qto.PF.engargolado_long_m, 3.0, 1e-12);
   assert.ok(sol.qto.con.soldadura.kg_alambre > 0);
   assert.equal(eng.qto.con.soldadura.kg_alambre, 0);
 });
@@ -582,4 +588,76 @@ test('ESPIGA no usa aros: no hay perfil, barrenos ni cierres', () => {
   assert.equal(r.qto.her.n_barrenos, 0);
   assert.equal(r.qto.her.sold_aros.cierres.length, 0);
   assert.equal(r.costos.materiales.perfiles, 0);
+});
+
+/* ---------- Armado por yardas (regla del taller) ---------- */
+
+const rectoYardas = { ...recto, ajuste_sin_brida: undefined }; // por omisión: el tramo de ajuste va sin brida
+
+test('Tramo de ajuste: por omisión su extremo va sin brida, y con él una brida menos de todo lo que lleva una brida', () => {
+  const sin = C.cotizarPartida(rectoYardas, M); // 3 000 mm en yardas de 1 220 = 2 yardas + ajuste de 560: 1 brida
+  const con = C.cotizarPartida({ ...rectoYardas, ajuste_sin_brida: false }, M); // 2 bridas
+  assert.equal(sin.qto.her.n_aros, 1);
+  assert.equal(con.qto.her.n_aros, 2);
+  casi(sin.qto.her.m_aros_neta_kg * 2, con.qto.her.m_aros_neta_kg, 1e-12);
+  assert.equal(sin.qto.her.n_barrenos * 2, con.qto.her.n_barrenos);
+  casi(sin.qto.her.n_tornillos_asignados * 2, con.qto.her.n_tornillos_asignados, 1e-12);
+  casi(sin.qto.her.L_empaque_m * 2, con.qto.her.L_empaque_m, 1e-12);
+  casi(sin.qto.her.sold_aros.filete_m * 2, con.qto.her.sold_aros.filete_m, 1e-12);
+  assert.equal(sin.qto.her.sold_aros.cierres.length, 1);
+  casi(sin.costos.materiales.perfiles * 2, con.costos.materiales.perfiles, 1e-12);
+  casi(sin.costos.materiales.tornilleria * 2, con.costos.materiales.tornilleria, 1e-12);
+  // la lámina no cambia: el ducto es el mismo
+  casi(sin.costos.materiales.lamina, con.costos.materiales.lamina, 1e-12);
+  assert.ok(sin.precio.unitario < con.precio.unitario);
+  // un tramo que cae justo en yardas completas lleva brida en ambos extremos, sin pedirlo
+  const justo = C.cotizarPartida({ ...rectoYardas, L_mm: 3660 }, M);
+  assert.equal(justo.qto.her.n_aros, 2);
+  assert.equal(justo.geometria.detalle.armado.extremo_libre, false);
+});
+
+test('Yardas: cada una se rola aparte y las juntas entre ellas se engargolan (más anillos, más tiempo de rolado y de engargolado)', () => {
+  const por1220 = C.cotizarPartida({ ...rectoYardas, ajuste_sin_brida: false, yarda_mm: 1220 }, M); // 3 anillos
+  const por914 = C.cotizarPartida({ ...rectoYardas, ajuste_sin_brida: false, yarda_mm: 914 }, M); // 4 anillos
+  assert.equal(por1220.geometria.n_virolas, 3);
+  assert.equal(por914.geometria.n_virolas, 4);
+  // el mismo ducto: misma área y misma lámina
+  casi(por914.geometria.A_neta_m2, por1220.geometria.A_neta_m2, 1e-12);
+  casi(por914.qto.lam.m_bruta_kg, por1220.qto.lam.m_bruta_kg, 1e-12);
+  // rolado = Σ (tiempo fijo + pasadas · m / velocidad): cada anillo trae su tiempo fijo
+  const t = (r) => r.qto.tmp.unitarios_min.rolado;
+  casi(t(por914) - t(por1220), 3.0, 1e-9, 'un anillo más = un tiempo fijo de rolado más (3 min)');
+  // juntas engargoladas: 2 y 2 (3 anillos en una pieza; 3 en una pieza y el ajuste aparte), pero 3 piezas vs 1 en el armado
+  assert.equal(por914.geometria.n_piezas, 2);
+  assert.equal(por1220.geometria.n_piezas, 1);
+  assert.ok(por914.qto.tmp.unitarios_min.armado > por1220.qto.tmp.unitarios_min.armado);
+  assert.equal(por914.qto.PF.n_engargolados, 2);
+  casi(por914.qto.PF.engargolado_circ_m, 2 * (Math.PI * (304.8 + 0.0598 * 25.4)) / 1000, 1e-12);
+  // el ancho de la hoja es el de la yarda: más hojas «equivalentes» al manejar la de 3 ft
+  assert.ok(por914.qto.tmp.detalle.n_hojas_eq > por1220.qto.tmp.detalle.n_hojas_eq);
+  casi(por914.qto.tmp.detalle.n_hojas_eq / por1220.qto.tmp.detalle.n_hojas_eq, 1220 / 914, 1e-12);
+});
+
+test('Sellado clase C: también se sellan las juntas engargoladas entre yardas (son transversales); NINGUNA no sella nada', () => {
+  const sel = (clase, yarda) => C.cotizarPartida({ ...rectoYardas, ajuste_sin_brida: false, yarda_mm: yarda, clase_sellado: clase }, M).qto.her.L_sellado_m;
+  const P_med = Math.PI * (304.8 + 0.0598 * 25.4);
+  const D_ext = 304.8 + 2 * 0.0598 * 25.4;
+  casi(sel('C', 1220), (1 * Math.PI * D_ext) / 1000 + (2 * P_med) / 1000, 1e-12, '1 junta de bridas + 2 juntas engargoladas');
+  // con yardas de 914 el ajuste es una pieza aparte (con brida en ambos extremos): una junta de bridas más, las engargoladas son las mismas
+  casi(sel('C', 914) - sel('C', 1220), (Math.PI * D_ext) / 1000, 1e-12);
+  assert.equal(sel('NINGUNA', 1220), 0);
+  // la costura longitudinal soldada a tope no se sella; con Pittsburgh se suma desde la clase B
+  const B = (tc) => C.cotizarPartida({ ...rectoYardas, ajuste_sin_brida: false, clase_sellado: 'B', tipo_costura: tc }, M).qto.her.L_sellado_m;
+  casi(B('PITTSBURGH') - B('A_TOPE'), 3.0, 1e-12);
+});
+
+test('Tramo recto largo: piezas de 3 yardas con brida en ambos extremos y el ajuste sin brida; el precio crece sin saltos locos', () => {
+  const r = C.cotizarPartida({ ...rectoYardas, L_mm: 10000 }, M); // 8 yardas de 1 220 + ajuste de 240: [3][3][2+240]
+  assert.deepEqual(r.geometria.detalle.armado.piezas.map((q) => `${q.yardas}${q.ajuste_mm ? `+${q.ajuste_mm}` : ''}`), ['3', '3', '2+240']);
+  assert.equal(r.qto.her.n_aros, 5);
+  assert.equal(r.geometria.n_virolas, 9);
+  casi(r.geometria.A_neta_m2, ((Math.PI * (304.8 + 0.0598 * 25.4) + 1.0) * 10000) / 1e6, 1e-12);
+  // el precio por metro lineal de un tramo largo no se dispara frente al de uno corto (las bridas son por pieza, no por metro)
+  const corto = C.cotizarPartida({ ...rectoYardas, L_mm: 3660 }, M);
+  assert.ok(r.indicadores.precio_por_m_lineal < corto.indicadores.precio_por_m_lineal * 1.1);
 });

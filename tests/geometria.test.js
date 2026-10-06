@@ -92,15 +92,182 @@ test('Tramo recto redondo: A = (π·D_med + holgura de costura)·L', () => {
   const PF = G.perfilFabricacion({ familia: 'RECTO', D_mm: 304.8, L_mm: 3000 }, E_16, M);
   const Dmed = 304.8 + E_16;
   casi(PF.A_neta_m2, ((PI * Dmed + 1.0) * 3000) / 1e6, 1e-12);
+  // 3 000 mm en yardas de 1 220 mm: 2 yardas y un tramo de ajuste de 560 mm, en una sola pieza con brida sólo en el extremo de las yardas
   assert.equal(PF.n_piezas, 1);
-  assert.equal(PF.extremos.length, 2);
+  assert.equal(PF.n_virolas, 3);
+  assert.equal(PF.extremos.length, 1);
+  assert.equal(PF.detalle.armado.extremo_libre, true);
 });
 
-test('Tramo recto: se divide en piezas por longitud máxima y cada pieza tiene 2 extremos', () => {
-  const PF = G.perfilFabricacion({ familia: 'RECTO', D_mm: 600, L_mm: 7000 }, E_16, M);
-  assert.equal(PF.n_piezas, 3);
-  assert.equal(PF.extremos.length, 6);
-  casi(PF.detalle.L_pieza_mm, 7000 / 3, 1e-12);
+/* ---------- Armado por yardas: la regla del taller ---------- */
+
+/**
+ * Oráculo del armado: construye el tramo pieza por pieza con un lazo (el motor lo calcula en forma cerrada), tal como lo
+ * cuenta el taller: primero piezas de `maxY` yardas mientras quepan; con lo que falta, las yardas completas y un tramo de
+ * ajuste engargolados en una pieza; el extremo del ajuste va sin brida.
+ */
+function oraculoArmado(L, Y, maxY, tol, sinBridaEnAjuste) {
+  const piezas = [];
+  let falta = L;
+  while (falta >= maxY * Y - tol) { piezas.push({ yardas: maxY, ajuste: 0 }); falta -= maxY * Y; }
+  if (piezas.length * maxY * Y > 0 && falta <= tol) return resumenOraculo(piezas, Y, sinBridaEnAjuste); // lo que sobra cabe en la tolerancia
+  let yardas = 0;
+  while (falta >= Y - tol && yardas < maxY && falta > 0) { yardas += 1; falta -= Y; }
+  const ajuste = yardas > 0 ? (falta > tol ? falta : 0) : falta;
+  if (yardas > 0 || ajuste > 0) piezas.push({ yardas, ajuste });
+  return resumenOraculo(piezas, Y, sinBridaEnAjuste);
+}
+function resumenOraculo(piezas, Y, sinBridaEnAjuste) {
+  const q = piezas.map((x) => ({ ...x, anillos: x.yardas + (x.ajuste > 0 ? 1 : 0), bridas: x.ajuste > 0 && sinBridaEnAjuste ? 1 : 2 }));
+  return {
+    piezas: q,
+    anillos: q.reduce((a, x) => a + x.anillos, 0),
+    bridas: q.reduce((a, x) => a + x.bridas, 0),
+    juntas: q.reduce((a, x) => a + x.anillos - 1, 0),
+    L_capa: q.reduce((a, x) => a + x.yardas * Y + x.ajuste, 0),
+  };
+}
+
+test('Armado por yardas: los casos del taller (3 yardas por pieza; el ajuste va sin brida)', () => {
+  const arm = (L, Y, libre = true) => G.distribuirYardas(L, Y, 3, 25, libre);
+  const forma = (a) => a.piezas.map((q) => `${q.yardas}${q.ajuste_mm ? `+${q.ajuste_mm}` : ''}/${q.bridas}`).join(' | ');
+  // exactamente 3 yardas: una pieza con brida en ambos extremos
+  let a = arm(3660, 1220);
+  assert.equal(forma(a), '3/2'); assert.equal(a.n_anillos, 3); assert.equal(a.n_juntas, 2); assert.equal(a.n_bridas, 2); assert.equal(a.extremo_libre, false);
+  // 3 m en yardas de 4 ft: 2 yardas y un tramo de ajuste de 560 mm, engargolados en una pieza; sólo una brida
+  a = arm(3000, 1220);
+  assert.equal(forma(a), '2+560/1'); assert.equal(a.n_anillos, 3); assert.equal(a.n_juntas, 2); assert.equal(a.n_bridas, 1); assert.equal(a.extremo_libre, true);
+  // 3 m en yardas de 3 ft: una pieza de 3 yardas y el ajuste de 258 mm aparte
+  a = arm(3000, 914);
+  assert.equal(forma(a), '3/2 | 0+258/1'); assert.equal(a.n_anillos, 4); assert.equal(a.n_juntas, 2); assert.equal(a.n_bridas, 3);
+  // «primero hasta 3 yardas entre sí, y lo que falta, 2 yardas y un tramo de ajuste»
+  a = arm(10000, 1220);
+  assert.equal(forma(a), '3/2 | 3/2 | 2+240/1'); assert.equal(a.n_anillos, 9); assert.equal(a.n_juntas, 6); assert.equal(a.n_bridas, 5);
+  a = arm(10000, 914);
+  assert.equal(forma(a), '3/2 | 3/2 | 3/2 | 1+860/1'); assert.equal(a.n_anillos, 11); assert.equal(a.n_juntas, 7); assert.equal(a.n_bridas, 7);
+  // lo que falta son sólo yardas completas: otra pieza con brida en ambos extremos
+  assert.equal(forma(arm(1828, 914)), '2/2');
+  assert.equal(forma(arm(914, 914)), '1/2');
+  assert.equal(forma(arm(7320, 1220)), '3/2 | 3/2');
+  assert.equal(forma(arm(8540, 1220)), '3/2 | 3/2 | 1/2');
+  // lo que falta es sólo el ajuste: una pieza aparte con una brida
+  assert.equal(forma(arm(8000, 1220)), '3/2 | 3/2 | 0+680/1');
+  // un tramo más corto que una yarda es todo ajuste
+  a = arm(500, 914);
+  assert.equal(forma(a), '0+500/1'); assert.equal(a.n_anillos, 1); assert.equal(a.n_juntas, 0);
+  // a ±25 mm de un múltiplo de la yarda no hay ajuste: son yardas completas
+  assert.equal(forma(arm(2735, 914)), '3/2');
+  assert.equal(forma(arm(2760, 914)), '3/2');
+  assert.equal(forma(arm(2770, 914)), '3/2 | 0+28/1');
+  // pedir brida en ambos extremos (aunque haya ajuste)
+  a = arm(3000, 1220, false);
+  assert.equal(forma(a), '2+560/2'); assert.equal(a.n_bridas, 2); assert.equal(a.extremo_libre, false);
+  // con otro máximo de yardas por pieza
+  assert.equal(forma(G.distribuirYardas(10000, 1220, 2, 25, true)), '2/2 | 2/2 | 2/2 | 2/2 | 0+240/1'); // 8 yardas = 4 piezas de 2
+  assert.equal(forma(G.distribuirYardas(10000, 1220, 1, 25, true)), '1/2 | 1/2 | 1/2 | 1/2 | 1/2 | 1/2 | 1/2 | 1/2 | 0+240/1');
+});
+
+test('Armado por yardas: coincide con el oráculo que arma pieza por pieza (miles de largos y yardas al azar)', () => {
+  let semilla = 20261006;
+  const azar = () => { semilla = (Math.imul(semilla, 1664525) + 1013904223) >>> 0; return semilla / 2 ** 32; };
+  for (let i = 0; i < 4000; i += 1) {
+    const Y = [914, 1220, 1000, 1524][Math.floor(azar() * 4)];
+    const maxY = 1 + Math.floor(azar() * 4);
+    const tol = [0, 10, 25, 60][Math.floor(azar() * 4)];
+    const L = Math.round((50 + azar() * 30000) * 10) / 10;
+    const libre = azar() < 0.8;
+    const a = G.distribuirYardas(L, Y, maxY, tol, libre);
+    const o = oraculoArmado(L, Y, maxY, tol, libre);
+    const dicho = `L=${L} Y=${Y} máx=${maxY} tol=${tol}`;
+    assert.deepEqual(a.piezas.map((q) => [q.yardas, q.ajuste_mm > 0 ? 1 : 0]), o.piezas.map((q) => [q.yardas, q.ajuste > 0 ? 1 : 0]), dicho);
+    assert.equal(a.n_anillos, o.anillos, dicho);
+    assert.equal(a.n_bridas, o.bridas, dicho);
+    assert.equal(a.n_juntas, o.juntas, dicho);
+    casi(a.L_capa_mm, o.L_capa, 1e-12, dicho);
+    // Invariantes de la regla
+    assert.ok(Math.abs(a.L_capa_mm - L) <= tol + 1e-9, `lo que se corta es el largo pedido ±tolerancia: ${dicho}`);
+    a.piezas.forEach((q, k) => {
+      assert.ok(q.yardas <= maxY, `una pieza no pasa de ${maxY} yardas: ${dicho}`);
+      assert.ok(q.ajuste_mm < Y, `el ajuste es menos de una yarda: ${dicho}`);
+      assert.ok(q.ajuste_mm === 0 || k === a.piezas.length - 1, `sólo la última pieza trae el ajuste: ${dicho}`);
+      assert.ok(q.yardas === maxY || k === a.piezas.length - 1, `todas las piezas, menos la última, son de ${maxY} yardas: ${dicho}`);
+      assert.equal(q.bridas, q.ajuste_mm > 0 && libre ? 1 : 2, dicho);
+      assert.equal(q.juntas, q.n_anillos - 1, dicho);
+    });
+    assert.equal(a.anillos.length, a.n_anillos);
+    assert.equal(a.extremo_libre, a.ajuste_mm > 0 && libre, dicho);
+  }
+});
+
+test('Tramo recto por yardas: cantidades físicas (anillos, corte a lo ancho de la hoja, juntas engargoladas, extremos con brida)', () => {
+  const D = 304.8;
+  const Dmed = D + E_16;
+  const P = PI * Dmed;
+  const B = P + 1.0;
+  const PF = G.perfilFabricacion({ familia: 'RECTO', D_mm: D, L_mm: 3000, yarda_mm: 1220 }, E_16, M);
+  assert.equal(PF.n_virolas, 3, 'cada yarda se rola por separado');
+  casi(PF.L_virola_m * PF.n_virolas, 3.0, 1e-12, 'n·L conserva los metros rolados');
+  casi(PF.A_neta_m2, (B * 3000) / 1e6, 1e-12, 'el área es la de la plantilla por el largo');
+  // Corte: dos yardas completas = un tajo de 1 220 mm cada una; el ajuste, más angosto que la hoja, B (a lo largo) + 560 (a lo ancho)
+  casi(PF.L_corte_m, (2 * 1220 + B + 560) / 1000, 1e-12);
+  // Costura longitudinal soldada a tope en cada anillo (3 m en total) y 2 juntas engargoladas de un perímetro medio cada una
+  casi(PF.sold.tope_m, 3.0, 1e-12);
+  casi(PF.engargolado_circ_m, (2 * P) / 1000, 1e-12);
+  assert.equal(PF.engargolado_long_m, 0);
+  casi(PF.engargolado_m, PF.engargolado_circ_m, 1e-12);
+  assert.equal(PF.n_engargolados, 2, 'una operación de engargolado por junta');
+  assert.equal(PF.n_juntas_internas, 0, 'las juntas engargoladas no son juntas de armado soldadas');
+  assert.equal(PF.extremos.length, 1);
+  assert.equal(PF.ancho_hoja_mm, 1220, 'la hoja es del ancho de la yarda');
+  casi(PF.A_ext_m2, (PI * (Dmed + E_16) * 3000) / 1e6, 1e-12);
+  assert.equal(PF.espigas_defecto, 1);
+  // Con brida en ambos extremos hay un extremo más y lo demás no cambia
+  const ambos = G.perfilFabricacion({ familia: 'RECTO', D_mm: D, L_mm: 3000, yarda_mm: 1220, ajuste_sin_brida: false }, E_16, M);
+  assert.equal(ambos.extremos.length, 2);
+  casi(ambos.A_neta_m2, PF.A_neta_m2, 1e-12);
+  assert.equal(ambos.n_virolas, 3);
+  // El ancho de la yarda por omisión sale de las tablas maestras
+  const por914 = G.perfilFabricacion({ familia: 'RECTO', D_mm: D, L_mm: 3000 }, E_16, crearMaestros({ proceso: { armado_yardas: { yarda_defecto_mm: 914 } } }));
+  assert.equal(por914.detalle.yarda_mm, 914);
+  assert.equal(por914.n_piezas, 2);
+  assert.equal(por914.extremos.length, 3);
+  assert.equal(por914.n_virolas, 4);
+});
+
+test('Tramo recto por yardas: la costura longitudinal engargolada y la junta soldada entre yardas siguen a las tablas', () => {
+  const Dmed = 304.8 + E_16;
+  const P = PI * Dmed;
+  // Pittsburgh: la costura de cada anillo se engargola; las juntas entre yardas también
+  const eng = G.perfilFabricacion({ familia: 'RECTO', D_mm: 304.8, L_mm: 3000, yarda_mm: 1220, tipo_costura: 'PITTSBURGH' }, E_16, M);
+  casi(eng.engargolado_long_m, 3.0, 1e-12);
+  casi(eng.engargolado_circ_m, (2 * P) / 1000, 1e-12);
+  casi(eng.engargolado_m, 3.0 + (2 * P) / 1000, 1e-12);
+  assert.equal(eng.n_engargolados, 3 + 2, 'una operación por anillo (costura) y una por junta');
+  assert.equal(eng.sold.tope_m + eng.sold.filete_m, 0);
+  // Si el taller soldara las yardas (A_TOPE en la junta), esas juntas son soldadura a tope y juntas de armado, no engargolado
+  const soldada = crearMaestros({ proceso: { armado_yardas: { junta_entre_yardas: 'A_TOPE' } } });
+  const s = G.perfilFabricacion({ familia: 'RECTO', D_mm: 304.8, L_mm: 3000, yarda_mm: 1220 }, E_16, soldada);
+  casi(s.sold.tope_m, 3.0 + (2 * P) / 1000, 1e-12);
+  assert.equal(s.engargolado_m, 0);
+  assert.equal(s.n_juntas_internas, 2);
+  // Un tipo de junta inexistente se avisa con claridad
+  assert.throws(() => G.perfilFabricacion({ familia: 'RECTO', D_mm: 304.8, L_mm: 3000 }, E_16, crearMaestros({ proceso: { armado_yardas: { junta_entre_yardas: 'PEGAMENTO' } } })), /junta entre yardas «PEGAMENTO»/);
+});
+
+test('Tramo recto: sin ajuste, con yardas de 3 y de 4 ft, y el aviso cuando la plantilla es más larga que la hoja', () => {
+  const sinAjuste = G.perfilFabricacion({ familia: 'RECTO', D_mm: 600, L_mm: 3660, yarda_mm: 1220 }, E_16, M);
+  assert.equal(sinAjuste.n_piezas, 1);
+  assert.equal(sinAjuste.extremos.length, 2);
+  assert.equal(sinAjuste.detalle.armado.extremo_libre, false);
+  // a un tramo largo le tocan varias piezas de 3 yardas
+  const largo = G.perfilFabricacion({ familia: 'RECTO', D_mm: 600, L_mm: 7000, yarda_mm: 914 }, E_16, M);
+  assert.deepEqual(largo.detalle.armado.piezas.map((q) => q.yardas), [3, 3, 1]);
+  assert.equal(largo.n_piezas, 3);
+  assert.equal(largo.extremos.length, 5);
+  // Ø1 200: la plantilla (≈3 800 mm) no cabe en una hoja de 10 ft: se avisa
+  const grande = G.perfilFabricacion({ familia: 'RECTO', D_mm: 1200, L_mm: 1220, yarda_mm: 1220 }, E_16, M);
+  assert.match(grande.advertencias.join(' '), /plantilla de cada yarda .* más larga que la hoja/);
+  assert.equal(G.perfilFabricacion({ familia: 'RECTO', D_mm: 600, L_mm: 1220 }, E_16, M).advertencias.length, 0);
 });
 
 test('Tramo recto: referencia EXTERIOR desplaza D_med hacia adentro', () => {
@@ -115,7 +282,12 @@ test('Tramo recto rectangular: perímetro medio 2(a+b+2e)', () => {
   const P = 2 * (500 + 1 + 300 + 1);
   casi(PF.A_neta_m2, ((P + 32) * 2000) / 1e6, 1e-12);
   assert.equal(PF.sold.tope_m + PF.sold.filete_m, 0, 'Pittsburgh es costura mecánica, no se suelda');
-  casi(PF.engargolado_m, 2, 1e-12);
+  // 2 000 mm en yardas de 1 220: una yarda y un ajuste de 780 mm (2 anillos, 1 junta entre ellos)
+  casi(PF.engargolado_long_m, 2, 1e-12);
+  casi(PF.engargolado_circ_m, P / 1000, 1e-12);
+  casi(PF.engargolado_m, 2 + P / 1000, 1e-12);
+  assert.equal(PF.n_virolas, 2);
+  assert.equal(PF.n_engargolados, 2 + 1);
 });
 
 test('Codo segmentado 90°, 5 gajos, R/D=1.5: λ = 2.38695 y F = tan(α/2)/(α/2)', () => {

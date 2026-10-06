@@ -31,10 +31,11 @@
 
   /**
    * Precio por kg (sin IVA) de la lámina de una partida: el de la hoja que cotiza el proveedor para ese material y
-   * calibre; si no hay (otro calibre, placa de espesor capturado, otro material) se usa el de la tabla de precios.
+   * calibre (de `ancho_mm` si se dice: la yarda del tramo recto); si no hay (otro calibre, placa de espesor capturado,
+   * otro material) se usa el de la tabla de precios.
    */
-  function precioLamina(M, p, mat) {
-    const prov = PROV.laminaDe(M, p.material_id, p.espesor_mm > 0 ? 0 : p.calibre);
+  function precioLamina(M, p, mat, ancho_mm) {
+    const prov = PROV.laminaDe(M, p.material_id, p.espesor_mm > 0 ? 0 : p.calibre, ancho_mm);
     return prov || { fuente: 'TABLA', ref: mat.precio_ref, precio_kg: precioDe(M, mat.precio_ref) };
   }
 
@@ -73,7 +74,7 @@
     const omitir = new Set((q.p && q.p.omitir_operaciones) || []);
 
     /* Materiales */
-    const pLamina = precioLamina(M, q.p, mat);
+    const pLamina = precioLamina(M, q.p, mat, q.PF && q.PF.ancho_hoja_mm);
     const lamina = n * lam.m_bruta_kg * pLamina.precio_kg;
     const credito_chatarra = -n * C.recuperacion_chatarra_pct * lam.m_merma_kg * precioDe(M, mat.chatarra_ref);
     // cada aro se valoriza con el precio de SU perfil (solera ≠ ángulo)

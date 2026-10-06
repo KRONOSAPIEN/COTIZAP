@@ -44,8 +44,8 @@ const r = cotizarPartida({
   D_mm: 304.8, L_mm: 3000, tipo_union: 'BRIDADO', cantidad: 1,
 }, M);
 
-console.log(r.precio.unitario);            // 3622.52 MXN (mano de obra a $500/h)
-console.log(r.peso.neto_total_kg);         // 37.564 kg (lámina + aros de brida)
+console.log(r.precio.unitario);            // 3320.71 MXN (mano de obra a $500/h; una sola brida: el tramo de ajuste va sin brida)
+console.log(r.peso.neto_total_kg);         // 36.011 kg (lámina + aro de brida)
 console.log(r.pila);                       // CD, CI, imprevistos, financiamiento, utilidad…
 console.log(r.qto);                        // cantidades físicas, sin precios
 ```
@@ -94,13 +94,28 @@ El encabezado de la cotización lleva los parámetros comerciales que se ajustan
 Todo dato pasa por una compuerta de validación (`src/motor/validacion.js`) antes de calcular; así un error de dedo o un archivo dañado produce un mensaje claro y no un precio absurdo:
 
 - **Tipo:** los números son números (se acepta «12.5» escrito como texto); `NaN`, infinitos, listas o texto no numérico se rechazan. Un campo opcional vacío significa «automático».
-- **Rango:** diámetros y lados de 25 a 6 000 mm, longitudes de 10 a 100 000 mm, espesor propio de 0.2 a 50 mm, cantidad de 1 a 100 000, hasta 1 000 piezas por tramo. Son **política del taller** y se cambian en *Tablas maestras → Proceso de fabricación → limites* ([T10 y §10.8 del documento](docs/arquitectura-cotizador-ducterias.md#108-supuestos-de-los-límites-de-captura-por-confirmar)).
+- **Rango:** diámetros y lados de 25 a 6 000 mm, longitudes de 10 a 100 000 mm, espesor propio de 0.2 a 50 mm, cantidad de 1 a 100 000, hasta 1 000 anillos (yardas) por tramo. Son **política del taller** y se cambian en *Tablas maestras → Proceso de fabricación → limites* ([T10 y §10.8 del documento](docs/arquitectura-cotizador-ducterias.md#108-supuestos-de-los-límites-de-captura-por-confirmar)).
 - **Pertenencia:** la familia, el material, el servicio, el tipo de unión… deben existir; no hay valores «desconocidos» que se tomen por otra cosa.
 - **Tablas maestras sanas:** una eficiencia, una velocidad, un paso de tornillos o una densidad en 0, un valor negativo o una tabla de velocidades desordenada se señalan **por su ruta** («proceso › eficiencia taller: debe ser un número mayor que 0») en el aviso de la cotización y en cada partida afectada. El editor de tablas no deja teclear esos valores.
 - **Datos guardados o importados:** de un archivo, del navegador o del almacén compartido sólo entra lo que tiene la forma esperada; se avisa cuántos valores se ignoraron y una importación rechazada no cambia nada.
 - En el formulario de partida, un número que no se puede leer (por ejemplo «3O00» con la letra O) se marca como error en vez de tomarse por «automático».
 
 Las reglas completas están en [§2.3 del documento](docs/arquitectura-cotizador-ducterias.md#23-reglas-de-validación) (V14–V20).
+
+## Armado del tramo recto por yardas
+
+El taller no rola un tramo de 3 m de una pieza: rola **yardas**, anillos del **ancho de la lámina** (914 mm = 3 ft ó 1 220 mm = 4 ft), y las **engargola** entre sí. El cotizador arma el tramo con la misma regla:
+
+1. Primero **piezas de hasta 3 yardas** engargoladas, con **brida en ambos extremos**.
+2. Con lo que falta, una última pieza: las yardas completas que sobren y un **tramo de ajuste** (menos de una yarda), que va **sin brida** en su extremo libre para cortarlo y ponerlo en campo ajustando la distancia. (Si el trabajo pide brida en ambos extremos se elige en la partida.)
+
+| Largo | Yarda | Armado | Anillos | Bridas |
+| --- | --- | --- | --- | --- |
+| 3 660 mm | 1 220 | 3 yardas (1 pieza) | 3 | 2 |
+| 3 000 mm | 1 220 | 2 yardas + ajuste de 560 mm (1 pieza) | 3 | 1 |
+| 10 000 mm | 1 220 | 2 × 3 yardas y 2 yardas + ajuste de 240 mm | 9 | 5 |
+
+Cada yarda se **rola por separado** (tiempo fijo por anillo), las juntas entre yardas son **engargolado** (con sellador), cada plantilla de una yarda sale con un solo tajo a lo ancho de la hoja y el precio de la lámina se busca con ese ancho de hoja. En la partida se elige el **ancho de la yarda** y el **tramo de ajuste**; el desglose muestra el armado con un diagrama (anillos, bridas y el extremo libre sin brida) y avisa que la brida de ese extremo no está en el precio. Los parámetros están en *Tablas maestras → Proceso de fabricación → armado yardas*; el documento explica la regla ([§3.2](docs/arquitectura-cotizador-ducterias.md#32-tramo-recto-armado-por-yardas)) y sus supuestos por confirmar ([§10.9](docs/arquitectura-cotizador-ducterias.md#109-supuestos-del-armado-por-yardas-por-confirmar)).
 
 ## Brida estándar del taller
 
@@ -112,7 +127,7 @@ Cinco detalles se **supusieron** y conviene confirmarlos con el taller (se edita
 
 | Familia | Geometría | Precisión |
 | --- | --- | --- |
-| Tramo recto (redondo y rectangular) | desarrollo con fibra neutra | exacta |
+| Tramo recto (redondo y rectangular) | desarrollo con fibra neutra; **armado por yardas** (anillos del ancho de la lámina, 3 por pieza, con tramo de ajuste) | exacta |
 | Codo de 30°, 45°, 60° o 90° (segmentado y de radio) | longitud de eje exacta; factor `tan(α/2)/(α/2)` | exacta (verificada con malla 3D) |
 | Reducción (concéntrica y excéntrica) | tronco de cono, integral numérica | exacta (verificada con malla 3D) |
 | Transición redondo → rectángulo | triangulación estándar | exacta (verificada con malla 3D) |

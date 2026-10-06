@@ -784,8 +784,10 @@ const ok = (cond, msg) => {
     const msg = async () => (await f.locator('#dlg-prev .errores').innerText().catch(() => '')).replace(/\s+/g, ' ');
     const escribir = async (sel, v) => { await f.fill(sel, v); await f.waitForTimeout(40); return msg(); };
     ok(/«3O00» no es una medida válida/.test(await escribir('#f_L_mm', '3O00')), 'una longitud con la letra O no se toma por un campo vacío');
-    ok(/Longitud máx\. por pieza: «xx» no es una medida válida/.test(await escribir('#f_L_max_pieza_mm', 'xx')), 'tampoco en un campo opcional');
-    await f.fill('#f_L_mm', '3000'); await f.fill('#f_L_max_pieza_mm', '');
+    await f.fill('#f_L_mm', '3000');
+    await f.click('.fam:has(span:text-is("Reducción"))'); // su longitud axial es opcional (vacío = automática)
+    ok(/Longitud axial: «xx» no es una medida válida/.test(await escribir('#f_L_mm', 'xx')), 'tampoco en un campo opcional');
+    await f.click('.fam:has(span:text-is("Tramo recto"))');
     ok(/Diámetro: debe estar entre 25 mm y 6000 mm/.test(await escribir('#f_D_mm', '9999')), 'un diámetro de 9 999″ se rechaza con el límite del taller');
     ok(/Diámetro: debe estar entre 25 mm y 6000 mm/.test(await escribir('#f_D_mm', '-5')), 'uno negativo también');
     await f.fill('#f_D_mm', '12');
@@ -889,6 +891,15 @@ const ok = (cond, msg) => {
     ok(med.txt >= 200 && med.scroll <= med.ancho, `a 320 px el texto del aviso mide ${Math.round(med.txt)} px (≥ 200) y no hay desplazamiento horizontal`);
     await m.context().close();
 
+    // g2) lo guardado en el artefacto (compartido) también puede venir dañado: se queda lo que tiene la forma de las tablas
+    const bdSucia = nuevoAlmacen();
+    bdSucia.docs.set('config/maestros', { v: 2, parche: { proceso: null, precios: { precio_kg_acero_carbon: 'veinte' }, capas: { iva_pct: 0.1 }, mano_obra: 7 }, actualizado: '2026-10-05T18:00:00.000Z' });
+    const compartida = await nuevaPagina({}, instalarClaude(bdSucia));
+    ok(await esperarHasta(async () => (await estadoApp(compartida, () => window.COTIZAP.web.estadoApp.M.capas.iva_pct)) === 0.1), 'el almacén compartido con tablas dañadas: se aplica lo sano (IVA 10 %)');
+    ok(await estadoApp(compartida, () => { const M = window.COTIZAP.web.estadoApp.M; return M.proceso.eficiencia_taller === 0.8 && M.precios.precio_kg_acero_carbon === 22.47 && M.mano_obra.FSR === 1; }), 'y lo dañado se repone con los valores de arranque (no un null ni un texto)');
+    ok(await compartida.locator('#aviso-error').isHidden() && await compartida.locator('#lista-partidas .partida.err').count() === 0, 'la cotización se calcula sin errores');
+    await compartida.context().close();
+
     // h) la fecha de una cotización nueva es la del día LOCAL: a las 9:30 pm en la Ciudad de México sigue siendo hoy (en UTC ya sería mañana)
     const noche = await nuevaPagina({ timezoneId: 'America/Mexico_City' }, (ctx) => ctx.addInitScript(() => {
       const fijo = Date.parse('2026-10-06T03:30:00Z'); // 21:30 del 5 de octubre en México
@@ -910,6 +921,105 @@ const ok = (cond, msg) => {
     const lineas = (await csv.inputValue('#io-texto')).split('\n');
     ok(lineas[1].startsWith('"\'=HYPERLINK(') && !/undefined/.test(lineas.join('\n')), 'en el CSV una descripción que empieza con «=» lleva una comilla delante y no se ejecuta como fórmula');
     await csv.context().close();
+  }
+
+  console.log('21) Armado del tramo recto por yardas: 3 yardas por pieza y tramo de ajuste sin brida');
+  {
+    const p = await nuevaPagina();
+    const det = () => estadoApp(p, () => window.COTIZAP.web.estadoApp.res.partidas[0]);
+    const abrirTodo = async () => {
+      const secs = p.locator('#detalle details.sec');
+      for (let i = 0; i < await secs.count(); i += 1) if (!(await secs.nth(i).evaluate((e) => e.open))) await secs.nth(i).locator('summary').click();
+    };
+    // a) el tramo de 3 m de la muestra: 2 yardas de 1 220 mm y un ajuste de 560 mm, en una pieza con una sola brida
+    await p.locator('#lista-partidas .partida').first().click();
+    await abrirTodo();
+    ok((await p.locator('.arm-resumen').first().innerText()) === '2 yardas + ajuste de 560 mm', 'el desglose dice el armado: «2 yardas + ajuste de 560 mm»');
+    ok(await p.locator('.arm-fig svg.arm rect.arm-anillo').count() === 2 && await p.locator('.arm-fig svg.arm rect.arm-ajuste').count() === 1, 'el diagrama dibuja 2 anillos y el tramo de ajuste');
+    ok(await p.locator('.arm-fig svg.arm rect.arm-brida').count() === 1 && await p.locator('.arm-fig svg.arm line.arm-libre').count() === 1, 'una sola brida y el extremo libre del ajuste sin brida');
+    ok((await p.locator('.arm-fig svg.arm text').evaluateAll((es) => es.map((e) => e.textContent))).some((t) => t === 'sin brida'), 'el diagrama rotula «sin brida»');
+    ok(/va sin brida en su extremo libre/.test(await p.locator('.arm-fig').innerText()) && /no están en este precio/.test(await p.locator('.arm-fig').innerText()), 'y avisa que esa brida y su junta no están en el precio');
+    ok(/Caben 3 plantillas por hoja \(una por yarda/.test(await p.locator('.hoja-fig').innerText()), 'la hoja es del ancho de la yarda: caben 3 plantillas de Ø12″ a lo largo');
+    ok(await p.locator('.hoja-fig svg rect.hoja-pieza').count() === 3, 'y se dibujan las 3');
+    const f0 = await det();
+    ok(f0.geometria.n_virolas === 3 && f0.geometria.n_piezas === 1 && f0.qto.her.n_aros === 1, 'el motor: 3 anillos rolados, 1 pieza, 1 aro');
+    ok(/Yardas \(anillos rolados\)/.test(await p.locator('#detalle').innerText()) && /Juntas engargoladas entre yardas/.test(await p.locator('#detalle').innerText()), 'la geometría lista los anillos y las juntas engargoladas');
+
+    // b) cambiar el ancho de la yarda a 914 mm (3 ft) y pedir brida en ambos extremos
+    await editar(p, 0);
+    ok(await p.locator('#f_yarda_mm option').allInnerTexts().then((t) => t.join('|') === 'Predeterminada · 1,220 mm · 4 ft|914 mm · 3 ft|1,220 mm · 4 ft'), 'el selector ofrece 914 mm (3 ft), 1 220 mm (4 ft) y la predeterminada');
+    ok((await p.locator('#f_ajuste_sin_brida option').allInnerTexts()).join('|') === 'Extremo libre sin brida|Brida en ambos extremos', 'y el tramo de ajuste: extremo libre sin brida o brida en ambos extremos');
+    ok(await p.locator('#f_L_max_pieza_mm').count() === 0, 'ya no hay «Longitud máx. por pieza»: la regla es por yardas');
+    await p.selectOption('#f_yarda_mm', '914');
+    await p.waitForTimeout(120);
+    ok(/Armado\s*3 yardas y ajuste de 258 mm/.test((await p.locator('#dlg-prev').innerText()).replace(/\n/g, ' ')) || /3 yardas y ajuste de 258 mm/.test(await p.locator('#dlg-prev').innerText()), 'la vista previa dice el armado con 914 mm: «3 yardas y ajuste de 258 mm»');
+    await p.click('#dlg-guardar');
+    await p.waitForTimeout(120);
+    const f1 = await det();
+    ok(f1.entrada.yarda_mm === 914 && f1.geometria.n_piezas === 2 && f1.qto.her.n_aros === 3 && f1.geometria.n_virolas === 4, 'con yardas de 914: 2 piezas, 4 anillos y 3 bridas');
+    ok(f1.precio.unitario > f0.precio.unitario, `y cuesta más (${f0.precio.unitario} → ${f1.precio.unitario}): más anillos, más piezas y una brida más`);
+    await abrirTodo();
+    ok((await p.locator('.arm-resumen').first().innerText()) === '3 yardas y ajuste de 258 mm', 'el desglose se actualiza');
+    await editar(p, 0);
+    await p.selectOption('#f_ajuste_sin_brida', 'false');
+    await p.waitForTimeout(100);
+    await p.click('#dlg-guardar');
+    await p.waitForTimeout(100);
+    const f2 = await det();
+    ok(f2.entrada.ajuste_sin_brida === false && f2.qto.her.n_aros === 4, 'con «Brida en ambos extremos» el ajuste también lleva brida: 4 bridas');
+    // volver al valor por omisión (vacío) quita el campo de la partida
+    await editar(p, 0);
+    await p.selectOption('#f_ajuste_sin_brida', '');
+    await p.selectOption('#f_yarda_mm', '');
+    await p.click('#dlg-guardar');
+    await p.waitForTimeout(100);
+    const f3 = await estadoApp(p, () => window.COTIZAP.web.estadoApp.cot.partidas[0]);
+    ok(f3.yarda_mm === undefined && f3.ajuste_sin_brida === undefined, 'elegir «Predeterminada» y «Extremo libre sin brida» deja la partida sin esos campos (manda lo de las tablas)');
+
+    // c) una yarda de otro ancho (guardada en un archivo) se respeta y se muestra tal cual
+    await p.click('#btn-io');
+    const base = JSON.parse(await p.inputValue('#io-texto'));
+    base.cotizacion.partidas[0] = { ...base.cotizacion.partidas[0], yarda_mm: 1000, L_max_pieza_mm: 2000 };
+    await p.fill('#io-texto', JSON.stringify(base));
+    await p.click('#io-cargar');
+    await p.waitForTimeout(150);
+    ok((await det()).geometria.detalle.yarda_mm === 1000, 'una yarda de 1 000 mm guardada en un archivo se calcula');
+    await editar(p, 0);
+    ok(await p.locator('#f_yarda_mm').inputValue() === '1000' && /^1000 mm$/.test((await p.locator('#f_yarda_mm option:checked').innerText()).trim()), 'el formulario la muestra como «1000 mm» (no como no permitida)');
+    ok(await p.locator('#f_L_max_pieza_mm').count() === 0, 'y la «longitud máxima por pieza» de una cotización anterior se ignora (ya no existe)');
+    await p.click('#dlg-cancelar');
+
+    // d) las tablas maestras: el armado por yardas y sus límites
+    await p.click('#tab-maestros');
+    await p.fill('#maestros-buscar', 'armado_yardas');
+    ok(await p.locator('input#m_proceso__armado_yardas__yarda_defecto_mm').inputValue() === '1220' && await p.locator('input#m_proceso__armado_yardas__yardas_por_pieza_max').inputValue() === '3'
+      && await p.locator('input#m_proceso__armado_yardas__ajuste_tolerancia_mm').inputValue() === '25' && await p.locator('input#m_proceso__armado_yardas__junta_entre_yardas').inputValue() === 'PITTSBURGH',
+    'las tablas traen el armado: yarda 1 220 mm, 3 yardas por pieza, tolerancia 25 mm y junta engargolada (Pittsburgh)');
+    const lista = await p.locator('input[id^="m_proceso__armado_yardas__yardas_mm"]').evaluateAll((es) => es.map((e) => e.value));
+    ok(lista.join(',') === '914,1220', 'y la lista de anchos de yarda: 914 y 1 220 mm');
+    const maxY = p.locator('input#m_proceso__armado_yardas__yardas_por_pieza_max');
+    await maxY.fill('0'); await maxY.dispatchEvent('change');
+    ok(await maxY.inputValue() === '3' && /mayor que 0/.test(await p.locator('.toast').last().innerText()), 'un máximo de 0 yardas por pieza se rechaza');
+    await maxY.fill('2'); await maxY.dispatchEvent('change');
+    await p.click('#tab-cotizacion');
+    await p.locator('#lista-partidas .partida').first().click();
+    await abrirTodo();
+    ok((await p.locator('.arm-resumen').first().innerText()) === '2 yardas y 1 yarda', `con 2 yardas por pieza, 3 yardas de 1 000 mm se arman en una pieza de 2 y otra de 1 («${await p.locator('.arm-resumen').first().innerText()}»)`);
+    // una junta entre yardas que no existe se señala con su ruta
+    await p.click('#tab-maestros');
+    await p.fill('#maestros-buscar', 'junta_entre_yardas');
+    const junta = p.locator('input#m_proceso__armado_yardas__junta_entre_yardas');
+    await junta.fill('PEGAMENTO'); await junta.dispatchEvent('change');
+    await p.click('#tab-cotizacion');
+    ok(/junta entre yardas: debe ser un tipo de costura/.test(await p.locator('#aviso-error').innerText()), 'una junta entre yardas inexistente se avisa con su ruta');
+    await junta.evaluate((e) => e.scrollIntoView()).catch(() => {});
+    await p.click('#tab-maestros');
+    await p.fill('#maestros-buscar', 'junta_entre_yardas');
+    await p.locator('input#m_proceso__armado_yardas__junta_entre_yardas').fill('PITTSBURGH');
+    await p.locator('input#m_proceso__armado_yardas__junta_entre_yardas').dispatchEvent('change');
+    await p.fill('#maestros-buscar', 'NEGRA_C12_3X10');
+    ok(await p.locator('tr[data-id="NEGRA_C12_3X10"] .m-uso-calculo').count() === 1, 'en la lista del proveedor la hoja de 3 ft (914 mm) se marca «Cálculo»: es la de las yardas de 3 ft');
+    await p.context().close();
   }
 
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);

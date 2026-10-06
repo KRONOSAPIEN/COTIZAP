@@ -74,17 +74,21 @@
     return { precio: p, sin_iva: neto, kg, precio_kg: neto / kg };
   }
 
-  const mismaHoja = (M, h) => Math.abs(h.ancho_mm - M.proceso.hoja.ancho_mm) < 1 && Math.abs(h.largo_mm - M.proceso.hoja.largo_mm) < 1;
+  /** ¿La hoja del renglón es del `ancho` dado (el de la hoja estándar si no se dice) y del largo estándar? (±2 mm: 1 219 y 1 220 son la misma hoja de 4 ft) */
+  const mismaHoja = (M, h, ancho) => Math.abs(h.ancho_mm - (ancho || M.proceso.hoja.ancho_mm)) <= 2 && Math.abs(h.largo_mm - M.proceso.hoja.largo_mm) < 1;
 
-  /** Renglón de lámina con precio válido para (material, calibre): el de la hoja estándar del taller, o el primero. */
-  function laminaDe(M, material_id, calibre) {
+  /**
+   * Renglón de lámina con precio válido para (material, calibre). Con `ancho_mm` (la yarda del tramo recto: es el ancho de la
+   * hoja) se prefiere la hoja de ese ancho; si no hay, la hoja estándar del taller, y si tampoco, el primer renglón.
+   */
+  function laminaDe(M, material_id, calibre, ancho_mm) {
     const hojas = (M.proveedor && M.proveedor.hojas) || {};
     const cal = Number(calibre);
     if (!positivo(cal)) return null;
     const candidatos = Object.keys(hojas)
       .filter((id) => hojas[id].material === material_id && Number(hojas[id].calibre) === cal && convertir(M, hojas[id].precio, kgHoja(M, hojas[id])));
     if (!candidatos.length) return null;
-    const id = candidatos.find((i) => mismaHoja(M, hojas[i])) || candidatos[0];
+    const id = (ancho_mm && candidatos.find((i) => mismaHoja(M, hojas[i], ancho_mm))) || candidatos.find((i) => mismaHoja(M, hojas[i])) || candidatos[0];
     return { fuente: 'PROVEEDOR', id, descripcion: hojas[id].descripcion || id, ...convertir(M, hojas[id].precio, kgHoja(M, hojas[id])) };
   }
 
@@ -106,10 +110,12 @@
       const c = convertir(M, r.precio, kg);
       return { kg: kg === null ? null : kg, sin_iva: c ? c.sin_iva : null, precio_kg: c ? c.precio_kg : null };
     };
+    // Un renglón de lámina se usa si es la hoja que se elige para algún ancho de yarda (o la estándar)
+    const anchos = [undefined, ...(M.proceso && M.proceso.armado_yardas && Array.isArray(M.proceso.armado_yardas.yardas_mm) ? M.proceso.armado_yardas.yardas_mm : [])];
     const hojas = Object.keys(P.hojas || {}).map((id) => {
       const h = P.hojas[id];
-      const uso = laminaDe(M, h.material, h.calibre);
-      return { id, ...h, ...derivado(h, kgHoja(M, h)), uso: uso && uso.id === id ? 'CALCULO' : 'REFERENCIA' };
+      const usada = anchos.some((a) => { const uso = laminaDe(M, h.material, h.calibre, a); return uso && uso.id === id; });
+      return { id, ...h, ...derivado(h, kgHoja(M, h)), uso: usada ? 'CALCULO' : 'REFERENCIA' };
     });
     const barras = Object.keys(P.barras || {}).map((id) => {
       const b = P.barras[id];

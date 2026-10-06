@@ -70,7 +70,11 @@
       k_rolado: 1,
       L_corte_m: 0,
       sold: { tope_m: 0, filete_m: 0 },
-      engargolado_m: 0,
+      engargolado_m: 0, // total (longitudinal + entre yardas): lo que se cobra en tiempo de engargolado
+      engargolado_long_m: 0, // costura longitudinal engargolada (Pittsburgh)
+      engargolado_circ_m: 0, // juntas engargoladas entre yardas (transversales: se sellan en toda clase de sellado)
+      n_engargolados: null, // operaciones de engargolado (una por costura o junta); null = una por pieza
+      ancho_hoja_mm: 0, // ancho de la hoja de la que sale la pieza (0 = el de la hoja estándar): en el tramo recto es la yarda
       n_juntas_internas: 0,
       extremos: [],
       espigas_defecto: 0,
@@ -126,6 +130,59 @@
   /* Familias                                                           */
   /* ------------------------------------------------------------------ */
 
+  /** Cuántas yardas completas caben en `L` y cuánto sobra como tramo de ajuste (con la tolerancia). Es barato: no arma nada. */
+  function partirEnYardas(L, Y, tol) {
+    const n_completas = Math.floor((L + tol) / Y);
+    let ajuste = L - n_completas * Y;
+    if (n_completas === 0) ajuste = L; // un tramo más corto que una yarda es todo tramo de ajuste
+    else if (ajuste <= tol) ajuste = 0; // a ±tol de un múltiplo: son yardas completas
+    return { n_completas, ajuste };
+  }
+
+  /**
+   * Armado de un tramo recto por «yardas», como lo hace el taller. Una yarda es un anillo rolado del ANCHO de la lámina
+   * (914 mm = 3 ft ó 1 220 mm = 4 ft): así se aprovecha toda la hoja.
+   *   · Las yardas se engargolan entre sí en piezas de hasta `maxY` (3): primero salen las piezas de 3 yardas.
+   *   · Lo que falta son las yardas completas que sobren (0, 1 ó 2) y un tramo de ajuste —menos de una yarda— engargolado a ellas.
+   *   · Cada pieza lleva brida en ambos extremos, menos la que trae el tramo de ajuste: su extremo libre va SIN brida, para
+   *     cortarlo y ponerlo en campo ajustando la distancia (`sinBridaEnAjuste` = false pide brida en ambos).
+   * `tol` (mm): un sobrante menor que esto no es tramo de ajuste (a ±tol de un múltiplo de la yarda se cuentan yardas completas).
+   * Devuelve { yarda_mm, largo_mm, n_completas, ajuste_mm, L_capa_mm, anillos: [mm…], piezas: [{ yardas, ajuste_mm, n_anillos,
+   * largo_mm, bridas, juntas }], n_anillos, n_piezas, n_bridas, n_juntas, extremo_libre }.
+   */
+  function distribuirYardas(L, Y, maxY, tol, sinBridaEnAjuste) {
+    const tope = Math.max(1, Math.floor(maxY));
+    const { n_completas, ajuste } = partirEnYardas(L, Y, tol);
+    const grupos = [];
+    for (let i = 0; i < Math.floor(n_completas / tope); i += 1) grupos.push({ yardas: tope, ajuste_mm: 0 });
+    const sobran = n_completas % tope;
+    if (sobran > 0 || ajuste > 0) grupos.push({ yardas: sobran, ajuste_mm: ajuste });
+    const anillos = [];
+    const piezas = grupos.map((g) => {
+      const n_anillos = g.yardas + (g.ajuste_mm > 0 ? 1 : 0);
+      for (let j = 0; j < g.yardas; j += 1) anillos.push(Y);
+      if (g.ajuste_mm > 0) anillos.push(g.ajuste_mm);
+      return {
+        yardas: g.yardas, ajuste_mm: g.ajuste_mm, n_anillos, largo_mm: g.yardas * Y + g.ajuste_mm, bridas: g.ajuste_mm > 0 && sinBridaEnAjuste ? 1 : 2, juntas: n_anillos - 1,
+      };
+    });
+    const suma = (campo) => piezas.reduce((acc, q) => acc + q[campo], 0);
+    return {
+      yarda_mm: Y,
+      largo_mm: L,
+      n_completas,
+      ajuste_mm: ajuste,
+      L_capa_mm: anillos.reduce((acc, x) => acc + x, 0),
+      anillos,
+      piezas,
+      n_anillos: anillos.length,
+      n_piezas: piezas.length,
+      n_bridas: suma('bridas'),
+      n_juntas: suma('juntas'),
+      extremo_libre: ajuste > 0 && sinBridaEnAjuste,
+    };
+  }
+
   function recto(p, e, M) {
     const PF = nuevoPF('RECTO');
     const forma = p.forma || 'REDONDA';
@@ -133,13 +190,20 @@
     exigir(costura, `Tipo de costura desconocido: ${p.tipo_costura}`);
     exigir(p.L_mm > 0, 'La longitud total del tramo debe ser mayor que 0.');
 
+    const AY = M.proceso.armado_yardas;
+    const Y = p.yarda_mm || AY.yarda_defecto_mm;
+    exigir(Y > 0, 'El ancho de la yarda debe ser mayor que 0.');
+    exigir(AY.yardas_por_pieza_max >= 1, 'En las tablas maestras, las yardas por pieza deben ser al menos 1.');
+    const junta = M.proceso.costuras[AY.junta_entre_yardas];
+    exigir(junta, `En las tablas maestras, la junta entre yardas «${AY.junta_entre_yardas}» no es un tipo de costura conocido.`);
     const L_total = p.L_mm;
-    const L_max = p.L_max_pieza_mm || M.proceso.L_max_pieza_mm;
-    exigir(L_max > 0, 'La longitud máxima por pieza debe ser mayor que 0.');
-    const n_piezas = Math.max(1, Math.ceil(L_total / L_max - 1e-9));
+    // Antes de armar nada: cuántos anillos saldrían (un arreglo desorbitado no se construye)
     const tope = Math.min(M.proceso.limites && M.proceso.limites.piezas_max > 0 ? M.proceso.limites.piezas_max : Infinity, TOPE_PIEZAS);
-    exigir(n_piezas <= tope, `Un tramo de ${L_total} mm en piezas de ${L_max} mm serían ${n_piezas} piezas (el máximo es ${tope}): revise la longitud total y la longitud máxima por pieza.`);
-    const L_pieza = L_total / n_piezas;
+    const cuenta = partirEnYardas(L_total, Y, AY.ajuste_tolerancia_mm);
+    const n_cuenta = cuenta.n_completas + (cuenta.ajuste > 0 ? 1 : 0);
+    exigir(n_cuenta <= tope, `Un tramo de ${L_total} mm en yardas de ${Y} mm serían ${n_cuenta} anillos (el máximo es ${tope}): revise la longitud total y el ancho de la yarda.`);
+    const arm = distribuirYardas(L_total, Y, AY.yardas_por_pieza_max, AY.ajuste_tolerancia_mm, p.ajuste_sin_brida !== false);
+    const L_capa = arm.L_capa_mm; // lo que realmente se corta: las yardas completas y el ajuste
     const n_cost = forma === 'REDONDA' ? 1 : (p.n_costuras_long || 1);
 
     let P_med; let extremo;
@@ -159,23 +223,43 @@
       PF.detalle = { a_med_mm: d.a_med, b_med_mm: d.b_med, P_med_mm: P_med };
     }
 
-    const B = P_med + n_cost * costura.allowance_mm;
-    PF.A_neta_m2 = (B * L_total) / 1e6;
-    PF.n_piezas = n_piezas;
-    PF.n_virolas = n_piezas;
-    PF.L_virola_m = L_pieza / 1000;
+    const B = P_med + n_cost * costura.allowance_mm; // plantilla de un anillo: perímetro medio + holgura de la costura longitudinal
+    PF.A_neta_m2 = (B * L_capa) / 1e6;
+    PF.n_piezas = arm.n_piezas;
+    PF.n_virolas = arm.n_anillos; // cada yarda se rola por separado
+    PF.L_virola_m = L_capa / arm.n_anillos / 1000; // promedio: n · L conserva el metro rolado total
     PF.pasadas_rolado = forma === 'REDONDA' ? M.proceso.rolado.n_pasadas : M.proceso.rolado.n_pasadas_plegado;
-    PF.L_corte_m = (n_piezas * 2 * (B + L_pieza)) / 1000;
-    PF.extremos = Array.from({ length: 2 * n_piezas }, () => extremo);
-    PF.espigas_defecto = n_piezas;
-    PF.A_ext_m2 = (extremo.P_ext_mm * L_total) / 1e6;
+    // Corte: la yarda ES el ancho de la hoja, así que cada plantilla de una yarda completa sale con un solo tajo a lo ancho;
+    // el tramo de ajuste, más angosto que la hoja, necesita además el corte a lo largo de la hoja (B en total) y su tajo.
+    PF.L_corte_m = (arm.n_completas * n_cost * Y + (arm.ajuste_mm > 0 ? B + n_cost * arm.ajuste_mm : 0)) / 1000;
+    PF.extremos = [];
+    arm.piezas.forEach((q) => { for (let i = 0; i < q.bridas; i += 1) PF.extremos.push(extremo); }); // sólo los extremos con brida
+    PF.espigas_defecto = arm.n_piezas;
+    PF.A_ext_m2 = (extremo.P_ext_mm * L_capa) / 1e6;
+    PF.ancho_hoja_mm = Y;
 
-    const L_costura_m = (n_cost * L_total) / 1000;
-    if (costura.soldada) PF.sold[costura.cordon === 'TOPE' ? 'tope_m' : 'filete_m'] = L_costura_m;
-    else PF.engargolado_m = L_costura_m;
+    // Costura longitudinal: una por anillo y por línea de costura
+    const L_costura_m = (n_cost * L_capa) / 1000;
+    let n_eng = 0;
+    if (costura.soldada) PF.sold[costura.cordon === 'TOPE' ? 'tope_m' : 'filete_m'] += L_costura_m;
+    else { PF.engargolado_long_m = L_costura_m; n_eng += arm.n_anillos * n_cost; }
+    // Juntas entre yardas de una misma pieza (engargoladas, o soldadas si así lo dicen las tablas)
+    const L_juntas_m = (arm.n_juntas * P_med) / 1000;
+    if (arm.n_juntas > 0) {
+      if (junta.soldada) {
+        PF.sold[junta.cordon === 'TOPE' ? 'tope_m' : 'filete_m'] += L_juntas_m;
+        PF.n_juntas_internas = arm.n_juntas;
+      } else { PF.engargolado_circ_m = L_juntas_m; n_eng += arm.n_juntas; }
+    }
+    PF.engargolado_m = PF.engargolado_long_m + PF.engargolado_circ_m;
+    PF.n_engargolados = n_eng;
+    if (B > M.proceso.hoja.largo_mm) {
+      PF.advertencias.push(`La plantilla de cada yarda (${B.toFixed(0)} mm) es más larga que la hoja (${M.proceso.hoja.largo_mm} mm): cada anillo saldría de varias plantillas, con más costuras longitudinales de las cotizadas.`);
+    }
 
     Object.assign(PF.detalle, {
-      ancho_plantilla_mm: B, allowance_costura_mm: costura.allowance_mm, L_pieza_mm: L_pieza, n_costuras: n_cost,
+      ancho_plantilla_mm: B, allowance_costura_mm: costura.allowance_mm, n_costuras: n_cost,
+      yarda_mm: Y, n_anillos: arm.n_anillos, n_juntas_yardas: arm.n_juntas, L_capa_mm: L_capa, armado: arm,
     });
     return PF;
   }
@@ -630,6 +714,7 @@
 
   return {
     perfilFabricacion,
+    distribuirYardas,
     dimensionesRedondas,
     dimensionesRect,
     areaTroncoOblicuo,

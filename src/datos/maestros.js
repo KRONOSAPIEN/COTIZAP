@@ -25,7 +25,7 @@
 
   const base = {
     meta: {
-      version: '1.3.0',
+      version: '1.4.0',
       moneda: 'MXN',
       aviso: 'Mano de obra y lámina/perfiles del proveedor son reales; el resto son valores ilustrativos. Revisar antes de cotizar.',
     },
@@ -209,7 +209,18 @@
     proceso: {
       eficiencia_taller: 0.8,
       hoja: { ancho_mm: 1219, largo_mm: 3048 },
-      L_max_pieza_mm: 3000,
+
+      // Armado del tramo recto por «yardas». Una yarda es un anillo rolado del ANCHO de la lámina (914 mm = 3 ft ó 1 220 mm = 4 ft),
+      // para aprovechar toda la hoja. Las yardas se engargolan entre sí en piezas de hasta `yardas_por_pieza_max`, con brida en
+      // ambos extremos; lo que falta se arma con las yardas completas que sobren y un tramo de ajuste (menos de una yarda) que
+      // va SIN brida en su extremo libre, para cortarlo y ponerlo en campo. Se puede pedir brida en ambos extremos por partida.
+      armado_yardas: {
+        yardas_mm: [914, 1220], // anchos de lámina que se eligen al capturar la partida
+        yarda_defecto_mm: 1220, // la que se usa si la partida no elige
+        yardas_por_pieza_max: 3, // yardas engargoladas en una pieza con bridas en ambos extremos
+        ajuste_tolerancia_mm: 25, // un sobrante menor que esto no es un tramo de ajuste (2 735 mm son 3 yardas de 914, no 2 y un ajuste)
+        junta_entre_yardas: 'PITTSBURGH', // cómo se unen las yardas de una pieza: clave de proceso.costuras (engargolado; una soldada las soldaría)
+      },
       semiangulo_max_deg: 15,
       alfa_max_junta_deg: 22.5,
       k_R_defecto: 1.5,
@@ -233,7 +244,9 @@
         largo_max_mm: 100000, // longitud más larga (100 m)
         espesor_min_mm: 0.2, // espesor propio (placa) mínimo
         espesor_max_mm: 50, // espesor propio (placa) máximo
-        piezas_max: 1000, // piezas en que se parte un tramo recto, o piezas a armar de una pieza personalizada
+        piezas_max: 1000, // anillos (yardas) y piezas de un tramo recto, o piezas a armar de una pieza personalizada
+        yarda_min_mm: 300, // ancho de yarda (de lámina) más angosto
+        yarda_max_mm: 2000, // y más ancho
       },
 
       costuras: {
@@ -468,11 +481,17 @@
 
   /**
    * Quita de un parche guardado lo que ya no existe en las tablas, para que no quede como un campo suelto y sin efecto:
-   * el salario diario y la jornada (ahora el salario se captura por hora). No muta el parche recibido.
+   * el salario diario y la jornada (ahora el salario se captura por hora) y la longitud máxima por pieza (ahora el tramo
+   * recto se arma por yardas). No muta el parche recibido.
    */
   function migrarParche(parche) {
     if (parche === null || typeof parche !== 'object' || Array.isArray(parche)) return parche;
     const p = U.clonar(parche);
+    // La longitud máxima por pieza (3 000 mm) la sustituyó el armado por yardas (proceso.armado_yardas)
+    if (p.proceso && typeof p.proceso === 'object' && !Array.isArray(p.proceso)) {
+      delete p.proceso.L_max_pieza_mm;
+      if (!Object.keys(p.proceso).length) delete p.proceso;
+    }
     const mo = p.mano_obra;
     if (mo && typeof mo === 'object' && !Array.isArray(mo)) {
       delete mo.jornada_h;

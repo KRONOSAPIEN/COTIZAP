@@ -184,8 +184,10 @@
       });
     }
 
-    // Sellado por clase (SMACNA): C = juntas transversales; B = C + costuras longitudinales no soldadas; A = B + penetraciones.
-    if (clase === 'B' || clase === 'A') out.L_sellado_m += PF.engargolado_m;
+    // Sellado por clase (SMACNA): C = juntas transversales (también las engargoladas entre yardas); B = C + costuras longitudinales
+    // no soldadas; A = B + penetraciones.
+    if (clase !== 'NINGUNA') out.L_sellado_m += PF.engargolado_circ_m;
+    if (clase === 'B' || clase === 'A') out.L_sellado_m += PF.engargolado_long_m;
     if (clase === 'A') out.L_sellado_m += p.L_penetraciones_m || 0;
     const S = M.herrajes.sellador;
     out.V_sellador_ml = out.L_sellado_m * S.ml_por_m * (1 + S.f_merma);
