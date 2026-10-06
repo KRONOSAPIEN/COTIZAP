@@ -35,7 +35,7 @@
 | Parámetros de precio de la cotización | El encabezado de la cotización lleva los parámetros comerciales que se ajustan al cotizar —**margen de utilidad, comisión de ventas, descuento al cliente y días de cobro** y, en «Más parámetros de precio», **administración, financiamiento anual e IVA**— para no ir a las tablas maestras. Valen sólo para esa cotización: el motor los toma de `cotizacion.parametros` y los pone encima de las capas de T9 (§5.4); lo que no se cambia sale de los maestros. Cuatro supuestos de detalle están por confirmar (§10.7). | §5.2 · §5.4 · §6 · §10.7 |
 | Mano de obra por hora y lista de precios del proveedor | Los trabajadores ganan **$500 por hora, cifra que ya incluye prestaciones** (FSR = 1.00): el salario se captura por hora (antes por día y jornada) y el costo de la hora es `salario_hora · FSR`. El proveedor de acero cotiza **por pieza y con IVA incluido** (hojas y barras): la lista (T3b) conserva el precio como se cotiza y el motor lo convierte a **$/kg sin IVA** con los kg de la pieza (§5.1.1); lo que no está cotizado usa un precio por kg de respaldo. Cuatro supuestos de detalle están por confirmar (§10.6). | T3 · T3b · T8 · §4.1 · §5.1.1 · §10.6 |
 | Brida estándar del taller | **Una sola brida para todos los diámetros: aro de solera 1½" × 3/16", barreno Ø3/8", tornillo 5/16" × 1¼".** Se modela como el perfil `SOL38x4.8` (tipo solera, rolada "de canto"), que lleva en sus propias columnas el barreno y el tornillo; los ángulos quedan como opción por partida (`perfil_id`). Cinco supuestos de detalle están por confirmar con el taller (§10.4). | T4 · T5 · §3.5 · §10.4 |
-| Armado del tramo recto por yardas | El taller no rola tramos de 3 m: rola **yardas** —anillos del ancho de la lámina (914 mm = 3 ft ó 1 220 mm = 4 ft)—, las **engargola** hasta de 3 en una pieza con brida en ambos extremos, y lo que falta lo arma con las yardas completas que sobren y un **tramo de ajuste** (menos de una yarda) cuyo extremo libre **no lleva brida de taller**, para ponerlo en campo ajustando la distancia. **Quien diseña elige el ancho de la yarda** (3 ft ó 4 ft) en el encabezado de la cotización, o por partida. En ese extremo libre se cotiza, por omisión, la **brida suelta** —el taller manda el aro, los tornillos y el empaque sin fabricarlos: sólo material—; la partida puede pedir también «sin brida» (la brida no está en el precio) o «brida de taller». El motor reparte el largo así (§3.2): anillos que se rolan por separado, juntas engargoladas entre yardas, bridas sólo donde corresponde, corte con un tajo a lo ancho de la hoja. Los supuestos de detalle están por confirmar (§10.9). | T7c · §3.2 · §3.5.7 · §4.1 · §10.9 |
+| Armado del tramo recto por yardas | El taller no rola tramos de 3 m: rola **yardas** —anillos del ancho de la lámina (914 mm = 3 ft ó 1 220 mm = 4 ft)—, las **engargola** hasta de 3 en una pieza con brida en ambos extremos, y lo que falta lo arma con las yardas completas que sobren y un **tramo de ajuste** (menos de una yarda) cuyo extremo libre **no lleva brida de taller**, para ponerlo en campo ajustando la distancia. **Quien diseña elige el ancho de la yarda** (3 ft ó 4 ft) en el encabezado de la cotización, o por partida. En ese extremo libre se cotiza, por omisión, la **brida suelta** —el taller manda el aro ya terminado (rolado, con el cierre soldado, barrenado y pintado), con sus tornillos y su empaque, sin soldarlo al ducto: se suelda en obra—; la partida puede pedir también «sin brida» (la brida no está en el precio) o «brida de taller». El motor reparte el largo así (§3.2): anillos que se rolan por separado, juntas engargoladas entre yardas, bridas sólo donde corresponde, corte con un tajo a lo ancho de la hoja. Los supuestos de detalle están por confirmar (§10.9). | T7c · §3.2 · §3.5.7 · §4.1 · §10.9 |
 | Público objetivo | Ingenieros de ventas técnicas en México y desarrolladores internos. Moneda **MXN**, **IVA 16 %** aparte, **Factor de Salario Real (FSR)** para mano de obra. | `capas.iva_pct`, `mano_obra.FSR` |
 
 ### 0.2 Convenciones obligatorias (evitan los errores más caros)
@@ -407,7 +407,7 @@ n_completas  = ⌊(L + tol) / Y⌋ ;   ajuste = L − n_completas·Y        (0 s
 piezas       = ⌊n_completas / 3⌋ de 3 yardas  +  una última de (n_completas mod 3) yardas + el ajuste, si algo sobra
 n_anillos    = n_completas + [ajuste > 0]                           # cada anillo se rola por separado: n_virolas
 n_bridas     = 2·n_piezas − [hay ajuste y extremo_ajuste ≠ CON_BRIDA]   # bridas de taller: PF.extremos
-n_sueltas    = [hay ajuste y extremo_ajuste = SUELTA]               # aros sueltos (sólo material): PF.extremos_sueltos
+n_sueltas    = [hay ajuste y extremo_ajuste = SUELTA]               # aros sueltos, terminados y sin unir al ducto: PF.extremos_sueltos
 n_juntas     = Σ_piezas (anillos de la pieza − 1)                   # juntas entre yardas de una misma pieza
 
 B            = π·D_med + n_costuras·a_costura                       # plantilla de un anillo, mm
@@ -439,7 +439,7 @@ Rectangular:  P_med = 2·(a + b + 2e) ;  B = P_med + n_costuras·a_costura
 - **Engargolado.** Las juntas entre yardas son engargolado (`proceso.armado_yardas.junta_entre_yardas` = `PITTSBURGH`; si se cambiara a una costura soldada, serían soldadura a tope y juntas de armado). Cada junta y cada costura longitudinal engargolada es una operación (§4.1). Las juntas engargoladas son transversales: llevan sellador en toda clase de sellado menos NINGUNA (§3.5.5).
 - **Hoja.** La hoja de la que sale el tramo es del ancho de la yarda: el manejo de hojas (`n_hojas_eq`) usa `Y × 3 048` y el precio de la lámina se busca en la lista del proveedor con ese ancho (§5.1.1).
 - **Extremo libre del tramo de ajuste** (`extremo_ajuste`; por omisión el de T7c, `extremo_ajuste_defecto` = `SUELTA`; la partida puede pedir otro). La brida de ese extremo se instala en obra, ajustada a la distancia que se necesite; lo que se cotiza del extremo es:
-  - `SUELTA` — el taller manda **suelto** el aro de solera, los tornillos y el empaque de esa brida, para ponerlos en obra. Se cobra **sólo el material** (§3.5.7): sin mano de obra, soldadura, pintura ni sellador.
+  - `SUELTA` — el taller manda **suelto** el aro de esa brida **ya terminado** —se rola la solera, se suelda el cierre del aro, se barrena y se pinta— con sus tornillos y su empaque, **sin soldarlo al ducto**: se suelda en obra donde se corta el tramo (§3.5.7). Se cobra el material y esas operaciones; no se cobra el armado del aro al ducto, el filete aro–ducto ni el sellador de su junta.
   - `SIN_BRIDA` — **nada**: la brida y su junta no están en el precio de la partida.
   - `CON_BRIDA` — brida de taller en ambos extremos, como en cualquier otra pieza: se fabrica y se suelda (no queda un extremo libre para ajustar en campo).
 
@@ -448,13 +448,13 @@ Rectangular:  P_med = 2·(a + b + 2e) ;  B = P_med + n_costuras·a_costura
 | Yarda (mm) | `extremo_ajuste` | Qué cotiza el extremo libre | Armado | Bridas de taller | Aros sueltos | CD (MXN) | Precio antes de IVA (MXN) | Más que «sin brida» |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1,220 | `SIN_BRIDA` | Nada: la brida de ese extremo no está en el precio | 2 yardas + ajuste de 560 mm | 1 | 0 | 2,119.08 | 3,320.71 | — |
-| 1,220 | `SUELTA` | El aro, los tornillos y el empaque, sin fabricarlos (sólo material) | 2 yardas + ajuste de 560 mm | 1 | 1 | 2,195.99 | 3,433.36 | +112.65 |
+| 1,220 | `SUELTA` | El aro terminado (rolado, cierre soldado, barrenado y pintado), los tornillos y el empaque; no se suelda al ducto | 2 yardas + ajuste de 560 mm | 1 | 1 | 2,322.96 | 3,645.10 | +324.39 |
 | 1,220 | `CON_BRIDA` | Brida fabricada y soldada en taller, como en los demás extremos | 2 yardas + ajuste de 560 mm | 2 | 0 | 2,448.54 | 3,853.28 | +532.57 |
 | 914 | `SIN_BRIDA` | Nada: la brida de ese extremo no está en el precio | 3 yardas y ajuste de 258 mm | 3 | 0 | 2,894.33 | 4,580.58 | — |
-| 914 | `SUELTA` | El aro, los tornillos y el empaque, sin fabricarlos (sólo material) | 3 yardas y ajuste de 258 mm | 3 | 1 | 2,971.24 | 4,693.24 | +112.66 |
+| 914 | `SUELTA` | El aro terminado (rolado, cierre soldado, barrenado y pintado), los tornillos y el empaque; no se suelda al ducto | 3 yardas y ajuste de 258 mm | 3 | 1 | 3,098.21 | 4,904.98 | +324.40 |
 | 914 | `CON_BRIDA` | Brida fabricada y soldada en taller, como en los demás extremos | 3 yardas y ajuste de 258 mm | 4 | 0 | 3,223.79 | 5,113.16 | +532.58 |
 
-  La brida suelta cuesta una fracción de la de taller: el aro es de la misma solera, pero lo que más pesa en la brida de taller es la mano de obra de fabricarla (rolar el aro, barrenarlo, soldarlo y pintarlo).
+  La brida suelta cuesta menos que la de taller: es el mismo aro, con el mismo material y las mismas operaciones (rolado, cierre soldado, barrenado y pintura), pero no se arma ni se suelda al ducto y su junta no se sella en taller.
 
 Holguras de costura `a_costura` (mm): soldada a tope 1.0 (holgura de raíz) · soldada a traslape 25 · engargolado Pittsburgh 32 *(valores iniciales: calibrar con la plantilla real del taller)*. Las costuras soldadas generan metros de soldadura; el engargolado genera metros de engargolado y habilita sellado clase B. El pliegue de las juntas entre yardas no suma área: se absorbe en la merma de tabla (§10.9).
 
@@ -669,7 +669,7 @@ D_bc        = D_ext + 2·g                                   # círculo de barre
 n_tornillos = múltiplo_de_4_hacia_arriba( máx( n_mín , ⌈ π·D_bc / paso_máx ⌉ ) )     # por junta = barrenos por brida
 n_juntas_asignadas = 0.5 · (n_extremos_bridados + n_aros_sueltos)   # cada junta se comparte entre dos piezas
 juegos      = Σ_extremos 0.5·n_tornillos · (1 + f_reserva)  # juego = tornillo 5/16" × 1¼" + tuerca + 2 rondanas; extremos de taller y sueltos
-n_barrenos  = Σ_extremos_de_taller n_tornillos              # cada brida de taller lleva sus barrenos (el aro suelto se barrena en obra, §3.5.7)
+n_barrenos  = Σ_aros n_tornillos                            # cada aro lleva sus barrenos: el de taller y el suelto (§3.5.7)
 Marco rectangular:  P_perno = 2·(a_ext + b_ext) + 8·g
 ```
 
@@ -678,8 +678,8 @@ Los juegos se agrupan por tipo de tornillo del perfil y cada tipo se valoriza co
 #### 3.5.3 Soldadura de aros
 
 ```text
-L_filete_aro = Σ_extremos f_cont · P_ext            # aro–ducto, al espesor de la LÁMINA ; P_ext = π·D_ext ; f_cont = 1.0 (continuo, hermético)
-L_cierre_aro = Σ_extremos b                         # costura a tope que cierra el aro: una sección de ancho b (rect.: 4 esquinas × b ; ángulo: 2b por cierre)
+L_filete_aro = Σ_extremos_de_taller f_cont · P_ext  # aro–ducto, al espesor de la LÁMINA ; P_ext = π·D_ext ; f_cont = 1.0 (continuo, hermético); no los aros sueltos (§3.5.7)
+L_cierre_aro = Σ_aros b                             # costura a tope que cierra el aro: una sección de ancho b (rect.: 4 esquinas × b ; ángulo: 2b por cierre); todos los aros, también los sueltos
 A_cordón_cierre = máx( A_mín , k_tope · t² )        # con el espesor t de la SOLERA, no el de la lámina (4.763 mm → 39.7 mm²)
 ```
 
@@ -719,18 +719,31 @@ Tramo recto: 1 macho por pieza. Accesorios: un macho por extremo (configurable c
 
 #### 3.5.7 Brida suelta (extremo libre del tramo de ajuste)
 
-Cuando el extremo del ajuste se cotiza como `SUELTA` (§3.2), el taller no fabrica esa brida: manda el aro de solera, los tornillos y el empaque para ponerlos en obra, ajustados a la distancia que se necesite. El motor la trata como una brida que **sólo cuesta su material**:
+Cuando el extremo del ajuste se cotiza como `SUELTA` (§3.2), el taller fabrica el aro **completo**, pero **no lo une al ducto**: ese extremo se corta y se ajusta en campo, así que el aro sale suelto —con sus tornillos y su empaque— y se suelda en obra. El motor lo trata como un aro de brida al que se le hace todo menos unirlo:
 
 ```text
-extremos_sueltos      = PF.extremos_sueltos                          # un extremo por tramo de ajuste con brida suelta (sólo unión BRIDADO)
+extremos_sueltos      = PF.extremos_sueltos                  # un extremo por tramo de ajuste con brida suelta (sólo unión BRIDADO)
 aro suelto            = el aro de §3.5.1, del mismo perfil y diámetro:  L_aro , m_aro , m_aro_bruta = m_aro / (1 − φ_perfil)
-costo del perfil     += n · m_aro_bruta · precio_kg_perfil           # y el flete de entrada (2 %) también cubre el perfil del aro suelto
-juegos de tornillería += 0.5 · n_tornillos · (1 + f_reserva)         # media junta, como cualquier brida (§3.5.2)
-L_empaque            += 0.5 · P_perno · (1 + f_traslape)             # medio empaque (§3.5.4)
-peso que se manda    += m_aro                                        # peso.aros_sueltos_neto_kg
+
+Material (como cualquier brida):
+  costo del perfil     += m_aro_bruta · precio_kg_perfil      # y el flete de entrada (2 %) también cubre el perfil del aro suelto
+  juegos de tornillería += 0.5 · n_tornillos · (1 + f_reserva)  # media junta (§3.5.2)
+  L_empaque            += 0.5 · P_perno · (1 + f_traslape)      # medio empaque (§3.5.4)
+
+Se le hace en taller (igual que a un aro de taller):
+  Aros          t += t_fijo_aro + t_roll_aro · L_aro / 1000    # se rola la solera
+  Barrenado     n_barrenos += n_tornillos                       # se barrena
+  Soldadura     L_cierre += b ; el cordón es el del espesor de la solera   # se suelda el cierre del aro (§3.5.3)
+  Pintura       A_pint += A_pintura_aro                         # se pinta (si la partida lleva pintura)
+  Inspección    m_neta_total += m_aro                           # se inspecciona y se embala
+
+NO se le hace (se hace en obra):
+  Armado        no suma t_ajuste_aro                            # no se arma al ducto: n_aros cuenta sólo los aros de taller
+  Soldadura     no suma el filete aro–ducto                     # no se suelda al ducto
+  Sellador      no suma media junta                             # la junta se sella en obra
 ```
 
-**No lleva:** tiempo de fabricación del aro, armado, barrenado, soldadura (ni el filete aro–ducto ni el cierre del aro), pintura, sellador, consumibles ni equipo: el taller no la trabaja. Los barrenos del aro se hacen en obra (el desglose los marca «en obra») y la junta se sella allá. Los drivers de subcontrato por kilogramo (`KG_NETO`, `KG_BRUTO`) toman sólo lo que se fabrica: el aro suelto no entra. Con unión `ESPIGA` o `LISO` no hay aros: `SUELTA` y `SIN_BRIDA` cuestan lo mismo.
+El acabado (`f_acabado · t_soldadura`) y los consumibles de soldadura y de pintura siguen a esos metros y esa superficie. El peso que se manda incluye el aro (`peso.aros_sueltos_neto_kg`) y los drivers de subcontrato por kilogramo (`KG_NETO`, `KG_BRUTO`) y por metro de soldadura (`M_SOLDADURA`) lo cuentan, porque es acero fabricado que va en la partida. Con unión `ESPIGA` o `LISO` no hay aros: `SUELTA` y `SIN_BRIDA` cuestan lo mismo.
 
 ---
 
@@ -746,15 +759,15 @@ Corte        t = n_hojas_eq·t_manejo_hoja + L_corte / v_corte(proceso, e)      
 Rolado       t = n_virolas · [ t_fijo_rolado + n_pasadas · k_rolado · L_virola / v_rolado(e) ]      k_rolado = 1 cilindro ; 1.6 cono ; n_virolas = anillos (yardas)
 Armado       t = k_dif[familia] · [ n_piezas·t_fijo_pieza + n_juntas_int·(t_junta_base + t_junta_por_m·D_ref)
                                     + n_aros·t_ajuste_aro + n_fijaciones·t_fijación + n_espigas·t_formado_espiga ]      n_aros = aros de taller (no los sueltos, §3.5.7)
-Aros         t = Σ_aros [ t_fijo_aro + t_roll_aro · L_aro/1000 ]
+Aros         t = Σ_aros [ t_fijo_aro + t_roll_aro · L_aro/1000 ]                  # aros de taller y sueltos (§3.5.7)
 Soldadura    t_arco = (L_tope + L_filete) / ( v_sold(e)·v_mult(proceso) )                # min con arco encendido, al espesor de la lámina
                     + Σ_aros L_cierre / ( v_sold(t_perfil)·v_mult(proceso) )              # cierres de aro, al espesor de la solera
              t      = ( t_arco / FO ) · f_sold(material)                        # FO = factor de operación (arco encendido / tiempo total)
 Engargolado  t = n_engargolados·t_fijo + L_engargolado / v_engargolado(e)       # una operación por junta entre yardas y por costura longitudinal Pittsburgh
-Barrenado    t = n_barrenos · t_barreno
+Barrenado    t = n_barrenos · t_barreno                                         # barrenos de todos los aros, también los sueltos
 Acabado      t = f_acabado(material) · t_soldadura
 Pintura      t = A_pint · ( t_prep + n_manos · t_aplicación )
-Inspección   t = t_fijo_qc + k_manejo · m_neta_total
+Inspección   t = t_fijo_qc + k_manejo · m_neta_total                            # lámina + aros de taller + aros sueltos
 t_real(op)   = t_estándar(op) / η_taller
 Costo(op)    = (t_real / 60) · ( mo_h(op) + equipo_h(op) )        mo_h = salario_hora · FSR
 ```
@@ -989,7 +1002,7 @@ FUNCIÓN cotizar_partida(p, M):
 | `yarda_mm` | **1 220 mm** (4 ft: la de las tablas, T7c, porque ni la cotización ni la partida eligen otra; el ancho de la hoja) |
 | `tipo_costura` | A_TOPE (soldada; holgura de raíz 1.0 mm) |
 | `tipo_union` | BRIDADO |
-| `extremo_ajuste` | **SUELTA** (por omisión de T7c): el extremo del tramo de ajuste no lleva brida de taller —se corta en campo—, así que la pieza lleva **una** brida fabricada; del otro extremo el taller manda **suelto** el aro con sus tornillos y su empaque |
+| `extremo_ajuste` | **SUELTA** (por omisión de T7c): el extremo del tramo de ajuste no lleva brida de taller —se corta en campo—, así que la pieza lleva **una** brida fabricada; del otro extremo el taller manda **suelto** el aro **terminado** (rolado, con el cierre soldado, barrenado y pintado) con sus tornillos y su empaque, sin soldarlo al ducto |
 | `clase_sellado` | C (juntas transversales) |
 | `pintura` | PRIMARIO (1 mano, sólo exterior) |
 | `servicio` / `riesgo` | POLVO / MEDIO |
@@ -1011,7 +1024,7 @@ Yardas completas    = ⌊(L + tol) / Y⌋ = ⌊(3 000 + 25) / 1220⌋ = 2
 Tramo de ajuste     = L − 2·Y = 3 000 − 2440 = 560 mm   (menos de una yarda)
 Piezas              = ⌊2 / 3⌋ = 0 de 3 yardas;  lo que falta, 2 yardas + el ajuste, en 1 pieza de 3 anillos (3,000 mm)
 Bridas de taller    = 2·1 − 1 (el extremo del ajuste no lleva brida de taller) = 1
-Aros sueltos        = 1   (el del extremo del ajuste: se manda sin fabricar, para ponerlo en obra; §3.5.7)
+Aros sueltos        = 1   (el del extremo del ajuste: sale terminado de taller y se manda suelto, para soldarlo en obra; §3.5.7)
 Juntas engargoladas = 3 anillos − 1 = 2   (entre yardas, de un perímetro medio cada una)
 ```
 
@@ -1047,7 +1060,7 @@ w_p (peso lineal)    = b · t · 7.85 / 1000 = 38.100 · 4.763 · 7.85 / 1000 = 
 L_aro                = π·(D_ext + 2c) + 3.0 = π·(307.8378 + 38.100) + 3.0 = 1089.80 mm
 m_aros_neta          = 1 · 1.0898 m · 1.4245 kg/m = 1.552 kg
 m_aros_bruta         = m_aros_neta / (1 − 0.05) = 1.634 kg
-m_sueltos_neta       = 1 · 1.0898 m · 1.4245 kg/m = 1.552 kg   (el mismo aro, pero sin fabricar: sólo se compra)
+m_sueltos_neta       = 1 · 1.0898 m · 1.4245 kg/m = 1.552 kg   (el mismo aro: se rola, se barrena y se pinta como el de taller, pero no se une al ducto)
 m_sueltos_bruta      = m_sueltos_neta / (1 − 0.05) = 1.634 kg
 Precio del perfil    = barra `SOL_1_1_2X3_16`: 250.00 con IVA → 25.215 MXN/kg sin IVA   (§5.1.1)
 Costo de perfil      = (1.634 + 1.634) · 25.215 = 82.41 MXN
@@ -1060,7 +1073,7 @@ D_bc (círculo de barrenos) = D_ext + 2g = 307.8378 + 2·19.05 = 345.938 mm  →
 n_barrenos por brida       = ⌈1086.80 / 150⌉ = 8  →  múltiplo de 4 ≥ máx(4, 8) = 8
 n_juntas_asignadas         = (1 + 1) extremos · 0.5 = 1.0   (cada junta se reparte entre las dos bridas que la forman —de taller o suelta—; la otra mitad es de la brida del tramo vecino)
 Juegos de tornillería      = 8 · 1.05 (reserva) = 8.4  →  · 4.50 = 37.80 MXN   (juego = tornillo 5/16" × 1¼" + tuerca + 2 rondanas)
-n_barrenos (total)         = 1 aro de taller · 8 = 8   (el aro suelto se barrena en obra)
+n_barrenos (total)         = (1 + 1) aros · 8 = 16   (también se barrena el aro suelto)
 L_empaque                  = 1.0 junta · 1086.80 mm · 1.05 / 1000 = 1.1411 m  →  · 28.00 = 31.95 MXN
 L_sellado (clase C)        = 0.5 junta · π·D_ext / 1000 + 2 juntas engargoladas · π·D_med / 1000 = 0.4836 + 1.9247 = 2.4082 m   (la junta del aro suelto se sella en obra)
 V_sellador                 = 2.4082 m · 20 mL/m · 1.15 = 55.39 mL  →  · (120.00 / 300) = 22.16 MXN
@@ -1071,11 +1084,11 @@ V_sellador                 = 2.4082 m · 20 mL/m · 1.15 = 55.39 mL  →  · (12
 ```text
 L_corte                      = 2·Y + (B + ajuste) = 2·1220 + (963.329 + 560) = 3963.3 mm = 3.9633 m   (un tajo a lo ancho por yarda completa; el ajuste, más angosto que la hoja, también a lo largo)
 L_soldadura (tope, lámina)   = costura longitudinal de cada anillo = n_costuras · L_capa / 1000 = 3.0000 m
-L_soldadura (filete)         = aro–ducto 1·π·D_ext / 1000 = 0.9671 m
-L_soldadura (cierres de aro) = 1 aro · b / 1000 = 0.0381 m   (a tope, al espesor de la solera: 4.763 mm)
-L_soldadura total            = 4.0052 m
+L_soldadura (filete)         = aro–ducto 1·π·D_ext / 1000 = 0.9671 m   (sólo el aro que se une al ducto)
+L_soldadura (cierres de aro) = (1 + 1) aros · b / 1000 = 0.0762 m   (a tope, al espesor de la solera: 4.763 mm; también el cierre del aro suelto)
+L_soldadura total            = 4.0433 m
 L_engargolado (entre yardas) = 2 juntas · π·D_med / 1000 = 1.9247 m   (la costura longitudinal es a tope: no se engargola)
-A_pintura                    = π·D_ext·L_capa + 1 aro·(caras + canto) = 2.9899 m²
+A_pintura                    = π·D_ext·L_capa + (1 + 1) aros·(caras + canto) = 3.0784 m²   (se pinta también el aro suelto)
 ```
 
 **Paso 9 · Tiempos estándar por operación** (η_taller = 0.8)
@@ -1084,17 +1097,17 @@ A_pintura                    = π·D_ext·L_capa + 1 aro·(caras + canto) = 2.98
 | --- | --- | --- |
 | Corte (guillotina) | 0.8448 hojas de 1,220 × 3 048 · 4.0 min + 3.963 m / 7.975 m/min | 3.88 |
 | Rolado | 3 anillos · 3.0 min + 3 pasadas · 3.0 m / 5.962 m/min   (cada yarda se rola aparte) | 10.51 |
-| Armado y punteo | 1 pieza · 6.0 + 1 aro · 4.0 | 10.00 |
-| Aros de brida | 1 · (4.0 + 2.5 min/m · 1.0898 m) | 6.72 |
-| Soldadura | t_arco = (3.967 m / 0.497 m/min) + (0.0381 m / 0.240 m/min en 4.763 mm) = 7.98 + 0.16 = 8.14 min;  ÷ FO (0.4) | 20.35 |
+| Armado y punteo | 1 pieza · 6.0 + 1 aro · 4.0   (el aro suelto no se arma al ducto) | 10.00 |
+| Aros de brida | (1 + 1) · (4.0 + 2.5 min/m · 1.0898 m)   (se rolan el de taller y el suelto) | 13.45 |
+| Soldadura | t_arco = (3.967 m / 0.497 m/min) + (0.0762 m / 0.240 m/min en 4.763 mm) = 7.98 + 0.32 = 8.30 min;  ÷ FO (0.4) | 20.75 |
 | Engargolado | 2 juntas · 2.0 min + 1.9247 m / 1.777 m/min | 5.08 |
-| Barrenado | 8 barrenos Ø3/8" · 0.35 min | 2.80 |
-| Acabado | 0.25 · t_soldadura | 5.09 |
-| Pintura | 2.9899 m² · (4.0 preparación + 1 mano · 3.0) | 20.93 |
-| Inspección y embalaje | 3.0 + 0.05 min/kg · 36.011 kg | 4.80 |
-| **Total estándar** |  | **90.16** |
+| Barrenado | 16 barrenos Ø3/8" · 0.35 min   (los dos aros) | 5.60 |
+| Acabado | 0.25 · t_soldadura | 5.19 |
+| Pintura | 3.0784 m² · (4.0 preparación + 1 mano · 3.0) | 21.55 |
+| Inspección y embalaje | 3.0 + 0.05 min/kg · 37.564 kg | 4.88 |
+| **Total estándar** |  | **100.88** |
 
-`t_real = t_estándar / η = 90.16 / 0.8 = 112.71 min = 1.8784 h`
+`t_real = t_estándar / η = 100.88 / 0.8 = 126.10 min = 2.1017 h`
 
 **Paso 10 · Consumibles**
 
@@ -1102,13 +1115,13 @@ A_pintura                    = π·D_ext·L_capa + 1 aro·(caras + canto) = 2.98
 A_cordón tope          = máx(2.0, 1.75·e²) = máx(2.0, 4.037) = 4.037 mm²
 A_cordón filete        = máx(2.0, 1.00·e²) = máx(2.0, 2.307) = 2.307 mm²
 A_cordón cierre de aro = máx(2.0, 1.75·t²) = máx(2.0, 39.701) = 39.701 mm²   (con el espesor t de la solera)
-m_depositado           = (3.0000·4.037 + 0.9671·2.307) · 7.85 + 0.0381·39.701 · 7.85 = 112.60 + 11.87 = 124.47 g
-Microalambre           = 124.47 / (1000 · 0.93) = 0.1338 kg  →  · 62.00 = 8.30 MXN
-Gas de protección      = 8.14 min · 15 L/min · 1.10 / 1000 = 0.1343 m³  →  · 145.00 = 19.48 MXN
+m_depositado           = (3.0000·4.037 + 0.9671·2.307) · 7.85 + 0.0762·39.701 · 7.85 = 112.60 + 23.75 = 136.34 g
+Microalambre           = 136.34 / (1000 · 0.93) = 0.1466 kg  →  · 62.00 = 9.09 MXN
+Gas de protección      = 8.30 min · 15 L/min · 1.10 / 1000 = 0.1370 m³  →  · 145.00 = 19.86 MXN
 Consumibles de corte   = 3.9633 m · 0.30 = 1.19 MXN
 Cobertura de pintura   = 10·55 / 50 = 11.0 m²/L teórica;  · 0.65 = 7.15 m²/L práctica
-Pintura                = 2.9899 / 7.15 = 0.4182 L;  diluyente 10 % = 0.0418 L
-Costo de pintura       = 0.4182 · 220 + 0.0418 · 70 = 94.92 MXN
+Pintura                = 3.0784 / 7.15 = 0.4305 L;  diluyente 10 % = 0.0431 L
+Costo de pintura       = 0.4305 · 220 + 0.0431 · 70 = 97.73 MXN
 ```
 
 **Paso 11 · Costo directo (CD)**
@@ -1118,13 +1131,13 @@ Costo de pintura       = 0.4182 · 220 + 0.0418 · 70 = 94.92 MXN
 | Corte | 4.85 | 500.00 | 45 | 44.01 |
 | Rolado | 13.14 | 500.00 | 55 | 121.52 |
 | Armado y punteo | 12.50 | 500.00 | 25 | 109.38 |
-| Aros de brida | 8.41 | 500.00 | 40 | 75.65 |
-| Soldadura | 25.44 | 500.00 | 45 | 231.09 |
+| Aros de brida | 16.81 | 500.00 | 40 | 151.30 |
+| Soldadura | 25.94 | 500.00 | 45 | 235.60 |
 | Engargolado | 6.35 | 500.00 | 35 | 56.65 |
-| Barrenado | 3.50 | 500.00 | 25 | 30.62 |
-| Acabado | 6.36 | 500.00 | 20 | 55.12 |
-| Pintura | 26.16 | 500.00 | 40 | 235.45 |
-| Inspección y embalaje | 6.00 | 500.00 | 0 | 50.01 |
+| Barrenado | 7.00 | 500.00 | 25 | 61.25 |
+| Acabado | 6.48 | 500.00 | 20 | 56.20 |
+| Pintura | 26.94 | 500.00 | 40 | 242.43 |
+| Inspección y embalaje | 6.10 | 500.00 | 0 | 50.81 |
 
 | Concepto | MXN |
 | --- | --- |
@@ -1135,39 +1148,39 @@ Costo de pintura       = 0.4182 · 220 + 0.0418 · 70 = 94.92 MXN
 | Sellador | 22.16 |
 | Flete de entrada (2 % de lámina + perfil) | 18.48 |
 | **Subtotal materiales** | **1,034.42** |
-| Alambre + gas + consumibles de corte + pintura | 123.89 |
-| Mano de obra directa | 939.21 |
-| Equipo (hora-máquina) | 70.29 |
-| Herramienta menor (3 % de MO) | 28.18 |
-| **COSTO DIRECTO (CD)** | **2,195.99** |
+| Alambre + gas + consumibles de corte + pintura | 127.87 |
+| Mano de obra directa | 1,050.86 |
+| Equipo (hora-máquina) | 78.29 |
+| Herramienta menor (3 % de MO) | 31.53 |
+| **COSTO DIRECTO (CD)** | **2,322.96** |
 
 **Paso 12 · Pila de precio**
 
 | Capa | Fórmula | MXN |
 | --- | --- | --- |
-| CD |  | 2,195.99 |
-| CI de fábrica | GIF · h_MOD = 85.00 · 1.8784 | 159.67 |
-| CI de administración | 8 % · CD | 175.68 |
-| Imprevistos (riesgo MEDIO) | 4 % · (CD + CI) | 101.25 |
-| **Costo total C_T** | CD + CI + imprevistos | **2,632.58** |
-| Financiamiento | C_T · 14 % · 45/365 = C_T · 1.726 % | 45.44 |
-| **Costo base** | C_T + financiamiento | **2,678.02** |
-| **PRECIO antes de IVA** | C_base / (1 − 0.20 − 0.02) = 2,678.02 / 0.78 | **3,433.36** |
-|   ↳ utilidad (20 % del precio) |  | 686.67 |
-|   ↳ comisión de ventas (2 % del precio) |  | 68.67 |
-| IVA 16 % |  | 549.34 |
-| **Total con IVA** |  | **3,982.70** |
+| CD |  | 2,322.96 |
+| CI de fábrica | GIF · h_MOD = 85.00 · 2.1017 | 178.65 |
+| CI de administración | 8 % · CD | 185.84 |
+| Imprevistos (riesgo MEDIO) | 4 % · (CD + CI) | 107.50 |
+| **Costo total C_T** | CD + CI + imprevistos | **2,794.94** |
+| Financiamiento | C_T · 14 % · 45/365 = C_T · 1.726 % | 48.24 |
+| **Costo base** | C_T + financiamiento | **2,843.18** |
+| **PRECIO antes de IVA** | C_base / (1 − 0.20 − 0.02) = 2,843.18 / 0.78 | **3,645.10** |
+|   ↳ utilidad (20 % del precio) |  | 729.02 |
+|   ↳ comisión de ventas (2 % del precio) |  | 72.90 |
+| IVA 16 % |  | 583.22 |
+| **Total con IVA** |  | **4,228.32** |
 
 **Resultado e indicadores de control**
 
 | Indicador | Valor |
 | --- | --- |
-| Precio unitario antes de IVA | **3,433.36 MXN** |
+| Precio unitario antes de IVA | **3,645.10 MXN** |
 | Peso neto que se manda (lámina + aros, incluido el suelto) | 37.564 kg |
-| Precio por kg neto | 91.40 MXN/kg |
-| Precio por metro lineal | 1144.45 MXN/m |
-| Horas de mano de obra directa (reales) | 1.878 h |
-| Margen de contribución (P − CD)/P | 36.0 % |
+| Precio por kg neto | 97.04 MXN/kg |
+| Precio por metro lineal | 1215.03 MXN/m |
+| Horas de mano de obra directa (reales) | 2.102 h |
+| Margen de contribución (P − CD)/P | 36.3 % |
 | Markup sobre costo total | 30.4 % |
 | Costo de la merma en lámina | 2.996 kg · 22.47 = 67.33 MXN |
 
@@ -1288,7 +1301,7 @@ Bridas                        = 3 aros (D1, D2 y d): 1089.8 mm · 930.2 mm · 61
 | 30°, hacia D2 | 320.7 | 0.0340 | 3,041.50 | +3.6 % |
 | 45°, si se inclinara hacia D1 (`MAYOR`) | 288.7 | 0.0304 | 2,995.75 | +2.0 % |
 
-**Lectura:** el precio por kg neto es **4.36×** el del tramo recto del Ejemplo A, por lo mismo que el codo: merma de 28 % contra 8 %, dificultad de armado 1.9 contra 1.0 y tres bridas en una pieza chica. A 30° la silleta es más larga y el cono también; hacia el extremo menor el cono "se cierra" y la silleta resulta más corta que si el injerto mirara hacia el mayor.
+**Lectura:** el precio por kg neto es **4.10×** el del tramo recto del Ejemplo A, por lo mismo que el codo: merma de 28 % contra 8 %, dificultad de armado 1.9 contra 1.0 y tres bridas en una pieza chica. A 30° la silleta es más larga y el cono también; hacia el extremo menor el cono "se cierra" y la silleta resulta más corta que si el injerto mirara hacia el mayor.
 
 ---
 
@@ -1351,7 +1364,7 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 - **Oráculos geométricos independientes:** codo, reducción excéntrica, transición, injerto simple (distancia media de silleta y área del orificio por fuerza bruta) y reducción con injerto (silleta sobre el cono por bisección, polilínea y rejilla; ensamble recalculado línea por línea) se comparan contra mallas 3D y promedios numéricos de fuerza bruta (`tests/geometria.test.js`). **Toda familia nueva debe traer su oráculo independiente.**
 - **Lista del proveedor y mano de obra** (`tests/proveedor.test.js`): la lista reproduce al centavo los precios sin IVA de la factura; kg por hoja y por barra y $/kg recalculados desde las medidas; qué renglón usa el cálculo (hoja estándar, calibre sin cotizar, placa, inoxidable); IVA incluido o no; un precio inválido cae a la tabla; el salario es por hora y el costo de la hora es salario × FSR; un parche guardado con el salario diario de antes se limpia.
 - **Parámetros de la cotización** (`tests/parametros.test.js`): cada parámetro recalculado desde `C_base` (margen, comisión, administración, días y tasa de cobro, IVA); descuento con IVA sobre el neto; utilidad real y su forma cerrada; valores inválidos que se ignoran con aviso; las tablas maestras no se mutan; la vista previa de una partida coincide con la lista; y los campos del encabezado en las pruebas de interfaz (sección 19).
-- **Armado por yardas** (`tests/geometria.test.js`, `tests/motor.test.js`, `tests/ejemplo_recto.test.js`): los casos del taller (3 yardas por pieza, el extremo del ajuste sin brida de taller, a ±25 mm, ajuste solo, otro máximo de yardas por pieza); la distribución se contrasta contra un **oráculo que arma el tramo pieza por pieza con un lazo** en 4 000 largos y anchos al azar, en los tres modos del extremo libre (más invariantes: sólo la última pieza trae el ajuste, ninguna pasa de 3 yardas, lo que se corta es el largo pedido ±tolerancia); cantidades físicas (anillos, corte a lo ancho, juntas, extremos con brida, junta soldada si las tablas lo piden); **la brida suelta** (sólo material: mismas horas, consumibles, soldadura y barrenos que «sin brida»; el aumento de costo directo es exactamente perfil + tornillería + empaque + flete del aro; con `ESPIGA` o `LISO` no hay aros; sigue a las tablas y a la partida); el **ancho de yarda de la cotización** (lo heredan sólo los tramos rectos; la partida manda; vacío, 0 o inválido se ignoran); la conversión del `ajuste_sin_brida` sí/no de la versión anterior; y el Ejemplo A recalculado de forma independiente —con su aro suelto— en los tres modos.
+- **Armado por yardas** (`tests/geometria.test.js`, `tests/motor.test.js`, `tests/ejemplo_recto.test.js`): los casos del taller (3 yardas por pieza, el extremo del ajuste sin brida de taller, a ±25 mm, ajuste solo, otro máximo de yardas por pieza); la distribución se contrasta contra un **oráculo que arma el tramo pieza por pieza con un lazo** en 4 000 largos y anchos al azar, en los tres modos del extremo libre (más invariantes: sólo la última pieza trae el ajuste, ninguna pasa de 3 yardas, lo que se corta es el largo pedido ±tolerancia); cantidades físicas (anillos, corte a lo ancho, juntas, extremos con brida, junta soldada si las tablas lo piden); **la brida suelta** (qué se le hace al aro en taller —se rola, se barrena, se le suelda el cierre y se pinta, con las mismas horas y la misma pintura que a uno de taller— y qué no —no se arma, no lleva filete al ducto ni sellador—; el material completo; el peso y los drivers por kilo y por metro de soldadura; las operaciones omitidas; con `ESPIGA` o `LISO` no hay aros; sigue a las tablas y a la partida); el **ancho de yarda de la cotización** (lo heredan sólo los tramos rectos; la partida manda; vacío, 0 o inválido se ignoran); la conversión del `ajuste_sin_brida` sí/no de la versión anterior; y el Ejemplo A recalculado de forma independiente —con su aro suelto— en los tres modos.
 - **Robustez** (`tests/robustez.test.js`): 640 partidas válidas al azar con semilla fija de todas las familias (sin excepciones ni `NaN`, pila de precio cerrada, cantidades independientes de los precios, ida y vuelta por JSON); cada campo numérico de cada familia corrompido con `NaN`, `±Infinity`, texto, listas, objetos y booleanos (siempre se rechaza); medidas en cero, negativas, «casi cero» y de `1e12` (se rechazan sin agotar memoria); vacíos opcionales; enumeraciones y listas; maestros con ceros, negativos, tablas de velocidad rotas o secciones ausentes (error que nombra la ruta); `cotizar()` con cotizaciones y partidas mal formadas (nunca lanza); y `sanearParche` contra parches dañados y `__proto__`. Las secciones 20 de `tests/e2e/ui.e2e.js` repiten lo visible: almacenamiento dañado, números ilegibles en el formulario, importaciones hostiles, tablas con ceros, almacenamiento bloqueado o lleno, fecha local y pantalla de 320 px.
 - **Pruebas de política:** separación cantidades/precios, identidades de la pila (`P·(1 − u − c − o) = C_base`), cargo mínimo, subcontratos, validaciones, uniones, materiales (`tests/motor.test.js`).
 - **Estándar de bridas del taller** (`tests/motor.test.js`): la solera de 1½" × 3/16" pesa `b·t·ρ`; el taller usa la misma brida (barreno Ø3/8", tornillo 5/16" × 1¼") en todos los diámetros; `L_aro = π·(D_ext + b) + holgura`; nº de barrenos múltiplo de 4 por paso; cada aro se valoriza con el precio de su propio perfil y el tornillo con el suyo; el cierre del aro se suelda a tope al espesor de la solera; marco rectangular; y `ESPIGA` no genera aros ni barrenos.
@@ -1477,7 +1490,7 @@ Lo que describió el taller: se rolan yardas de 914 ó 1 220 mm (el ancho de la 
 | --- | --- | --- | --- |
 | Qué cuenta en «hasta 3 yardas» | El tramo de ajuste cuenta como una: la última pieza es a lo más «2 yardas + ajuste» | `yardas_por_pieza_max` | Si el ajuste no contara, una pieza podría ser «3 yardas + ajuste» y 3 m en yardas de 914 serían una pieza con una brida (no 2 piezas y 3 bridas). |
 | Cómo se reparte lo que falta | Greedy: primero piezas de 3 yardas; lo que sobra va en una última pieza (yardas completas + ajuste engargolados). Si sobra sólo el ajuste, es una pieza aparte con una brida | — (`distribuirYardas`) | Otro reparto (por ejemplo piezas más parejas) cambia el número de piezas, no el de anillos ni de bridas. |
-| Brida del extremo del ajuste | **Brida suelta** por omisión: el taller manda el aro (la misma solera, con su merma de barra), los tornillos y el empaque sin fabricarlos, y se cobra **sólo ese material** (más su flete). **No** se cobra mano de obra (ni rolar, barrenar o soldar el aro, que se hacen en obra), ni sellador (la junta se sella en obra), ni consumibles. Es una media junta de tornillos y empaque, como cualquier brida | `extremo_ajuste_defecto` (tablas) y `extremo_ajuste` (partida): `SUELTA`, `SIN_BRIDA` o `CON_BRIDA` | `SIN_BRIDA`: la brida no está en el precio. `CON_BRIDA`: se fabrica y se suelda en taller (cuánto cambia el precio, en la tabla de §3.2). **Por confirmar:** si el taller además rola o barrena el aro antes de mandarlo, hay que sumar esas horas; y si manda el sellador de esa junta, sumarlo. |
+| Brida del extremo del ajuste | **Brida suelta** por omisión: el taller manda el aro **terminado** —rolado, con el cierre soldado, barrenado y pintado— con sus tornillos y su empaque, **sin soldarlo al ducto** (se suelda en obra donde se corta el tramo). Se cobra su material (solera con la merma de barra, tornillería, empaque y flete) y esas operaciones; **no** se cobra el armado del aro al ducto ni el filete aro–ducto, ni el sellador de su junta (se sella en obra) | `extremo_ajuste_defecto` (tablas) y `extremo_ajuste` (partida): `SUELTA`, `SIN_BRIDA` o `CON_BRIDA` | `SIN_BRIDA`: la brida no está en el precio. `CON_BRIDA`: se arma y se suelda al ducto en taller y se sella su junta (cuánto cambia el precio, en la tabla de §3.2). **Por confirmar:** si el taller también manda el sellador de esa junta, hay que sumarlo (unos pesos por brida). |
 | Quién elige el ancho de la yarda | El ingeniero que diseña, una vez para toda la cotización (encabezado) o partida por partida; si nadie elige, 1 220 mm | `cotizacion.yarda_mm`, `yarda_mm` de la partida, `yarda_defecto_mm` | Todas las partidas de la cotización cambian de armado a la vez; la que trae su propio ancho no cambia. |
 | Anchos de yarda | 914 y 1 220 mm | `yardas_mm` | Con 914 mm hay más anillos y más piezas por metro: sube el rolado, el engargolado y las bridas. |
 | Tolerancia del ajuste | 25 mm | `ajuste_tolerancia_mm` | Un sobrante menor se toma por yardas completas. |

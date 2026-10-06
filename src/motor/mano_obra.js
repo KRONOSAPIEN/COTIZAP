@@ -57,8 +57,8 @@
     const t_armado = k_dif * (PF.n_piezas * A.t_fijo_pieza_min + PF.n_juntas_internas * t_junta
       + her.n_aros * A.t_ajuste_aro_min + her.n_fijaciones * A.t_fijacion_min + her.n_espigas * A.t_formado_espiga_min);
 
-    /* --- Fabricación de aros de brida --- */
-    const t_aros = her.aros.reduce((s, a) => s + P.aros.t_fijo_aro_min + P.aros.t_roll_aro_min_m * (a.L_aro_mm / 1000), 0);
+    /* --- Fabricación de aros de brida (rolado de la solera): los que se arman al ducto y los que se mandan sueltos --- */
+    const t_aros = [...her.aros, ...her.aros_sueltos].reduce((s, a) => s + P.aros.t_fijo_aro_min + P.aros.t_roll_aro_min_m * (a.L_aro_mm / 1000), 0);
 
     /* --- Soldadura --- */
     const S = P.soldadura;
@@ -91,7 +91,7 @@
     const t_pintura = pint.A_pint_m2 * (P.pintura.t_prep_min_m2 + pint.capas.length * P.pintura.t_aplic_min_m2);
 
     /* --- Inspección y embalaje --- */
-    const m_neta_total = lam.m_neta_kg + her.m_aros_neta_kg;
+    const m_neta_total = lam.m_neta_kg + her.m_aros_neta_kg + her.m_aros_sueltos_neta_kg; // todo lo que se manda se inspecciona y se embala
     const t_qc = P.qc.t_fijo_min + P.qc.k_manejo_min_kg * m_neta_total;
 
     return {

@@ -6,7 +6,8 @@
  * barreno Ø3/8", tornillo 5/16" × 1¼") · sellado clase C · primario · servicio POLVO · riesgo MEDIO · 1 pieza.
  * Armado por yardas de 4 ft (1 220 mm): 3 000 mm = 2 yardas completas + un tramo de ajuste de 560 mm, engargolados en una
  * sola pieza. El extremo del ajuste no lleva brida de taller (se corta en campo): la pieza lleva UNA brida fabricada y, por
- * omisión, el taller manda SUELTO el aro del otro extremo con sus tornillos y su empaque (sólo material, sin fabricarlos).
+ * omisión, el taller manda SUELTO el aro del otro extremo, terminado (rolado, con el cierre soldado, barrenado y pintado) y
+ * con sus tornillos y su empaque, sin soldarlo al ducto (se suelda en obra).
  *
  * El oráculo recalcula TODO paso a paso con aritmética directa (sin llamar a las funciones del motor)
  * y compara contra la salida del motor. Los valores monetarios dependen de las tablas maestras
@@ -60,7 +61,7 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   assert.equal(L_capa, 3000);
   const n_juntas = n_anillos - 1;               // juntas engargoladas entre los anillos de la pieza
   const n_bridas = 1;                           // brida de taller: la pieza trae el ajuste y su extremo libre no la lleva…
-  const n_sueltas = 1;                          // …se manda suelta (por omisión): aro, tornillos y empaque, sin fabricarlos
+  const n_sueltas = 1;                          // …se manda suelta (por omisión): aro terminado, tornillos y empaque, sin unirlo al ducto
   assert.equal(r.geometria.n_piezas, 1);
   assert.equal(r.geometria.n_virolas, n_anillos);
   assert.equal(r.geometria.extremos.length, n_bridas);
@@ -91,7 +92,7 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   const m_aro = (L_aro * w) / 1000;
   const m_aros_neta = n_bridas * m_aro;          // los aros que se fabrican en taller
   const m_aros_bruta = m_aros_neta / (1 - 0.05);
-  const m_sueltos_neta = n_sueltas * m_aro;      // el aro suelto es el mismo aro, pero no se fabrica: sólo se compra
+  const m_sueltos_neta = n_sueltas * m_aro;      // el aro suelto es el mismo aro (se rola, se barrena, se pinta), pero no se une al ducto
   const m_sueltos_bruta = m_sueltos_neta / (1 - 0.05);
   casi(r.qto.her.m_aros_neta_kg, m_aros_neta);
   casi(r.qto.her.m_aros_bruta_kg, m_aros_bruta);
@@ -129,8 +130,9 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   // el tramo de ajuste (560 mm) necesita el corte a lo largo de la hoja (B) y su tajo de 560 mm.
   const L_corte = (2 * 1220 + B + 560) / 1000;
   const L_tope = 3.0;                           // costura longitudinal: una por anillo, 3 m en total
-  const L_fil = (n_bridas * PI * D_ext) / 1000; // filete aro–ducto (continuo)
-  const L_cierres = (n_bridas * ancho) / 1000;  // cierre del aro: una sección de solera
+  const L_fil = (n_bridas * PI * D_ext) / 1000; // filete aro–ducto (continuo): sólo el aro que se une al ducto
+  const n_aros_hechos = n_bridas + n_sueltas;   // aros que se fabrican: los de taller y los sueltos
+  const L_cierres = (n_aros_hechos * ancho) / 1000;  // cierre de cada aro (de taller o suelto): una sección de solera
   const L_sold = L_tope + L_fil + L_cierres;
   casi(r.qto.tmp.detalle.L_soldadura_m, L_sold);
 
@@ -142,7 +144,7 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   const v_rol = interp([[0.6, 8], [1.0, 7], [1.5, 6], [2.0, 5], [3.0, 3.5], [4.5, 2.5]], e);
   const t_rolado = n_anillos * 3.0 + (3 * 1 * (L_capa / 1000)) / v_rol;
   const t_armado = 1.0 * (1 * 6.0 + 0 * 0 + n_bridas * 4.0);
-  const t_aros = n_bridas * (4.0 + 2.5 * (L_aro / 1000));
+  const t_aros = n_aros_hechos * (4.0 + 2.5 * (L_aro / 1000));  // se rolan todos los aros; sólo los de taller se arman al ducto (t_armado)
   const tablaVs = [[0.6, 0.9], [1.0, 0.7], [1.5, 0.5], [2.0, 0.42], [3.0, 0.32], [4.5, 0.24]];
   const v_sold = interp(tablaVs, e) * 1.0;
   const v_cierre = interp(tablaVs, esp) * 1.0;   // el cierre se suelda en el espesor de la solera
@@ -151,12 +153,12 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   // engargolado: la costura longitudinal es a tope (soldada), así que sólo las 2 juntas entre yardas
   const v_eng = interp([[0.5, 3.0], [1.0, 2.5], [1.5, 1.8], [2.0, 1.2]], e);
   const t_eng = n_juntas * 2.0 + L_eng_circ / v_eng;
-  const t_barren = n_bridas * n_tornillos * 0.35;
+  const t_barren = n_aros_hechos * n_tornillos * 0.35;  // el aro suelto también sale barrenado
   const t_acab = 0.25 * t_sold;
   const A_aro_pint = ((PI / 2) * ((D_ext + 2 * ancho) ** 2 - D_ext ** 2) + PI * (D_ext + 2 * ancho) * esp) / 1e6;
-  const A_pint = (PI * D_ext * L_capa) / 1e6 + n_bridas * A_aro_pint;
+  const A_pint = (PI * D_ext * L_capa) / 1e6 + n_aros_hechos * A_aro_pint;  // y pintado
   const t_pint = A_pint * (4.0 + 1 * 3.0);
-  const t_qc = 3.0 + 0.05 * (m_neta + m_aros_neta);
+  const t_qc = 3.0 + 0.05 * (m_neta + m_aros_neta + m_sueltos_neta);  // todo lo que se manda se inspecciona y se embala
   const T = r.qto.tmp.unitarios_min;
   casi(T.corte, t_corte); casi(T.rolado, t_rolado); casi(T.armado, t_armado); casi(T.aros, t_aros);
   casi(T.soldadura, t_sold); casi(T.engargolado, t_eng); casi(T.barrenado, t_barren); casi(T.acabado, t_acab); casi(T.pintura, t_pint);
@@ -218,7 +220,7 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
 /* Los tres modos del extremo del ajuste: el vector de cada uno (CD, C_T y precio con el mismo método del documento). */
 const MODOS = {
   SIN_BRIDA: { n_aros: 1, n_sueltos: 0, horas: 1.878, CD: 2119.08, C_T: 2546.2, precio: 3320.71 },
-  SUELTA: { n_aros: 1, n_sueltos: 1, horas: 1.878, CD: 2195.99, C_T: 2632.58, precio: 3433.36 },
+  SUELTA: { n_aros: 1, n_sueltos: 1, horas: 2.102, CD: 2322.96, C_T: 2794.94, precio: 3645.1 },
   CON_BRIDA: { n_aros: 2, n_sueltos: 0, horas: 2.312, CD: 2448.54, C_T: 2954.56, precio: 3853.28 },
 };
 
@@ -243,12 +245,18 @@ test('Ejemplo A — el extremo del ajuste: sin brida, brida suelta (por omisión
   // la brida de taller trae dos aros; la suelta, uno de taller y uno suelto (el mismo aro)
   casi(con.qto.her.m_aros_neta_kg, 2 * sin.qto.her.m_aros_neta_kg, 1e-12);
   casi(suelta.qto.her.m_aros_sueltos_neta_kg, sin.qto.her.m_aros_neta_kg, 1e-12);
-  // suelta = el material de la brida de taller (perfil, tornillos, empaque y flete) sin mano de obra, soldadura, pintura ni sellador
+  // el material es el mismo que el de la brida de taller: perfil, tornillería y empaque (el sellador no: la junta se sella en obra)
   casi(suelta.costos.materiales.perfiles, con.costos.materiales.perfiles, 1e-12);
   casi(suelta.costos.materiales.tornilleria, con.costos.materiales.tornilleria, 1e-12);
   casi(suelta.costos.materiales.empaque, con.costos.materiales.empaque, 1e-12);
   casi(suelta.costos.materiales.sellador, sin.costos.materiales.sellador, 1e-12);
-  casi(suelta.costos.h_MOD, sin.costos.h_MOD, 1e-12);
+  // el aro suelto sale terminado: se rola, se barrena, se pinta y se le suelda el cierre, igual que el de taller…
+  const h = (x, op) => x.costos.horas_std[op];
+  ['aros', 'barrenado', 'pintura', 'qc_embalaje'].forEach((op) => casi(h(suelta, op), h(con, op), 1e-12, op));
+  assert.ok(h(suelta, 'soldadura') > h(sin, 'soldadura') && h(suelta, 'soldadura') < h(con, 'soldadura'), 'suelda su cierre, pero no el filete al ducto');
+  // …pero no se arma ni se suelda al ducto: el armado (ajuste del aro) es el de «sin brida»
+  casi(h(suelta, 'armado'), h(sin, 'armado'), 1e-12);
+  assert.ok(h(con, 'armado') > h(suelta, 'armado'));
   assert.ok(sin.precio.unitario < suelta.precio.unitario && suelta.precio.unitario < con.precio.unitario);
 });
 
@@ -273,10 +281,10 @@ const GOLDEN = {
   n_aros_sueltos: 1,
   L_aro_mm: 1089.8,
   n_tornillos: 8,
-  horas_mod_reales: 1.878,
-  CD: 2195.99,
-  C_T: 2632.58,
-  precio_unitario: 3433.36,
+  horas_mod_reales: 2.102,
+  CD: 2322.96,
+  C_T: 2794.94,
+  precio_unitario: 3645.1,
 };
 
 test('Ejemplo A — vector de referencia (valores redondeados que cita el documento)', () => {

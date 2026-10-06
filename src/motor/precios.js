@@ -52,8 +52,8 @@
     const { lam, her, tmp } = q;
     switch (driver) {
       case 'PIEZA': return 1;
-      case 'KG_NETO': return lam.m_neta_kg + her.m_aros_neta_kg;
-      case 'KG_BRUTO': return lam.m_bruta_kg + her.m_aros_bruta_kg;
+      case 'KG_NETO': return lam.m_neta_kg + her.m_aros_neta_kg + her.m_aros_sueltos_neta_kg;
+      case 'KG_BRUTO': return lam.m_bruta_kg + her.m_aros_bruta_kg + her.m_aros_sueltos_bruta_kg;
       case 'M2_NETO': return lam.A_neta_m2;
       case 'M_CORTE': return tmp.detalle.L_corte_m;
       case 'M_SOLDADURA': return tmp.detalle.L_soldadura_m;

@@ -215,7 +215,8 @@
       // entre sí en piezas de hasta `yardas_por_pieza_max`, con brida en ambos extremos; lo que falta se arma con las yardas
       // completas que sobren y un tramo de ajuste (menos de una yarda) cuyo extremo libre NO lleva brida de taller, para cortarlo
       // y ponerlo en campo. Qué se cotiza en ese extremo (`extremo_ajuste_defecto`; la partida puede pedir otro):
-      //   SUELTA    — el taller manda el aro de solera, los tornillos y el empaque sueltos, para ponerlos en obra (sólo material);
+      //   SUELTA    — el taller manda el aro terminado (rolado, con el cierre soldado, barrenado y pintado), los tornillos y el
+      //               empaque, sin soldarlo al ducto: se suelda en obra donde se corta el tramo;
       //   SIN_BRIDA — nada: la brida de ese extremo no está en este precio;
       //   CON_BRIDA — brida fabricada y soldada en taller, como en los demás extremos.
       armado_yardas: {

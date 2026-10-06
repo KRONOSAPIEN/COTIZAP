@@ -104,8 +104,10 @@
 
   /**
    * Herrajes de unión por unidad de partida.
-   *   BRIDADO: aros (solera o ángulo) + tornillería + empaque (+ sellador según clase). Las bridas de taller (`PF.extremos`)
-   *            se fabrican; las SUELTAS (`PF.extremos_sueltos`) se mandan sin fabricar, para ponerlas en obra: sólo material.
+   *   BRIDADO: aros (solera o ángulo) + tornillería + empaque (+ sellador según clase). Toda brida sale de taller como aro
+   *            terminado (rolado, con el cierre soldado, barrenado y pintado). Las de taller (`PF.extremos`) además se arman y se
+   *            sueldan al ducto; las SUELTAS (`PF.extremos_sueltos`) no se unen al ducto: se mandan con sus tornillos y su empaque
+   *            para soldarlas en obra donde se corta el tramo.
    *   ESPIGA : prolongación macho + fijaciones + sellador.
    *   LISO   : sin herraje.
    * Cada junta se comparte entre dos extremos: se asigna 0.5 junta de tornillería, empaque y sellador por extremo.
@@ -125,7 +127,7 @@
       L_aros_m: 0,
       m_aros_neta_kg: 0,
       m_aros_bruta_kg: 0,
-      aros_sueltos: [], // aros que el taller manda sueltos para ponerlos en obra: sólo material, sin fabricarlos
+      aros_sueltos: [], // aros terminados que el taller manda sueltos (sin unirlos al ducto) para soldarlos en obra
       m_aros_sueltos_neta_kg: 0,
       m_aros_sueltos_bruta_kg: 0,
       tornillos_por_tipo: {},
@@ -145,9 +147,10 @@
 
     if (tipo === 'BRIDADO') {
       const holgura = M.proceso.aros.holgura_corte_mm;
-      // Una brida del extremo `ext`. La de taller se fabrica (aro rolado, barrenado y soldado al ducto) y sella su media junta;
-      // la SUELTA se manda sin fabricar para ponerla en obra: se cobra sólo su material (aro, tornillos y empaque), sin tiempos,
-      // soldadura, pintura ni sellador.
+      // Una brida del extremo `ext`. Toda brida se fabrica como aro terminado —se rola la solera, se suelda el cierre del aro, se
+      // barrena y se pinta— y lleva su media junta de tornillería y empaque. La de taller además se arma y se suelda al ducto y
+      // sella su media junta. La SUELTA sale igual de terminada pero no se une al ducto (ahí se corta y se ajusta en campo): sin
+      // ajuste, sin filete aro–ducto y sin sellador (la junta se sella en obra).
       const brida = (ext, suelta) => {
         const dim_mayor = ext.forma === 'REDONDA' ? ext.D_ext_mm : Math.max(ext.a_ext_mm, ext.b_ext_mm);
         const perfil = seleccionarPerfil(M, dim_mayor, p.perfil_id);
@@ -168,21 +171,23 @@
         out.n_tornillos_asignados += 0.5 * n_tornillos;
         out.n_juntas_asignadas += 0.5;
         if (p.usa_empaque !== false) out.L_empaque_m += (0.5 * g.P_perno_mm * (1 + U_.f_traslape_empaque)) / 1000;
+        // Fabricación del aro (toda brida): barrenos, cierre soldado del aro y pintura
+        out.n_barrenos += n_tornillos;
+        out.sold_aros.cierres.push({ L_m: g.L_cierre_mm / 1000, esp_mm: perfil.esp_mm });
+        out.A_pintura_aros_m2 += g.A_pintura_m2;
         if (suelta) {
           out.aros_sueltos.push(aro);
           out.m_aros_sueltos_neta_kg += m_aro;
           out.m_aros_sueltos_bruta_kg += aro.m_aro_bruta_kg;
           return;
         }
+        // Unión al ducto (sólo la brida de taller): ajuste del aro, filete aro–ducto y media junta de sellador
         out.aros.push(aro);
         out.n_aros += 1;
         out.L_aros_m += L_aro_m;
         out.m_aros_neta_kg += m_aro;
-        out.n_barrenos += n_tornillos;
         if (clase !== 'NINGUNA') out.L_sellado_m += (0.5 * ext.P_ext_mm) / 1000;
         out.sold_aros.filete_m += (U_.f_cont_soldadura_aro * ext.P_ext_mm) / 1000;
-        out.sold_aros.cierres.push({ L_m: g.L_cierre_mm / 1000, esp_mm: perfil.esp_mm });
-        out.A_pintura_aros_m2 += g.A_pintura_m2;
       };
       PF.extremos.forEach((ext) => brida(ext, false));
       (PF.extremos_sueltos || []).forEach((ext) => brida(ext, true));

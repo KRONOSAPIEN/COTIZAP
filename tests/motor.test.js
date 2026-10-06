@@ -618,11 +618,12 @@ test('Tramo de ajuste: sin brida, con brida de taller o con brida suelta — cu�
   assert.equal(justo.geometria.detalle.armado.extremo_libre, false);
 });
 
-test('Brida suelta (por omisión): el taller manda el aro, los tornillos y el empaque sin fabricarlos — sólo material, nada de mano de obra', () => {
+test('Brida suelta (por omisión): el aro sale terminado de taller (rolado, cierre soldado, barrenado y pintado) pero no se une al ducto', () => {
   const sin = C.cotizarPartida({ ...rectoYardas, extremo_ajuste: 'SIN_BRIDA' }, M);
   const con = C.cotizarPartida({ ...rectoYardas, extremo_ajuste: 'CON_BRIDA' }, M);
   const suelta = C.cotizarPartida(rectoYardas, M); // sin pedirlo: manda la tabla maestra (SUELTA)
   const her = suelta.qto.her;
+  const T = (r, op) => r.qto.tmp.unitarios_min[op];
   assert.equal(suelta.geometria.detalle.armado.modo, 'SUELTA');
   // Una brida de taller (la del extremo de las yardas) y un aro suelto idéntico al de taller
   assert.equal(her.n_aros, 1);
@@ -632,33 +633,46 @@ test('Brida suelta (por omisión): el taller manda el aro, los tornillos y el em
   casi(her.aros_sueltos[0].L_aro_mm, her.aros[0].L_aro_mm, 1e-12);
   casi(her.m_aros_sueltos_neta_kg, her.m_aros_neta_kg, 1e-12);
   casi(her.m_aros_sueltos_bruta_kg, her.m_aros_bruta_kg, 1e-12);
-  // Lo que se fabrica no cambia respecto de «sin brida»: ni barrenos, ni soldadura de aros, ni pintura de aros
-  assert.equal(her.n_barrenos, sin.qto.her.n_barrenos);
-  assert.equal(her.sold_aros.cierres.length, 1);
+
+  // LO QUE SE LE HACE AL ARO SUELTO EN TALLER (igual que a uno de taller): se rola, se barrena, se le suelda el cierre y se pinta
+  casi(T(suelta, 'aros'), 2 * T(sin, 'aros'), 1e-12, 'rolado: dos aros, no uno');
+  assert.equal(her.n_barrenos, 2 * sin.qto.her.n_barrenos);
+  assert.equal(her.n_barrenos, con.qto.her.n_barrenos);
+  casi(T(suelta, 'barrenado'), T(con, 'barrenado'), 1e-12);
+  assert.equal(her.sold_aros.cierres.length, 2, 'el cierre de cada aro, el de taller y el suelto');
+  assert.deepEqual(her.sold_aros.cierres, con.qto.her.sold_aros.cierres);
+  casi(her.A_pintura_aros_m2, con.qto.her.A_pintura_aros_m2, 1e-12);
+  casi(suelta.qto.pint.A_pint_m2, con.qto.pint.A_pint_m2, 1e-12, 'se pintan los dos aros');
+  assert.ok(suelta.qto.pint.A_pint_m2 > sin.qto.pint.A_pint_m2 && sin.qto.pint.A_pint_m2 > 0, 'y hay pintura que aplicar (primario por omisión)');
+  casi(T(suelta, 'pintura'), T(con, 'pintura'), 1e-12);
+  casi(suelta.costos.consumibles.pintura, con.costos.consumibles.pintura, 1e-12);
+
+  // LO QUE NO SE LE HACE: no se arma ni se suelda al ducto (eso se hace en obra) y su junta no se sella en taller
+  assert.equal(her.n_aros, sin.qto.her.n_aros, 'ajuste de aros al ducto: sólo el de taller');
+  casi(T(suelta, 'armado'), T(sin, 'armado'), 1e-12);
+  assert.ok(T(con, 'armado') > T(suelta, 'armado'));
   casi(her.sold_aros.filete_m, sin.qto.her.sold_aros.filete_m, 1e-12);
-  casi(her.A_pintura_aros_m2, sin.qto.her.A_pintura_aros_m2, 1e-12);
+  casi(con.qto.her.sold_aros.filete_m, 2 * her.sold_aros.filete_m, 1e-12);
+  assert.ok(T(suelta, 'soldadura') > T(sin, 'soldadura') && T(suelta, 'soldadura') < T(con, 'soldadura'), 'suelda el cierre del aro, no el filete al ducto');
+  casi(her.L_sellado_m, sin.qto.her.L_sellado_m, 1e-12);
   casi(her.L_aros_m, sin.qto.her.L_aros_m, 1e-12);
-  // El material de su junta sí está: el aro, la media tornillería y el medio empaque de ese extremo; el sellador no (se pone en obra)
+
+  // El material de su junta: el aro, la media tornillería y el medio empaque de ese extremo, y el flete de entrada
   casi(her.n_tornillos_asignados, con.qto.her.n_tornillos_asignados, 1e-12);
   casi(her.L_empaque_m, con.qto.her.L_empaque_m, 1e-12);
-  casi(her.L_sellado_m, sin.qto.her.L_sellado_m, 1e-12);
   casi(suelta.costos.materiales.perfiles, con.costos.materiales.perfiles, 1e-12);
   casi(suelta.costos.materiales.tornilleria, con.costos.materiales.tornilleria, 1e-12);
   casi(suelta.costos.materiales.empaque, con.costos.materiales.empaque, 1e-12);
   casi(suelta.costos.materiales.sellador, sin.costos.materiales.sellador, 1e-12);
   casi(suelta.costos.materiales.flete, con.costos.materiales.flete, 1e-12, 'el flete va sobre lámina y perfiles: también sobre el aro suelto');
-  // Ninguna hora de taller ni consumible: horas, mano de obra, equipo y consumibles son los de «sin brida»
-  Object.keys(sin.costos.horas_std).forEach((op) => casi(suelta.costos.horas_std[op], sin.costos.horas_std[op], 1e-12, op));
-  assert.deepEqual(suelta.costos.consumibles, sin.costos.consumibles);
-  casi(suelta.costos.subtotales.mano_obra, sin.costos.subtotales.mano_obra, 1e-12);
-  casi(suelta.costos.subtotales.equipo, sin.costos.subtotales.equipo, 1e-12);
-  // El aumento de costo directo es exactamente el material del aro (perfil + tornillería + empaque + su flete)
-  const dif = (campo) => suelta.costos.materiales[campo] - sin.costos.materiales[campo];
-  casi(suelta.costos.CD - sin.costos.CD, dif('perfiles') + dif('tornilleria') + dif('empaque') + dif('flete'), 1e-12);
-  assert.ok(dif('perfiles') > 0 && dif('tornilleria') > 0 && dif('empaque') > 0 && dif('flete') > 0);
-  // Cuesta más que no mandarla y bastante menos que fabricarla y soldarla en taller
+
+  // Se inspecciona y se embala todo lo que se manda
+  casi(T(suelta, 'qc_embalaje'), T(con, 'qc_embalaje'), 1e-12);
+
+  // Cuesta más que no mandarla y menos que la brida de taller (que además se arma, se suelda al ducto y se sella)
   assert.ok(sin.precio.unitario < suelta.precio.unitario && suelta.precio.unitario < con.precio.unitario);
-  assert.ok((suelta.precio.unitario - sin.precio.unitario) < 0.4 * (con.precio.unitario - sin.precio.unitario), 'el aro suelto es el material; fabricarlo es sobre todo mano de obra');
+  assert.ok(sin.costos.subtotales.mano_obra < suelta.costos.subtotales.mano_obra && suelta.costos.subtotales.mano_obra < con.costos.subtotales.mano_obra);
+  assert.ok(sin.costos.h_MOD < suelta.costos.h_MOD && suelta.costos.h_MOD < con.costos.h_MOD);
   // El peso que se manda incluye el aro suelto
   casi(suelta.peso.neto_unitario_kg - sin.peso.neto_unitario_kg, her.m_aros_sueltos_neta_kg, 1e-12);
   casi(suelta.peso.aros_sueltos_neto_kg, her.m_aros_sueltos_neta_kg, 1e-12);
@@ -667,6 +681,16 @@ test('Brida suelta (por omisión): el taller manda el aro, los tornillos y el em
   const cinco = C.cotizarPartida({ ...rectoYardas, cantidad: 5 }, M);
   casi(cinco.costos.materiales.perfiles, 5 * suelta.costos.materiales.perfiles, 1e-12);
   casi(cinco.costos.materiales.tornilleria, 5 * suelta.costos.materiales.tornilleria, 1e-12);
+
+  // Las operaciones omitidas (subcontratadas) también le quitan sus horas al aro suelto, y los drivers por kilo lo incluyen
+  const sinBarrenar = C.cotizarPartida({ ...rectoYardas, omitir_operaciones: ['barrenado'] }, M);
+  assert.equal(sinBarrenar.costos.horas_std.barrenado, 0);
+  const sub = C.cotizarPartida({ ...rectoYardas, subcontratos: [{ concepto: 'Galvanizado', driver: 'KG_NETO', precio: 10 }, { concepto: 'Granallado', driver: 'KG_BRUTO', precio: 1 }] }, M);
+  casi(sub.costos.subcontratos['1. Galvanizado'], 10 * (suelta.qto.lam.m_neta_kg + her.m_aros_neta_kg + her.m_aros_sueltos_neta_kg), 1e-12);
+  casi(sub.costos.subcontratos['2. Granallado'], suelta.qto.lam.m_bruta_kg + her.m_aros_bruta_kg + her.m_aros_sueltos_bruta_kg, 1e-12);
+  const driverM = C.cotizarPartida({ ...rectoYardas, subcontratos: [{ concepto: 'Soldadura de terceros', driver: 'M_SOLDADURA', precio: 1 }] }, M);
+  casi(driverM.costos.subcontratos['1. Soldadura de terceros'], suelta.qto.tmp.detalle.L_soldadura_m, 1e-12);
+  assert.ok(suelta.qto.tmp.detalle.L_cierres_m > sin.qto.tmp.detalle.L_cierres_m, 'los metros de soldadura incluyen el cierre del aro suelto');
 });
 
 test('Brida suelta: sigue las demás opciones de la unión (sin empaque, perfil de ángulo, unión de espiga, tablas maestras)', () => {

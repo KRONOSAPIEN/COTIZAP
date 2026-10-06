@@ -37,7 +37,7 @@
     tipo_costura: [['A_TOPE', 'Soldada a tope'], ['TRASLAPE', 'Soldada a traslape'], ['PITTSBURGH', 'Engargolado Pittsburgh']],
     excentrica: [['NO', 'Concéntrica'], ['CARA_PLANA', 'Excéntrica · cara plana']],
     // Extremo libre del tramo de ajuste (el de las tablas maestras se ofrece aparte, como «Predeterminado»)
-    ajuste: [['SUELTA', 'Brida suelta (aro, tornillos y empaque)'], ['SIN_BRIDA', 'Sin brida (fuera de este precio)'], ['CON_BRIDA', 'Brida de taller en ambos extremos']],
+    ajuste: [['SUELTA', 'Brida suelta (aro terminado, tornillos y empaque)'], ['SIN_BRIDA', 'Sin brida (fuera de este precio)'], ['CON_BRIDA', 'Brida de taller en ambos extremos']],
     driver: [['PIEZA', 'Por pieza'], ['KG_NETO', 'Por kg neto'], ['KG_BRUTO', 'Por kg bruto'], ['M2_NETO', 'Por m² de lámina'], ['M_CORTE', 'Por m de corte'], ['M_SOLDADURA', 'Por m de soldadura']],
   };
 

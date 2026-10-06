@@ -941,7 +941,7 @@ const ok = (cond, msg) => {
     ok(await p.locator('.arm-fig svg.arm rect.arm-brida').count() === 1 && await p.locator('.arm-fig svg.arm line.arm-libre').count() === 1 && await p.locator('.arm-fig svg.arm rect.arm-suelta').count() === 1, 'una brida de taller, el extremo libre del ajuste y, aparte, su aro suelto');
     ok((await textosSvg()).includes('brida suelta'), 'el diagrama rotula «brida suelta»');
     const fig = await p.locator('.arm-fig').innerText();
-    ok(/manda suelto el aro con sus tornillos y su empaque \(sólo material, sin mano de obra\)/.test(fig), 'explica que el aro, los tornillos y el empaque van sueltos: sólo material, sin mano de obra');
+    ok(/no suelda la brida al ducto, manda suelto el aro terminado \(rolado, con el cierre soldado, barrenado y pintado\) con sus tornillos y su empaque, para soldarlo en obra/.test(fig), 'explica que el aro sale terminado (rolado, cierre soldado, barrenado y pintado) con sus tornillos y su empaque, y se suelda en obra');
     ok(/1 \+ 1 suelta/.test(fig), 'la tabla de piezas cuenta «1 + 1 suelta»');
     ok(/Caben 3 plantillas por hoja \(una por yarda/.test(await p.locator('.hoja-fig').innerText()), 'la hoja es del ancho de la yarda: caben 3 plantillas de Ø12″ a lo largo');
     ok(await p.locator('.hoja-fig svg rect.hoja-pieza').count() === 3, 'y se dibujan las 3');
@@ -949,7 +949,7 @@ const ok = (cond, msg) => {
     ok(f0.geometria.n_virolas === 3 && f0.geometria.n_piezas === 1 && f0.qto.her.n_aros === 1 && f0.qto.her.aros_sueltos.length === 1, 'el motor: 3 anillos rolados, 1 pieza, 1 aro de taller y 1 aro suelto');
     const textoDet = await p.locator('#detalle').innerText();
     ok(/Yardas \(anillos rolados\)/.test(textoDet) && /Juntas engargoladas entre yardas/.test(textoDet), 'la geometría lista los anillos y las juntas engargoladas');
-    ok(/Aros sueltos \(sin fabricar\)/.test(textoDet) && /Suelto #1/.test(textoDet) && /\(en obra\)/.test(textoDet), 'los herrajes listan el aro suelto, con sus barrenos «en obra»');
+    ok(/Aros sueltos \(terminados, sin unir al ducto\)/.test(textoDet) && /Suelto #1/.test(textoDet) && !/\(en obra\)/.test(textoDet), 'los herrajes listan el aro suelto terminado, con sus barrenos hechos en taller');
 
     // b) el ancho de la yarda se elige en la cotización (3 ó 4 pies, como decida quien diseña)
     ok((await p.locator('#c_yarda_mm option').allInnerTexts()).join('|') === 'Predeterminada · 1,220 mm · 4 ft|914 mm · 3 ft|1,220 mm · 4 ft', 'el encabezado ofrece el ancho de la yarda: predeterminada, 914 mm (3 ft) o 1 220 mm (4 ft)');
@@ -970,7 +970,7 @@ const ok = (cond, msg) => {
     // la partida: «Según la cotización», o su propio ancho
     await editar(p, 0);
     ok((await p.locator('#f_yarda_mm option').allInnerTexts()).join('|') === 'Según la cotización · 914 mm · 3 ft|914 mm · 3 ft|1,220 mm · 4 ft', 'la partida ofrece «Según la cotización · 914 mm · 3 ft» y los dos anchos');
-    ok((await p.locator('#f_extremo_ajuste option').allInnerTexts()).join('|') === 'Predeterminado · Brida suelta (aro, tornillos y empaque)|Brida suelta (aro, tornillos y empaque)|Sin brida (fuera de este precio)|Brida de taller en ambos extremos', 'y el extremo del ajuste: lo predeterminado (brida suelta), brida suelta, sin brida o brida de taller');
+    ok((await p.locator('#f_extremo_ajuste option').allInnerTexts()).join('|') === 'Predeterminado · Brida suelta (aro terminado, tornillos y empaque)|Brida suelta (aro terminado, tornillos y empaque)|Sin brida (fuera de este precio)|Brida de taller en ambos extremos', 'y el extremo del ajuste: lo predeterminado (brida suelta), brida suelta, sin brida o brida de taller');
     ok(await p.locator('#f_ajuste_sin_brida').count() === 0 && await p.locator('#f_L_max_pieza_mm').count() === 0, 'ya no están «Tramo de ajuste» (sí/no) ni «Longitud máx. por pieza»');
     ok(/3 yardas y ajuste de 258 mm/.test(await p.locator('#dlg-prev').innerText()), 'la vista previa usa el ancho de la cotización: «3 yardas y ajuste de 258 mm»');
     await p.selectOption('#f_yarda_mm', '1220');
@@ -1057,7 +1057,7 @@ const ok = (cond, msg) => {
     ok(await p.locator('input#m_proceso__armado_yardas__yarda_defecto_mm').inputValue() === '1220' && await p.locator('input#m_proceso__armado_yardas__yardas_por_pieza_max').inputValue() === '3'
       && await p.locator('input#m_proceso__armado_yardas__ajuste_tolerancia_mm').inputValue() === '25', 'las tablas traen el armado: yarda 1 220 mm, 3 yardas por pieza y tolerancia 25 mm');
     const ea = p.locator('select#m_proceso__armado_yardas__extremo_ajuste_defecto');
-    ok(await ea.inputValue() === 'SUELTA' && (await ea.locator('option').allInnerTexts()).join('|') === 'Brida suelta (aro, tornillos y empaque)|Sin brida (fuera de este precio)|Brida de taller en ambos extremos', 'el extremo del ajuste por omisión se elige de una lista: brida suelta (la de arranque), sin brida o brida de taller');
+    ok(await ea.inputValue() === 'SUELTA' && (await ea.locator('option').allInnerTexts()).join('|') === 'Brida suelta (aro terminado, tornillos y empaque)|Sin brida (fuera de este precio)|Brida de taller en ambos extremos', 'el extremo del ajuste por omisión se elige de una lista: brida suelta (la de arranque), sin brida o brida de taller');
     const jy = p.locator('select#m_proceso__armado_yardas__junta_entre_yardas');
     ok(await jy.inputValue() === 'PITTSBURGH' && (await jy.locator('option').allInnerTexts()).join('|') === 'Soldada a tope|Soldada a traslape|Engargolado Pittsburgh', 'y la junta entre yardas, de la lista de costuras: engargolado Pittsburgh');
     const lista = await p.locator('input[id^="m_proceso__armado_yardas__yardas_mm"]').evaluateAll((es) => es.map((e) => e.value));

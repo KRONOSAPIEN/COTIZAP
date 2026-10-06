@@ -44,7 +44,7 @@ const r = cotizarPartida({
   D_mm: 304.8, L_mm: 3000, tipo_union: 'BRIDADO', cantidad: 1,
 }, M);
 
-console.log(r.precio.unitario);            // 3433.36 MXN (mano de obra a $500/h; una brida de taller y, en el extremo del ajuste, el aro suelto)
+console.log(r.precio.unitario);            // 3645.10 MXN (mano de obra a $500/h; una brida de taller y, en el extremo del ajuste, el aro suelto terminado)
 console.log(r.peso.neto_total_kg);         // 37.564 kg (lámina + aro de brida + aro suelto)
 console.log(r.pila);                       // CD, CI, imprevistos, financiamiento, utilidad…
 console.log(r.qto);                        // cantidades físicas, sin precios
@@ -121,11 +121,11 @@ El taller no rola un tramo de 3 m de una pieza: rola **yardas**, anillos del **a
 
 | Opción | Qué cotiza | Ejemplo A (3 m, Ø12″) |
 | --- | --- | --- |
-| **Brida suelta** (predeterminada) | El taller manda el **aro, los tornillos y el empaque sueltos**, para ponerlos en obra: se cobra **sólo el material**, sin mano de obra, soldadura, pintura ni sellador | $3,433.36 |
+| **Brida suelta** (predeterminada) | El taller manda el **aro terminado** (rolado, con el cierre soldado, barrenado y pintado), con sus **tornillos y empaque**, **sin soldarlo al ducto**: se suelda en obra. Se cobra su material y esas operaciones; no el armado al ducto, el filete aro–ducto ni el sellador de su junta | $3,645.10 |
 | Sin brida | Nada: la brida de ese extremo no está en el precio | $3,320.71 |
 | Brida de taller | Se fabrica y se suelda en taller, como en los demás extremos | $3,853.28 |
 
-Cada yarda se **rola por separado** (tiempo fijo por anillo), las juntas entre yardas son **engargolado** (con sellador), cada plantilla de una yarda sale con un solo tajo a lo ancho de la hoja y el precio de la lámina se busca con ese ancho de hoja. El desglose muestra el armado con un diagrama (anillos, bridas de taller, el extremo libre y su aro suelto), la tabla de piezas y el aro suelto en los herrajes (con sus barrenos «en obra»). Los parámetros están en *Tablas maestras → Proceso de fabricación → armado yardas*; el documento explica la regla ([§3.2](docs/arquitectura-cotizador-ducterias.md#32-tramo-recto-armado-por-yardas)), la brida suelta ([§3.5.7](docs/arquitectura-cotizador-ducterias.md#357-brida-suelta-extremo-libre-del-tramo-de-ajuste)) y sus supuestos por confirmar ([§10.9](docs/arquitectura-cotizador-ducterias.md#109-supuestos-del-armado-por-yardas-por-confirmar)). Una cotización guardada con la opción anterior (*sí/no* para la brida del ajuste) se convierte sola: *sí* = sin brida, *no* = brida de taller.
+Cada yarda se **rola por separado** (tiempo fijo por anillo), las juntas entre yardas son **engargolado** (con sellador), cada plantilla de una yarda sale con un solo tajo a lo ancho de la hoja y el precio de la lámina se busca con ese ancho de hoja. El desglose muestra el armado con un diagrama (anillos, bridas de taller, el extremo libre y su aro suelto), la tabla de piezas y el aro suelto en los herrajes. Los parámetros están en *Tablas maestras → Proceso de fabricación → armado yardas*; el documento explica la regla ([§3.2](docs/arquitectura-cotizador-ducterias.md#32-tramo-recto-armado-por-yardas)), la brida suelta ([§3.5.7](docs/arquitectura-cotizador-ducterias.md#357-brida-suelta-extremo-libre-del-tramo-de-ajuste)) y sus supuestos por confirmar ([§10.9](docs/arquitectura-cotizador-ducterias.md#109-supuestos-del-armado-por-yardas-por-confirmar)). Una cotización guardada con la opción anterior (*sí/no* para la brida del ajuste) se convierte sola: *sí* = sin brida, *no* = brida de taller.
 
 ## Brida estándar del taller
 

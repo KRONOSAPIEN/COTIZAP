@@ -623,7 +623,7 @@
   }
 
   /** Lo que lleva el extremo libre del ajuste, para el rótulo y la lectura en voz alta. */
-  const libreTexto = (arm) => (arm.modo === 'SUELTA' ? 'con la brida suelta (se manda sin fabricar, para ponerla en obra)' : 'sin brida');
+  const libreTexto = (arm) => (arm.modo === 'SUELTA' ? 'con la brida suelta (aro terminado que se suelda en obra)' : 'sin brida');
 
   /** Diagrama del armado: cada yarda un anillo, las piezas con sus bridas (barras) y el extremo libre del ajuste, sin brida de taller (con su aro suelto, si se manda). */
   function svgArmado(arm) {
@@ -683,7 +683,7 @@
     const notas = [];
     notas.push(`Yardas de ${W.num(arm.yarda_mm, 0)} mm (el ancho de la hoja): cada una se rola por separado y se engargolan hasta ${estado.M.proceso.armado_yardas.yardas_por_pieza_max} por pieza; las piezas llevan brida de taller en ambos extremos.`);
     if (arm.extremo_libre && arm.modo === 'SUELTA') {
-      notas.push(`El tramo de ajuste (${W.num(arm.ajuste_mm, 0)} mm, menos de una yarda) lleva brida de taller sólo en el extremo de las yardas. En el otro, que se corta y se ajusta en campo, no se fabrica brida: el taller manda suelto el aro con sus tornillos y su empaque (sólo material, sin mano de obra), para ponerlo en obra.`);
+      notas.push(`El tramo de ajuste (${W.num(arm.ajuste_mm, 0)} mm, menos de una yarda) lleva brida de taller sólo en el extremo de las yardas. El otro extremo se corta y se ajusta en campo: ahí el taller no suelda la brida al ducto, manda suelto el aro terminado (rolado, con el cierre soldado, barrenado y pintado) con sus tornillos y su empaque, para soldarlo en obra.`);
     } else if (arm.extremo_libre) {
       notas.push(`El tramo de ajuste (${W.num(arm.ajuste_mm, 0)} mm, menos de una yarda) va sin brida en su extremo libre para cortarlo y ponerlo en campo: la brida y la junta de ese extremo no están en este precio.`);
     } else if (arm.ajuste_mm > 0) {
@@ -756,12 +756,12 @@
         kv('Perfil de aros, neto / bruto', `${W.num(her.m_aros_neta_kg, 3)} / ${W.num(her.m_aros_bruta_kg, 3)}`, 'kg'));
       if (sueltos) {
         kvs.append(
-          kv('Aros sueltos (sin fabricar)', String(sueltos)),
+          kv('Aros sueltos (terminados, sin unir al ducto)', String(sueltos)),
           kv('Perfil de aros sueltos, neto / bruto', `${W.num(her.m_aros_sueltos_neta_kg, 3)} / ${W.num(her.m_aros_sueltos_bruta_kg, 3)}`, 'kg'));
       }
       kvs.append(
         kv('Juegos de tornillería (asignados)', W.num(her.n_tornillos_asignados, 1)),
-        kv('Barrenos (en taller)', String(her.n_barrenos)),
+        kv('Barrenos', String(her.n_barrenos)),
         kv('Empaque', W.num(her.L_empaque_m, 3), 'm'));
     }
     if (her.n_espigas) kvs.append(kv('Espigas', String(her.n_espigas)), kv('Fijaciones', String(her.n_fijaciones)), kv('Lámina extra de espiga', W.num(her.A_espiga_m2, 4), 'm²'));
@@ -776,8 +776,8 @@
     const barreno = (a) => (a.barreno_desc ? `Ø${a.barreno_desc} (${W.num(a.diam_barreno_mm, 2)} mm)` : `Ø${W.num(a.diam_barreno_mm, 2)} mm`);
     const filasAros = [
       ...her.aros.map((a, i) => [`#${i + 1}`, a.descripcion || a.perfil_id, `${W.num(a.L_aro_mm, 1)} mm`, `${a.n_tornillos} × ${barreno(a)}`, a.tornillo_desc, `${W.num(a.m_aro_kg, 3)} kg`]),
-      // el aro suelto no se barrena ni se suelda en taller: los barrenos se hacen en obra
-      ...her.aros_sueltos.map((a, i) => [`Suelto #${i + 1}`, a.descripcion || a.perfil_id, `${W.num(a.L_aro_mm, 1)} mm`, `${a.n_tornillos} × ${barreno(a)} (en obra)`, a.tornillo_desc, `${W.num(a.m_aro_kg, 3)} kg`]),
+      // el aro suelto sale terminado (rolado, con el cierre soldado, barrenado y pintado); lo que no se hace en taller es unirlo al ducto
+      ...her.aros_sueltos.map((a, i) => [`Suelto #${i + 1}`, a.descripcion || a.perfil_id, `${W.num(a.L_aro_mm, 1)} mm`, `${a.n_tornillos} × ${barreno(a)}`, a.tornillo_desc, `${W.num(a.m_aro_kg, 3)} kg`]),
     ];
     const aros = filasAros.length ? tabla([{ t: 'Aro' }, { t: 'Perfil' }, { t: 'Barra', num: true }, { t: 'Barrenos', num: true }, { t: 'Tornillo' }, { t: 'Peso', num: true }], filasAros) : null;
     return [h('div', { class: 'dos-col' }, h('div', null, h('h4', null, 'Herrajes de unión'), kvs), h('div', null, h('h4', null, 'Consumibles'), cons)), aros];

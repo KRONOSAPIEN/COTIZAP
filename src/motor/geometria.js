@@ -77,7 +77,7 @@
       ancho_hoja_mm: 0, // ancho de la hoja de la que sale la pieza (0 = el de la hoja estándar): en el tramo recto es la yarda
       n_juntas_internas: 0,
       extremos: [], // extremos con brida (o espiga) fabricada en taller
-      extremos_sueltos: [], // extremos cuya brida se manda suelta, para ponerla en obra: sólo material (aro, tornillos y empaque)
+      extremos_sueltos: [], // extremos cuya brida se manda suelta (aro terminado, tornillos y empaque), sin unirla al ducto: se suelda en obra
       espigas_defecto: 0,
       D_ref_mm: 0,
       A_ext_m2: 0,
@@ -142,7 +142,8 @@
 
   /**
    * Qué se cotiza en el extremo libre del tramo de ajuste:
-   *   SUELTA    — el taller manda el aro de solera, los tornillos y el empaque sueltos, para ponerlos en obra (sólo material);
+   *   SUELTA    — el taller manda el aro terminado (rolado, con el cierre soldado, barrenado y pintado), los tornillos y el
+   *               empaque, sin soldarlo al ducto: se suelda en obra donde se corta el tramo;
    *   SIN_BRIDA — nada: la brida de ese extremo no está en el precio;
    *   CON_BRIDA — brida fabricada y soldada en taller, como en los demás extremos.
    */
@@ -155,7 +156,7 @@
    *   · Lo que falta son las yardas completas que sobren (0, 1 ó 2) y un tramo de ajuste —menos de una yarda— engargolado a ellas.
    *   · Cada pieza lleva brida en ambos extremos, menos la que trae el tramo de ajuste: su extremo libre NO lleva brida de
    *     taller, para cortarlo y ponerlo en campo ajustando la distancia. `modo` (EXTREMOS_AJUSTE) dice qué se cotiza allí: la
-   *     brida suelta (el aro y su herraje, sin fabricar), nada, o la brida de taller como en los demás extremos.
+   *     brida suelta (el aro terminado y su herraje, sin unirlo al ducto), nada, o la brida de taller como en los demás extremos.
    * `tol` (mm): un sobrante menor que esto no es tramo de ajuste (a ±tol de un múltiplo de la yarda se cuentan yardas completas).
    * Devuelve { modo, yarda_mm, largo_mm, n_completas, ajuste_mm, L_capa_mm, anillos: [mm…], piezas: [{ yardas, ajuste_mm,
    * n_anillos, largo_mm, bridas (de taller), sueltas (aros sueltos), juntas }], n_anillos, n_piezas, n_bridas, n_sueltas,
@@ -259,7 +260,7 @@
     PF.extremos_sueltos = [];
     arm.piezas.forEach((q) => {
       for (let i = 0; i < q.bridas; i += 1) PF.extremos.push(extremo); // brida fabricada en taller
-      for (let i = 0; i < q.sueltas; i += 1) PF.extremos_sueltos.push(extremo); // aro suelto, para ponerlo en obra
+      for (let i = 0; i < q.sueltas; i += 1) PF.extremos_sueltos.push(extremo); // aro terminado que se manda suelto, para soldarlo en obra
     });
     PF.espigas_defecto = arm.n_piezas;
     PF.A_ext_m2 = (extremo.P_ext_mm * L_capa) / 1e6;
