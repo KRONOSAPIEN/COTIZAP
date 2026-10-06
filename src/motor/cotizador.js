@@ -53,6 +53,62 @@
     }
   }
 
+  /**
+   * Parámetros de precio que una cotización puede traer propios (`cot.parametros`) y que anulan, sólo para esa
+   * cotización, a las capas de las tablas maestras: así el margen, la comisión o los días de cobro se ajustan al
+   * cotizar sin tocar los maestros. Valores en fracción (0.25 = 25 %); `dias_cobro` en días enteros. `ruta` dice
+   * dónde vive el valor en `M.capas`; el descuento no existe en maestros (0 por omisión) y se aplica al subtotal.
+   * `min`/`max` son los límites válidos (la interfaz usa los mismos).
+   */
+  const PARAMETROS_COTIZACION = {
+    utilidad_pct_precio: { nombre: 'Margen de utilidad', ruta: ['utilidad_pct_precio'], min: 0, max: 0.8 },
+    comision_ventas_pct_precio: { nombre: 'Comisión de ventas', ruta: ['comision_ventas_pct_precio'], min: 0, max: 0.2 },
+    descuento_pct: { nombre: 'Descuento', ruta: null, min: 0, max: 0.5 },
+    dias_cobro: { nombre: 'Días de cobro', ruta: ['financiamiento', 'dias_cobro'], min: 0, max: 365, entero: true },
+    administracion_pct_cd: { nombre: 'Administración', ruta: ['administracion_pct_cd'], min: 0, max: 0.5 },
+    tasa_anual: { nombre: 'Financiamiento anual', ruta: ['financiamiento', 'tasa_anual'], min: 0, max: 1 },
+    iva_pct: { nombre: 'IVA', ruta: ['iva_pct'], min: 0, max: 0.3 },
+  };
+
+  /** Valor de un parámetro en las tablas maestras (el descuento no existe allí: 0). */
+  function parametroDeMaestros(M, clave) {
+    const def = PARAMETROS_COTIZACION[clave];
+    return def.ruta ? def.ruta.reduce((o, k) => o[k], M.capas) : 0;
+  }
+
+  const textoLimite = (def, x) => (def.entero ? String(x) : `${U.redondear(x * 100, 2)} %`);
+
+  /**
+   * Maestros con las capas de precio de ESTA cotización: las de las tablas con los parámetros propios encima.
+   * No muta `M`. Un parámetro inválido (fuera de rango, no numérico, días no enteros) se ignora y se avisa.
+   * Devuelve { M, capas, descuento_pct, aplicados, avisos }.
+   */
+  function maestrosEfectivos(cot, M) {
+    const capas = U.clonar(M.capas);
+    const crudos = cot && cot.parametros && typeof cot.parametros === 'object' && !Array.isArray(cot.parametros) ? cot.parametros : {};
+    const avisos = [];
+    const aplicados = {};
+    let descuento_pct = 0;
+    Object.keys(PARAMETROS_COTIZACION).forEach((clave) => {
+      const crudo = Object.prototype.hasOwnProperty.call(crudos, clave) ? crudos[clave] : undefined;
+      if (crudo === undefined || crudo === null || crudo === '') return;
+      const def = PARAMETROS_COTIZACION[clave];
+      const v = typeof crudo === 'number' || typeof crudo === 'string' ? Number(crudo) : NaN;
+      if (!(Number.isFinite(v) && v >= def.min && v <= def.max && (!def.entero || Number.isInteger(v)))) {
+        avisos.push(`${def.nombre}: «${String(crudo)}» no es válido (debe estar entre ${textoLimite(def, def.min)} y ${textoLimite(def, def.max)}); se usa el valor de las tablas maestras.`);
+        return;
+      }
+      aplicados[clave] = v;
+      if (def.ruta) {
+        const padre = def.ruta.slice(0, -1).reduce((o, k) => o[k], capas);
+        padre[def.ruta[def.ruta.length - 1]] = v;
+      } else {
+        descuento_pct = v;
+      }
+    });
+    return { M: { ...M, capas }, capas, descuento_pct, aplicados, avisos };
+  }
+
   const dimensionCaracteristica = (p) => Math.max(p.D_mm || 0, p.D1_mm || 0, p.D2_mm || 0, p.a_mm || 0, p.b_mm || 0);
 
   /** Validación previa. `errores` bloquean el cálculo; `advertencias` se reportan. */
@@ -188,7 +244,9 @@
   }
 
   /** Cotización completa: lista de partidas + totales con IVA. */
-  function cotizar(cot, M) {
+  function cotizar(cot, M0) {
+    const ef = maestrosEfectivos(cot, M0);
+    const M = ef.M;
     const defs = { riesgo: cot.riesgo || 'MEDIO', servicio: cot.servicio, ...(cot.defaults || {}) };
     Object.keys(defs).forEach((k) => defs[k] === undefined && delete defs[k]);
     const filas = (cot.partidas || []).map((p, indice) => {
@@ -200,24 +258,38 @@
       }
     });
     const ok = filas.filter((f) => f.ok);
+    const C = M.capas;
     const subtotal = U.redondear(ok.reduce((s, f) => s + f.precio.importe, 0), 2);
-    const iva = U.redondear(subtotal * M.capas.iva_pct, 2);
+    const descuento = U.redondear(subtotal * ef.descuento_pct, 2);
+    const subtotal_neto = U.redondear(subtotal - descuento, 2); // el IVA se calcula sobre el precio ya descontado
+    const iva = U.redondear(subtotal_neto * C.iva_pct, 2);
     const peso_total = ok.reduce((s, f) => s + f.peso.neto_total_kg, 0);
     const CD_total = ok.reduce((s, f) => s + f.costos.CD, 0);
     const C_T_total = ok.reduce((s, f) => s + f.pila.C_T, 0);
+    // Utilidad real = lo que queda del precio descontado después de la comisión y de todo el costo (C_base, con financiamiento)
+    const utilidad = ok.reduce((s, f) => s + f.precio.importe * (1 - ef.descuento_pct) * (1 - C.comision_ventas_pct_precio - C.otros_pct_precio) - f.pila.C_base, 0);
     return {
       partidas: filas,
+      maestros: M, // las tablas con las capas de esta cotización: lo que usó cada partida
+      capas: C,
+      parametros: ef.aplicados,
+      avisos: ef.avisos,
       totales: {
-        subtotal, iva_pct: M.capas.iva_pct, iva, total: U.redondear(subtotal + iva, 2),
+        subtotal, descuento_pct: ef.descuento_pct, descuento, subtotal_neto,
+        iva_pct: C.iva_pct, iva, total: U.redondear(subtotal_neto + iva, 2),
         peso_neto_kg: peso_total,
-        precio_por_kg_neto: peso_total > 0 ? subtotal / peso_total : null,
+        precio_por_kg_neto: peso_total > 0 ? subtotal_neto / peso_total : null,
         costo_directo: CD_total,
         costo_total: C_T_total,
+        utilidad,
+        margen_real_pct: subtotal_neto > 0 ? utilidad / subtotal_neto : 0,
         n_partidas_ok: ok.length,
         n_partidas_error: filas.length - ok.length,
       },
     };
   }
 
-  return { FAMILIAS, validarPartida, levantarCantidades, cotizarPartida, cotizar };
+  return {
+    FAMILIAS, PARAMETROS_COTIZACION, parametroDeMaestros, maestrosEfectivos, validarPartida, levantarCantidades, cotizarPartida, cotizar,
+  };
 }));

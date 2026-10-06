@@ -83,7 +83,7 @@
       // La cotización de muestra que nadie ha tocado se renueva con la versión actual de la muestra (nombres de taller,
       // partidas nuevas); se respetan los ajustes generales que ya hubiera cambiado.
       const guardada = estado.cot;
-      estado.cot = { ...cotizacionEjemplo(), ...Object.fromEntries(['unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'fecha', 'vigencia_dias'].filter((k) => guardada[k] !== undefined).map((k) => [k, guardada[k]])) };
+      estado.cot = { ...cotizacionEjemplo(), ...Object.fromEntries(['unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'fecha', 'vigencia_dias', 'parametros'].filter((k) => guardada[k] !== undefined).map((k) => [k, guardada[k]])) };
     }
     estado.cot.partidas.forEach((p) => { if (!p.id) p.id = idNuevo(); });
     estado.sel = estado.cot.partidas.length ? estado.cot.partidas[0].id : null;
@@ -129,7 +129,7 @@
 
   function calcular() {
     const cot = estado.cot;
-    estado.res = C.cotizador.cotizar({ riesgo: cot.riesgo, servicio: cot.servicio, partidas: cot.partidas }, estado.M);
+    estado.res = C.cotizador.cotizar({ riesgo: cot.riesgo, servicio: cot.servicio, parametros: cot.parametros, partidas: cot.partidas }, estado.M);
   }
 
   /* ================================================================== */
@@ -173,6 +173,9 @@
 
   /** replaceChildren seguro: ignora null/false (que de otro modo se insertarían como texto). */
   const reemplazar = (cont, ...nodos) => cont.replaceChildren(...nodos.flat(Infinity).filter((n) => n !== null && n !== undefined && n !== false));
+
+  /** 16 % · 8.5 %: sin decimales cuando sobran. */
+  const pctCorto = (x) => W.pct(x, Number.isInteger(Number((x * 100).toFixed(6))) ? 0 : 1);
 
   const kv = (et, val, un) => h('div', { class: 'kv' }, h('dt', null, et), h('dd', null, val, un ? h('span', { class: 'un' }, ` ${un}`) : null));
 
@@ -270,6 +273,93 @@
         render();
       });
     });
+  }
+
+  /* ================================================================== */
+  /* Parámetros de precio de la cotización (anulan a las tablas maestras) */
+  /* ================================================================== */
+  const PARAMS = W.PARAMETROS_COT;
+  const ctlParam = {};
+  const aPantalla = (d, v) => (d.pct ? Number((v * 100).toFixed(6)) : v);
+  const dePantalla = (d, n) => (d.pct ? Number((n / 100).toFixed(9)) : n);
+  const deMaestros = (d) => C.cotizador.parametroDeMaestros(estado.M, d.clave);
+  const propio = (d) => (estado.cot.parametros ? estado.cot.parametros[d.clave] : undefined);
+  const modificado = (d) => propio(d) !== undefined && Math.abs(propio(d) - deMaestros(d)) >= 1e-9;
+  const tx = (d, v) => `${Number(aPantalla(d, v).toFixed(2))}\u00a0${d.pct ? '%' : 'días'}`; // 20 % · 22.5 % · 45 días (sin partirse en dos renglones)
+
+  function crearParametros() {
+    PARAMS.forEach((d) => {
+      const id = `c_${d.id}`;
+      const el = h('input', { id, type: 'number', min: String(d.min), max: String(d.max), step: String(d.paso), inputmode: d.entero ? 'numeric' : 'decimal', 'aria-describedby': `${id}_nota` });
+      const nota = h('div', { class: 'ayuda param-nota', id: `${id}_nota` });
+      const reset = h('button', { type: 'button', class: 'btn-texto param-reset', hidden: true, onclick: () => restablecerParametro(d) }, 'Restablecer');
+      const campo = h('div', { class: 'campo campo-param', dataset: { param: d.id } },
+        h('label', { for: id }, d.etiqueta),
+        h('div', { class: `ctl${d.entero ? ' ctl-dias' : ''}` }, el, h('span', { class: 'sufijo' }, d.sufijo)),
+        h('div', { class: 'param-pie' }, nota, reset));
+      $(d.grupo === 'mas' ? '#c_parametros_mas_cuerpo' : '#c_parametros').append(campo);
+      ctlParam[d.id] = { el, nota, reset, campo };
+      el.addEventListener('input', () => editarParametro(d));
+      el.addEventListener('blur', () => sincronizarParametros());
+    });
+  }
+
+  function editarParametro(d) {
+    const { el, nota, campo } = ctlParam[d.id];
+    const crudo = el.value.trim();
+    const par = estado.cot.parametros || (estado.cot.parametros = {});
+    if (crudo === '') {
+      delete par[d.clave]; // vacío = el de las tablas maestras
+    } else {
+      const n = Number(crudo);
+      const valido = Number.isFinite(n) && n >= d.min && n <= d.max && (!d.entero || Number.isInteger(n));
+      campo.classList.toggle('invalido', !valido);
+      el.setAttribute('aria-invalid', String(!valido));
+      if (!valido) { nota.textContent = `Debe ser ${d.entero ? 'un entero ' : ''}de ${d.min} a ${d.max}${d.pct ? ' %' : ' días'}.`; return; }
+      const v = dePantalla(d, n);
+      if (Math.abs(v - deMaestros(d)) < 1e-9) delete par[d.clave]; else par[d.clave] = v;
+    }
+    if (!Object.keys(par).length) delete estado.cot.parametros;
+    persistir();
+    render();
+  }
+
+  function restablecerParametro(d) {
+    if (estado.cot.parametros) delete estado.cot.parametros[d.clave];
+    if (estado.cot.parametros && !Object.keys(estado.cot.parametros).length) delete estado.cot.parametros;
+    persistir();
+    render();
+  }
+
+  /** Pone en cada campo el valor que vale (el propio o el de las tablas), marca los modificados y escribe su nota. */
+  function sincronizarParametros(abrirMas) {
+    if (!ctlParam.utilidad) return;
+    const R = estado.res;
+    const ok = R ? R.partidas.filter((f) => f.ok) : [];
+    const piso = ok.reduce((t, f) => t + f.indicadores.precio_piso, 0);
+    const sub = R ? R.totales.subtotal : 0;
+    PARAMS.forEach((d) => {
+      const { el, nota, reset, campo } = ctlParam[d.id];
+      const mod = modificado(d);
+      const valor = propio(d) !== undefined ? propio(d) : deMaestros(d);
+      if (document.activeElement !== el) {
+        el.value = String(aPantalla(d, valor));
+        campo.classList.remove('invalido');
+        el.removeAttribute('aria-invalid');
+      }
+      if (!campo.classList.contains('invalido')) {
+        const partes = [d.base];
+        if (d.id === 'utilidad') partes.push(`equivale a ${W.num((valor / (1 - valor)) * 100, 1)}\u00a0% sobre el costo`);
+        if (d.id === 'descuento' && sub > 0) partes.push(`hasta ${W.num(Math.max(0, 1 - piso / sub) * 100, 1)}\u00a0% sin perder utilidad`);
+        if (mod) partes.push(`maestros: ${tx(d, deMaestros(d))}`);
+        nota.textContent = partes.join(' · ');
+      }
+      campo.classList.toggle('modificado', mod);
+      reset.hidden = !mod;
+    });
+    const nMas = PARAMS.filter((d) => d.grupo === 'mas' && modificado(d)).length;
+    $('#c_mas_n').textContent = nMas ? ` · ${nMas} ${nMas === 1 ? 'modificado' : 'modificados'}` : '';
+    if (abrirMas && nMas) $('#c_parametros_mas').open = true;
   }
 
   /* ================================================================== */
@@ -371,19 +461,25 @@
     const T = R.totales;
     const ok = R.partidas.filter((f) => f.ok);
     const piso = ok.reduce((s, f) => s + f.indicadores.precio_piso, 0);
-    const margenMax = T.subtotal > 0 ? 1 - piso / T.subtotal : 0;
+    const margenMax = T.subtotal > 0 ? 1 - piso / T.subtotal : 0; // cuánto se puede descontar del precio de lista antes de perder la utilidad
+    const bajoPiso = ok.length > 0 && T.subtotal_neto < piso - 0.005;
     const hMOD = ok.reduce((s, f) => s + f.costos.h_MOD, 0);
     const cont = $('#totales');
+    const resumen = [`Subtotal ${W.mxn(T.subtotal)}`];
+    if (T.descuento > 0) resumen.push(`Descuento ${pctCorto(T.descuento_pct)} −${W.mxn(T.descuento)}`);
+    resumen.push(`IVA ${pctCorto(T.iva_pct)} ${W.mxn(T.iva)}`);
     reemplazar(cont,
       h('div', { class: 'hero' },
         h('div', { class: 'hero-et' }, 'Total con IVA'),
         h('div', { class: 'hero-val' }, W.mxn(T.total)),
-        h('div', { class: 'hero-sub' }, `Subtotal ${W.mxn(T.subtotal)} · IVA ${W.pct(T.iva_pct, 0)} ${W.mxn(T.iva)}`)),
+        h('div', { class: 'hero-sub' }, resumen.join(' · '))),
       h('div', { class: 'tiles' },
         tile('Peso neto', `${W.num(T.peso_neto_kg, 1)} kg`, `${T.n_partidas_ok} ${T.n_partidas_ok === 1 ? 'partida' : 'partidas'}${T.n_partidas_error ? ` · ${T.n_partidas_error} con error` : ''}`),
         tile('Precio por kg neto', T.precio_por_kg_neto ? `${W.mxn(T.precio_por_kg_neto)}` : '—', 'antes de IVA'),
         tile('Mano de obra directa', `${W.num(hMOD, 1)} h`, 'horas reales de taller'),
-        tile('Piso de negociación', W.mxn(piso), ok.length ? `hasta −${W.num(margenMax * 100, 1)} % con utilidad cero` : '')),
+        tile('Piso de negociación', W.mxn(piso), bajoPiso ? 'El descuento deja el precio por debajo del piso' : ok.length ? `hasta −${W.num(margenMax * 100, 1)} % con utilidad cero` : '', bajoPiso ? 'tile-adv' : ''),
+        tile('Utilidad', W.mxn(T.utilidad), ok.length ? `${W.num(T.margen_real_pct * 100, 1)} % del precio${T.descuento > 0 ? ' con el descuento' : ''}` : '', T.utilidad < 0 ? 'tile-adv' : ''),
+        tile('Costo total', W.mxn(T.costo_total), 'directo + indirectos + imprevistos')),
       ok.length ? barraComposicion(composicion(ok), 'De qué se compone el precio') : null);
   }
 
@@ -596,7 +692,7 @@
 
   function detallePila(f) {
     const p = f.pila;
-    const C = estado.M.capas;
+    const C = estado.res.capas; // las de esta cotización: las de maestros con los parámetros propios encima
     const filas = [
       ['Costo directo (CD)', '', W.mxn(p.CD)],
       ['CI de fábrica', `GIF ${W.mxn(C.gif_por_hora_mod)}/h × ${W.num(f.costos.h_MOD, 3)} h`, W.mxn(p.CI_fabrica)],
@@ -822,7 +918,7 @@
     const tit = h('h3', null, 'Vista previa');
     try {
       const defs = { riesgo: estado.cot.riesgo, servicio: estado.cot.servicio };
-      const f = C.cotizador.cotizarPartida({ ...defs, ...p }, estado.M);
+      const f = C.cotizador.cotizarPartida({ ...defs, ...p }, estado.res.maestros);
       const ind = f.indicadores;
       cont.replaceChildren(tit,
         h('div', { class: 'prev-precio' }, h('div', { class: 'tile-et' }, 'Precio unitario'), h('div', { class: 'prev-val' }, W.mxn(f.precio.unitario)), h('div', { class: 'tile-sub' }, `${p.cantidad} × = ${W.mxn(f.precio.importe)}`)),
@@ -1012,6 +1108,7 @@
     const c = estado.cot;
     const T = estado.res.totales;
     const filas = estado.res.partidas.map((f, i) => ({ f, p: c.partidas[i] })).filter((x) => x.f.ok);
+    const dias = estado.res.capas.financiamiento.dias_cobro;
     const sec = $('#propuesta');
     sec.replaceChildren(
       h('header', { class: 'prop-cab' },
@@ -1020,8 +1117,12 @@
           kv('Cliente', c.cliente || '—'), kv('Proyecto', c.proyecto || '—'), kv('Fecha', fechaLarga(c.fecha)), kv('Vigencia', `${c.vigencia_dias} días naturales`))),
       tabla([{ t: 'Partida' }, { t: 'Material' }, { t: 'Cant.', num: true }, { t: 'P. unitario', num: true }, { t: 'Importe', num: true }],
         filas.map(({ f, p }) => [h('div', null, h('strong', null, p.descripcion || NOMBRE_FAM[p.familia]), h('div', { class: 'prop-dim' }, W.resumenDims(p, { diam: c.unidad_diam, long: c.unidad_long }))), resumenMaterial(p) || 'Compra', String(p.cantidad), W.mxn(f.precio.unitario), W.mxn(f.precio.importe)])),
-      h('dl', { class: 'prop-tot' }, kv('Subtotal', W.mxn(T.subtotal)), kv(`IVA ${W.pct(T.iva_pct, 0)}`, W.mxn(T.iva)), kv('Total', W.mxn(T.total))),
-      h('p', { class: 'prop-nota' }, `Precios en pesos mexicanos (MXN), antes de IVA salvo indicación. Peso neto aproximado: ${W.num(T.peso_neto_kg, 1)} kg. Vigencia de ${c.vigencia_dias} días a partir de la fecha de emisión; sujeta a variación del precio del acero.`));
+      h('dl', { class: 'prop-tot' },
+        kv('Subtotal', W.mxn(T.subtotal)),
+        T.descuento > 0 ? kv(`Descuento ${pctCorto(T.descuento_pct)}`, `−${W.mxn(T.descuento)}`) : null,
+        kv(`IVA ${pctCorto(T.iva_pct)}`, W.mxn(T.iva)),
+        kv('Total', W.mxn(T.total))),
+      h('p', { class: 'prop-nota' }, `Precios en pesos mexicanos (MXN), antes de IVA salvo indicación. Peso neto aproximado: ${W.num(T.peso_neto_kg, 1)} kg. Vigencia de ${c.vigencia_dias} días a partir de la fecha de emisión; sujeta a variación del precio del acero. Condiciones de pago: ${dias > 0 ? `crédito a ${dias} días` : 'de contado'}.`));
   }
 
   /* ================================================================== */
@@ -1038,9 +1139,13 @@
     $('#aviso-ilustrativo').hidden = !!estado.M.meta.revisado;
     $('#aviso-ejemplo').hidden = !estado.cot.ejemplo;
     const nErr = estado.res.totales.n_partidas_error;
+    const avisos = estado.res.avisos || [];
     const el = $('#aviso-error');
-    el.hidden = !nErr;
-    if (nErr) el.querySelector('.aviso-txt').textContent = `${nErr} ${nErr === 1 ? 'partida no se puede calcular' : 'partidas no se pueden calcular'}: revise sus datos o las tablas maestras.`;
+    el.hidden = !nErr && !avisos.length;
+    el.querySelector('.aviso-txt').textContent = [
+      nErr ? `${nErr} ${nErr === 1 ? 'partida no se puede calcular' : 'partidas no se pueden calcular'}: revise sus datos o las tablas maestras.` : '',
+      ...avisos,
+    ].filter(Boolean).join(' ');
   }
 
   function render() {
@@ -1049,6 +1154,7 @@
     renderAvisos();
     renderPartidas();
     renderTotales();
+    sincronizarParametros();
     renderDetalle();
     renderPropuesta();
   }
@@ -1079,11 +1185,13 @@
     $('#ir-maestros').addEventListener('click', () => irPestana('maestros'));
     $('#btn-ya-revise').addEventListener('click', () => { estado.M.meta.revisado = true; persistir(); render(); });
     $('.datos').addEventListener('submit', (e) => e.preventDefault());
+    crearParametros();
     enlazarEncabezado();
     enlazarDialogo();
     enlazarIntercambio();
     sincronizarEncabezado();
     render();
+    sincronizarParametros(true);
     irPestana('cotizacion');
     root.addEventListener('resize', () => $$('.seg').forEach((el) => el.classList.toggle('con-txt', el.offsetWidth >= 46)));
     iniciarAlmacen();

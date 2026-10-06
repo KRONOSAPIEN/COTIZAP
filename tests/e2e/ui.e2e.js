@@ -637,6 +637,110 @@ const ok = (cond, msg) => {
     await pv.context().close();
   }
 
+  console.log('19) Parámetros de precio en el encabezado de la cotización (sin ir a las tablas maestras)');
+  {
+    const p = await nuevaPagina();
+    const T = () => estadoApp(p, () => window.COTIZAP.web.estadoApp.res.totales);
+    const par = () => estadoApp(p, () => window.COTIZAP.web.estadoApp.cot.parametros);
+    const campo = (id) => p.locator(`#c_${id}`);
+    const marcado = (id, clase) => p.locator(`.campo-param[data-param="${id}"]`).evaluate((e, c) => e.classList.contains(c), clase);
+    const maestros = crearMaestros();
+    ok(await campo('utilidad').inputValue() === '20' && await campo('comision').inputValue() === '2' && await campo('descuento').inputValue() === '0' && await campo('dias_cobro').inputValue() === '45',
+      'arrancan con lo de las tablas maestras: margen 20 %, comisión 2 %, descuento 0 % y 45 días de cobro');
+    ok(await p.locator('#c_parametros_mas').evaluate((e) => !e.open) && await campo('administracion').inputValue() === '8' && await campo('tasa').inputValue() === '14' && await campo('iva').inputValue() === '16',
+      'los demás (administración 8 %, financiamiento 14 %, IVA 16 %) están en «Más parámetros de precio»');
+    ok(await p.locator('.campo-param.modificado').count() === 0 && (await par()) === undefined, 'ninguno aparece como modificado');
+    const t0 = await T();
+
+    // margen de utilidad: sube el precio, se marca como modificado y dice cuál es el de las tablas
+    await campo('utilidad').fill('25');
+    const t25 = await T();
+    ok(t25.subtotal > t0.subtotal && Math.abs(t25.margen_real_pct - 0.25) < 2e-3, `con margen de 25 % el subtotal sube (${t0.subtotal.toFixed(2)} → ${t25.subtotal.toFixed(2)}) y la utilidad real es 25 %`);
+    ok(await marcado('utilidad', 'modificado') && (await par()).utilidad_pct_precio === 0.25, 'el campo se marca como modificado y se guarda como fracción en la cotización');
+    const notaU = await p.locator('#c_utilidad_nota').innerText();
+    ok(/equivale a 33\.3\s% sobre el costo/.test(notaU) && /maestros: 20\s%/.test(notaU), 'la nota dice a cuánto equivale sobre el costo (33.3 %) y cuál es el de las tablas (20 %)');
+    ok(await p.locator('.campo-param[data-param="utilidad"] .param-reset').isVisible(), 'aparece «Restablecer»');
+    await p.locator('.campo-param[data-param="utilidad"] .param-reset').click();
+    ok(await campo('utilidad').inputValue() === '20' && (await par()) === undefined && (await T()).subtotal === t0.subtotal, 'restablecer vuelve al valor de las tablas y quita el parámetro de la cotización');
+
+    // descuento: el total y el resumen lo muestran; el IVA va sobre el precio ya descontado
+    await campo('descuento').fill('10');
+    const td = await T();
+    ok(td.descuento > 0 && Math.abs(td.descuento - Math.round(td.subtotal * 0.1 * 100) / 100) < 0.011 && Math.abs(td.iva - Math.round(td.subtotal_neto * 0.16 * 100) / 100) < 0.011, 'el descuento de 10 % se resta del subtotal y el IVA se calcula sobre el neto');
+    ok(/Descuento 10 %/.test(await p.locator('#totales .hero-sub').innerText()), 'el total muestra «Descuento 10 %»');
+    ok(/hasta \d+\.\d\s% sin perder utilidad/.test(await p.locator('#c_descuento_nota').innerText()), 'la nota del descuento dice hasta dónde se puede bajar sin perder utilidad');
+    const utilTile = await p.locator('#totales .tile:has(.tile-et:text-is("Utilidad"))').innerText();
+    ok(/con el descuento/.test(utilTile), 'la tarjeta «Utilidad» aclara que es con el descuento');
+    await campo('descuento').fill('45');
+    ok(await p.locator('#totales .tile.tile-adv').count() >= 1 && /por debajo del piso/.test(await p.locator('#totales').innerText()), 'un descuento que pasa del piso se avisa en rojo en «Piso de negociación»');
+    await campo('descuento').fill('10');
+
+    // fuera de rango: se rechaza sin tocar la cotización
+    await campo('utilidad').fill('150');
+    ok(await marcado('utilidad', 'invalido') && /de 0 a 80/.test(await p.locator('#c_utilidad_nota').innerText()) && (await T()).subtotal === t0.subtotal, 'un margen de 150 % se rechaza (de 0 a 80 %) y la cotización no cambia');
+    await campo('utilidad').fill('');
+    await campo('utilidad').blur();
+    ok(await campo('utilidad').inputValue() === '20' && !(await marcado('utilidad', 'invalido')), 'vaciar el campo vuelve al valor de las tablas');
+
+    // más parámetros: IVA propio
+    await p.click('#c_parametros_mas > summary');
+    await campo('iva').fill('8');
+    ok(/IVA 8 %/.test(await p.locator('#totales .hero-sub').innerText()) && /1 modificado/.test(await p.locator('#c_parametros_mas > summary').innerText()), 'IVA al 8 % se refleja en el total y el resumen de «Más parámetros» cuenta 1 modificado');
+    await campo('dias_cobro').fill('60');
+    ok((await par()).dias_cobro === 60, 'los días de cobro son un entero');
+    await campo('dias_cobro').fill('30.5');
+    ok(await marcado('dias_cobro', 'invalido'), 'unos días de cobro con decimales se rechazan');
+    await campo('dias_cobro').fill('60');
+
+    // la vista previa de una partida usa las mismas capas que la lista
+    await editar(p, 0);
+    const previa = await p.locator('#dlg-prev .prev-val').innerText();
+    const lista = await estadoApp(p, () => window.COTIZAP.web.mxn(window.COTIZAP.web.estadoApp.res.partidas[0].precio.unitario));
+    ok(previa === lista, `la vista previa de la partida (${previa}) coincide con la lista`);
+    await p.click('#dlg-cancelar');
+
+    // la propuesta lleva el descuento y las condiciones de pago
+    const prop = await p.locator('#propuesta').evaluate((e) => e.textContent);
+    ok(/Descuento 10 %/.test(prop) && /IVA 8 %/.test(prop) && /crédito a 60 días/.test(prop), 'la propuesta imprimible lleva el descuento, el IVA propio y «crédito a 60 días»');
+    await campo('dias_cobro').fill('0');
+    ok(/de contado/.test(await p.locator('#propuesta').evaluate((e) => e.textContent)), 'con 0 días la propuesta dice «de contado»');
+    await campo('dias_cobro').fill('60');
+
+    // persiste al recargar y abre solo «Más parámetros» si algo ahí está modificado
+    await p.reload();
+    await p.waitForSelector('#lista-partidas .partida');
+    ok(await campo('descuento').inputValue() === '10' && await campo('iva').inputValue() === '8' && await campo('dias_cobro').inputValue() === '60', 'los parámetros de la cotización se conservan al recargar');
+    ok(await p.locator('#c_parametros_mas').evaluate((e) => e.open), '«Más parámetros de precio» abre solo porque hay uno modificado');
+
+    // exportar e importar: los parámetros viajan con la cotización
+    await p.click('#btn-io');
+    const json = JSON.parse(await p.inputValue('#io-texto'));
+    ok(json.cotizacion.parametros && json.cotizacion.parametros.descuento_pct === 0.1 && json.cotizacion.parametros.iva_pct === 0.08 && json.cotizacion.parametros.dias_cobro === 60, 'el JSON exportado lleva los parámetros');
+    await p.click('#io-cerrar').catch(() => {});
+    // un parámetro inválido en un archivo se ignora y se avisa
+    const raro = { ...json, cotizacion: { ...json.cotizacion, parametros: { utilidad_pct_precio: 5, descuento_pct: 0.2 } } };
+    await p.click('#btn-io');
+    await p.fill('#io-texto', JSON.stringify(raro));
+    await p.click('#io-cargar');
+    await p.waitForTimeout(150);
+    ok(/Margen de utilidad: «5» no es válido/.test(await p.locator('#aviso-error').innerText()) && await campo('descuento').inputValue() === '20', 'un parámetro inválido de un archivo se ignora y se avisa; el válido (descuento 20 %) sí se aplica');
+    // cotización nueva: todo vuelve a las tablas
+    await p.click('#btn-nueva');
+    await p.waitForTimeout(100);
+    ok(await campo('utilidad').inputValue() === '20' && await campo('descuento').inputValue() === '0' && await campo('iva').inputValue() === '16' && (await par()) === undefined, 'una cotización nueva arranca otra vez con lo de las tablas maestras');
+
+    // lo que cambia en las tablas maestras se refleja en los campos que no se tocaron
+    await p.click('#tab-maestros');
+    await p.fill('#maestros-buscar', 'utilidad_pct_precio');
+    const inp = p.locator('input#m_capas__utilidad_pct_precio');
+    ok(await inp.inputValue() === '20' && (await p.locator('.m-fila:has(input#m_capas__utilidad_pct_precio) .sufijo').innerText()) === '%', 'en las tablas maestras el margen también se ve en % (20 %), igual que en la cotización');
+    await inp.fill('22');
+    await inp.dispatchEvent('change');
+    await p.click('#tab-cotizacion');
+    ok(await campo('utilidad').inputValue() === '22' && (await marcado('utilidad', 'modificado')) === false, 'si se cambia el margen en las tablas maestras, el campo (sin tocar) lo sigue');
+    await p.context().close();
+  }
+
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

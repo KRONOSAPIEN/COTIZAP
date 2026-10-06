@@ -36,7 +36,8 @@
   ];
   const POSITIVOS = ['eficiencia_taller', 'FO', 'eta_dep', 'eta_transf', 'v_mult', 'FSR', 'cartucho_ml', 'paso_tornillo_mm', 'paso_fijacion_mm', 'densidad_kg_m3', 'dft_um', 'sv_pct', 'L_max_pieza_mm'];
 
-  const esPct = (ruta) => ruta[0] === 'merma' || ruta.some((k) => typeof k === 'string' && /pct$|^tasa_/.test(k) && k !== 'sv_pct');
+  // Se guardan como fracción (0.20) y se muestran en % (20): `utilidad_pct_precio`, `administracion_pct_cd`, `iva_pct`… (`_pct` en cualquier parte del nombre)
+  const esPct = (ruta) => ruta[0] === 'merma' || ruta.some((k) => typeof k === 'string' && /_pct(_|$)|^tasa_/.test(k) && k !== 'sv_pct');
   const etiqueta = (k) => String(k).replace(/_/g, ' ');
   function unidadDe(ruta) {
     if (esPct(ruta)) return '%';

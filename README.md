@@ -19,7 +19,7 @@ Cotizador para ducterías de lámina (colección de polvo y control ambiental). 
 **Usar la app.** Abra `src/web/index.html` en el navegador (doble clic). No necesita servidor ni instalación; la cotización se guarda en el propio navegador y las tablas maestras se guardan solas cada vez que las cambia (ver [Dónde se guardan los precios](#dónde-se-guardan-los-precios)). Arranca con una cotización de ejemplo para explorar el cálculo. Las tipografías (Barlow, IBM Plex Mono) se piden a Google Fonts; sin conexión se usan las del sistema.
 
 1. **Tablas maestras** → capture precios, tarifas y velocidades reales.
-2. **Cotización** → *Agregar partida*, elija la familia y capture dimensiones; el precio se recalcula mientras escribe.
+2. **Cotización** → en el encabezado ajuste, para esa cotización, el **margen de utilidad, la comisión, el descuento y los días de cobro** (y, en *Más parámetros de precio*, administración, financiamiento e IVA) sin ir a las tablas maestras; luego *Agregar partida*, elija la familia y capture dimensiones; el precio se recalcula mientras escribe.
 3. Seleccione una partida para ver el desglose: geometría, merma, tiempos, consumibles y cada capa del precio.
 4. *Imprimir propuesta* genera la hoja para el cliente (sin costos internos). *Guardar y cargar* exporta/importa JSON y copia un CSV de partidas para Excel.
 
@@ -72,6 +72,22 @@ Cada cambio en **Tablas maestras** (lista del proveedor, precios, tarifas, tiemp
 - **Mano de obra:** los trabajadores ganan **$500 por hora, ya con prestaciones**: el salario se captura por hora en cada operación y el costo de la hora es salario × FSR, con FSR = 1.00 (el factor queda en *Tablas maestras → Mano de obra y equipo* por si algún día el salario se captura sin prestaciones).
 - **Lista de precios del proveedor** (primer grupo de *Tablas maestras*): hojas y barras **por pieza y con IVA incluido**, tal como las cotiza el proveedor (lámina galvanizada 4 × 10 cal. 22 = $920, cal. 24 = $700, la factura del 30-sep-2026, etc.). El cotizador las convierte a **$/kg sin IVA** con los kg de la pieza y las usa para la lámina (mismo material y calibre) y para los aros (barra del perfil); lo que no está cotizado usa el precio por kg de respaldo. Cada renglón muestra su precio sin IVA, sus kg, su $/kg y si el cálculo lo usa; el desglose de cada partida dice de dónde salió el precio de su lámina y de sus aros.
 - Quedan cuatro supuestos por confirmar con el proveedor (IVA incluido en sus precios, calibres sin cotizar, lámina por fracción de hoja, placa 3 × 8): [§10.6 del documento](docs/arquitectura-cotizador-ducterias.md#106-supuestos-de-la-lista-del-proveedor-por-confirmar). Las barras de ángulo y solera se consideran de 6 m.
+
+## Parámetros de la cotización
+
+El encabezado de la cotización lleva los parámetros comerciales que se ajustan al cotizar, para no ir a *Tablas maestras*:
+
+| Parámetro | Qué cambia | De las tablas maestras |
+| --- | --- | --- |
+| Margen de utilidad (% del precio) | `P = costo base / (1 − margen − comisión)`; la nota dice a cuánto equivale sobre el costo | 20 % |
+| Comisión de ventas (% del precio) | comisión que paga el precio | 2 % |
+| Descuento al cliente (% del subtotal) | se resta del subtotal; el IVA va sobre el precio ya descontado; la nota dice hasta cuánto se puede bajar sin perder utilidad | 0 % |
+| Días de cobro | costo del dinero y «crédito a N días» en la propuesta | 45 días |
+| *Más parámetros:* administración (% del costo directo), financiamiento anual e IVA | indirectos, costo del dinero e IVA de los totales | 8 % · 14 % · 16 % |
+
+- Valen **sólo para esa cotización**: un campo que se cambia queda marcado, dice cuál es el valor de las tablas y tiene *Restablecer*; un campo sin tocar sigue las ediciones de las tablas. Una cotización nueva arranca otra vez con los de las tablas.
+- Los totales muestran el descuento, la **utilidad real** (en pesos y como % del precio, ya con el descuento) y el **costo total**, y avisan en rojo si el descuento deja el precio por debajo del piso (sin utilidad). La propuesta imprimible lleva el descuento y las condiciones de pago.
+- Los parámetros viajan con la cotización al exportar e importar el JSON; un valor inválido de un archivo se ignora y se avisa. Cuatro supuestos quedan por confirmar: [§10.7 del documento](docs/arquitectura-cotizador-ducterias.md#107-supuestos-de-los-parámetros-de-la-cotización-por-confirmar).
 
 ## Brida estándar del taller
 

@@ -32,6 +32,7 @@
 | Factor de área del codo de 90° de 5 gajos | **No es un número fijo: se deriva exactamente.** Respecto a un tramo recto cuya longitud es el arco de eje (π/2·R): **F_arco = 1.0131**. En forma absoluta: **A = 7.4988·D²** con R/D = 1.5. El sobrecosto real de un codo no viene del área sino de la merma y la mano de obra (§3.4.1 y Ejemplo B). | §3.4.1 |
 | Diámetro y calibre del ejemplo | Ø12" (interior), calibre 16, acero al carbón, 3 m, bridado (los valores sugeridos en el prompt). | §7 |
 | Injerto simple, reducción con injerto y ángulos del taller | El «ramal en ángulo» pasó a llamarse **injerto simple** (misma geometría, id `RAMAL`). El «pantalón» se sustituyó por la **reducción con injerto** (id `REDUCCION_INJERTO`): una reducción D1 → D2 con el injerto **sobre el cono**. **Todo injerto es a 30° o 45°** y **los codos son de 30°, 45°, 60° o 90°**: son listas de maestros y el cotizador rechaza cualquier otro ángulo. El pantalón se retiró de la interfaz; el motor lo sigue calculando sólo para abrir cotizaciones anteriores. Seis supuestos de detalle están por confirmar con el taller (§10.5). | §3.4.1 · §3.4.4 · §3.4.5 · §7.3 · §10.5 |
+| Parámetros de precio de la cotización | El encabezado de la cotización lleva los parámetros comerciales que se ajustan al cotizar —**margen de utilidad, comisión de ventas, descuento al cliente y días de cobro** y, en «Más parámetros de precio», **administración, financiamiento anual e IVA**— para no ir a las tablas maestras. Valen sólo para esa cotización: el motor los toma de `cotizacion.parametros` y los pone encima de las capas de T9 (§5.4); lo que no se cambia sale de los maestros. Cuatro supuestos de detalle están por confirmar (§10.7). | §5.2 · §5.4 · §6 · §10.7 |
 | Mano de obra por hora y lista de precios del proveedor | Los trabajadores ganan **$500 por hora, cifra que ya incluye prestaciones** (FSR = 1.00): el salario se captura por hora (antes por día y jornada) y el costo de la hora es `salario_hora · FSR`. El proveedor de acero cotiza **por pieza y con IVA incluido** (hojas y barras): la lista (T3b) conserva el precio como se cotiza y el motor lo convierte a **$/kg sin IVA** con los kg de la pieza (§5.1.1); lo que no está cotizado usa un precio por kg de respaldo. Cuatro supuestos de detalle están por confirmar (§10.6). | T3 · T3b · T8 · §4.1 · §5.1.1 · §10.6 |
 | Brida estándar del taller | **Una sola brida para todos los diámetros: aro de solera 1½" × 3/16", barreno Ø3/8", tornillo 5/16" × 1¼".** Se modela como el perfil `SOL38x4.8` (tipo solera, rolada "de canto"), que lleva en sus propias columnas el barreno y el tornillo; los ángulos quedan como opción por partida (`perfil_id`). Cinco supuestos de detalle están por confirmar con el taller (§10.4). | T4 · T5 · §3.5 · §10.4 |
 | Público objetivo | Ingenieros de ventas técnicas en México y desarrolladores internos. Moneda **MXN**, **IVA 16 %** aparte, **Factor de Salario Real (FSR)** para mano de obra. | `capas.iva_pct`, `mano_obra.FSR` |
@@ -145,6 +146,8 @@
 | `REDUCCION_INJERTO` | `D1_mm`, `D2_mm` (< D1), `d_mm`, `beta_deg` (**30** ó **45**; 45), `L_reduccion_mm`, `L_ramal_mm` | El injerto va **sobre el cono** y siempre de extremo mayor a menor (inclinado hacia D2): es un dato de maestros (`proceso.injerto_inclinado_hacia`), no se captura por partida. Los dos largos son opcionales: vacíos → automáticos (§3.4.5). |
 | `PERSONALIZADO` | `A_neta_m2`, `L_corte_m`, `L_sold_tope_m`, `L_sold_filete_m`, `n_piezas`, `n_extremos`, `D_ref_mm` | Para campanas y piezas con desarrollo CAD. |
 | `COMPRADO` | `precio_compra_unitario`, `peso_kg` | Compuertas, flexibles, etc.: pasa por la pila sin mano de obra. |
+
+**Entradas por cotización** (`cotizacion`): `cliente`, `proyecto`, `fecha`, `vigencia_dias`, unidades de captura de diámetros y longitudes, `servicio` y `riesgo` por omisión de las partidas (cada partida puede traer los suyos) y los **parámetros de precio propios** de la cotización (`parametros`, §5.4): margen de utilidad, comisión, descuento, días de cobro, administración, financiamiento anual e IVA.
 
 ### 2.2 Tablas maestras
 
@@ -335,6 +338,7 @@
 | V10 | Toda variable `precio_*` referenciada existe en la tabla de precios | Error |
 | V11 | Lista del proveedor: un renglón con precio ≤ 0 o sin medidas válidas no se usa (el cálculo cae al precio por kg de T3) | Silencioso; el renglón se ve como sin $/kg |
 | V12 | `salario_hora ≥ 0` en cada operación | Error (con el nombre de la operación) |
+| V13 | `cotizacion.parametros`: un valor fuera de sus límites (§5.4), no numérico o —en días— no entero se **ignora** y rige el de las tablas maestras; vacío = sin parámetro | Aviso con el nombre del parámetro |
 
 ---
 
@@ -788,6 +792,40 @@ Los CI de fábrica se absorben **por hora de mano de obra**, no como % plano del
 | Margen de contribución | `(P − CD)/P` | Piso de negociación |
 | Markup sobre costo total | `P/C_T − 1` | Verificación de política |
 | Precio piso | `C_base / (1 − c_ventas − otros)` | Precio mínimo con utilidad 0 (piso de negociación) |
+| Utilidad real de la cotización | `Σ [P_i·(1 − d)·(1 − c_ventas − otros) − C_base_i]` y su margen sobre el subtotal neto | Ver qué queda después del descuento (§5.4) |
+| Descuento máximo sin perder utilidad | `1 − Σ precio_piso_i / subtotal` | Tope de negociación del descuento (§5.4) |
+
+### 5.4 Parámetros de precio propios de la cotización
+
+Las capas de §5.2 salen de las tablas maestras (T9), pero **cada cotización puede traer sus propios valores** de siete parámetros comerciales —los que un vendedor ajusta al cotizar— sin ir a los maestros. Valen sólo para esa cotización: lo que no se cambia sale de T9 y sigue las ediciones posteriores de los maestros. Se guardan como fracción (0.25 = 25 %; los días como entero) en `cotizacion.parametros`.
+
+| Parámetro (`cotizacion.parametros`) | En la pantalla | Anula a | Valor de las tablas | Límites | Qué cambia |
+| --- | --- | --- | --- | --- | --- |
+| `utilidad_pct_precio` | Margen de utilidad | `capas.utilidad_pct_precio` | 20.0 % | 0 – 80 % | Margen de utilidad sobre el **precio**: `P = C_base / (1 − u − c − o)` |
+| `comision_ventas_pct_precio` | Comisión de ventas | `capas.comision_ventas_pct_precio` | 2.0 % | 0 – 20 % | Comisión de ventas sobre el precio |
+| `descuento_pct` | Descuento | — (no existe en maestros) | 0.0 % | 0 – 50 % | Descuento al cliente sobre el subtotal de la cotización (§5.4); las partidas no cambian |
+| `dias_cobro` | Días de cobro | `capas.financiamiento.dias_cobro` | 45 días | 0 – 365 | Plazo de cobro: costo del dinero `C_T · tasa · días / 365`; también sale en la propuesta («crédito a N días») |
+| `administracion_pct_cd` | Administración | `capas.administracion_pct_cd` | 8.0 % | 0 – 50 % | Indirectos de administración sobre el costo directo |
+| `tasa_anual` | Financiamiento anual | `capas.financiamiento.tasa_anual` | 14.0 % | 0 – 100 % | Tasa anual del costo del dinero |
+| `iva_pct` | IVA | `capas.iva_pct` | 16.0 % | 0 – 30 % | IVA de los totales de la cotización |
+
+El motor construye **unas capas efectivas** (T9 con los parámetros encima; no muta los maestros), con ellas calcula todas las partidas y las devuelve en el resultado (`capas`, `maestros`, `parametros`, `avisos`). La vista previa de una partida usa las mismas capas, así su precio coincide con el de la lista.
+
+El **descuento** no está en los maestros y no cambia el precio de las partidas: es un renglón de los totales de la cotización.
+
+```text
+subtotal       = Σ importe_i                                    # precio de lista, antes del descuento
+descuento      = subtotal · descuento_pct
+subtotal_neto  = subtotal − descuento
+IVA            = subtotal_neto · iva%                           # el IVA va sobre el precio ya descontado
+total          = subtotal_neto + IVA
+
+utilidad_real  = Σ_i [ importe_i · (1 − d) · (1 − c_ventas − otros) − C_base_i ]     # comisión sobre el precio ya descontado
+margen_real    = utilidad_real / subtotal_neto                  # = u (a los centavos del redondeo) si d = 0
+descuento_máx  = 1 − Σ precio_piso_i / subtotal                 # con ese descuento la utilidad real llega a 0
+```
+
+La pantalla muestra el descuento en el total, la **utilidad** (en pesos y como % del precio) y el **costo total** en las tarjetas, y avisa en rojo cuando el descuento deja el precio por debajo del piso (utilidad negativa). Un parámetro inválido en un archivo importado se ignora y se avisa (V13).
 
 ---
 
@@ -795,9 +833,11 @@ Los CI de fábrica se absorben **por hora de mano de obra**, no como % plano del
 
 ```text
 FUNCIÓN cotizar(cotización, M):                          # M = snapshot de maestros (versión congelada)
+    Mq ← maestros_efectivos(cotización.parametros, M)    # capas de T9 con los parámetros de la cotización encima (§5.4); no muta M
     PARA CADA partida p EN cotización.partidas:
-        resultado[p] ← cotizar_partida(p, M)             # un error en una partida no tumba las demás
-    subtotal ← Σ resultado.importe ;  IVA ← subtotal · M.iva ;  total ← subtotal + IVA
+        resultado[p] ← cotizar_partida(p, Mq)            # un error en una partida no tumba las demás
+    subtotal ← Σ resultado.importe ;  descuento ← subtotal · Mq.descuento ;  neto ← subtotal − descuento
+    IVA ← neto · Mq.iva ;  total ← neto + IVA
 
 FUNCIÓN cotizar_partida(p, M):
     validar(p, M)                                        # errores bloquean · advertencias se reportan
@@ -1142,7 +1182,7 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 | Entidad | Campos clave | Notas |
 | --- | --- | --- |
 | `Maestros` | `version_id`, `vigente_desde`, tablas T1–T9, lista de precios del proveedor (T3b, con fecha) y `precios` con vigencia/moneda | Inmutable una vez usada en una cotización. |
-| `Cotizacion` | `id`, cliente, proyecto, fecha, `vigencia_dias`, moneda, `riesgo_default`, `servicio_default`, `maestros_version_id`, estado | La vigencia protege contra la volatilidad del acero. |
+| `Cotizacion` | `id`, cliente, proyecto, fecha, `vigencia_dias`, moneda, `riesgo_default`, `servicio_default`, `parametros` (§5.4), `maestros_version_id`, estado | La vigencia protege contra la volatilidad del acero. |
 | `Partida` | `cotizacion_id`, `n`, `familia`, parámetros (JSON de §2.1), `cantidad` | |
 | `ResultadoPartida` | QTO, costos por capa, precio unitario e importe, indicadores, advertencias | Se puede recalcular con otra versión de precios sin tocar el QTO. |
 | `Calibracion` | `partida_id`, horas reales por operación, kg bruto real, costo real, fecha | Alimenta el ajuste de φ, velocidades y `k_dif` (§10). |
@@ -1159,7 +1199,7 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 | §5.1.1 Lista de precios del proveedor (kg por pieza, $/kg sin IVA, qué renglón usa el cálculo) | `src/motor/proveedor.js` |
 | §4.3 Consumibles | `src/motor/consumibles.js` |
 | §5 Valorización y pila de precio | `src/motor/precios.js` |
-| §6 Orquestación y validación | `src/motor/cotizador.js` |
+| §5.4 y §6 Parámetros de la cotización, orquestación y validación | `src/motor/cotizador.js` |
 | Interfaz web (captura, desglose, editor de maestros, propuesta imprimible) | `src/web/` (`index.html`, `app.js`, `maestros_ui.js`, `esquemas.js`, `dom.js`, `estilos.css`) |
 | Guardado automático de las tablas maestras (artefacto y navegador) | `src/web/almacen.js` |
 | Empaquetado a un solo HTML | `scripts/construir.js` |
@@ -1180,6 +1220,7 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 - **Vector de referencia (*golden test*):** el Ejemplo A de §7.1. `tests/ejemplo_recto.test.js` lo recalcula **de forma independiente** con aritmética directa, línea por línea, y lo compara contra el motor.
 - **Oráculos geométricos independientes:** codo, reducción excéntrica, transición, injerto simple (distancia media de silleta y área del orificio por fuerza bruta) y reducción con injerto (silleta sobre el cono por bisección, polilínea y rejilla; ensamble recalculado línea por línea) se comparan contra mallas 3D y promedios numéricos de fuerza bruta (`tests/geometria.test.js`). **Toda familia nueva debe traer su oráculo independiente.**
 - **Lista del proveedor y mano de obra** (`tests/proveedor.test.js`): la lista reproduce al centavo los precios sin IVA de la factura; kg por hoja y por barra y $/kg recalculados desde las medidas; qué renglón usa el cálculo (hoja estándar, calibre sin cotizar, placa, inoxidable); IVA incluido o no; un precio inválido cae a la tabla; el salario es por hora y el costo de la hora es salario × FSR; un parche guardado con el salario diario de antes se limpia.
+- **Parámetros de la cotización** (`tests/parametros.test.js`): cada parámetro recalculado desde `C_base` (margen, comisión, administración, días y tasa de cobro, IVA); descuento con IVA sobre el neto; utilidad real y su forma cerrada; valores inválidos que se ignoran con aviso; las tablas maestras no se mutan; la vista previa de una partida coincide con la lista; y los campos del encabezado en las pruebas de interfaz (sección 19).
 - **Pruebas de política:** separación cantidades/precios, identidades de la pila (`P·(1 − u − c − o) = C_base`), cargo mínimo, subcontratos, validaciones, uniones, materiales (`tests/motor.test.js`).
 - **Estándar de bridas del taller** (`tests/motor.test.js`): la solera de 1½" × 3/16" pesa `b·t·ρ`; el taller usa la misma brida (barreno Ø3/8", tornillo 5/16" × 1¼") en todos los diámetros; `L_aro = π·(D_ext + b) + holgura`; nº de barrenos múltiplo de 4 por paso; cada aro se valoriza con el precio de su propio perfil y el tornillo con el suyo; el cierre del aro se suelda a tope al espesor de la solera; marco rectangular; y `ESPIGA` no genera aros ni barrenos.
 - **Persistencia de maestros** (`tests/util.test.js`): `mezclar(base, diferencia(base, actual))` reconstruye lo editado y los valores de arranque nuevos no quedan enmascarados.
@@ -1271,3 +1312,14 @@ Datos que dio el taller: los trabajadores ganan **$500 por hora y esa cifra ya i
 | Calibres y perfiles que no se cotizaron | Precio por kg de respaldo (T3): negra $22.47 (lámina cal. 12 de la factura), galvanizada $30.69 (promedio de cal. 22 y 24), solera $25.21, ángulo $25.25 | `precios.precio_kg_*` | Un calibre más delgado suele costar más por kg y uno más grueso menos: conviene cotizar los calibres que se usan. |
 | Cuánta lámina se cobra a la pieza | La fracción de hoja que consume (`m_bruta`, con la merma de T6), no hojas completas | `merma.*` | Si compras obliga a comprar hoja completa y el retazo se pierde, subir φ de la familia. |
 | Placa lisa 3 × 8 ft de 3/16" | Viene en la factura al mismo precio que la de 4 × 8 ($2 431.03 sin IVA); se dejó tal cual y es sólo referencia | `proveedor.hojas.PLACA_3_16_3X8` | Confirmar con el proveedor; no entra al cálculo. |
+
+### 10.7 Supuestos de los parámetros de la cotización por confirmar
+
+Lo que pidió el taller: ajustar el margen de utilidad y los demás parámetros importantes desde el encabezado de la cotización, sin ir a las tablas maestras. La selección y el comportamiento de los parámetros se **supusieron** y se editan en `PARAMETROS_COTIZACION` (`src/motor/cotizador.js`) o en los maestros:
+
+| Supuesto | Valor usado | Dónde se cambia | Efecto si es distinto |
+| --- | --- | --- | --- |
+| Qué parámetros se ajustan por cotización | Margen, comisión, descuento, días de cobro y —en «Más parámetros»— administración, financiamiento anual e IVA | `PARAMETROS_COTIZACION` | Agregar otros (merma, eficiencia del taller…) exige decidir si son de la cotización o del taller. |
+| El descuento reduce también la comisión | La comisión de ventas se paga sobre el precio ya descontado | `capas.comision_ventas_pct_precio` | Si la comisión se calcula sobre el precio de lista, la utilidad real baja `c · d` puntos más. |
+| Dónde se aplica el descuento | Una sola cifra sobre el subtotal de toda la cotización, antes de IVA; las partidas conservan su precio | — | Un descuento por partida necesita un campo en cada partida. |
+| Límites de los parámetros | Margen 0–80 %, comisión 0–20 %, descuento 0–50 %, administración 0–50 %, financiamiento 0–100 %, IVA 0–30 %, cobro 0–365 días | `PARAMETROS_COTIZACION` | Ampliarlos si la política del taller lo requiere; la pantalla toma los mismos límites. |

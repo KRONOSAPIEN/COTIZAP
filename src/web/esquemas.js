@@ -148,6 +148,31 @@
     return p;
   };
 
+  /**
+   * Parámetros de precio del encabezado de la cotización: cada uno anula el valor de las tablas maestras sólo para esa
+   * cotización (así no hay que ir a los maestros para ajustar el margen o los días de cobro). Los límites salen del
+   * motor (PARAMETROS_COTIZACION) para que interfaz y motor coincidan; en pantalla los porcentajes van en %.
+   * grupo: 'principal' (siempre visible) o 'mas' (dentro de «Más parámetros de precio»).
+   */
+  (function definirParametros() {
+    const LIM = root.COTIZAP.cotizador.PARAMETROS_COTIZACION;
+    const par = (clave, extra) => {
+      const l = LIM[clave];
+      const pct = !l.entero;
+      const aPantalla = (x) => (pct ? Number((x * 100).toFixed(6)) : x);
+      return { clave, pct, entero: !!l.entero, min: aPantalla(l.min), max: aPantalla(l.max), sufijo: pct ? '%' : 'días', ...extra };
+    };
+    W.PARAMETROS_COT = [
+      par('utilidad_pct_precio', { id: 'utilidad', etiqueta: 'Margen de utilidad', base: 'Del precio', paso: 0.5, grupo: 'principal' }),
+      par('comision_ventas_pct_precio', { id: 'comision', etiqueta: 'Comisión de ventas', base: 'Del precio', paso: 0.5, grupo: 'principal' }),
+      par('descuento_pct', { id: 'descuento', etiqueta: 'Descuento al cliente', base: 'Del subtotal', paso: 0.5, grupo: 'principal' }),
+      par('dias_cobro', { id: 'dias_cobro', etiqueta: 'Días de cobro', base: 'Crédito al cliente', paso: 1, grupo: 'principal' }),
+      par('administracion_pct_cd', { id: 'administracion', etiqueta: 'Administración', base: 'Del costo directo', paso: 0.5, grupo: 'mas' }),
+      par('tasa_anual', { id: 'tasa', etiqueta: 'Financiamiento anual', base: 'Costo del dinero', paso: 0.5, grupo: 'mas' }),
+      par('iva_pct', { id: 'iva', etiqueta: 'IVA', base: 'Sobre el precio neto', paso: 1, grupo: 'mas' }),
+    ];
+  }());
+
   /* ---------------- Unidades por eje: diámetros/secciones y longitudes ---------------- */
   Object.keys(W.CAMPOS).forEach((fam) => W.CAMPOS[fam].forEach((c) => {
     if (c.tipo === 'dim') c.eje = /^(L|H)/.test(c.id) ? 'long' : 'diam';
