@@ -3,8 +3,8 @@
  *
  *  Alambre/varilla de aporte:  kg = Σ(L_cordón · A_cordón · ρ_dep) / (1000 · η_dep),   A_cordón = k · e²
  *  Gas de protección:          m³ = t_arco · Q_gas · (1 + f_pre/post) / 1000
- *  Pintura (por mano):         L  = A_pint / (cobertura_teórica · η_transferencia),
- *                              cobertura_teórica = 10 · SV% / DFT_µm   (m²/L)
+ *  Pintura (por mano):         L  = A_mano / (cobertura_teórica · η_transferencia),   A_mano = superficie de las partes (ducto, bridas)
+ *                              que llevan esa mano;  cobertura_teórica = 10 · SV% / DFT_µm   (m²/L)
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -35,14 +35,15 @@
     const kg_alambre = m_dep_g / 1000 / proc.eta_dep;
     const V_gas_m3 = (tmp.detalle.t_arco_min * proc.Q_gas_L_min * (1 + proc.f_pre_post)) / 1000;
 
-    /* Pintura */
+    /* Pintura: litros de cada mano, sumando las partes que la llevan (el ducto y las bridas pueden llevar manos distintas) */
     const capas = pint.capas.map((nombre) => {
       const c = M.proceso.pintura.capas[nombre];
       const cobertura_teorica = (10 * c.sv_pct) / c.dft_um;
       const cobertura_practica = cobertura_teorica * c.eta_transf;
-      const litros = pint.A_pint_m2 / cobertura_practica;
+      const A_mano = pint.partes.reduce((s, x) => s + (x.capas.includes(nombre) ? x.A_m2 : 0), 0);
+      const litros = A_mano / cobertura_practica;
       return {
-        nombre, precio_ref: c.precio_ref, cobertura_teorica_m2_L: cobertura_teorica, cobertura_practica_m2_L: cobertura_practica, litros,
+        nombre, precio_ref: c.precio_ref, cobertura_teorica_m2_L: cobertura_teorica, cobertura_practica_m2_L: cobertura_practica, A_m2: A_mano, litros,
       };
     });
     const L_pintura = capas.reduce((s, c) => s + c.litros, 0);

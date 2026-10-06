@@ -29,8 +29,10 @@
     ref_diametro: [['INTERIOR', 'Interior (nominal)'], ['EXTERIOR', 'Exterior']],
     tipo_union: [['BRIDADO', 'Bridado · aros, tornillos y empaque'], ['ESPIGA', 'Espiga · macho–hembra'], ['LISO', 'Extremos lisos']],
     clase_sellado: [['C', 'Clase C · juntas transversales'], ['B', 'Clase B · + costuras longitudinales'], ['A', 'Clase A · + penetraciones'], ['NINGUNA', 'Sin sellador']],
-    pintura: [['', 'Según el material'], ['NINGUNA', 'Sin pintura'], ['PRIMARIO', 'Primario'], ['PRIMARIO_ESMALTE', 'Primario + esmalte']],
-    caras_pintadas: [['1', 'Sólo exterior'], ['2', 'Exterior e interior']],
+    // Pintura: en blanco manda la regla del taller (según el material y dónde va instalado el ducto); un sistema elegido vale para todo lo que se pinta
+    pintura: [['', 'Según material e instalación'], ['NINGUNA', 'Sin pintura'], ['ESMALTE', 'Sólo pintura (esmalte)'], ['PRIMARIO', 'Sólo primario'], ['PRIMARIO_ESMALTE', 'Primario + pintura (esmalte)']],
+    ubicacion: [['', 'Según la cotización'], ['INTERIOR', 'Interior (bajo techo)'], ['EXTERIOR', 'Exterior (a la intemperie)']],
+    caras_pintadas: [['1', 'Sólo la cara exterior del ducto'], ['2', 'Caras exterior e interior del ducto']],
     servicio: [['', 'Según la cotización'], ['VENTILACION', 'Ventilación'], ['POLVO', 'Colección de polvo'], ['ABRASIVO', 'Material abrasivo']],
     riesgo: [['', 'Según la cotización'], ['BAJO', 'Bajo'], ['MEDIO', 'Medio'], ['ALTO', 'Alto']],
     proceso_corte: [['', 'Automático'], ['GUILLOTINA', 'Guillotina'], ['PLASMA', 'Plasma CNC'], ['LASER', 'Láser']],
@@ -133,7 +135,11 @@
     { id: 'ref_diametro', etiqueta: 'Dimensión nominal', tipo: 'select', opciones: 'ref_diametro', defecto: 'INTERIOR', familias: ['RECTO', 'CODO', 'REDUCCION', 'TRANSICION', 'RAMAL', 'REDUCCION_INJERTO', 'PANTALON', 'PERSONALIZADO'] },
     { id: 'tipo_union', etiqueta: 'Unión', tipo: 'select', opciones: 'tipo_union', defecto: 'BRIDADO' },
     { id: 'clase_sellado', etiqueta: 'Sellado', tipo: 'select', opciones: 'clase_sellado', defecto: 'C' },
-    { id: 'pintura', etiqueta: 'Pintura', tipo: 'select', opciones: 'pintura', defecto: '' },
+    { id: 'ubicacion', etiqueta: 'Instalación', tipo: 'select', opciones: 'ubicacion', defecto: '' },
+    {
+      id: 'pintura', etiqueta: 'Pintura', tipo: 'select', opciones: 'pintura', defecto: '',
+      ayuda: 'En blanco manda la regla del taller: acero al carbón, interior sólo pintura y exterior primario y pintura; galvanizado, sólo las bridas',
+    },
     { id: 'servicio', etiqueta: 'Servicio', tipo: 'select', opciones: 'servicio', defecto: '' },
     { id: 'riesgo', etiqueta: 'Riesgo (imprevistos)', tipo: 'select', opciones: 'riesgo', defecto: '' },
   ];

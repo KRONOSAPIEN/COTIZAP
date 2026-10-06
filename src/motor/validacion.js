@@ -16,12 +16,12 @@
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('./util'), require('./mano_obra'), require('./precios'), require('./geometria'));
+    module.exports = factory(require('./util'), require('./mano_obra'), require('./precios'), require('./geometria'), require('./material'));
   } else {
     root.COTIZAP = root.COTIZAP || {};
-    root.COTIZAP.validacion = factory(root.COTIZAP.util, root.COTIZAP.manoObra, root.COTIZAP.precios, root.COTIZAP.geometria);
+    root.COTIZAP.validacion = factory(root.COTIZAP.util, root.COTIZAP.manoObra, root.COTIZAP.precios, root.COTIZAP.geometria, root.COTIZAP.material);
   }
-}(typeof self !== 'undefined' ? self : this, function (U, MO, PRE, GEO) {
+}(typeof self !== 'undefined' ? self : this, function (U, MO, PRE, GEO, MAT) {
   'use strict';
 
   const esObjeto = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
@@ -164,6 +164,7 @@
         ['tipo_union', claves(sub(M.herrajes, 'uniones')), 'Tipo de unión'],
         ['clase_sellado', ['NINGUNA', 'A', 'B', 'C'], 'Clase de sellado'],
         ['pintura', claves(sub(sub(M.proceso, 'pintura'), 'sistemas')), 'Sistema de pintura'],
+        ['ubicacion', MAT.UBICACIONES, 'Ubicación de la instalación'],
         ['servicio', claves(M.servicios), 'Servicio'],
         ['proceso_corte', claves(sub(sub(M.proceso, 'corte'), 'v_m_min')), 'Proceso de corte'],
         ['perfil_id', claves(sub(M.herrajes, 'perfiles')), 'Perfil de aros']);
@@ -399,6 +400,34 @@
             if (typeof v === 'number' && (v < Lm.yarda_min_mm || v > Lm.yarda_max_mm)) agregar(['proceso', 'armado_yardas', ...ruta], `debe estar entre ${Lm.yarda_min_mm} y ${Lm.yarda_max_mm} mm, los límites de la yarda (vale ${v})`);
           });
         }
+      }
+    }
+
+    // Pintura: la ubicación por omisión, las manos que lleva cada sistema (deben existir) y el sistema que lleva cada material
+    // (ducto y bridas, interior y exterior) deben ser de los que hay
+    if (quiere('proceso') || quiere('materiales')) {
+      const PP = esObjeto(M.proceso) && esObjeto(M.proceso.pintura) ? M.proceso.pintura : {};
+      const sistemas = esObjeto(PP.sistemas) ? PP.sistemas : {};
+      if (quiere('proceso')) {
+        if (!MAT.UBICACIONES.includes(PP.ubicacion_defecto)) agregar(['proceso', 'pintura', 'ubicacion_defecto'], `debe ser ${MAT.UBICACIONES.join(' o ')}; vale ${texto(PP.ubicacion_defecto)}`);
+        Object.keys(sistemas).forEach((nombre) => {
+          if (!Array.isArray(sistemas[nombre])) { agregar(['proceso', 'pintura', 'sistemas', nombre], 'debe ser una lista de manos'); return; }
+          sistemas[nombre].forEach((mano, i) => {
+            if (!tiene(PP.capas, mano)) agregar(['proceso', 'pintura', 'sistemas', nombre, i], `debe ser una mano de «proceso › pintura › capas» (${claves(PP.capas).join(', ')}); vale ${texto(mano)}`);
+          });
+        });
+      }
+      if (quiere('materiales')) {
+        Object.keys(M.materiales).forEach((id) => {
+          const mat = M.materiales[id];
+          if (!esObjeto(mat)) return;
+          ['pintura_cuerpo', 'pintura_bridas'].forEach((campo) => {
+            if (!esObjeto(mat[campo])) { agregar(['materiales', id, campo], 'falta el sistema de pintura por ubicación (INTERIOR y EXTERIOR)'); return; }
+            MAT.UBICACIONES.forEach((u) => {
+              if (!tiene(sistemas, mat[campo][u])) agregar(['materiales', id, campo, u], `debe ser un sistema de pintura de «proceso › pintura › sistemas» (${claves(sistemas).join(', ')}); vale ${texto(mat[campo][u])}`);
+            });
+          });
+        });
       }
     }
 

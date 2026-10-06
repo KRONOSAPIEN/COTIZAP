@@ -1101,6 +1101,142 @@ const ok = (cond, msg) => {
     await p.context().close();
   }
 
+  console.log('22) Pintura: depende del material y de dónde va instalado el ducto (interior o exterior)');
+  {
+    const p = await nuevaPagina();
+    const det = (k = 0) => estadoApp(p, (i) => window.COTIZAP.web.estadoApp.res.partidas[i], k);
+    const cotP = () => estadoApp(p, () => window.COTIZAP.web.estadoApp.cot.partidas[0]);
+    const textoDet = async () => (await p.locator('#detalle').innerText()).replace(/\s+/g, ' ');
+    const abrirTodo = async () => {
+      const secs = p.locator('#detalle details.sec');
+      for (let i = 0; i < await secs.count(); i += 1) if (!(await secs.nth(i).evaluate((e) => e.open))) await secs.nth(i).locator('summary').click();
+    };
+    // a) la muestra: acero al carbón y, por omisión de las tablas, instalación interior: sólo pintura
+    ok((await p.locator('#c_ubicacion option').allInnerTexts()).join('|') === 'Interior · bajo techo|Exterior · a la intemperie', 'el encabezado ofrece la instalación: interior o exterior');
+    ok(await p.locator('#c_ubicacion').inputValue() === 'INTERIOR', 'la cotización va con instalación interior (la de las tablas)');
+    await p.locator('#lista-partidas .partida').first().click();
+    await abrirTodo();
+    ok(/Pintura Interior · ducto: sólo pintura \(esmalte\) · bridas: sólo pintura \(esmalte\)/.test(await textoDet()), 'el desglose dice qué se pinta: en interior, el ducto y las bridas con sólo pintura');
+    const f0 = await det();
+    ok(f0.qto.pint.sistema === 'ESMALTE' && f0.qto.pint.capas.join() === 'esmalte' && f0.qto.pint.A_pint_m2 > 2.9, 'acero al carbón en interior: una mano de pintura (esmalte) en todo el ducto');
+
+    // b) exterior: primario y pintura
+    await p.selectOption('#c_ubicacion', 'EXTERIOR');
+    await p.waitForTimeout(120);
+    const f1 = await det();
+    ok(f1.qto.pint.sistema === 'PRIMARIO_ESMALTE' && f1.qto.pint.capas.join() === 'primario,esmalte' && f1.qto.pint.ubicacion === 'EXTERIOR', 'en exterior: primario y pintura');
+    ok(f1.precio.unitario > f0.precio.unitario && f1.qto.pint.A_pint_m2 === f0.qto.pint.A_pint_m2, `y cuesta más (${f0.precio.unitario} → ${f1.precio.unitario}) por la mano de primario: es la misma superficie`);
+    ok(await estadoApp(p, () => window.COTIZAP.web.estadoApp.cot.ubicacion) === 'EXTERIOR' && (await cotP()).ubicacion === undefined, 'la cotización guarda la instalación; la partida no la copia');
+    await abrirTodo();
+    ok(/Pintura Exterior · ducto: primario \+ pintura \(esmalte\) · bridas: primario \+ pintura \(esmalte\)/.test(await textoDet()), 'el desglose dice «Exterior · … primario + pintura»');
+    await p.reload();
+    await p.waitForSelector('#lista-partidas .partida');
+    ok(await p.locator('#c_ubicacion').inputValue() === 'EXTERIOR', 'al recargar, la cotización recuerda la instalación');
+
+    // c) lámina galvanizada: no se pinta más que las bridas
+    await editar(p, 0);
+    await p.selectOption('#f_material_id', 'GALVANIZADO');
+    await p.waitForTimeout(100);
+    ok(await p.locator('#dlg-prev .errores').count() === 0, 'la vista previa del galvanizado calcula sin errores');
+    await p.click('#dlg-guardar');
+    await p.waitForTimeout(150);
+    const f2 = await det();
+    ok(f2.qto.pint.sistema === 'NINGUNA' && f2.qto.pint.sistema_bridas === 'PRIMARIO_ESMALTE', 'galvanizado en exterior: el ducto sin pintura y las bridas con primario y pintura');
+    ok(f2.qto.pint.A_pint_m2 === f2.qto.her.A_pintura_aros_m2 && f2.qto.pint.A_pint_m2 < 0.5, `sólo se pintan los aros (${f2.qto.pint.A_pint_m2.toFixed(3)} m²), no los ~3 m² del ducto`);
+    ok(f2.costos.consumibles.pintura < 0.1 * f1.costos.consumibles.pintura, 'y la pintura cuesta una fracción de la del acero al carbón');
+    await p.locator('#lista-partidas .partida').first().click();
+    await abrirTodo();
+    ok(/Pintura Exterior · ducto: sin pintura · bridas: primario \+ pintura \(esmalte\)/.test(await textoDet()), 'el desglose dice «ducto: sin pintura · bridas: primario + pintura»');
+    await p.selectOption('#c_ubicacion', 'INTERIOR');
+    await p.waitForTimeout(100);
+    ok((await det()).qto.pint.sistema_bridas === 'ESMALTE' && (await det()).qto.pint.sistema === 'NINGUNA', 'galvanizado en interior: las bridas con sólo pintura');
+
+    // d) la partida puede traer su propia instalación y elegir el sistema de pintura
+    await editar(p, 0);
+    ok((await p.locator('#f_ubicacion option').allInnerTexts()).join('|') === 'Según la cotización|Interior (bajo techo)|Exterior (a la intemperie)', 'la partida ofrece «Según la cotización», interior y exterior');
+    ok((await p.locator('#f_pintura option').allInnerTexts()).join('|') === 'Según material e instalación|Sin pintura|Sólo pintura (esmalte)|Sólo primario|Primario + pintura (esmalte)', 'y el sistema de pintura: según la regla del taller, ninguna, sólo pintura, sólo primario o primario y pintura');
+    await p.selectOption('#f_ubicacion', 'EXTERIOR');
+    await p.waitForTimeout(100);
+    await p.click('#dlg-guardar');
+    await p.waitForTimeout(100);
+    const f3 = await det();
+    ok(f3.entrada.ubicacion === 'EXTERIOR' && f3.qto.pint.sistema_bridas === 'PRIMARIO_ESMALTE', 'la partida en exterior manda sobre la cotización en interior');
+    await editar(p, 0);
+    await p.selectOption('#f_pintura', 'ESMALTE');
+    await p.click('#dlg-guardar');
+    await p.waitForTimeout(100);
+    const f4 = await det();
+    ok(f4.entrada.pintura === 'ESMALTE' && f4.qto.pint.sistema === 'ESMALTE' && f4.qto.pint.A_pint_m2 > 2.9, 'un sistema elegido en la partida pinta todo (también el ducto galvanizado)');
+    await p.locator('#lista-partidas .partida').first().click();
+    await abrirTodo();
+    ok(/Pintura Elegida en la partida · ducto: sólo pintura \(esmalte\) · bridas: sólo pintura \(esmalte\)/.test(await textoDet()), 'y el desglose dice que lo eligió la partida');
+    await editar(p, 0);
+    await p.selectOption('#f_pintura', '');
+    await p.selectOption('#f_ubicacion', '');
+    await p.click('#dlg-guardar');
+    await p.waitForTimeout(100);
+    const g = await cotP();
+    ok(g.pintura === undefined && g.ubicacion === undefined, 'volver a «según la cotización» y «según material e instalación» deja la partida sin esos campos');
+
+    // e) archivos de otras versiones
+    const cargar = async (cambiar) => {
+      await p.click('#btn-io');
+      const base = JSON.parse(await p.inputValue('#io-texto'));
+      cambiar(base);
+      await p.fill('#io-texto', JSON.stringify(base));
+      await p.click('#io-cargar');
+      await p.waitForTimeout(150);
+    };
+    await cargar((b) => { delete b.cotizacion.ubicacion; b.maestros = { materiales: { ACERO_CARBON: { pintura_defecto: 'NINGUNA' } } }; });
+    ok(await p.locator('#c_ubicacion').inputValue() === 'INTERIOR', 'una cotización guardada sin instalación (versión anterior) abre en interior');
+    ok(!/ignoraron/.test(await p.locator('.toast').last().innerText()), 'y la pintura por defecto del material de una versión anterior se migra sin avisar de valores ignorados');
+    ok(await estadoApp(p, () => 'pintura_defecto' in window.COTIZAP.web.estadoApp.M.materiales.ACERO_CARBON) === false, 'ya no queda como campo suelto en las tablas');
+    await cargar((b) => { b.cotizacion.ubicacion = 'PATIO'; });
+    ok(await p.locator('#c_ubicacion').inputValue() === 'INTERIOR' && await p.locator('#aviso-error').isHidden(), 'una instalación que no existe en el archivo se repone con la de las tablas, sin errores');
+    await cargar((b) => { b.cotizacion.partidas[0].ubicacion = 'PATIO'; });
+    ok(/Ubicación de la instalación: «PATIO» no existe/.test((await det()).errores.join(' ')), 'pero una partida con una instalación que no existe se señala (no se calcula con un valor inventado)');
+    await cargar((b) => { delete b.cotizacion.partidas[0].ubicacion; });
+
+    // f) tablas maestras: qué sistema lleva cada material y la instalación por omisión
+    await p.click('#tab-maestros');
+    await p.fill('#maestros-buscar', 'pintura_cuerpo');
+    const ext = p.locator('select#m_materiales__ACERO_CARBON__pintura_cuerpo__EXTERIOR');
+    ok(await ext.inputValue() === 'PRIMARIO_ESMALTE' && (await ext.locator('option').allInnerTexts()).join('|') === 'Sin pintura|Sólo pintura (esmalte)|Sólo primario|Primario + pintura (esmalte)', 'las tablas traen el sistema de cada material, por ubicación, como lista: acero al carbón en exterior = primario + pintura');
+    ok(await p.locator('select#m_materiales__GALVANIZADO__pintura_cuerpo__INTERIOR').inputValue() === 'NINGUNA' && await p.locator('select#m_materiales__GALVANIZADO__pintura_cuerpo__EXTERIOR').inputValue() === 'NINGUNA', 'el galvanizado no lleva pintura en el ducto, ni en interior ni en exterior');
+    await p.fill('#maestros-buscar', 'pintura_bridas');
+    ok(await p.locator('select#m_materiales__GALVANIZADO__pintura_bridas__INTERIOR').inputValue() === 'ESMALTE' && await p.locator('select#m_materiales__GALVANIZADO__pintura_bridas__EXTERIOR').inputValue() === 'PRIMARIO_ESMALTE', 'pero sí en las bridas: interior, sólo pintura; exterior, primario y pintura');
+    await p.fill('#maestros-buscar', 'pintura_cuerpo');
+    await p.selectOption('select#m_materiales__ACERO_CARBON__pintura_cuerpo__EXTERIOR', 'ESMALTE');
+    await p.click('#tab-cotizacion');
+    await p.selectOption('#c_ubicacion', 'EXTERIOR');
+    await p.waitForTimeout(100);
+    ok((await det(1)).familia === 'CODO' && (await det(1)).qto.pint.sistema === 'ESMALTE', 'cambiar el sistema de un material en las tablas recalcula la cotización (el codo de acero al carbón, en exterior, con sólo pintura)');
+    await p.click('#tab-maestros');
+    await p.fill('#maestros-buscar', 'pintura_cuerpo');
+    await p.selectOption('select#m_materiales__ACERO_CARBON__pintura_cuerpo__EXTERIOR', 'PRIMARIO_ESMALTE');
+    await p.fill('#maestros-buscar', 'ubicacion_defecto');
+    const ub = p.locator('select#m_proceso__pintura__ubicacion_defecto');
+    ok(await ub.inputValue() === 'INTERIOR' && (await ub.locator('option').allInnerTexts()).join('|') === 'Interior (bajo techo)|Exterior (a la intemperie)', 'la instalación por omisión es una lista: interior (la de arranque) o exterior');
+    await ub.selectOption('EXTERIOR');
+    await p.click('#tab-cotizacion');
+    await p.click('#btn-nueva');
+    ok(await p.locator('#c_ubicacion').inputValue() === 'EXTERIOR', 'una cotización nueva abre con la instalación por omisión de las tablas');
+    await p.click('#tab-maestros');
+    await p.fill('#maestros-buscar', 'ubicacion_defecto');
+    await p.locator('select#m_proceso__pintura__ubicacion_defecto').selectOption('INTERIOR');
+    // un sistema que no existe en las tablas se muestra marcado y se avisa con su ruta
+    await estadoApp(p, () => { const W = window.COTIZAP.web; W.estadoApp.M.materiales.ACERO_CARBON.pintura_cuerpo.INTERIOR = 'ORO'; W.recalcular(); });
+    await p.click('#tab-cotizacion');
+    ok(/pintura cuerpo › INTERIOR: debe ser un sistema de pintura/.test(await p.locator('#aviso-error').innerText()), 'un sistema de pintura inexistente en las tablas se avisa con su ruta');
+    await p.click('#tab-maestros');
+    await p.fill('#maestros-buscar', 'pintura_cuerpo');
+    ok((await p.locator('select#m_materiales__ACERO_CARBON__pintura_cuerpo__INTERIOR option:checked').innerText()).trim() === 'ORO (no válido)', 'y la tabla lo muestra como «ORO (no válido)»');
+    await p.locator('select#m_materiales__ACERO_CARBON__pintura_cuerpo__INTERIOR').selectOption('ESMALTE');
+    await p.click('#tab-cotizacion');
+    ok(await p.locator('#aviso-error').isHidden() || !/pintura cuerpo/.test(await p.locator('#aviso-error').innerText()), 'al elegir uno válido el aviso desaparece');
+    await p.context().close();
+  }
+
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

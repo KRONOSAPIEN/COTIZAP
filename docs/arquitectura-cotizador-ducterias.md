@@ -36,6 +36,7 @@
 | Mano de obra por hora y lista de precios del proveedor | Los trabajadores ganan **$500 por hora, cifra que ya incluye prestaciones** (FSR = 1.00): el salario se captura por hora (antes por día y jornada) y el costo de la hora es `salario_hora · FSR`. El proveedor de acero cotiza **por pieza y con IVA incluido** (hojas y barras): la lista (T3b) conserva el precio como se cotiza y el motor lo convierte a **$/kg sin IVA** con los kg de la pieza (§5.1.1); lo que no está cotizado usa un precio por kg de respaldo. Cuatro supuestos de detalle están por confirmar (§10.6). | T3 · T3b · T8 · §4.1 · §5.1.1 · §10.6 |
 | Brida estándar del taller | **Una sola brida para todos los diámetros: aro de solera 1½" × 3/16", barreno Ø3/8", tornillo 5/16" × 1¼".** Se modela como el perfil `SOL38x4.8` (tipo solera, rolada "de canto"), que lleva en sus propias columnas el barreno y el tornillo; los ángulos quedan como opción por partida (`perfil_id`). Cinco supuestos de detalle están por confirmar con el taller (§10.4). | T4 · T5 · §3.5 · §10.4 |
 | Armado del tramo recto por yardas | El taller no rola tramos de 3 m: rola **yardas** —anillos del ancho de la lámina (914 mm = 3 ft ó 1 220 mm = 4 ft)—, las **engargola** hasta de 3 en una pieza con brida en ambos extremos, y lo que falta lo arma con las yardas completas que sobren y un **tramo de ajuste** (menos de una yarda) cuyo extremo libre **no lleva brida de taller**, para ponerlo en campo ajustando la distancia. **Quien diseña elige el ancho de la yarda** (3 ft ó 4 ft) en el encabezado de la cotización, o por partida. En ese extremo libre se cotiza, por omisión, la **brida suelta** —el taller manda el aro ya terminado (rolado, con el cierre soldado, barrenado y pintado), con sus tornillos y su empaque, sin soldarlo al ducto: se suelda en obra—; la partida puede pedir también «sin brida» (la brida no está en el precio) o «brida de taller». El motor reparte el largo así (§3.2): anillos que se rolan por separado, juntas engargoladas entre yardas, bridas sólo donde corresponde, corte con un tajo a lo ancho de la hoja. Los supuestos de detalle están por confirmar (§10.9). | T7c · §3.2 · §3.5.7 · §4.1 · §10.9 |
+| Pintura según el material y la instalación | **Lo que se pinta depende del material y el sistema, de dónde va instalado el ducto.** Acero al carbón: se pinta —en **interior**, sólo pintura (esmalte); en **exterior**, primario y pintura—. Lámina galvanizada: **no se pinta más que las bridas** (con el mismo criterio: interior, sólo pintura; exterior, primario y pintura). Inoxidable: no se pinta. La instalación se elige una vez en el encabezado de la cotización y cada partida puede traer la suya; si una partida elige un sistema de pintura, vale para todo lo que se pinta. El ducto y las bridas se calculan por separado (superficie, manos, tiempo y litros). Los supuestos de detalle están por confirmar (§10.10). | T7d · §4.1 · §4.3 · §10.10 |
 | Público objetivo | Ingenieros de ventas técnicas en México y desarrolladores internos. Moneda **MXN**, **IVA 16 %** aparte, **Factor de Salario Real (FSR)** para mano de obra. | `capas.iva_pct`, `mano_obra.FSR` |
 
 ### 0.2 Convenciones obligatorias (evitan los errores más caros)
@@ -125,8 +126,9 @@
 | `ref_diametro` | enum | `INTERIOR` `EXTERIOR` | `INTERIOR` | A qué superficie se refiere la dimensión nominal. |
 | `tipo_union` | enum | `BRIDADO` `ESPIGA` `LISO` | `BRIDADO` | Define herrajes y mano de obra de unión. |
 | `clase_sellado` | enum | `NINGUNA` `C` `B` `A` | `C` | Clases de sellado SMACNA (ver §3.5.5). |
-| `pintura` | enum | `NINGUNA` `PRIMARIO` `PRIMARIO_ESMALTE` | por material | Acero al carbón: primario; galvanizado/inoxidable: ninguna. |
-| `caras_pintadas` | 1 ó 2 | — | 1 | 2 = exterior + interior. |
+| `ubicacion` | enum | `INTERIOR` `EXTERIOR` | la de la cotización | Dónde va instalado el ducto (bajo techo o a la intemperie): decide el sistema de pintura (T7d). |
+| `pintura` | enum | `NINGUNA` `ESMALTE` `PRIMARIO` `PRIMARIO_ESMALTE` | la regla del taller | Vacío: la regla de T7d según el material y la `ubicacion` (acero al carbón: interior `ESMALTE`, exterior `PRIMARIO_ESMALTE`; galvanizado: sólo las bridas; inoxidable: ninguna). Un sistema elegido vale para el ducto **y** las bridas. |
+| `caras_pintadas` | 1 ó 2 | — | 1 | Caras **del ducto** que se pintan: 1 = la exterior, 2 = exterior e interior (no confundir con la instalación). Las bridas llevan sus dos caras y el canto. |
 | `servicio` | enum | `VENTILACION` `POLVO` `ABRASIVO` | `POLVO` | Valida el calibre mínimo por diámetro (advertencia). |
 | `riesgo` | enum | `BAJO` `MEDIO` `ALTO` | `MEDIO` | Selecciona el % de imprevistos. |
 | `proceso_corte` | enum | `GUILLOTINA` `PLASMA` `LASER` | por familia | Recto: guillotina; accesorios: plasma. |
@@ -148,18 +150,18 @@
 | `PERSONALIZADO` | `A_neta_m2`, `L_corte_m`, `L_sold_tope_m`, `L_sold_filete_m`, `n_piezas`, `n_extremos`, `D_ref_mm` | Para campanas y piezas con desarrollo CAD. |
 | `COMPRADO` | `precio_compra_unitario`, `peso_kg` | Compuertas, flexibles, etc.: pasa por la pila sin mano de obra. |
 
-**Entradas por cotización** (`cotizacion`): `cliente`, `proyecto`, `fecha`, `vigencia_dias`, unidades de captura de diámetros y longitudes, `servicio` y `riesgo` por omisión de las partidas (cada partida puede traer los suyos), el **ancho de la yarda** (`yarda_mm`) de los tramos rectos —lo elige quien diseña: 914 ó 1 220 mm; cada tramo puede traer el suyo— y los **parámetros de precio propios** de la cotización (`parametros`, §5.4): margen de utilidad, comisión, descuento, días de cobro, administración, financiamiento anual e IVA.
+**Entradas por cotización** (`cotizacion`): `cliente`, `proyecto`, `fecha`, `vigencia_dias`, unidades de captura de diámetros y longitudes, `servicio` y `riesgo` por omisión de las partidas (cada partida puede traer los suyos), la **instalación** (`ubicacion`: interior o exterior, que decide la pintura), el **ancho de la yarda** (`yarda_mm`) de los tramos rectos —lo elige quien diseña: 914 ó 1 220 mm; cada tramo puede traer el suyo— y los **parámetros de precio propios** de la cotización (`parametros`, §5.4): margen de utilidad, comisión, descuento, días de cobro, administración, financiamiento anual e IVA.
 
 ### 2.2 Tablas maestras
 
 **T1 · Materiales**
 
-| `material_id` | Tabla calibre | ρ (kg/m³) | Variable de precio | Soldadura | Aporte | Gas | f_sold | f_acabado | Pintura defecto |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `ACERO_CARBON` | MSG | 7,850 | `precio_kg_acero_carbon` | GMAW | `precio_kg_alambre_er70s6` | `precio_m3_gas_mezcla_ar_co2` | 1.00 | 0.25 | PRIMARIO |
-| `GALVANIZADO` | GSG | 7,850 | `precio_kg_acero_galvanizado` | GMAW | `precio_kg_alambre_er70s6` | `precio_m3_gas_mezcla_ar_co2` | 1.20 | 0.35 | NINGUNA |
-| `INOX_304` | USSG | 7,930 | `precio_kg_inox_304` | GTAW | `precio_kg_varilla_er308l` | `precio_m3_gas_argon` | 1.00 | 0.60 | NINGUNA |
-| `INOX_316` | USSG | 7,980 | `precio_kg_inox_316` | GTAW | `precio_kg_varilla_er316l` | `precio_m3_gas_argon` | 1.00 | 0.60 | NINGUNA |
+| `material_id` | Tabla calibre | ρ (kg/m³) | Variable de precio | Soldadura | Aporte | Gas | f_sold | f_acabado |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `ACERO_CARBON` | MSG | 7,850 | `precio_kg_acero_carbon` | GMAW | `precio_kg_alambre_er70s6` | `precio_m3_gas_mezcla_ar_co2` | 1.00 | 0.25 |
+| `GALVANIZADO` | GSG | 7,850 | `precio_kg_acero_galvanizado` | GMAW | `precio_kg_alambre_er70s6` | `precio_m3_gas_mezcla_ar_co2` | 1.20 | 0.35 |
+| `INOX_304` | USSG | 7,930 | `precio_kg_inox_304` | GTAW | `precio_kg_varilla_er308l` | `precio_m3_gas_argon` | 1.00 | 0.60 |
+| `INOX_316` | USSG | 7,980 | `precio_kg_inox_316` | GTAW | `precio_kg_varilla_er316l` | `precio_m3_gas_argon` | 1.00 | 0.60 |
 
 `f_sold` = multiplicador de mano de obra de soldadura por material (p. ej. retiro de zinc en galvanizado). `f_acabado` = fracción del tiempo de soldadura que se dedica a esmerilado, limpieza o decapado.
 
@@ -308,6 +310,31 @@
 | `junta_entre_yardas` | `PITTSBURGH` | cómo se unen las yardas de una pieza: clave de `proceso.costuras` (engargolado Pittsburgh) |
 | `extremo_ajuste_defecto` | `SUELTA` | qué lleva el extremo libre del tramo de ajuste cuando la partida no pide otra cosa: `SUELTA` (aro, tornillos y empaque sueltos), `SIN_BRIDA` (nada) o `CON_BRIDA` (brida de taller) |
 
+**T7d · Pintura** (`proceso.pintura` y `materiales.*.pintura_cuerpo` / `pintura_bridas`; reglas en §4.1 y §4.3). Cada material lleva dos reglas, **una para el ducto y otra para las bridas**, y cada una dice qué sistema se aplica según la instalación:
+
+| `material_id` | Ducto · interior | Ducto · exterior | Bridas · interior | Bridas · exterior |
+| --- | --- | --- | --- | --- |
+| `ACERO_CARBON` | `ESMALTE` · sólo pintura (esmalte) | `PRIMARIO_ESMALTE` · primario + pintura (esmalte) | `ESMALTE` · sólo pintura (esmalte) | `PRIMARIO_ESMALTE` · primario + pintura (esmalte) |
+| `GALVANIZADO` | `NINGUNA` · sin pintura | `NINGUNA` · sin pintura | `ESMALTE` · sólo pintura (esmalte) | `PRIMARIO_ESMALTE` · primario + pintura (esmalte) |
+| `INOX_304` | `NINGUNA` · sin pintura | `NINGUNA` · sin pintura | `NINGUNA` · sin pintura | `NINGUNA` · sin pintura |
+| `INOX_316` | `NINGUNA` · sin pintura | `NINGUNA` · sin pintura | `NINGUNA` · sin pintura | `NINGUNA` · sin pintura |
+
+Un **sistema** es la lista de manos que recibe una superficie; la instalación por omisión (`ubicacion_defecto`) es `INTERIOR`:
+
+| Sistema (`proceso.pintura.sistemas`) | Manos | Para qué se usa |
+| --- | --- | --- |
+| `NINGUNA` | — | lo que no se pinta |
+| `ESMALTE` | `esmalte` | interior: una mano de pintura (esmalte), sin primario |
+| `PRIMARIO` | `primario` | sólo si la partida lo pide |
+| `PRIMARIO_ESMALTE` | `primario` + `esmalte` | exterior: primario y pintura |
+
+Las **manos** (valores ilustrativos: confirmar con la ficha técnica de la pintura):
+
+| Mano (`proceso.pintura.capas`) | Sólidos por volumen | Espesor seco | η transferencia | Cobertura teórica | Cobertura práctica | Variable de precio |
+| --- | --- | --- | --- | --- | --- | --- |
+| `primario` | 55 % | 50 µm | 0.65 | 11.00 m²/L | 7.15 m²/L | `precio_L_primario` |
+| `esmalte` | 45 % | 40 µm | 0.65 | 11.25 m²/L | 7.31 m²/L | `precio_L_esmalte` |
+
 **T8 · Tarifas de operación** (`mo_h = salario_hora · FSR`: los trabajadores ganan **$500 por hora**, cifra que **ya incluye prestaciones**, así que FSR = 1.00 y la hora de mano de obra cuesta **$500**, más el equipo de la operación)
 
 | Operación | Salario por hora (MXN) | `mo_h` = salario · FSR (MXN/h) | Equipo (MXN/h) | Tarifa total (MXN/h) |
@@ -368,9 +395,9 @@
 | V13 | `cotizacion.parametros`: un valor fuera de sus límites (§5.4), no numérico o —en días— no entero se **ignora** y rige el de las tablas maestras; vacío = sin parámetro | Aviso con el nombre del parámetro |
 | V14 | **Tipo:** todo campo numérico de la partida es un número finito. Un texto numérico («12.5», «1e3») se acepta y se convierte; `NaN`, `±Infinity`, texto no numérico, listas, objetos y booleanos se rechazan. Un vacío opcional («», `null`) significa «automático» | Error: «Diámetro: «abc» no es un número» |
 | V15 | **Rango:** cada medida, longitud, espesor, cantidad y conteo está dentro de T10 o de su rango propio (por ejemplo costuras longitudinales 1–8, gajos 2–60, merma 0–90 %); cero, negativos y «casi cero» (1 mm, 10⁻⁹) se rechazan; en un campo opcional el 0 equivale a vacío | Error con el rango y lo que trae la partida |
-| V16 | **Pertenencia:** `familia`, `material_id`, `forma`, `ref_diametro`, `tipo_union`, `clase_sellado`, `pintura`, `servicio`, `riesgo`, `proceso_corte`, `perfil_id`, `tipo_costura` y `excentrica` deben existir (ni `constructor` ni `__proto__`); `omitir_operaciones` y `subcontratos` son listas de lo esperado; `caras_pintadas` ∈ {1, 2}; `usa_empaque` es sí/no | Error con las opciones válidas |
+| V16 | **Pertenencia:** `familia`, `material_id`, `forma`, `ref_diametro`, `tipo_union`, `clase_sellado`, `pintura`, `ubicacion`, `servicio`, `riesgo`, `proceso_corte`, `perfil_id`, `tipo_costura` y `excentrica` deben existir (ni `constructor` ni `__proto__`); `omitir_operaciones` y `subcontratos` son listas de lo esperado; `caras_pintadas` ∈ {1, 2}; `usa_empaque` es sí/no | Error con las opciones válidas |
 | V17 | **Geometría física:** una dimensión **exterior** debe ser mayor que el doble del espesor (si no, no existe el interior); un tramo recto no tiene más anillos (yardas) que `piezas_max` | Error |
-| V18 | **Tablas maestras sanas:** divisores y rendimientos (`eficiencia_taller`, velocidades, `paso_tornillo_mm`, `cartucho_ml`, densidad, `FSR`, `sv_pct`, `eta_*`, `FO`…) **> 0**; todo número de las tablas finito y **≥ 0**; merma en [0, 1); tablas espesor → velocidad con espesores crecientes y velocidades > 0; las listas de ángulos y los límites de T10 presentes. Una partida comprada sólo depende de `capas` | Error «Tablas maestras · ruta: …» en cada partida afectada, y aviso general; nunca un NaN ni un precio infinito |
+| V18 | **Tablas maestras sanas:** divisores y rendimientos (`eficiencia_taller`, velocidades, `paso_tornillo_mm`, `cartucho_ml`, densidad, `FSR`, `sv_pct`, `eta_*`, `FO`…) **> 0**; todo número de las tablas finito y **≥ 0**; merma en [0, 1); tablas espesor → velocidad con espesores crecientes y velocidades > 0; las listas de ángulos y los límites de T10 presentes; en la pintura (T7d), la ubicación por omisión es interior o exterior, cada mano de cada sistema existe y cada material trae un sistema que existe para el ducto y para las bridas, en interior y en exterior. Una partida comprada sólo depende de `capas` | Error «Tablas maestras · ruta: …» en cada partida afectada, y aviso general; nunca un NaN ni un precio infinito |
 | V19 | **Resultado numérico:** nada de lo que sale del cálculo de una partida puede ser `NaN` ni infinito | Error que dice dónde |
 | V20 | **Datos que vienen de fuera** (navegador, almacén compartido, archivo importado): un parche de maestros conserva sólo lo que tiene la forma de las tablas (un número donde va un número…; lo demás se descarta y se cuenta); una cotización importada conserva lo sano: las partidas que no son objetos se descartan, los `id` se reponen únicos, y los textos, unidades, riesgo y servicio inválidos vuelven a su valor por defecto. `__proto__` nunca entra | Se avisa cuántos valores se ignoraron; un archivo sin lista de partidas se rechaza sin tocar nada |
 | V21 | **Armado por yardas:** `yarda_mm` de la partida entre `yarda_min_mm` y `yarda_max_mm` (T10; vacío o 0 = el de la cotización y, si no, el de T7c); `extremo_ajuste` es `SUELTA`, `SIN_BRIDA` o `CON_BRIDA` (el `ajuste_sin_brida` sí/no de una versión anterior se convierte: sí = `SIN_BRIDA`, no = `CON_BRIDA`); en las tablas, `yardas_mm` es una lista de anchos dentro de esos límites, `yardas_por_pieza_max` un entero ≥ 1, `junta_entre_yardas` un tipo de costura que existe y `extremo_ajuste_defecto` uno de los tres extremos | Error con la ruta |
@@ -766,7 +793,7 @@ Soldadura    t_arco = (L_tope + L_filete) / ( v_sold(e)·v_mult(proceso) )      
 Engargolado  t = n_engargolados·t_fijo + L_engargolado / v_engargolado(e)       # una operación por junta entre yardas y por costura longitudinal Pittsburgh
 Barrenado    t = n_barrenos · t_barreno                                         # barrenos de todos los aros, también los sueltos
 Acabado      t = f_acabado(material) · t_soldadura
-Pintura      t = A_pint · ( t_prep + n_manos · t_aplicación )
+Pintura      t = Σ_partes A_parte · ( t_prep + n_manos_parte · t_aplicación )      # partes: el ducto y las bridas, cada una con su sistema (T7d); una parte sin pintura no suma
 Inspección   t = t_fijo_qc + k_manejo · m_neta_total                            # lámina + aros de taller + aros sueltos
 t_real(op)   = t_estándar(op) / η_taller
 Costo(op)    = (t_real / 60) · ( mo_h(op) + equipo_h(op) )        mo_h = salario_hora · FSR
@@ -800,12 +827,26 @@ V_gas        = t_arco · Q_gas · (1 + f_pre/post) / 1000      # m³ de gas de p
 
 Pintura (por mano):
   cobertura_teórica = 10 · SV% / DFT_µm                      # m²/L   (55 % SV, 50 µm → 11.0 m²/L)
-  L_mano            = A_pint / ( cobertura_teórica · η_transf )
+  L_mano            = A_mano / ( cobertura_teórica · η_transf )
+  A_mano            = Σ A_parte de las partes que llevan esa mano     # el ducto y las bridas pueden llevar manos distintas
   L_diluyente       = f_dil · Σ L_mano
-  A_pint            = A_ext · n_caras + A_aros_expuestos
+  A_ducto           = A_ext · n_caras  (0 si el sistema del ducto es NINGUNA)
+  A_bridas          = Σ_aros A_pintura_aro (aros de taller y sueltos; 0 si el sistema de las bridas es NINGUNA)
+  sistema           = el de la partida (`pintura`) para todo ; si no, el del material según la instalación (T7d)
 
 Corte:  costo = L_corte · precio_m_corte[proceso]            # electrodos, boquillas, gas de asistencia, cuchillas
 ```
+
+**La regla de pintura en el tramo del Ejemplo A** (Ø12″, 3 m, calibre 16, sin elegir sistema en la partida; el costo y el precio salen del motor). El acero al carbón lleva la misma superficie en interior y en exterior, pero en exterior recibe además la mano de primario; el galvanizado sólo pinta sus dos aros de brida:
+
+| Material | Instalación | Ducto | Bridas | Superficie pintada (m²) | Pintura + diluyente (L) | Costo de la pintura (MXN) | Pintura (min reales) | Precio antes de IVA (MXN) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `ACERO_CARBON` | Interior | sólo pintura | sólo pintura | 3.078 | 0.463 | 112.40 | 26.9 | 3,666.59 |
+| `ACERO_CARBON` | Exterior | primario + pintura | primario + pintura | 3.078 | 0.937 | 210.14 | 38.5 | 3,988.36 |
+| `GALVANIZADO` | Interior | sin pintura | sólo pintura | 0.177 | 0.027 | 6.47 | 1.6 | 3,858.98 |
+| `GALVANIZADO` | Exterior | sin pintura | primario + pintura | 0.177 | 0.054 | 12.10 | 2.2 | 3,877.50 |
+| `INOX_304` | Interior | sin pintura | sin pintura | 0.000 | 0.000 | 0.00 | 0.0 | 8,709.42 |
+| `INOX_304` | Exterior | sin pintura | sin pintura | 0.000 | 0.000 | 0.00 | 0.0 | 8,709.42 |
 
 ### 4.4 Costos de operación y subcontratos
 
@@ -1004,7 +1045,7 @@ FUNCIÓN cotizar_partida(p, M):
 | `tipo_union` | BRIDADO |
 | `extremo_ajuste` | **SUELTA** (por omisión de T7c): el extremo del tramo de ajuste no lleva brida de taller —se corta en campo—, así que la pieza lleva **una** brida fabricada; del otro extremo el taller manda **suelto** el aro **terminado** (rolado, con el cierre soldado, barrenado y pintado) con sus tornillos y su empaque, sin soldarlo al ducto |
 | `clase_sellado` | C (juntas transversales) |
-| `pintura` | PRIMARIO (1 mano, sólo exterior) |
+| `pintura` | PRIMARIO, elegido en la partida: 1 mano de primario en el ducto y en las bridas (sólo la cara exterior del ducto) |
 | `servicio` / `riesgo` | POLVO / MEDIO |
 | `cantidad` | 1 |
 
@@ -1186,7 +1227,7 @@ Costo de pintura       = 0.4305 · 220 + 0.0431 · 70 = 97.73 MXN
 
 ### 7.2 Ejemplo B — Codo de 90°, 5 gajos, Ø12", calibre 16 (el "factor" en acción)
 
-Mismos maestros, mismo calibre, mismas bridas y primario que el Ejemplo A.
+Mismos maestros, mismo calibre, mismas bridas y primario que el Ejemplo A (la pintura se elige en la partida: primario).
 
 **Geometría** (D_nom = 304.8 mm, R = 1.5·D = 457.2 mm, θ = 90°, 5 gajos → j = 4 juntas, α = 22.50°)
 
@@ -1336,7 +1377,7 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 | Tablas maestras (T1–T9) | `src/datos/maestros.js` |
 | Utilidades numéricas (Simpson, interpolación, parche de maestros) | `src/motor/util.js` |
 | §3.1–3.4 Geometría por familia | `src/motor/geometria.js` |
-| §3.3 y §3.5 Lámina, merma y herrajes | `src/motor/material.js` |
+| §3.3, §3.5 y T7d Lámina, merma, herrajes y pintura (qué se pinta y con qué sistema) | `src/motor/material.js` |
 | §4.1 Tiempos y tarifas | `src/motor/mano_obra.js` |
 | §5.1.1 Lista de precios del proveedor (kg por pieza, $/kg sin IVA, qué renglón usa el cálculo) | `src/motor/proveedor.js` |
 | §4.3 Consumibles | `src/motor/consumibles.js` |
@@ -1365,6 +1406,7 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 - **Lista del proveedor y mano de obra** (`tests/proveedor.test.js`): la lista reproduce al centavo los precios sin IVA de la factura; kg por hoja y por barra y $/kg recalculados desde las medidas; qué renglón usa el cálculo (hoja estándar, calibre sin cotizar, placa, inoxidable); IVA incluido o no; un precio inválido cae a la tabla; el salario es por hora y el costo de la hora es salario × FSR; un parche guardado con el salario diario de antes se limpia.
 - **Parámetros de la cotización** (`tests/parametros.test.js`): cada parámetro recalculado desde `C_base` (margen, comisión, administración, días y tasa de cobro, IVA); descuento con IVA sobre el neto; utilidad real y su forma cerrada; valores inválidos que se ignoran con aviso; las tablas maestras no se mutan; la vista previa de una partida coincide con la lista; y los campos del encabezado en las pruebas de interfaz (sección 19).
 - **Armado por yardas** (`tests/geometria.test.js`, `tests/motor.test.js`, `tests/ejemplo_recto.test.js`): los casos del taller (3 yardas por pieza, el extremo del ajuste sin brida de taller, a ±25 mm, ajuste solo, otro máximo de yardas por pieza); la distribución se contrasta contra un **oráculo que arma el tramo pieza por pieza con un lazo** en 4 000 largos y anchos al azar, en los tres modos del extremo libre (más invariantes: sólo la última pieza trae el ajuste, ninguna pasa de 3 yardas, lo que se corta es el largo pedido ±tolerancia); cantidades físicas (anillos, corte a lo ancho, juntas, extremos con brida, junta soldada si las tablas lo piden); **la brida suelta** (qué se le hace al aro en taller —se rola, se barrena, se le suelda el cierre y se pinta, con las mismas horas y la misma pintura que a uno de taller— y qué no —no se arma, no lleva filete al ducto ni sellador—; el material completo; el peso y los drivers por kilo y por metro de soldadura; las operaciones omitidas; con `ESPIGA` o `LISO` no hay aros; sigue a las tablas y a la partida); el **ancho de yarda de la cotización** (lo heredan sólo los tramos rectos; la partida manda; vacío, 0 o inválido se ignoran); la conversión del `ajuste_sin_brida` sí/no de la versión anterior; y el Ejemplo A recalculado de forma independiente —con su aro suelto— en los tres modos.
+- **Pintura** (`tests/motor.test.js`, `tests/robustez.test.js`): la matriz material × instalación × partida (acero al carbón interior/exterior, galvanizado sólo en las bridas, inoxidable sin pintura, sistema elegido en la partida, dos caras del ducto, unión de espiga sin aros, aro suelto) con **superficie, litros de cada mano, minutos y costo recalculados a mano** desde las tablas; la instalación heredada de la cotización y la de la partida; los valores que no existen; las tablas de pintura (ubicación por omisión, manos y sistemas de cada material); y la migración de la pintura por defecto de una versión anterior.
 - **Robustez** (`tests/robustez.test.js`): 640 partidas válidas al azar con semilla fija de todas las familias (sin excepciones ni `NaN`, pila de precio cerrada, cantidades independientes de los precios, ida y vuelta por JSON); cada campo numérico de cada familia corrompido con `NaN`, `±Infinity`, texto, listas, objetos y booleanos (siempre se rechaza); medidas en cero, negativas, «casi cero» y de `1e12` (se rechazan sin agotar memoria); vacíos opcionales; enumeraciones y listas; maestros con ceros, negativos, tablas de velocidad rotas o secciones ausentes (error que nombra la ruta); `cotizar()` con cotizaciones y partidas mal formadas (nunca lanza); y `sanearParche` contra parches dañados y `__proto__`. Las secciones 20 de `tests/e2e/ui.e2e.js` repiten lo visible: almacenamiento dañado, números ilegibles en el formulario, importaciones hostiles, tablas con ceros, almacenamiento bloqueado o lleno, fecha local y pantalla de 320 px.
 - **Pruebas de política:** separación cantidades/precios, identidades de la pila (`P·(1 − u − c − o) = C_base`), cargo mínimo, subcontratos, validaciones, uniones, materiales (`tests/motor.test.js`).
 - **Estándar de bridas del taller** (`tests/motor.test.js`): la solera de 1½" × 3/16" pesa `b·t·ρ`; el taller usa la misma brida (barreno Ø3/8", tornillo 5/16" × 1¼") en todos los diámetros; `L_aro = π·(D_ext + b) + holgura`; nº de barrenos múltiplo de 4 por paso; cada aro se valoriza con el precio de su propio perfil y el tornillo con el suyo; el cierre del aro se suelda a tope al espesor de la solera; marco rectangular; y `ESPIGA` no genera aros ni barrenos.
@@ -1497,3 +1539,20 @@ Lo que describió el taller: se rolan yardas de 914 ó 1 220 mm (el ancho de la 
 | Junta entre yardas | Engargolado Pittsburgh de un perímetro medio por junta; sellador en toda clase de sellado menos NINGUNA; el pliegue no suma área (se absorbe en la merma de tabla) | `junta_entre_yardas` (una costura de `proceso.costuras`) | Si se soldaran, serían soldadura a tope y juntas de armado; si el pliegue consumiera lámina, subiría φ del tramo recto. |
 | Corte | Un tajo a lo ancho de la hoja por yarda completa; el ajuste, además el corte a lo largo | — | Con otra forma de cortar cambian los metros de corte (poco costo: guillotina). |
 | Tramo rectangular | Mismo armado por yardas (plegado en lugar de rolado) | — | Si el rectangular se fabrica de otra forma, se captura aparte. |
+
+### 10.10 Supuestos de la pintura por confirmar
+
+Lo que describió el taller: la lámina galvanizada no se pinta más que las bridas; el acero al carbón sí va pintado, con sólo pintura si va en interior y con primario y pintura si va en exterior. Lo demás se **supuso** y se cambia en las tablas (`proceso.pintura`, `materiales.*.pintura_cuerpo` / `pintura_bridas`), en el encabezado de la cotización o en la partida:
+
+| Supuesto | Valor usado | Dónde se cambia | Efecto si es distinto |
+| --- | --- | --- | --- |
+| «Interior» y «exterior» | La **instalación** del ducto: interior = bajo techo, exterior = a la intemperie. No son las caras del ducto (eso es `caras_pintadas`) | `ubicacion` (cotización y partida) | Si el taller se refería a otra cosa, la regla se reescribe en T7d. |
+| Instalación por omisión | **Interior** (la cotización o la partida que no la dicen) | `proceso.pintura.ubicacion_defecto` | Con exterior por omisión, todo el acero al carbón sin instalación elegida llevaría primario y pintura (más caro). |
+| Sistema de las bridas del galvanizado | El mismo criterio que el acero al carbón: interior, sólo pintura; exterior, primario y pintura | `materiales.GALVANIZADO.pintura_bridas` | Si las bridas llevan siempre lo mismo (por ejemplo sólo primario), se cambia en esa tabla. |
+| Pintura de las bridas del acero al carbón | El mismo sistema que el ducto | `materiales.ACERO_CARBON.pintura_bridas` | Si las bridas llevan otro, se cambia en esa tabla. |
+| Inoxidable | No se pinta (ni las bridas) | `materiales.INOX_*` | Si sus bridas de solera negra se pintan, se pone el sistema en `pintura_bridas`. |
+| «Sólo pintura» | Una mano de **esmalte** (la mano `esmalte` de T7d), sin primario | `proceso.pintura.sistemas.ESMALTE`, `capas.esmalte` | Si la pintura es otra (otro rendimiento o precio), se cambian sus datos; valores ilustrativos hoy. |
+| Superficie del ducto que se pinta | La cara exterior (`caras_pintadas` = 1); las dos caras sólo si la partida lo pide | `caras_pintadas` | El interior pintado duplica la superficie del ducto. |
+| Preparación | Una vez por parte (ducto, bridas), con `t_prep` por m², aunque lleve dos manos; cada mano suma `t_aplicación` | `proceso.pintura.t_prep_min_m2`, `t_aplic_min_m2` | Si la preparación se repite por mano, sube el tiempo de pintura del exterior. |
+| Aros sueltos | Se pintan con el sistema de las bridas, como los de taller | — | — |
+| Sistema elegido en la partida | Vale para todo lo que se pinta (ducto y bridas), también en galvanizado | `pintura` (partida) | Para pintar sólo el ducto o sólo las bridas habría que separar el dato. |

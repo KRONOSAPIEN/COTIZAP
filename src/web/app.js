@@ -50,7 +50,7 @@
     const P = (o) => ({ id: idNuevo(), ...base, ...o });
     return {
       cliente: 'Cliente de ejemplo', proyecto: 'Colector de polvo · línea 2', fecha: hoy(), vigencia_dias: 15, unidad_diam: 'in', unidad_long: 'mm',
-      riesgo: 'MEDIO', servicio: 'POLVO', ejemplo: true,
+      riesgo: 'MEDIO', servicio: 'POLVO', ubicacion: ubicacionPorOmision(), ejemplo: true,
       partidas: [
         P({ familia: 'RECTO', descripcion: 'Tramo recto Ø12″ × 3 m', D_mm: 304.8, L_mm: 3000, tipo_costura: 'A_TOPE', cantidad: 4 }),
         P({ familia: 'CODO', descripcion: 'Codo 90° · 5 gajos Ø12″', D_mm: 304.8, theta_deg: 90, k_R: 1.5, cantidad: 2 }),
@@ -63,8 +63,16 @@
     };
   }
 
+  /** Dónde va instalado el ducto cuando nadie lo dice: lo que traen las tablas (interior, bajo techo). */
+  function ubicacionPorOmision() {
+    const P = estado.M && estado.M.proceso && estado.M.proceso.pintura;
+    return P && C.material.UBICACIONES.includes(P.ubicacion_defecto) ? P.ubicacion_defecto : 'INTERIOR';
+  }
+
   function cotizacionVacia() {
-    return { cliente: '', proyecto: '', fecha: hoy(), vigencia_dias: 15, unidad_diam: 'in', unidad_long: 'mm', riesgo: 'MEDIO', servicio: 'POLVO', ejemplo: false, partidas: [] };
+    return {
+      cliente: '', proyecto: '', fecha: hoy(), vigencia_dias: 15, unidad_diam: 'in', unidad_long: 'mm', riesgo: 'MEDIO', servicio: 'POLVO', ubicacion: ubicacionPorOmision(), ejemplo: false, partidas: [],
+    };
   }
 
   function cargarEstado() {
@@ -85,7 +93,7 @@
       // La cotización de muestra que nadie ha tocado se renueva con la versión actual de la muestra (nombres de taller,
       // partidas nuevas); se respetan los ajustes generales que ya hubiera cambiado.
       const guardada = estado.cot;
-      estado.cot = { ...cotizacionEjemplo(), ...Object.fromEntries(['unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'fecha', 'vigencia_dias', 'parametros', 'yarda_mm'].filter((k) => guardada[k] !== undefined).map((k) => [k, guardada[k]])) };
+      estado.cot = { ...cotizacionEjemplo(), ...Object.fromEntries(['unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'ubicacion', 'fecha', 'vigencia_dias', 'parametros', 'yarda_mm'].filter((k) => guardada[k] !== undefined).map((k) => [k, guardada[k]])) };
     }
     estado.sel = estado.cot.partidas.length ? estado.cot.partidas[0].id : null;
   }
@@ -117,6 +125,7 @@
     if (!['mm', 'm', 'in'].includes(cot.unidad_long)) cot.unidad_long = vacia.unidad_long;
     if (!Object.keys(M.capas.imprevistos_pct).includes(cot.riesgo)) cot.riesgo = vacia.riesgo;
     if (!Object.keys(M.servicios).includes(cot.servicio)) cot.servicio = vacia.servicio;
+    if (!C.material.UBICACIONES.includes(cot.ubicacion)) cot.ubicacion = vacia.ubicacion;
     if (cot.parametros !== undefined && !esObjeto(cot.parametros)) delete cot.parametros;
     // Ancho de la yarda de la cotización: sólo vale uno dentro de los límites de las tablas (vacío o inválido = el de las tablas)
     const yarda = C.cotizador.yardaDeCotizacion(cot, M).yarda_mm;
@@ -166,7 +175,7 @@
   function calcular() {
     const cot = estado.cot;
     try {
-      estado.res = C.cotizador.cotizar({ riesgo: cot.riesgo, servicio: cot.servicio, parametros: cot.parametros, yarda_mm: cot.yarda_mm, partidas: cot.partidas }, estado.M);
+      estado.res = C.cotizador.cotizar({ riesgo: cot.riesgo, servicio: cot.servicio, ubicacion: cot.ubicacion, parametros: cot.parametros, yarda_mm: cot.yarda_mm, partidas: cot.partidas }, estado.M);
     } catch (err) {
       // No debería pasar (cotizar() atrapa lo que falle en cada partida): si pasa, la pantalla sigue viva y lo dice.
       const msg = `No se pudo calcular la cotización (${String((err && err.message) || err)}). Revise las tablas maestras.`;
@@ -302,7 +311,7 @@
   /* ================================================================== */
   function sincronizarEncabezado() {
     const c = estado.cot;
-    ['cliente', 'proyecto', 'fecha', 'vigencia_dias', 'unidad_diam', 'unidad_long', 'riesgo', 'servicio'].forEach((k) => {
+    ['cliente', 'proyecto', 'fecha', 'vigencia_dias', 'unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'ubicacion'].forEach((k) => {
       const el = $(`#c_${k}`);
       if (el && document.activeElement !== el) el.value = c[k] === undefined ? '' : c[k];
     });
@@ -320,7 +329,7 @@
   }
 
   function enlazarEncabezado() {
-    ['cliente', 'proyecto', 'fecha', 'vigencia_dias', 'unidad_diam', 'unidad_long', 'riesgo', 'servicio'].forEach((k) => {
+    ['cliente', 'proyecto', 'fecha', 'vigencia_dias', 'unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'ubicacion'].forEach((k) => {
       const el = $(`#c_${k}`);
       el.addEventListener('input', () => {
         estado.cot[k] = k === 'vigencia_dias' ? Number(el.value) || 0 : el.value;
@@ -744,6 +753,16 @@
     ];
   }
 
+  /** Qué se pinta y con qué: «Interior · ducto: sin pintura · bridas: sólo pintura (esmalte)» (o «Elegida en la partida · …»). */
+  function pinturaTexto(f) {
+    const pint = f.qto.pint;
+    if (!pint.A_pint_m2) return 'Sin pintura';
+    const nombre = Object.fromEntries(W.OPC.pintura.filter(([v]) => v));
+    const sistema = (id) => { const t = nombre[id] || id; return t.charAt(0).toLowerCase() + t.slice(1); };
+    const origen = f.entrada.pintura ? 'Elegida en la partida' : (pint.ubicacion === 'EXTERIOR' ? 'Exterior' : 'Interior');
+    return `${origen} · ducto: ${sistema(pint.sistema)} · bridas: ${sistema(pint.sistema_bridas)}`;
+  }
+
   function detalleHerrajes(f) {
     const her = f.qto.her;
     const con = f.qto.con;
@@ -771,6 +790,7 @@
       kv('Alambre / varilla', W.num(con.soldadura.kg_alambre, 4), 'kg'),
       kv('Gas de protección', W.num(con.soldadura.V_gas_m3, 4), 'm³'),
       kv('Corte', `${W.num(con.corte.L_corte_m, 3)} m · ${con.corte.proceso}`),
+      kv('Pintura', pinturaTexto(f)),
       kv('Superficie a pintar', W.num(f.qto.pint.A_pint_m2, 3), 'm²'),
       kv('Pintura / diluyente', `${W.num(con.pintura.L_pintura, 3)} / ${W.num(con.pintura.L_diluyente, 3)}`, 'L'));
     const barreno = (a) => (a.barreno_desc ? `Ø${a.barreno_desc} (${W.num(a.diam_barreno_mm, 2)} mm)` : `Ø${W.num(a.diam_barreno_mm, 2)} mm`);
@@ -1077,7 +1097,7 @@
     if (k === dlg.familia) return;
     const previo = leerDialogo();
     const nuevo = W.partidaNueva(k);
-    ['descripcion', 'cantidad', 'material_id', 'calibre', 'espesor_mm', 'ref_diametro', 'tipo_union', 'clase_sellado', 'pintura', 'servicio', 'riesgo', 'caras_pintadas', 'proceso_corte', 'merma_pct', 'subcontratos', 'omitir_operaciones'].forEach((c) => {
+    ['descripcion', 'cantidad', 'material_id', 'calibre', 'espesor_mm', 'ref_diametro', 'tipo_union', 'clase_sellado', 'pintura', 'ubicacion', 'servicio', 'riesgo', 'caras_pintadas', 'proceso_corte', 'merma_pct', 'subcontratos', 'omitir_operaciones'].forEach((c) => {
       if (previo[c] !== undefined && !(k === 'COMPRADO' && !['descripcion', 'cantidad'].includes(c))) nuevo[c] = previo[c];
     });
     if (nuevo.espesor_mm > 0) nuevo.calibre = 'PROPIO';
@@ -1100,7 +1120,7 @@
       return;
     }
     try {
-      const defs = { riesgo: estado.cot.riesgo, servicio: estado.cot.servicio };
+      const defs = { riesgo: estado.cot.riesgo, servicio: estado.cot.servicio, ubicacion: estado.cot.ubicacion };
       if (p.familia === 'RECTO' && estado.res.yarda_mm !== undefined) defs.yarda_mm = estado.res.yarda_mm; // lo que decide la cotización, si la partida no elige
       const f = C.cotizador.cotizarPartida({ ...defs, ...p }, estado.res.maestros);
       const ind = f.indicadores;

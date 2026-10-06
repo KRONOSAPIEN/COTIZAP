@@ -101,6 +101,11 @@
 
     /* ------------------------------------------------------------------ */
     /* MATERIALES DE LÁMINA                                               */
+    /* Pintura (regla del taller): lo que se pinta depende del material y el sistema, de dónde va instalado el ducto.   */
+    /*   pintura_cuerpo : sistema del ducto, por ubicación (INTERIOR / EXTERIOR)                                         */
+    /*   pintura_bridas : sistema de los aros de brida, por ubicación                                                    */
+    /* Acero al carbón: se pinta; en interior sólo pintura (ESMALTE), en exterior primario + pintura (PRIMARIO_ESMALTE). */
+    /* Galvanizado: no se pinta más que las bridas. Inoxidable: no se pinta. Los sistemas son los de proceso.pintura.sistemas. */
     /* ------------------------------------------------------------------ */
     materiales: {
       ACERO_CARBON: {
@@ -115,7 +120,8 @@
         gas_ref: 'precio_m3_gas_mezcla_ar_co2',
         f_sold: 1.0,
         f_acabado: 0.25,
-        pintura_defecto: 'PRIMARIO',
+        pintura_cuerpo: { INTERIOR: 'ESMALTE', EXTERIOR: 'PRIMARIO_ESMALTE' },
+        pintura_bridas: { INTERIOR: 'ESMALTE', EXTERIOR: 'PRIMARIO_ESMALTE' },
       },
       GALVANIZADO: {
         nombre: 'Acero galvanizado (G90)',
@@ -129,7 +135,8 @@
         gas_ref: 'precio_m3_gas_mezcla_ar_co2',
         f_sold: 1.2,
         f_acabado: 0.35,
-        pintura_defecto: 'NINGUNA',
+        pintura_cuerpo: { INTERIOR: 'NINGUNA', EXTERIOR: 'NINGUNA' }, // la lámina galvanizada no se pinta…
+        pintura_bridas: { INTERIOR: 'ESMALTE', EXTERIOR: 'PRIMARIO_ESMALTE' }, // …más que las bridas (aros de solera negra)
       },
       INOX_304: {
         nombre: 'Acero inoxidable 304/304L',
@@ -143,7 +150,8 @@
         gas_ref: 'precio_m3_gas_argon',
         f_sold: 1.0,
         f_acabado: 0.6,
-        pintura_defecto: 'NINGUNA',
+        pintura_cuerpo: { INTERIOR: 'NINGUNA', EXTERIOR: 'NINGUNA' },
+        pintura_bridas: { INTERIOR: 'NINGUNA', EXTERIOR: 'NINGUNA' },
       },
       INOX_316: {
         nombre: 'Acero inoxidable 316/316L',
@@ -157,7 +165,8 @@
         gas_ref: 'precio_m3_gas_argon',
         f_sold: 1.0,
         f_acabado: 0.6,
-        pintura_defecto: 'NINGUNA',
+        pintura_cuerpo: { INTERIOR: 'NINGUNA', EXTERIOR: 'NINGUNA' },
+        pintura_bridas: { INTERIOR: 'NINGUNA', EXTERIOR: 'NINGUNA' },
       },
     },
 
@@ -311,10 +320,14 @@
         rho_dep_g_cm3: 7.85,
       },
 
+      // Pintura. Un «sistema» es la lista de manos que lleva una superficie: ESMALTE = sólo pintura (interior), PRIMARIO_ESMALTE =
+      // primario y pintura (exterior). Qué sistema lleva cada material, el ducto y las bridas, está en `materiales` (pintura_cuerpo,
+      // pintura_bridas) según la ubicación; `ubicacion_defecto` es la de una cotización o partida que no la dice.
       pintura: {
         t_prep_min_m2: 4.0,
         t_aplic_min_m2: 3.0,
-        sistemas: { NINGUNA: [], PRIMARIO: ['primario'], PRIMARIO_ESMALTE: ['primario', 'esmalte'] },
+        ubicacion_defecto: 'INTERIOR', // INTERIOR (bajo techo) | EXTERIOR (a la intemperie)
+        sistemas: { NINGUNA: [], ESMALTE: ['esmalte'], PRIMARIO: ['primario'], PRIMARIO_ESMALTE: ['primario', 'esmalte'] },
         capas: {
           primario: { sv_pct: 55, dft_um: 50, eta_transf: 0.65, precio_ref: 'precio_L_primario' },
           esmalte: { sv_pct: 45, dft_um: 40, eta_transf: 0.65, precio_ref: 'precio_L_esmalte' },
@@ -487,8 +500,9 @@
 
   /**
    * Quita de un parche guardado lo que ya no existe en las tablas, para que no quede como un campo suelto y sin efecto:
-   * el salario diario y la jornada (ahora el salario se captura por hora) y la longitud máxima por pieza (ahora el tramo
-   * recto se arma por yardas). No muta el parche recibido.
+   * el salario diario y la jornada (ahora el salario se captura por hora), la longitud máxima por pieza (ahora el tramo
+   * recto se arma por yardas) y la pintura por defecto de cada material (ahora hay un sistema para el ducto y otro para las
+   * bridas, según la ubicación). No muta el parche recibido.
    */
   function migrarParche(parche) {
     if (parche === null || typeof parche !== 'object' || Array.isArray(parche)) return parche;
@@ -497,6 +511,17 @@
     if (p.proceso && typeof p.proceso === 'object' && !Array.isArray(p.proceso)) {
       delete p.proceso.L_max_pieza_mm;
       if (!Object.keys(p.proceso).length) delete p.proceso;
+    }
+    // La pintura por defecto de cada material la sustituyeron pintura_cuerpo y pintura_bridas (por ubicación)
+    const mats = p.materiales;
+    if (mats && typeof mats === 'object' && !Array.isArray(mats)) {
+      Object.keys(mats).forEach((k) => {
+        if (mats[k] && typeof mats[k] === 'object' && !Array.isArray(mats[k])) {
+          delete mats[k].pintura_defecto;
+          if (!Object.keys(mats[k]).length) delete mats[k];
+        }
+      });
+      if (!Object.keys(mats).length) delete p.materiales;
     }
     const mo = p.mano_obra;
     if (mo && typeof mo === 'object' && !Array.isArray(mo)) {

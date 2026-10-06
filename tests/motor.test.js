@@ -199,15 +199,148 @@ test('Costura soldada vs engargolada: Pittsburgh no suelda la costura longitudin
   assert.equal(eng.qto.con.soldadura.kg_alambre, 0);
 });
 
-test('Pintura NINGUNA anula superficie, consumibles y tiempo; galvanizado no se pinta por defecto', () => {
+test('Pintura NINGUNA anula superficie, consumibles y tiempo; un sistema pedido en la partida vale para todo lo que se pinta', () => {
   const sin = C.cotizarPartida({ ...recto, pintura: 'NINGUNA' }, M);
   assert.equal(sin.costos.consumibles.pintura, 0);
   assert.equal(sin.qto.tmp.unitarios_min.pintura, 0);
-  const galv = C.cotizarPartida({ ...recto, material_id: 'GALVANIZADO' }, M);
-  assert.equal(galv.qto.pint.sistema, 'NINGUNA');
+  assert.equal(sin.qto.pint.A_pint_m2, 0, 'ni el ducto ni las bridas');
   const dos = C.cotizarPartida({ ...recto, pintura: 'PRIMARIO_ESMALTE' }, M);
   const uno = C.cotizarPartida({ ...recto, pintura: 'PRIMARIO' }, M);
   assert.ok(dos.costos.consumibles.pintura > uno.costos.consumibles.pintura);
+  // el sistema pedido pinta el ducto y las bridas, también en galvanizado (que por la regla del taller sólo pinta las bridas)
+  const galv = C.cotizarPartida({ ...recto, material_id: 'GALVANIZADO', pintura: 'PRIMARIO' }, M);
+  assert.deepEqual([galv.qto.pint.sistema, galv.qto.pint.sistema_bridas], ['PRIMARIO', 'PRIMARIO']);
+  casi(galv.qto.pint.A_pint_m2, galv.geometria.A_ext_m2 + galv.qto.her.A_pintura_aros_m2, 1e-12);
+});
+
+/* ---------- Pintura según el material y dónde va instalado (regla del taller) ---------- */
+
+/** Recalcula la pintura de una partida a mano: manos de cada parte, litros de cada mano, minutos y costo de la pintura. */
+function pinturaEsperada(r, sistemas, caras = 1) {
+  const P = M.proceso.pintura;
+  const A_cuerpo = r.geometria.A_ext_m2 * caras;
+  const A_aros = r.qto.her.A_pintura_aros_m2;
+  const partes = [['cuerpo', sistemas.cuerpo, A_cuerpo], ['bridas', sistemas.bridas, A_aros]].map(([id, sis, A]) => ({ id, capas: P.sistemas[sis], A: P.sistemas[sis].length ? A : 0 }));
+  const litros = {};
+  partes.forEach((x) => x.capas.forEach((c) => {
+    const cap = P.capas[c];
+    litros[c] = (litros[c] || 0) + x.A / (((10 * cap.sv_pct) / cap.dft_um) * cap.eta_transf);
+  }));
+  const L = Object.values(litros).reduce((a, b) => a + b, 0);
+  const costo = Object.keys(litros).reduce((a, c) => a + litros[c] * M.precios[P.capas[c].precio_ref], 0) + L * P.f_diluyente * M.precios[P.diluyente_precio_ref];
+  const minutos = partes.reduce((a, x) => a + x.A * (P.t_prep_min_m2 + x.capas.length * P.t_aplic_min_m2), 0);
+  return { A: partes.reduce((a, x) => a + x.A, 0), litros, L, costo, minutos };
+}
+
+test('Pintura: acero al carbón se pinta; en interior sólo pintura (esmalte), en exterior primario y pintura', () => {
+  const interior = C.cotizarPartida({ ...recto, ubicacion: 'INTERIOR' }, M);
+  const exterior = C.cotizarPartida({ ...recto, ubicacion: 'EXTERIOR' }, M);
+  const pi = interior.qto.pint;
+  const pe = exterior.qto.pint;
+  assert.deepEqual([pi.ubicacion, pi.sistema, pi.sistema_bridas, pi.capas], ['INTERIOR', 'ESMALTE', 'ESMALTE', ['esmalte']]);
+  assert.deepEqual([pe.ubicacion, pe.sistema, pe.sistema_bridas, pe.capas], ['EXTERIOR', 'PRIMARIO_ESMALTE', 'PRIMARIO_ESMALTE', ['primario', 'esmalte']]);
+  // se pinta el ducto y las bridas (dos aros en este tramo: brida de taller en ambos extremos)
+  casi(pi.A_pint_m2, interior.geometria.A_ext_m2 + interior.qto.her.A_pintura_aros_m2, 1e-12);
+  assert.ok(pi.A_pint_m2 > 2.9, 'el ducto lleva pintura');
+  // litros, tiempo y costo recalculados a mano
+  const ei = pinturaEsperada(interior, { cuerpo: 'ESMALTE', bridas: 'ESMALTE' });
+  const ee = pinturaEsperada(exterior, { cuerpo: 'PRIMARIO_ESMALTE', bridas: 'PRIMARIO_ESMALTE' });
+  [[interior, ei], [exterior, ee]].forEach(([r, esp]) => {
+    casi(r.qto.pint.A_pint_m2, esp.A, 1e-12);
+    casi(r.qto.con.pintura.L_pintura, esp.L, 1e-12);
+    r.qto.con.pintura.capas.forEach((c) => casi(c.litros, esp.litros[c.nombre], 1e-12, c.nombre));
+    casi(r.qto.tmp.unitarios_min.pintura, esp.minutos, 1e-12);
+    casi(r.costos.consumibles.pintura, esp.costo, 1e-12);
+  });
+  // el exterior lleva dos manos en la misma superficie: más litros, más minutos, más costo
+  assert.deepEqual(Object.keys(ei.litros), ['esmalte']);
+  assert.deepEqual(Object.keys(ee.litros), ['primario', 'esmalte']);
+  casi(pe.A_pint_m2, pi.A_pint_m2, 1e-12);
+  assert.ok(ee.minutos > ei.minutos && ee.L > ei.L && ee.costo > ei.costo);
+  assert.ok(exterior.precio.unitario > interior.precio.unitario);
+  // sin decir dónde va instalado, rige lo que dicen las tablas (interior)
+  casi(C.cotizarPartida(recto, M).precio.unitario, interior.precio.unitario, 1e-12);
+  const tablaExterior = crearMaestros({ proceso: { pintura: { ubicacion_defecto: 'EXTERIOR' } } });
+  casi(C.cotizarPartida(recto, tablaExterior).precio.unitario, exterior.precio.unitario, 1e-12);
+  // las dos caras del ducto duplican la superficie del ducto, no la de las bridas
+  const caras = C.cotizarPartida({ ...recto, ubicacion: 'INTERIOR', caras_pintadas: 2 }, M);
+  casi(caras.qto.pint.A_pint_m2, 2 * caras.geometria.A_ext_m2 + caras.qto.her.A_pintura_aros_m2, 1e-12);
+  casi(caras.qto.con.pintura.L_pintura, pinturaEsperada(caras, { cuerpo: 'ESMALTE', bridas: 'ESMALTE' }, 2).L, 1e-12);
+});
+
+test('Pintura: la lámina galvanizada no se pinta más que las bridas', () => {
+  const interior = C.cotizarPartida({ ...recto, material_id: 'GALVANIZADO', ubicacion: 'INTERIOR' }, M);
+  const exterior = C.cotizarPartida({ ...recto, material_id: 'GALVANIZADO', ubicacion: 'EXTERIOR' }, M);
+  assert.deepEqual([interior.qto.pint.sistema, interior.qto.pint.sistema_bridas], ['NINGUNA', 'ESMALTE']);
+  assert.deepEqual([exterior.qto.pint.sistema, exterior.qto.pint.sistema_bridas], ['NINGUNA', 'PRIMARIO_ESMALTE']);
+  [interior, exterior].forEach((r) => {
+    const aros = r.qto.her.A_pintura_aros_m2;
+    assert.ok(aros > 0, 'hay aros que pintar');
+    casi(r.qto.pint.A_pint_m2, aros, 1e-12, 'sólo se pintan los aros: el ducto no');
+    assert.equal(r.qto.pint.partes[0].A_m2, 0);
+    assert.ok(r.qto.pint.A_pint_m2 < 0.5, 'unas décimas de m², no los ~3 m² del ducto');
+  });
+  const ei = pinturaEsperada(interior, { cuerpo: 'NINGUNA', bridas: 'ESMALTE' });
+  const ee = pinturaEsperada(exterior, { cuerpo: 'NINGUNA', bridas: 'PRIMARIO_ESMALTE' });
+  [[interior, ei], [exterior, ee]].forEach(([r, esp]) => {
+    casi(r.qto.con.pintura.L_pintura, esp.L, 1e-12);
+    casi(r.qto.tmp.unitarios_min.pintura, esp.minutos, 1e-12);
+    casi(r.costos.consumibles.pintura, esp.costo, 1e-12);
+  });
+  // las dos caras del ducto no cambian nada: el ducto no se pinta
+  const caras = C.cotizarPartida({ ...recto, material_id: 'GALVANIZADO', caras_pintadas: 2 }, M);
+  casi(caras.qto.pint.A_pint_m2, interior.qto.pint.A_pint_m2, 1e-12);
+  // pintar el galvanizado cuesta mucho menos que pintar acero al carbón
+  const carbon = C.cotizarPartida({ ...recto, ubicacion: 'EXTERIOR' }, M);
+  assert.ok(exterior.costos.consumibles.pintura < 0.1 * carbon.costos.consumibles.pintura);
+  assert.ok(exterior.qto.tmp.unitarios_min.pintura < 0.1 * carbon.qto.tmp.unitarios_min.pintura);
+  // con unión de espiga no hay aros: el galvanizado no lleva pintura alguna
+  const espiga = C.cotizarPartida({ ...recto, material_id: 'GALVANIZADO', tipo_union: 'ESPIGA', ubicacion: 'EXTERIOR' }, M);
+  assert.equal(espiga.qto.pint.A_pint_m2, 0);
+  assert.equal(espiga.costos.consumibles.pintura, 0);
+  // el aro suelto también se pinta: las bridas del tramo de ajuste cuentan
+  const sueltaG = C.cotizarPartida({ ...recto, material_id: 'GALVANIZADO', yarda_mm: 1220, extremo_ajuste: 'SUELTA' }, M);
+  const sinG = C.cotizarPartida({ ...recto, material_id: 'GALVANIZADO', yarda_mm: 1220, extremo_ajuste: 'SIN_BRIDA' }, M);
+  assert.equal(sueltaG.qto.her.aros_sueltos.length, 1);
+  casi(sueltaG.qto.pint.A_pint_m2, 2 * sinG.qto.pint.A_pint_m2, 1e-12, 'un aro de taller y uno suelto contra uno sólo');
+  // un sistema pedido en la partida pinta el ducto también
+  const pedida = C.cotizarPartida({ ...recto, material_id: 'GALVANIZADO', pintura: 'ESMALTE' }, M);
+  casi(pedida.qto.pint.A_pint_m2, pedida.geometria.A_ext_m2 + pedida.qto.her.A_pintura_aros_m2, 1e-12);
+});
+
+test('Pintura: el inoxidable no se pinta, en interior ni en exterior', () => {
+  ['INOX_304', 'INOX_316'].forEach((material_id) => ['INTERIOR', 'EXTERIOR'].forEach((ubicacion) => {
+    const r = C.cotizarPartida({ ...recto, material_id, ubicacion }, M);
+    assert.equal(r.qto.pint.A_pint_m2, 0, `${material_id} ${ubicacion}`);
+    assert.equal(r.costos.consumibles.pintura, 0);
+    assert.equal(r.qto.tmp.unitarios_min.pintura, 0);
+  }));
+  // pedirle pintura a una partida de inoxidable sí la pinta (el taller lo decide)
+  assert.ok(C.cotizarPartida({ ...recto, material_id: 'INOX_304', pintura: 'ESMALTE' }, M).qto.pint.A_pint_m2 > 0);
+});
+
+test('Instalación (interior / exterior): la cotización la fija y la partida la puede cambiar; vale sólo para la pintura', () => {
+  const R = { ...recto };
+  const cot = (ubicacion, partidas) => C.cotizar({ ubicacion, partidas }, M);
+  const interior = cot('INTERIOR', [R]).partidas[0];
+  const exterior = cot('EXTERIOR', [R]).partidas[0];
+  assert.equal(exterior.entrada.ubicacion, 'EXTERIOR');
+  assert.deepEqual([interior.qto.pint.sistema, exterior.qto.pint.sistema], ['ESMALTE', 'PRIMARIO_ESMALTE']);
+  // la partida que trae la suya la conserva; vacío = según la cotización
+  const mixta = cot('EXTERIOR', [R, { ...R, ubicacion: 'INTERIOR' }, { ...R, ubicacion: '' }, { ...R, ubicacion: null }]);
+  assert.deepEqual(mixta.partidas.map((f) => f.qto.pint.ubicacion), ['EXTERIOR', 'INTERIOR', 'EXTERIOR', 'EXTERIOR']);
+  // sin elegir, las tablas (interior)
+  assert.equal(cot(undefined, [R]).partidas[0].qto.pint.ubicacion, 'INTERIOR');
+  // la instalación sólo cambia la pintura: la geometría, la lámina y el resto del costo son los mismos
+  casi(exterior.geometria.A_neta_m2, interior.geometria.A_neta_m2, 1e-12);
+  casi(exterior.costos.materiales.lamina, interior.costos.materiales.lamina, 1e-12);
+  const sinPintar = (r) => r.costos.CD - r.costos.consumibles.pintura - r.costos.mano_obra.pintura - r.costos.equipo.pintura - r.costos.herramienta_menor;
+  assert.ok(Math.abs(sinPintar(exterior) - sinPintar(interior)) < 0.05 * sinPintar(interior), 'el resto del costo es el mismo (la herramienta menor sigue a la mano de obra)');
+  // un valor que no existe se rechaza con su nombre
+  ['PATIO', 'interior', 1, true, [], {}].forEach((x) => assert.throws(() => C.cotizarPartida({ ...R, ubicacion: x }, M), /Ubicación de la instalación: .* no existe \(use INTERIOR, EXTERIOR\)/, String(x)));
+  // una pieza comprada no se pinta: no le afecta
+  const comprada = cot('EXTERIOR', [{ familia: 'COMPRADO', precio_compra_unitario: 100, peso_kg: 1 }]).partidas[0];
+  assert.equal(comprada.ok, true);
 });
 
 test('Inoxidable: soldadura TIG, varilla y argón propios; más horas de soldadura que acero al carbón', () => {

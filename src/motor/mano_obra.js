@@ -88,7 +88,8 @@
     const t_acabado = mat.f_acabado * t_sold;
 
     /* --- Pintura (preparación + aplicación por mano) --- */
-    const t_pintura = pint.A_pint_m2 * (P.pintura.t_prep_min_m2 + pint.capas.length * P.pintura.t_aplic_min_m2);
+    // cada parte (ducto, bridas) se prepara una vez y recibe sus propias manos
+    const t_pintura = pint.partes.reduce((s, x) => s + x.A_m2 * (P.pintura.t_prep_min_m2 + x.capas.length * P.pintura.t_aplic_min_m2), 0);
 
     /* --- Inspección y embalaje --- */
     const m_neta_total = lam.m_neta_kg + her.m_aros_neta_kg + her.m_aros_sueltos_neta_kg; // todo lo que se manda se inspecciona y se embala

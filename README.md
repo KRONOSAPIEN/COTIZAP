@@ -19,7 +19,7 @@ Cotizador para ducterías de lámina (colección de polvo y control ambiental). 
 **Usar la app.** Abra `src/web/index.html` en el navegador (doble clic). No necesita servidor ni instalación; la cotización se guarda en el propio navegador y las tablas maestras se guardan solas cada vez que las cambia (ver [Dónde se guardan los precios](#dónde-se-guardan-los-precios)). Arranca con una cotización de ejemplo para explorar el cálculo. Las tipografías (Barlow, IBM Plex Mono) se piden a Google Fonts; sin conexión se usan las del sistema.
 
 1. **Tablas maestras** → capture precios, tarifas y velocidades reales.
-2. **Cotización** → en el encabezado elija el **ancho de la yarda** (3 ó 4 pies) de los tramos rectos y ajuste, para esa cotización, el **margen de utilidad, la comisión, el descuento y los días de cobro** (y, en *Más parámetros de precio*, administración, financiamiento e IVA) sin ir a las tablas maestras; luego *Agregar partida*, elija la familia y capture dimensiones; el precio se recalcula mientras escribe.
+2. **Cotización** → en el encabezado elija el **ancho de la yarda** (3 ó 4 pies) de los tramos rectos, la **instalación** (interior o exterior: decide la pintura) y ajuste, para esa cotización, el **margen de utilidad, la comisión, el descuento y los días de cobro** (y, en *Más parámetros de precio*, administración, financiamiento e IVA) sin ir a las tablas maestras; luego *Agregar partida*, elija la familia y capture dimensiones; el precio se recalcula mientras escribe.
 3. Seleccione una partida para ver el desglose: geometría, merma, tiempos, consumibles y cada capa del precio.
 4. *Imprimir propuesta* genera la hoja para el cliente (sin costos internos). *Guardar y cargar* exporta/importa JSON y copia un CSV de partidas para Excel.
 
@@ -44,7 +44,7 @@ const r = cotizarPartida({
   D_mm: 304.8, L_mm: 3000, tipo_union: 'BRIDADO', cantidad: 1,
 }, M);
 
-console.log(r.precio.unitario);            // 3645.10 MXN (mano de obra a $500/h; una brida de taller y, en el extremo del ajuste, el aro suelto terminado)
+console.log(r.precio.unitario);            // 3666.59 MXN (mano de obra a $500/h; una brida de taller, el aro suelto del extremo del ajuste y pintura de interior)
 console.log(r.peso.neto_total_kg);         // 37.564 kg (lámina + aro de brida + aro suelto)
 console.log(r.pila);                       // CD, CI, imprevistos, financiamiento, utilidad…
 console.log(r.qto);                        // cantidades físicas, sin precios
@@ -126,6 +126,18 @@ El taller no rola un tramo de 3 m de una pieza: rola **yardas**, anillos del **a
 | Brida de taller | Se fabrica y se suelda en taller, como en los demás extremos | $3,853.28 |
 
 Cada yarda se **rola por separado** (tiempo fijo por anillo), las juntas entre yardas son **engargolado** (con sellador), cada plantilla de una yarda sale con un solo tajo a lo ancho de la hoja y el precio de la lámina se busca con ese ancho de hoja. El desglose muestra el armado con un diagrama (anillos, bridas de taller, el extremo libre y su aro suelto), la tabla de piezas y el aro suelto en los herrajes. Los parámetros están en *Tablas maestras → Proceso de fabricación → armado yardas*; el documento explica la regla ([§3.2](docs/arquitectura-cotizador-ducterias.md#32-tramo-recto-armado-por-yardas)), la brida suelta ([§3.5.7](docs/arquitectura-cotizador-ducterias.md#357-brida-suelta-extremo-libre-del-tramo-de-ajuste)) y sus supuestos por confirmar ([§10.9](docs/arquitectura-cotizador-ducterias.md#109-supuestos-del-armado-por-yardas-por-confirmar)). Una cotización guardada con la opción anterior (*sí/no* para la brida del ajuste) se convierte sola: *sí* = sin brida, *no* = brida de taller.
+
+## Pintura según el material y la instalación
+
+Lo que se pinta depende del **material**, y el sistema, de **dónde va instalado el ducto** (se elige en el encabezado de la cotización, *Instalación*, y cada partida puede traer la suya):
+
+| Material | Ducto | Bridas |
+| --- | --- | --- |
+| **Acero al carbón** | Interior: **sólo pintura** (esmalte) · Exterior: **primario y pintura** | Igual que el ducto |
+| **Lámina galvanizada** | **No se pinta** | Interior: sólo pintura · Exterior: primario y pintura |
+| Acero inoxidable | No se pinta | No se pinta |
+
+El ducto y las bridas se calculan por separado (superficie, manos, litros y tiempo); el aro suelto del tramo de ajuste se pinta como las demás bridas. Si una partida elige un sistema de pintura, vale para todo lo que se pinta. Qué sistema lleva cada material y la instalación por omisión (*interior*) están en *Tablas maestras*; el documento explica la regla ([§4.3](docs/arquitectura-cotizador-ducterias.md#43-consumibles)) y sus supuestos por confirmar ([§10.10](docs/arquitectura-cotizador-ducterias.md#1010-supuestos-de-la-pintura-por-confirmar)). Una cotización guardada sin instalación abre en interior.
 
 ## Brida estándar del taller
 

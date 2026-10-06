@@ -286,7 +286,7 @@
     const M = ef.M;
     const problemas = VAL.problemasMaestros(M); // una sola vez para todas las partidas
     // Valores de la cotización que heredan las partidas que no los traen (o los dejan vacíos: «según la cotización»)
-    const defs = { riesgo: c.riesgo || 'MEDIO', servicio: c.servicio, ...(esObjeto(c.defaults) ? c.defaults : {}) };
+    const defs = { riesgo: c.riesgo || 'MEDIO', servicio: c.servicio, ubicacion: c.ubicacion, ...(esObjeto(c.defaults) ? c.defaults : {}) };
     Object.keys(defs).forEach((k) => sinValor(defs[k]) && delete defs[k]);
     const yarda = yardaDeCotizacion(c, M);
     const heredar = (p) => {

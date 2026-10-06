@@ -40,9 +40,10 @@ function generador(semilla) {
       material_id: pick(['ACERO_CARBON', 'GALVANIZADO', 'INOX_304', 'INOX_316']), calibre: pick([10, 12, 14, 16, 18, 20, 22, 24, 26, 28]),
       tipo_union: pick(['BRIDADO', 'BRIDADO', 'ESPIGA', 'LISO']), clase_sellado: pick(['C', 'B', 'A', 'NINGUNA']),
       cantidad: Math.ceil(u(0, 1) ** 2 * 40) || 1, servicio: pick(['POLVO', 'VENTILACION', 'ABRASIVO']), riesgo: pick(['BAJO', 'MEDIO', 'ALTO']),
-      ref_diametro: pick(['INTERIOR', 'EXTERIOR']), pintura: pick(['', 'NINGUNA', 'PRIMARIO', 'PRIMARIO_ESMALTE']),
+      ref_diametro: pick(['INTERIOR', 'EXTERIOR']), pintura: pick(['', '', 'NINGUNA', 'ESMALTE', 'PRIMARIO', 'PRIMARIO_ESMALTE']), ubicacion: pick(['', 'INTERIOR', 'EXTERIOR']),
     };
     if (o.pintura === '') delete o.pintura;
+    if (o.ubicacion === '') delete o.ubicacion;
     const pc = maybe(0.15, () => pick(['GUILLOTINA', 'PLASMA', 'LASER'])); if (pc) o.proceso_corte = pc;
     const mp = maybe(0.15, () => r1(u(0, 0.5), 3)); if (mp !== undefined) o.merma_pct = mp;
     const pf = maybe(0.2, () => pick(['SOL38x4.8', 'L25x3.2', 'L38x3.2', 'L38x4.8', 'L51x4.8', 'L64x6.4'])); if (pf) o.perfil_id = pf;
@@ -252,7 +253,7 @@ test('Espesor propio: dentro de los límites del taller; un calibre que no exist
 test('Valores que sólo admiten una lista (forma, servicio, riesgo, unión…): lo que no existe se rechaza, el vacío es «según la cotización»', () => {
   const casos = [
     ['RECTO', 'forma', 'REDONDO'], ['RECTO', 'tipo_costura', 'SOLDADA'], ['RECTO', 'ref_diametro', 'EXT'], ['RECTO', 'servicio', 'AGUA'], ['RECTO', 'riesgo', 'EXTREMO'],
-    ['RECTO', 'tipo_union', 'PEGAMENTO'], ['RECTO', 'clase_sellado', 'Z'], ['RECTO', 'pintura', 'ORO'], ['RECTO', 'proceso_corte', 'MACHETE'], ['RECTO', 'perfil_id', 'XYZ'],
+    ['RECTO', 'tipo_union', 'PEGAMENTO'], ['RECTO', 'clase_sellado', 'Z'], ['RECTO', 'pintura', 'ORO'], ['RECTO', 'ubicacion', 'PATIO'], ['CODO', 'ubicacion', 'interior'], ['RECTO', 'proceso_corte', 'MACHETE'], ['RECTO', 'perfil_id', 'XYZ'],
     ['RECTO', 'material_id', 'TITANIO'], ['CODO', 'forma', 'abc'], ['REDUCCION', 'excentrica', 'LADO'], ['COMPRADO', 'riesgo', 'EXTREMO'],
   ];
   casos.forEach(([n, campo, valor]) => assert.throws(() => C.cotizarPartida({ ...PLANTILLAS[n], [campo]: valor }, M), U.ErrorValidacion, `${n}.${campo}=${valor}`));
@@ -260,7 +261,7 @@ test('Valores que sólo admiten una lista (forma, servicio, riesgo, unión…): 
   assert.throws(() => C.cotizarPartida({ ...PLANTILLAS.RECTO, familia: 'constructor' }, M), /Familia desconocida/);
   assert.throws(() => C.cotizarPartida({ ...PLANTILLAS.RECTO, material_id: 'constructor' }, M), /Material desconocido/);
   assert.throws(() => C.cotizarPartida({ ...PLANTILLAS.RECTO, material_id: '__proto__' }, M), /Material desconocido/);
-  const sinVacios = C.cotizarPartida({ ...PLANTILLAS.RECTO, servicio: '', riesgo: ' ', pintura: null, perfil_id: '', proceso_corte: '' }, M);
+  const sinVacios = C.cotizarPartida({ ...PLANTILLAS.RECTO, servicio: '', riesgo: ' ', pintura: null, ubicacion: '', perfil_id: '', proceso_corte: '' }, M);
   assert.equal(sinVacios.precio.importe, C.cotizarPartida({ ...PLANTILLAS.RECTO, servicio: undefined }, M).precio.importe);
 });
 
@@ -358,6 +359,50 @@ test('Ancho de la yarda y tramo de ajuste: límites, tipo y valores de las tabla
 });
 
 /* ---------- 4 · tablas maestras ---------- */
+
+test('Maestros de pintura: la ubicación por omisión, las manos de cada sistema y el sistema de cada material deben existir', () => {
+  const malo = (arreglo) => { const Mx = crearMaestros(); arreglo(Mx); return V.problemasMaestros(Mx).map(V.textoProblema).join(' | '); };
+  assert.equal(malo(() => {}), '');
+  ['patio', 'EXTERIOR ', '', 5, null].forEach((x) => assert.match(malo((Mx) => { Mx.proceso.pintura.ubicacion_defecto = x; }), /pintura › ubicacion defecto: debe ser INTERIOR o EXTERIOR/, `ubicación ${JSON.stringify(x)}`));
+  assert.match(malo((Mx) => { Mx.proceso.pintura.sistemas.ESMALTE = ['barniz']; }), /sistemas › ESMALTE › 0: debe ser una mano de «proceso › pintura › capas» \(primario, esmalte\); vale barniz/);
+  assert.match(malo((Mx) => { Mx.proceso.pintura.sistemas.ESMALTE = 'esmalte'; }), /sistemas › ESMALTE: debe ser una lista de manos/);
+  assert.match(malo((Mx) => { Mx.materiales.ACERO_CARBON.pintura_cuerpo.EXTERIOR = 'ORO'; }), /materiales › ACERO CARBON › pintura cuerpo › EXTERIOR: debe ser un sistema de pintura de «proceso › pintura › sistemas» \(NINGUNA, ESMALTE, PRIMARIO, PRIMARIO_ESMALTE\); vale ORO/);
+  assert.match(malo((Mx) => { Mx.materiales.GALVANIZADO.pintura_bridas.INTERIOR = undefined; }), /GALVANIZADO › pintura bridas › INTERIOR: debe ser un sistema de pintura/);
+  assert.match(malo((Mx) => { delete Mx.materiales.INOX_304.pintura_cuerpo; }), /INOX 304 › pintura cuerpo: falta el sistema de pintura por ubicación/);
+  // un sistema que existe pero lo agregó el taller sí vale, y se pinta con él
+  const propio = crearMaestros();
+  propio.proceso.pintura.sistemas.DOBLE_ESMALTE = ['esmalte', 'esmalte'];
+  propio.materiales.ACERO_CARBON.pintura_cuerpo.INTERIOR = 'DOBLE_ESMALTE';
+  assert.deepEqual(V.problemasMaestros(propio), []);
+  const con = C.cotizarPartida({ ...PLANTILLAS.RECTO, ubicacion: 'INTERIOR' }, propio);
+  assert.deepEqual(con.qto.pint.partes[0].capas, ['esmalte', 'esmalte']);
+  // y la partida con un maestro roto no se calcula con valores inventados
+  const roto = crearMaestros();
+  roto.materiales.ACERO_CARBON.pintura_cuerpo.INTERIOR = 'ORO';
+  assert.throws(() => C.cotizarPartida(PLANTILLAS.RECTO, roto), /Tablas maestras · materiales › ACERO CARBON › pintura cuerpo › INTERIOR/);
+});
+
+test('Un parche guardado con la pintura por defecto de cada material (versión anterior) la pierde: ahora rige la regla por ubicación', () => {
+  const viejo = { materiales: { ACERO_CARBON: { pintura_defecto: 'NINGUNA', f_acabado: 0.3 }, GALVANIZADO: { pintura_defecto: 'PRIMARIO' } }, precios: { precio_L_esmalte: 300 } };
+  const migrado = crearMaestros(viejo);
+  assert.equal('pintura_defecto' in migrado.materiales.ACERO_CARBON, false);
+  assert.equal('pintura_defecto' in migrado.materiales.GALVANIZADO, false);
+  assert.equal(migrado.materiales.ACERO_CARBON.f_acabado, 0.3, 'lo demás del parche se respeta');
+  assert.equal(migrado.precios.precio_L_esmalte, 300);
+  assert.deepEqual(migrado.materiales.ACERO_CARBON.pintura_cuerpo, M.materiales.ACERO_CARBON.pintura_cuerpo);
+  assert.deepEqual(V.problemasMaestros(migrado), []);
+  // no queda anotado como «valor ignorado»: se migró, no se descartó
+  const leido = require('../src/datos/maestros').leerParche(viejo);
+  assert.deepEqual(leido.descartados, []);
+  assert.deepEqual(Object.keys(leido.parche.materiales), ['ACERO_CARBON']);
+  // un parche que sólo traía la pintura por defecto no deja materiales vacíos
+  assert.equal('materiales' in require('../src/datos/maestros').leerParche({ materiales: { GALVANIZADO: { pintura_defecto: 'NINGUNA' } } }).parche, false);
+  // y el que cambia la regla nueva se respeta
+  const nuevo = crearMaestros({ materiales: { GALVANIZADO: { pintura_cuerpo: { INTERIOR: 'ESMALTE' } } } });
+  assert.equal(nuevo.materiales.GALVANIZADO.pintura_cuerpo.INTERIOR, 'ESMALTE');
+  assert.equal(nuevo.materiales.GALVANIZADO.pintura_cuerpo.EXTERIOR, 'NINGUNA', 'la otra ubicación sigue como estaba');
+  assert.ok(C.cotizarPartida({ ...PLANTILLAS.RECTO, material_id: 'GALVANIZADO', ubicacion: 'INTERIOR' }, nuevo).qto.pint.partes[0].A_m2 > 0);
+});
 
 test('Maestros sanos: sin problemas', () => {
   assert.deepEqual(V.problemasMaestros(M), []);
@@ -467,7 +512,7 @@ test('cotizar() no lanza con cotizaciones, partidas o parámetros mal formados',
 
 test('Una falla inesperada dentro del cálculo de una partida no tumba la cotización: queda como error de esa partida', () => {
   const Mx = crearMaestros();
-  Mx.proceso.pintura = null; // estructura rota que ninguna validación previa de valores detecta
+  Mx.proceso.corte = null; // estructura rota que ninguna validación previa de valores detecta
   const res = C.cotizar({ partidas: [PLANTILLAS.RECTO, PLANTILLAS.COMPRADO] }, Mx);
   assert.equal(res.partidas[0].ok, false);
   assert.equal(res.partidas[0].interno, true);

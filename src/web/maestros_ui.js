@@ -55,12 +55,24 @@
 
   // Datos de texto que sólo admiten ciertos valores: se eligen de una lista (si se tecleara «suelta» en vez de «SUELTA», el
   // cálculo se detendría hasta corregirlo). Cada lista se arma al dibujar el campo: puede depender de otras tablas.
-  const OPCIONES_TEXTO = {
-    'proceso.armado_yardas.extremo_ajuste_defecto': () => W.OPC.ajuste,
-    'proceso.armado_yardas.junta_entre_yardas': () => {
+  // [patrón de la ruta, opciones]
+  const sistemasDePintura = () => {
+    const nombres = Object.fromEntries(W.OPC.pintura.filter(([v]) => v));
+    return Object.keys(W.estadoApp.M.proceso.pintura.sistemas).map((k) => [k, nombres[k] || k]);
+  };
+  const OPCIONES_TEXTO = [
+    [/^proceso\.armado_yardas\.extremo_ajuste_defecto$/, () => W.OPC.ajuste],
+    [/^proceso\.armado_yardas\.junta_entre_yardas$/, () => {
       const c = W.estadoApp.M.proceso.costuras;
       return Object.keys(c).map((k) => [k, c[k] && c[k].nombre ? c[k].nombre : k]);
-    },
+    }],
+    [/^proceso\.pintura\.ubicacion_defecto$/, () => W.OPC.ubicacion.filter(([v]) => v)],
+    [/^materiales\.[^.]+\.pintura_(cuerpo|bridas)\.(INTERIOR|EXTERIOR)$/, sistemasDePintura],
+  ];
+  const opcionesDeTexto = (ruta) => {
+    const clave = ruta.join('.');
+    const par = OPCIONES_TEXTO.find(([patron]) => patron.test(clave));
+    return par ? par[1]() : null;
   };
 
   function fila(ruta, valor, etiquetaPropia) {
@@ -70,7 +82,7 @@
     const mostrado = pct ? Number((valor * 100).toFixed(6)) : valor;
     const id = `m_${ruta.join('__')}`;
     const buscar = `${ruta.join(' ')} ${etiqueta(ruta.join(' '))} ${etiquetaPropia || ''}`.toLowerCase();
-    const lista = typeof valor === 'string' && OPCIONES_TEXTO[ruta.join('.')] ? OPCIONES_TEXTO[ruta.join('.')]() : null;
+    const lista = typeof valor === 'string' ? opcionesDeTexto(ruta) : null;
     let ctl;
     if (lista) {
       const ops = lista.some(([v]) => v === valor) ? lista : [[valor, `${valor} (no válido)`], ...lista]; // un valor guardado que no está en la lista se muestra, marcado

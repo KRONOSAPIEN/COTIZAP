@@ -217,17 +217,49 @@
     return out;
   }
 
-  /** Superficie a pintar y manos del sistema de pintura. */
+  /** Dónde va instalado el ducto; de eso depende el sistema de pintura. */
+  const UBICACIONES = ['INTERIOR', 'EXTERIOR'];
+
+  /**
+   * Superficie a pintar y manos de pintura, por PARTE: el cuerpo del ducto y los aros de brida (los de taller y los sueltos).
+   * El sistema de cada parte sale de:
+   *   · la partida, si pide uno (`pintura`): vale para todo lo que se pinta;
+   *   · si no, el del material según dónde va instalado el ducto (`ubicacion`: interior o exterior): `pintura_cuerpo` para el
+   *     ducto y `pintura_bridas` para los aros. Regla del taller: el acero al carbón se pinta (interior: sólo pintura; exterior:
+   *     primario y pintura); el galvanizado no se pinta más que las bridas; el inoxidable no se pinta.
+   * `caras_pintadas` (1 ó 2) cuenta las caras del ducto que se pintan; los aros llevan sus dos caras y el canto.
+   * Devuelve { ubicacion, sistema (del cuerpo), sistema_bridas, capas (manos distintas que se aplican), caras, A_pint_m2,
+   * partes: [{ id: 'cuerpo' | 'bridas', sistema, capas, A_m2 }] }.
+   */
   function pintura(PF, her, p, mat, M) {
-    const sistema = p.pintura || mat.pintura_defecto || 'NINGUNA';
-    const capas = M.proceso.pintura.sistemas[sistema];
-    exigir(capas, `Sistema de pintura desconocido: ${sistema}`);
+    const P = M.proceso.pintura;
+    const ubicacion = p.ubicacion || P.ubicacion_defecto || 'INTERIOR';
+    exigir(UBICACIONES.includes(ubicacion), `La ubicación de la instalación «${ubicacion}» no existe (use ${UBICACIONES.join(', ')}).`);
+    const delMaterial = (campo) => (mat[campo] && mat[campo][ubicacion]) || 'NINGUNA';
     const caras = p.caras_pintadas === 2 ? 2 : 1;
-    const A_pint = capas.length ? (PF.A_ext_m2 * caras + her.A_pintura_aros_m2) : 0;
-    return { sistema, capas, caras, A_pint_m2: A_pint };
+    const parte = (id, sistema, A_m2) => {
+      const capas = P.sistemas[sistema];
+      exigir(capas, `Sistema de pintura desconocido: ${sistema}`);
+      return { id, sistema, capas, A_m2: capas.length ? A_m2 : 0 };
+    };
+    const partes = [
+      parte('cuerpo', p.pintura || delMaterial('pintura_cuerpo'), PF.A_ext_m2 * caras),
+      parte('bridas', p.pintura || delMaterial('pintura_bridas'), her.A_pintura_aros_m2),
+    ];
+    const manos = [];
+    partes.forEach((x) => x.capas.forEach((c) => { if (!manos.includes(c)) manos.push(c); }));
+    return {
+      ubicacion,
+      sistema: partes[0].sistema,
+      sistema_bridas: partes[1].sistema,
+      capas: manos,
+      caras,
+      A_pint_m2: partes.reduce((s, x) => s + x.A_m2, 0),
+      partes,
+    };
   }
 
   return {
-    espesorMm, perfilDerivado, seleccionarPerfil, lamina, geometriaAro, herrajes, pintura,
+    UBICACIONES, espesorMm, perfilDerivado, seleccionarPerfil, lamina, geometriaAro, herrajes, pintura,
   };
 }));
