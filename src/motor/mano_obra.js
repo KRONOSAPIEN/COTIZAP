@@ -17,7 +17,7 @@
 
   const OPERACIONES = ['corte', 'rolado', 'armado', 'aros', 'soldadura', 'engargolado', 'barrenado', 'acabado', 'pintura', 'qc_embalaje'];
 
-  /** Tarifa horaria cargada: mo_h = salario_hora · FSR (el factor de salario real suma prestaciones al salario). */
+  /** Tarifa horaria cargada: mo_h = salario_hora · FSR (el factor de salario real suma las prestaciones; con FSR = 1 el salario ya es el costo). */
   function tarifa(M, op) {
     const o = M.mano_obra.operaciones[op];
     if (!o) throw new U.ErrorValidacion([`Operación sin tarifa: ${op}`]);

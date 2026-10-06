@@ -44,7 +44,7 @@ const r = cotizarPartida({
   D_mm: 304.8, L_mm: 3000, tipo_union: 'BRIDADO', cantidad: 1,
 }, M);
 
-console.log(r.precio.unitario);            // 4488.2 MXN (mano de obra a $500/h)
+console.log(r.precio.unitario);            // 3622.52 MXN (mano de obra a $500/h)
 console.log(r.peso.neto_total_kg);         // 37.564 kg (lámina + aros de brida)
 console.log(r.pila);                       // CD, CI, imprevistos, financiamiento, utilidad…
 console.log(r.qto);                        // cantidades físicas, sin precios
@@ -69,9 +69,9 @@ Cada cambio en **Tablas maestras** (lista del proveedor, precios, tarifas, tiemp
 
 ## Mano de obra y precios del proveedor
 
-- **Mano de obra:** los trabajadores ganan **$500 por hora**; el salario se captura por hora en cada operación y el costo de la hora es salario × FSR (1.55 → $775). Si los $500 ya incluyen las prestaciones, FSR = 1.00 en *Tablas maestras → Mano de obra y equipo*.
+- **Mano de obra:** los trabajadores ganan **$500 por hora, ya con prestaciones**: el salario se captura por hora en cada operación y el costo de la hora es salario × FSR, con FSR = 1.00 (el factor queda en *Tablas maestras → Mano de obra y equipo* por si algún día el salario se captura sin prestaciones).
 - **Lista de precios del proveedor** (primer grupo de *Tablas maestras*): hojas y barras **por pieza y con IVA incluido**, tal como las cotiza el proveedor (lámina galvanizada 4 × 10 cal. 22 = $920, cal. 24 = $700, la factura del 30-sep-2026, etc.). El cotizador las convierte a **$/kg sin IVA** con los kg de la pieza y las usa para la lámina (mismo material y calibre) y para los aros (barra del perfil); lo que no está cotizado usa el precio por kg de respaldo. Cada renglón muestra su precio sin IVA, sus kg, su $/kg y si el cálculo lo usa; el desglose de cada partida dice de dónde salió el precio de su lámina y de sus aros.
-- Se confirman seis supuestos con el proveedor y el taller (IVA incluido, largo de barra de 6.10 m, qué son los $500, calibres sin cotizar, lámina por fracción de hoja, placa 3 × 8): [§10.6 del documento](docs/arquitectura-cotizador-ducterias.md#106-supuestos-de-la-lista-del-proveedor-y-de-la-mano-de-obra-por-confirmar).
+- Quedan cuatro supuestos por confirmar con el proveedor (IVA incluido en sus precios, calibres sin cotizar, lámina por fracción de hoja, placa 3 × 8): [§10.6 del documento](docs/arquitectura-cotizador-ducterias.md#106-supuestos-de-la-lista-del-proveedor-por-confirmar). Las barras de ángulo y solera se consideran de 6 m.
 
 ## Brida estándar del taller
 

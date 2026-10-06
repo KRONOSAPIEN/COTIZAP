@@ -18,7 +18,7 @@
   const GRUPOS = [
     ['proveedor', 'Lista de precios del proveedor', 'Lo que cotiza el proveedor de acero, por pieza (hoja o barra) y con IVA incluido. El cálculo lo convierte a precio por kg sin IVA.'],
     ['precios', 'Precios', 'Variables referenciales en MXN, sin IVA. Los precios por kg de lámina y perfil sólo se usan para lo que no esté en la lista del proveedor.'],
-    ['mano_obra', 'Mano de obra y equipo', 'Costo por hora = salario por hora × FSR. FSR = Factor de Salario Real (suma las prestaciones al salario).'],
+    ['mano_obra', 'Mano de obra y equipo', 'Costo por hora = salario por hora × FSR. El salario del taller ya incluye prestaciones, por eso FSR = 1.00 (el Factor de Salario Real las suma cuando el salario no las trae).'],
     ['merma', 'Merma por familia', 'Fracción del material comprado que no queda en la pieza (se captura en %).'],
     ['capas', 'Pila de precio', 'Indirectos, imprevistos, financiamiento, utilidad, comisión e IVA.'],
     ['proceso', 'Proceso de fabricación', 'Velocidades, tiempos fijos, soldadura, pintura y eficiencia del taller.'],

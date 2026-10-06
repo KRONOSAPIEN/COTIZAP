@@ -103,7 +103,7 @@ test('Cantidades múltiples: sin setup el precio unitario no cambia; con corte C
   // Ahorro exacto: P(10) = 10·P(1) − 9·ΔP_setup, con ΔP_setup = K·[(1+adm)·CD_setup + GIF·h_setup]
   const K = ((1 + 0.04) * (1 + (0.14 * 45) / 365)) / (1 - 0.2 - 0.02);
   const h_setup = M.proceso.corte.t_prog_cnc_min / M.proceso.eficiencia_taller / 60;
-  const mo_h = 500 * 1.55; // $500 por hora × FSR
+  const mo_h = 500 * 1.0; // $500 por hora, ya con prestaciones (FSR = 1.00)
   const CD_setup = h_setup * (mo_h + 45) + 0.03 * h_setup * mo_h;
   const dP_setup = K * ((1 + 0.08) * CD_setup + 85 * h_setup);
   casi(c10.pila.precio, c1.pila.precio * 10 - 9 * dP_setup, 1e-9);

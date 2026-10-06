@@ -44,8 +44,8 @@ test('Cotizaciones de WhatsApp: galvanizada 4 × 10 cal. 22 = $920, cal. 24 = $7
   assert.equal(M.proveedor.iva_incluido_pct, 0.16, 'los precios traen IVA');
   // con IVA incluido el $/kg de cada pieza cae en la banda de la factura (acero negro ≈ $22.5/kg; perfiles ≈ $24–27/kg sin IVA)
   const kg = (id) => porId(id).precio_kg;
-  assert.ok(kg('ANG_1_1_4X1_8') > 24 && kg('ANG_1_1_4X1_8') < 27);
-  assert.ok(kg('SOL_1_1_4X1_8') > 24 && kg('SOL_1_1_4X1_8') < 27.5);
+  assert.ok(kg('ANG_1_1_4X1_8') > 24 && kg('ANG_1_1_4X1_8') < 28);
+  assert.ok(kg('SOL_1_1_4X1_8') > 24 && kg('SOL_1_1_4X1_8') < 28);
   assert.ok(kg('GALV_C22_4X10') > 28 && kg('GALV_C22_4X10') < 33);
 });
 
@@ -72,13 +72,14 @@ test('Hojas: kg = ancho · largo · espesor del calibre · densidad; $/kg = (pre
 
 test('Barras: peso lineal del perfil (solera b·t, ángulo t·(2b − t)) × largo; canal con kg/m capturado', () => {
   const sol = (38.1 * 4.763 * 7.85) / 1000; // la solera estándar sale de la tabla de perfiles (esp. 4.763 mm)
-  casi(porId('SOL_1_1_2X3_16').kg, sol * 6.1, 1e-12);
-  casi(porId('SOL_1_1_2X3_16').precio_kg, 250 / 1.16 / (sol * 6.1), 1e-12);
+  casi(porId('SOL_1_1_2X3_16').kg, sol * 6, 1e-12); // el taller considera barras de 6 m
+  casi(porId('SOL_1_1_2X3_16').precio_kg, 250 / 1.16 / (sol * 6), 1e-12);
   const ang = (3.175 * (2 * 31.75 - 3.175) * 7.85) / 1000; // ángulo 1¼" × 1/8" sin perfil de brida: usa sus medidas
-  casi(porId('ANG_1_1_4X1_8').kg, ang * 6.1, 1e-12);
+  casi(porId('ANG_1_1_4X1_8').kg, ang * 6, 1e-12);
   const solera14 = (31.75 * 3.175 * 7.85) / 1000;
-  casi(porId('SOL_1_1_4X1_8').kg, solera14 * 6.1, 1e-12);
-  casi(porId('SOL_1_1_4X1_8').precio_kg, 150 / 1.16 / (solera14 * 6.1), 1e-12);
+  casi(porId('SOL_1_1_4X1_8').kg, solera14 * 6, 1e-12);
+  casi(porId('SOL_1_1_4X1_8').precio_kg, 150 / 1.16 / (solera14 * 6), 1e-12);
+  Object.values(M.proveedor.barras).forEach((b) => assert.equal(b.largo_mm, 6000, `${b.descripcion}: barras de 6 m`));
   casi(porId('CANAL_U_6').kg, 12.2 * 6, 1e-12);
   casi(porId('CANAL_U_6').precio_kg, 2177.18 / 1.16 / 73.2, 1e-12);
 });
@@ -172,15 +173,16 @@ test('Cotizador: cambiar el precio de la hoja o el IVA incluido mueve el costo d
 
 /* ---------- mano de obra por hora ---------- */
 
-test('Mano de obra: los trabajadores ganan $500 por hora y el costo de la hora es salario × FSR (1.55 = $775) + equipo', () => {
+test('Mano de obra: los trabajadores ganan $500 por hora, ya con prestaciones (FSR = 1.00): la hora cuesta $500 + equipo', () => {
   MO.OPERACIONES.forEach((op) => assert.equal(M.mano_obra.operaciones[op].salario_hora, 500, op));
-  assert.equal(M.mano_obra.FSR, 1.55);
+  assert.equal(M.mano_obra.FSR, 1, 'los $500 ya incluyen prestaciones');
   const t = MO.tarifa(M, 'corte');
-  casi(t.mo_h, 775, 1e-12);
+  casi(t.mo_h, 500, 1e-12);
   casi(t.equipo_h, 45, 1e-12);
-  casi(t.total_h, 820, 1e-12);
-  casi(MO.tarifa(crearMaestros({ mano_obra: { FSR: 1 } }), 'soldadura').mo_h, 500, 1e-12, 'con FSR = 1 la hora cuesta lo que se les paga');
-  casi(MO.tarifa(crearMaestros({ mano_obra: { operaciones: { soldadura: { salario_hora: 600 } } } }), 'soldadura').mo_h, 600 * 1.55, 1e-12);
+  casi(t.total_h, 545, 1e-12);
+  // el factor sigue disponible por si algún día el salario se captura sin prestaciones
+  casi(MO.tarifa(crearMaestros({ mano_obra: { FSR: 1.55 } }), 'soldadura').mo_h, 775, 1e-12);
+  casi(MO.tarifa(crearMaestros({ mano_obra: { operaciones: { soldadura: { salario_hora: 600 } } } }), 'soldadura').mo_h, 600, 1e-12);
   assert.equal('jornada_h' in M.mano_obra, false, 'ya no hay jornada: el salario es por hora');
   assert.equal('salario_diario' in M.mano_obra.operaciones.corte, false);
 });

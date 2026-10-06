@@ -32,7 +32,7 @@
 | Factor de área del codo de 90° de 5 gajos | **No es un número fijo: se deriva exactamente.** Respecto a un tramo recto cuya longitud es el arco de eje (π/2·R): **F_arco = 1.0131**. En forma absoluta: **A = 7.4988·D²** con R/D = 1.5. El sobrecosto real de un codo no viene del área sino de la merma y la mano de obra (§3.4.1 y Ejemplo B). | §3.4.1 |
 | Diámetro y calibre del ejemplo | Ø12" (interior), calibre 16, acero al carbón, 3 m, bridado (los valores sugeridos en el prompt). | §7 |
 | Injerto simple, reducción con injerto y ángulos del taller | El «ramal en ángulo» pasó a llamarse **injerto simple** (misma geometría, id `RAMAL`). El «pantalón» se sustituyó por la **reducción con injerto** (id `REDUCCION_INJERTO`): una reducción D1 → D2 con el injerto **sobre el cono**. **Todo injerto es a 30° o 45°** y **los codos son de 30°, 45°, 60° o 90°**: son listas de maestros y el cotizador rechaza cualquier otro ángulo. El pantalón se retiró de la interfaz; el motor lo sigue calculando sólo para abrir cotizaciones anteriores. Seis supuestos de detalle están por confirmar con el taller (§10.5). | §3.4.1 · §3.4.4 · §3.4.5 · §7.3 · §10.5 |
-| Mano de obra por hora y lista de precios del proveedor | Los trabajadores ganan **$500 por hora**: el salario se captura por hora (antes por día y jornada) y el costo de la hora es `salario_hora · FSR`. El proveedor de acero cotiza **por pieza y con IVA incluido** (hojas y barras): la lista (T3b) conserva el precio como se cotiza y el motor lo convierte a **$/kg sin IVA** con los kg de la pieza (§5.1.1); lo que no está cotizado usa un precio por kg de respaldo. Seis supuestos de detalle están por confirmar (§10.6). | T3 · T3b · T8 · §4.1 · §5.1.1 · §10.6 |
+| Mano de obra por hora y lista de precios del proveedor | Los trabajadores ganan **$500 por hora, cifra que ya incluye prestaciones** (FSR = 1.00): el salario se captura por hora (antes por día y jornada) y el costo de la hora es `salario_hora · FSR`. El proveedor de acero cotiza **por pieza y con IVA incluido** (hojas y barras): la lista (T3b) conserva el precio como se cotiza y el motor lo convierte a **$/kg sin IVA** con los kg de la pieza (§5.1.1); lo que no está cotizado usa un precio por kg de respaldo. Cuatro supuestos de detalle están por confirmar (§10.6). | T3 · T3b · T8 · §4.1 · §5.1.1 · §10.6 |
 | Brida estándar del taller | **Una sola brida para todos los diámetros: aro de solera 1½" × 3/16", barreno Ø3/8", tornillo 5/16" × 1¼".** Se modela como el perfil `SOL38x4.8` (tipo solera, rolada "de canto"), que lleva en sus propias columnas el barreno y el tornillo; los ángulos quedan como opción por partida (`perfil_id`). Cinco supuestos de detalle están por confirmar con el taller (§10.4). | T4 · T5 · §3.5 · §10.4 |
 | Público objetivo | Ingenieros de ventas técnicas en México y desarrolladores internos. Moneda **MXN**, **IVA 16 %** aparte, **Factor de Salario Real (FSR)** para mano de obra. | `capas.iva_pct`, `mano_obra.FSR` |
 
@@ -64,7 +64,7 @@
 | **Merma (φ)** | Fracción del material comprado que no queda en la pieza. |
 | **QTO** | *Quantity take-off*: levantamiento de cantidades físicas, sin precios. |
 | **CD / CI / GIF** | Costo directo / costo indirecto / gastos indirectos de fábrica. |
-| **MOD / FSR** | Mano de obra directa / Factor de Salario Real (convierte salario base en costo real). |
+| **MOD / FSR** | Mano de obra directa / Factor de Salario Real (convierte el salario base en costo real; vale 1.00 porque los $500 por hora del taller ya incluyen las prestaciones). |
 | **FO** | Factor de operación: arco encendido ÷ tiempo total de soldadura. |
 | **GMAW / GTAW** | Soldadura MIG-MAG (microalambre) / TIG (varilla). |
 | **MSG / GSG / USSG** | Tablas de calibre: acero al carbón / galvanizado / inoxidable. |
@@ -184,8 +184,8 @@
 | `precio_kg_inox_316` | MXN/kg | 135.00 | Ilustrativo |
 | `precio_kg_chatarra_acero` | MXN/kg | 7.00 | Ilustrativo |
 | `precio_kg_chatarra_inox` | MXN/kg | 45.00 | Ilustrativo |
-| `precio_kg_perfil_angulo` | MXN/kg | 24.83 | Respaldo, tomado de la lista del proveedor (T3b) |
-| `precio_kg_solera` | MXN/kg | 24.80 | Respaldo, tomado de la lista del proveedor (T3b) |
+| `precio_kg_perfil_angulo` | MXN/kg | 25.25 | Respaldo, tomado de la lista del proveedor (T3b) |
+| `precio_kg_solera` | MXN/kg | 25.21 | Respaldo, tomado de la lista del proveedor (T3b) |
 | `precio_kg_alambre_er70s6` | MXN/kg | 62.00 | Ilustrativo |
 | `precio_kg_varilla_er308l` | MXN/kg | 420.00 | Ilustrativo |
 | `precio_kg_varilla_er316l` | MXN/kg | 520.00 | Ilustrativo |
@@ -220,16 +220,16 @@
 | `PLACA_3_16_4X8` | Placa lisa 4 × 8 ft · 3/16" | 1219 × 2438 | 2,820.00 | 2,431.03 | 111.11 | 21.88 | Referencia |
 | `PLACA_3_16_3X8` | Placa lisa 3 × 8 ft · 3/16" (precio como viene en la factura) | 914 × 2438 | 2,820.00 | 2,431.03 | 83.31 | 29.18 | Referencia |
 
-*Perfiles y otros en barra* (largo de barra supuesto: 6.10 m, §10.6)
+*Perfiles y otros en barra* (las barras de ángulo y solera se consideran de 6 m, dato del taller)
 
 | Renglón | Concepto | Barra (m) | `perfil` | Precio cotizado (con IVA) | Sin IVA | kg por barra | $/kg sin IVA | Uso |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `SOL_1_1_2X3_16` | Solera 1½" × 3/16" (brida estándar) | 6.10 | `SOL38x4.8` | 250.00 | 215.52 | 8.69 | 24.80 | **Cálculo** |
-| `ANG_1_1_2X3_16` | Ángulo 1½" × 3/16" | 6.10 | `L38x4.8` | 470.00 | 405.17 | 16.29 | 24.87 | **Cálculo** |
-| `ANG_2X3_16` | Ángulo 2" × 3/16" | 6.10 | `L51x4.8` | 616.00 | 531.03 | 22.09 | 24.04 | **Cálculo** |
-| `ANG_1_1_4X1_8` | Ángulo 1¼" × 1/8" | 6.10 | — | 260.00 | 224.14 | 9.17 | 24.44 | Referencia |
-| `ANG_3_4X1_8` | Ángulo ¾" × 1/8" | 6.10 | — | 160.00 | 137.93 | 5.31 | 25.98 | Referencia |
-| `SOL_1_1_4X1_8` | Solera 1¼" × 1/8" | 6.10 | — | 150.00 | 129.31 | 4.83 | 26.79 | Referencia |
+| `SOL_1_1_2X3_16` | Solera 1½" × 3/16" (brida estándar) | 6.00 | `SOL38x4.8` | 250.00 | 215.52 | 8.55 | 25.21 | **Cálculo** |
+| `ANG_1_1_2X3_16` | Ángulo 1½" × 3/16" | 6.00 | `L38x4.8` | 470.00 | 405.17 | 16.03 | 25.28 | **Cálculo** |
+| `ANG_2X3_16` | Ángulo 2" × 3/16" | 6.00 | `L51x4.8` | 616.00 | 531.03 | 21.72 | 24.44 | **Cálculo** |
+| `ANG_1_1_4X1_8` | Ángulo 1¼" × 1/8" | 6.00 | — | 260.00 | 224.14 | 9.02 | 24.85 | Referencia |
+| `ANG_3_4X1_8` | Ángulo ¾" × 1/8" | 6.00 | — | 160.00 | 137.93 | 5.22 | 26.41 | Referencia |
+| `SOL_1_1_4X1_8` | Solera 1¼" × 1/8" | 6.00 | — | 150.00 | 129.31 | 4.75 | 27.23 | Referencia |
 | `CANAL_U_6` | Canal U 6" × 6 m (12.2 kg/m) | 6.00 | — | 2,177.18 | 1,876.88 | 73.20 | 25.64 | Referencia |
 
 **T4 · Perfiles de aros de brida.** La primera fila es el **estándar del taller** y se usa en todos los diámetros; las demás (ángulos) son opcionales por partida con `perfil_id`. El área, el peso lineal y el centroide se **derivan** de (tipo, ancho, espesor) y no se capturan; el gramil, el barreno, el tornillo y la variable de precio son datos del perfil. Fórmulas en §3.5.1.
@@ -293,20 +293,20 @@
 
 **Otros parámetros de proceso:** `eficiencia_taller` η = 0.80 · hoja estándar 1 219 × 3 048 mm · `L_max_pieza` = 3 000 mm · semiángulo máx. de reducciones 15° · α máx. por junta de codo 22.5° · holguras de costura (mm): `A_TOPE` 1.0, `TRASLAPE` 25, `PITTSBURGH` 32 · soldadura GMAW (`FO` 0.40, 15 L/min, η_dep 0.93, pre/post-flujo 10 %) y GTAW (velocidad ×0.5, `FO` 0.35, 9 L/min, η_dep 0.98, pre/post-flujo 15 %) · `k_cordón` tope 1.75 y filete 1.00, `A_cordón_min` 2.0 mm² · pintura: primario SV 55 %, DFT 50 µm, η_transf. 0.65; esmalte SV 45 %, DFT 40 µm, η_transf. 0.65; diluyente 10 %.
 
-**T8 · Tarifas de operación** (`mo_h = salario_hora · FSR`: los trabajadores ganan **$500 por hora** y FSR = 1.55 → **$775** por hora de mano de obra, más el equipo de la operación)
+**T8 · Tarifas de operación** (`mo_h = salario_hora · FSR`: los trabajadores ganan **$500 por hora**, cifra que **ya incluye prestaciones**, así que FSR = 1.00 y la hora de mano de obra cuesta **$500**, más el equipo de la operación)
 
 | Operación | Salario por hora (MXN) | `mo_h` = salario · FSR (MXN/h) | Equipo (MXN/h) | Tarifa total (MXN/h) |
 | --- | --- | --- | --- | --- |
-| `corte` | 500 | 775.00 | 45 | 820.00 |
-| `rolado` | 500 | 775.00 | 55 | 830.00 |
-| `armado` | 500 | 775.00 | 25 | 800.00 |
-| `aros` | 500 | 775.00 | 40 | 815.00 |
-| `soldadura` | 500 | 775.00 | 45 | 820.00 |
-| `engargolado` | 500 | 775.00 | 35 | 810.00 |
-| `barrenado` | 500 | 775.00 | 25 | 800.00 |
-| `acabado` | 500 | 775.00 | 20 | 795.00 |
-| `pintura` | 500 | 775.00 | 40 | 815.00 |
-| `qc_embalaje` | 500 | 775.00 | 0 | 775.00 |
+| `corte` | 500 | 500.00 | 45 | 545.00 |
+| `rolado` | 500 | 500.00 | 55 | 555.00 |
+| `armado` | 500 | 500.00 | 25 | 525.00 |
+| `aros` | 500 | 500.00 | 40 | 540.00 |
+| `soldadura` | 500 | 500.00 | 45 | 545.00 |
+| `engargolado` | 500 | 500.00 | 35 | 535.00 |
+| `barrenado` | 500 | 500.00 | 25 | 525.00 |
+| `acabado` | 500 | 500.00 | 20 | 520.00 |
+| `pintura` | 500 | 500.00 | 40 | 540.00 |
+| `qc_embalaje` | 500 | 500.00 | 0 | 500.00 |
 
 **T9 · Capas de precio** (valores ilustrativos; ver §5)
 
@@ -647,7 +647,7 @@ t_real(op)   = t_estándar(op) / η_taller
 Costo(op)    = (t_real / 60) · ( mo_h(op) + equipo_h(op) )        mo_h = salario_hora · FSR
 ```
 
-`FSR` (Factor de Salario Real) convierte el salario por hora en costo real (prestaciones, aguinaldo, vacaciones, cargas sociales). Los trabajadores ganan **$500 por hora**; con FSR = 1.55 la hora cuesta **$775**. Si los $500 ya incluyeran las prestaciones, FSR = 1.00 (supuesto de §10.6).
+`FSR` (Factor de Salario Real) convierte un salario base en costo real (prestaciones, aguinaldo, vacaciones, cargas sociales). Los trabajadores ganan **$500 por hora y esa cifra ya incluye las prestaciones**, por eso FSR = 1.00 y la hora cuesta **$500**. El factor se conserva por si el salario se captura algún día sin prestaciones (con FSR = 1.55 la hora costaría $775).
 
 ### 4.2 Drivers por familia
 
@@ -729,14 +729,14 @@ kg_hoja         = 1.219 m · 3.048 m · 0.8534 mm · 7 850 / 1000 = 24.892 kg
 precio_kg       = 793.10 / 24.892 = 31.862 MXN/kg
 ```
 
-*Solera 1½" × 3/16", barra de 6.10 m (factura): la brida estándar del taller*
+*Solera 1½" × 3/16", barra de 6.00 m (factura): la brida estándar del taller*
 
 ```text
 precio_cotizado = 250.00 MXN (con IVA)
 precio_sin_IVA  = 250.00 / 1.16 = 215.52 MXN   (en la factura: 215.52 + 34.48 de IVA)
 peso_lineal     = 38.100 · 4.763 · 7.85 / 1000 = 1.4245 kg/m
-kg_barra        = 1.4245 · 6.10 = 8.690 kg
-precio_kg       = 215.52 / 8.690 = 24.801 MXN/kg
+kg_barra        = 1.4245 · 6.00 = 8.547 kg
+precio_kg       = 215.52 / 8.547 = 25.215 MXN/kg
 ```
 
 **Qué renglón usa el cálculo.**
@@ -883,8 +883,8 @@ w_p (peso lineal)    = b · t · 7.85 / 1000 = 38.100 · 4.763 · 7.85 / 1000 = 
 L_aro                = π·(D_ext + 2c) + 3.0 = π·(307.8378 + 38.100) + 3.0 = 1089.80 mm
 m_aros_neta          = 2 · 1.0898 m · 1.4245 kg/m = 3.105 kg
 m_aros_bruta         = m_aros_neta / (1 − 0.05) = 3.268 kg
-Precio del perfil    = barra `SOL_1_1_2X3_16`: 250.00 con IVA → 24.801 MXN/kg sin IVA   (§5.1.1)
-Costo de perfil      = 3.268 · 24.801 = 81.06 MXN
+Precio del perfil    = barra `SOL_1_1_2X3_16`: 250.00 con IVA → 25.215 MXN/kg sin IVA   (§5.1.1)
+Costo de perfil      = 3.268 · 25.215 = 82.41 MXN
 ```
 
 **Paso 6 · Barrenos, tornillería, empaque y sellador** (barreno Ø3/8" = 9.525 mm · tornillo 5/16" × 1¼")
@@ -947,58 +947,58 @@ Costo de pintura       = 0.4305 · 220 + 0.0431 · 70 = 97.73 MXN
 
 | Operación | t real (min) | MO (MXN/h) | Equipo (MXN/h) | Costo (MXN) |
 | --- | --- | --- | --- | --- |
-| Corte | 5.47 | 775.00 | 45 | 74.75 |
-| Rolado | 5.64 | 775.00 | 55 | 77.98 |
-| Armado y punteo | 17.50 | 775.00 | 25 | 233.33 |
-| Aros de brida | 16.81 | 775.00 | 40 | 228.35 |
-| Soldadura | 32.02 | 775.00 | 45 | 437.59 |
-| Barrenado | 7.00 | 775.00 | 25 | 93.33 |
-| Acabado | 8.00 | 775.00 | 20 | 106.06 |
-| Pintura | 26.94 | 775.00 | 40 | 365.88 |
-| Inspección y embalaje | 6.10 | 775.00 | 0 | 78.76 |
+| Corte | 5.47 | 500.00 | 45 | 49.68 |
+| Rolado | 5.64 | 500.00 | 55 | 52.14 |
+| Armado y punteo | 17.50 | 500.00 | 25 | 153.13 |
+| Aros de brida | 16.81 | 500.00 | 40 | 151.30 |
+| Soldadura | 32.02 | 500.00 | 45 | 290.84 |
+| Barrenado | 7.00 | 500.00 | 25 | 61.25 |
+| Acabado | 8.00 | 500.00 | 20 | 69.37 |
+| Pintura | 26.94 | 500.00 | 40 | 242.43 |
+| Inspección y embalaje | 6.10 | 500.00 | 0 | 50.81 |
 
 | Concepto | MXN |
 | --- | --- |
 | Lámina (37.455 kg brutos) | 841.62 |
-| Perfil de aros | 81.06 |
+| Perfil de aros | 82.41 |
 | Tornillería | 37.80 |
 | Empaque | 31.95 |
 | Sellador | 8.90 |
-| Flete de entrada (2 % de lámina + perfil) | 18.45 |
-| **Subtotal materiales** | **1,019.78** |
+| Flete de entrada (2 % de lámina + perfil) | 18.48 |
+| **Subtotal materiales** | **1,021.16** |
 | Alambre + gas + consumibles de corte + pintura | 134.88 |
-| Mano de obra directa | 1,620.72 |
+| Mano de obra directa | 1,045.63 |
 | Equipo (hora-máquina) | 75.33 |
-| Herramienta menor (3 % de MO) | 48.62 |
-| **COSTO DIRECTO (CD)** | **2,899.33** |
+| Herramienta menor (3 % de MO) | 31.37 |
+| **COSTO DIRECTO (CD)** | **2,308.36** |
 
 **Paso 11 · Pila de precio**
 
 | Capa | Fórmula | MXN |
 | --- | --- | --- |
-| CD |  | 2,899.33 |
+| CD |  | 2,308.36 |
 | CI de fábrica | GIF · h_MOD = 85.00 · 2.0913 | 177.76 |
-| CI de administración | 8 % · CD | 231.95 |
-| Imprevistos (riesgo MEDIO) | 4 % · (CD + CI) | 132.36 |
-| **Costo total C_T** | CD + CI + imprevistos | **3,441.40** |
-| Financiamiento | C_T · 14 % · 45/365 = C_T · 1.726 % | 59.40 |
-| **Costo base** | C_T + financiamiento | **3,500.80** |
-| **PRECIO antes de IVA** | C_base / (1 − 0.20 − 0.02) = 3,500.80 / 0.78 | **4,488.20** |
-|   ↳ utilidad (20 % del precio) |  | 897.64 |
-|   ↳ comisión de ventas (2 % del precio) |  | 89.76 |
-| IVA 16 % |  | 718.11 |
-| **Total con IVA** |  | **5,206.31** |
+| CI de administración | 8 % · CD | 184.67 |
+| Imprevistos (riesgo MEDIO) | 4 % · (CD + CI) | 106.83 |
+| **Costo total C_T** | CD + CI + imprevistos | **2,777.62** |
+| Financiamiento | C_T · 14 % · 45/365 = C_T · 1.726 % | 47.94 |
+| **Costo base** | C_T + financiamiento | **2,825.56** |
+| **PRECIO antes de IVA** | C_base / (1 − 0.20 − 0.02) = 2,825.56 / 0.78 | **3,622.52** |
+|   ↳ utilidad (20 % del precio) |  | 724.50 |
+|   ↳ comisión de ventas (2 % del precio) |  | 72.45 |
+| IVA 16 % |  | 579.60 |
+| **Total con IVA** |  | **4,202.12** |
 
 **Resultado e indicadores de control**
 
 | Indicador | Valor |
 | --- | --- |
-| Precio unitario antes de IVA | **4,488.20 MXN** |
+| Precio unitario antes de IVA | **3,622.52 MXN** |
 | Peso neto terminado (lámina + aros) | 37.564 kg |
-| Precio por kg neto | 119.48 MXN/kg |
-| Precio por metro lineal | 1496.07 MXN/m |
+| Precio por kg neto | 96.44 MXN/kg |
+| Precio por metro lineal | 1207.51 MXN/m |
 | Horas de mano de obra directa (reales) | 2.091 h |
-| Margen de contribución (P − CD)/P | 35.4 % |
+| Margen de contribución (P − CD)/P | 36.3 % |
 | Markup sobre costo total | 30.4 % |
 | Costo de la merma en lámina | 2.996 kg · 22.47 = 67.33 MXN |
 
@@ -1028,12 +1028,12 @@ L_corte = π·D_med·(2·j·κ + 2) + 2·L_eje = 11.154 m ;  L_soldadura (chapa)
 | Peso neto terminado, con aros (kg) | 37.564 | 11.453 |
 | Longitud de soldadura total (m) | 5.01 | 6.63 |
 | Horas de MOD reales (h) | 2.09 | 3.61 |
-| Costo directo CD (MXN) | 2,899.33 | 3,514.67 |
-| Precio antes de IVA (MXN) | 4,488.20 | 5,564.45 |
-| Precio por kg neto (MXN/kg) | 119.48 | 485.85 |
+| Costo directo CD (MXN) | 2,308.36 | 2,494.10 |
+| Precio antes de IVA (MXN) | 3,622.52 | 4,069.46 |
+| Precio por kg neto (MXN/kg) | 96.44 | 355.32 |
 | Horas MOD por kg neto (h/kg) | 0.056 | 0.315 |
 
-**Lectura:** el área del codo es sólo 1.3 % mayor que la de un tramo recto de igual longitud de eje (F_arco = 1.0131), pero su **precio por kg neto es 4.07×** el del tramo recto y su **costo directo por m² de lámina es 5.00×**. El sobrecosto no está en el área: está en la merma (20 % vs 8 %), en el corte perfilado, en el armado (k_dif = 1.35) y en la soldadura de 4 juntas elípticas.
+**Lectura:** el área del codo es sólo 1.3 % mayor que la de un tramo recto de igual longitud de eje (F_arco = 1.0131), pero su **precio por kg neto es 3.68×** el del tramo recto y su **costo directo por m² de lámina es 4.46×**. El sobrecosto no está en el área: está en la merma (20 % vs 8 %), en el corte perfilado, en el armado (k_dif = 1.35) y en la soldadura de 4 juntas elípticas.
 
 ### 7.3 Ejemplo C — Reducción con injerto 45° sobre el cono, Ø12" → Ø10" con injerto Ø6", calibre 16
 
@@ -1105,21 +1105,21 @@ Bridas                        = 3 aros (D1, D2 y d): 1089.8 mm · 930.2 mm · 61
 
 | Indicador | Valor |
 | --- | --- |
-| Costo directo (CD) | 2,534.60 MXN |
-| Precio unitario antes de IVA | **4,012.21 MXN** |
+| Costo directo (CD) | 1,800.71 MXN |
+| Precio unitario antes de IVA | **2,937.16 MXN** |
 | Peso neto terminado (lámina + 3 aros) | 7.376 kg |
-| Precio por kg neto | 543.93 MXN/kg |
+| Precio por kg neto | 398.19 MXN/kg |
 | Horas de mano de obra directa (reales) | 2.597 h  (k_dif armado = 1.9) |
 
 **Sensibilidad** (misma pieza, un solo cambio)
 
 | Variante | L reducción (mm) | Orificio (m²) | Precio (MXN) | vs. base |
 | --- | --- | --- | --- | --- |
-| Base: 45°, de extremo mayor a menor (hacia D2) | 247.4 | 0.0249 | 4,012.21 | — |
-| 30°, hacia D2 | 320.7 | 0.0340 | 4,138.88 | +3.2 % |
-| 45°, si se inclinara hacia D1 (`MAYOR`) | 288.7 | 0.0304 | 4,083.32 | +1.8 % |
+| Base: 45°, de extremo mayor a menor (hacia D2) | 247.4 | 0.0249 | 2,937.16 | — |
+| 30°, hacia D2 | 320.7 | 0.0340 | 3,041.50 | +3.6 % |
+| 45°, si se inclinara hacia D1 (`MAYOR`) | 288.7 | 0.0304 | 2,995.75 | +2.0 % |
 
-**Lectura:** el precio por kg neto es **4.55×** el del tramo recto del Ejemplo A, por lo mismo que el codo: merma de 28 % contra 8 %, dificultad de armado 1.9 contra 1.0 y tres bridas en una pieza chica. A 30° la silleta es más larga y el cono también; hacia el extremo menor el cono "se cierra" y la silleta resulta más corta que si el injerto mirara hacia el mayor.
+**Lectura:** el precio por kg neto es **4.13×** el del tramo recto del Ejemplo A, por lo mismo que el codo: merma de 28 % contra 8 %, dificultad de armado 1.9 contra 1.0 y tres bridas en una pieza chica. A 30° la silleta es más larga y el cono también; hacia el extremo menor el cono "se cierra" y la silleta resulta más corta que si el injerto mirara hacia el mayor.
 
 ---
 
@@ -1261,15 +1261,13 @@ El taller definió: *injerto simple* (antes ramal en ángulo); *reducción con i
 | Merma y dificultad | 28 % y `k_dif` 1.9, heredados del pantalón | `merma.REDUCCION_INJERTO`, `proceso.armado.k_dif.REDUCCION_INJERTO` | Calibrar con 10 órdenes reales. |
 | Gajos de los codos | Automáticos con α ≤ 22.5° por junta: 30° → 3, 45° → 3, 60° → 4, 90° → 5 | `proceso.alfa_max_junta_deg`, o capturar `n_gajos` | Si el codo de 30° lleva 2 gajos en el taller, capturar `n_gajos = 2`. |
 
-### 10.6 Supuestos de la lista del proveedor y de la mano de obra por confirmar
+### 10.6 Supuestos de la lista del proveedor por confirmar
 
-Datos que dio el taller: los trabajadores ganan **$500 por hora**; el proveedor de acero cotiza hojas y barras por pieza (cotizaciones y factura del 30-sep-2026). Lo demás se **supuso** y se edita en las tablas maestras:
+Datos que dio el taller: los trabajadores ganan **$500 por hora y esa cifra ya incluye prestaciones** (FSR = 1.00); las barras de ángulo y solera se consideran de **6 m**; el proveedor de acero cotiza hojas y barras por pieza (cotizaciones y factura del 30-sep-2026). Lo demás se **supuso** y se edita en las tablas maestras:
 
 | Supuesto | Valor usado | Dónde se cambia | Efecto si es distinto |
 | --- | --- | --- | --- |
 | Los precios cotizados incluyen IVA | Sí, 16 %: la factura desglosa el IVA de precios redondos y los $/kg salen parejos; las cotizaciones por mensaje se leyeron igual | `proveedor.iva_incluido_pct` (0 % si fueran antes de IVA) | Si fueran antes de IVA, lámina y perfiles cotizados cuestan 16 % más. |
-| Largo de las barras de ángulo y solera | 6.10 m (20 ft); la factura no lo dice | `proveedor.barras.*.largo_mm` | Con 6.00 m el $/kg de perfil sube 1.7 %. |
-| Qué son los $500 por hora | El salario por hora **antes de prestaciones**, igual en todas las operaciones; la hora cuesta 500 × FSR 1.55 = **$775** | `mano_obra.operaciones.*.salario_hora`, `mano_obra.FSR` | Si los $500 ya incluyen prestaciones, FSR = 1.00: la mano de obra baja 35 %. Si soldadores y ayudantes ganan distinto, se edita cada operación. |
-| Calibres y perfiles que no se cotizaron | Precio por kg de respaldo (T3): negra $22.47 (lámina cal. 12 de la factura), galvanizada $30.69 (promedio de cal. 22 y 24), solera $24.80, ángulo $24.83 | `precios.precio_kg_*` | Un calibre más delgado suele costar más por kg y uno más grueso menos: conviene cotizar los calibres que se usan. |
+| Calibres y perfiles que no se cotizaron | Precio por kg de respaldo (T3): negra $22.47 (lámina cal. 12 de la factura), galvanizada $30.69 (promedio de cal. 22 y 24), solera $25.21, ángulo $25.25 | `precios.precio_kg_*` | Un calibre más delgado suele costar más por kg y uno más grueso menos: conviene cotizar los calibres que se usan. |
 | Cuánta lámina se cobra a la pieza | La fracción de hoja que consume (`m_bruta`, con la merma de T6), no hojas completas | `merma.*` | Si compras obliga a comprar hoja completa y el retazo se pierde, subir φ de la familia. |
 | Placa lisa 3 × 8 ft de 3/16" | Viene en la factura al mismo precio que la de 4 × 8 ($2 431.03 sin IVA); se dejó tal cual y es sólo referencia | `proveedor.hojas.PLACA_3_16_3X8` | Confirmar con el proveedor; no entra al cálculo. |

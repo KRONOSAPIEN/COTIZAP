@@ -142,8 +142,9 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   const costo_pintura = litros * P.precio_L_primario + litros * 0.1 * P.precio_L_diluyente;
 
   /* Paso 13 · mano de obra y equipo (η = 0.80) */
-  // los trabajadores ganan $500 por hora; el costo de la hora es salario × FSR (1.55)
-  const tar = (s, eq) => ({ mo: s * 1.55, eq });
+  // los trabajadores ganan $500 por hora y esa cifra ya incluye las prestaciones: FSR = 1.00
+  const FSR = 1.0;
+  const tar = (s, eq) => ({ mo: s * FSR, eq });
   const ops = {
     corte: [t_corte, tar(500, 45)], rolado: [t_rolado, tar(500, 55)], armado: [t_armado, tar(500, 25)], aros: [t_aros, tar(500, 40)],
     soldadura: [t_sold, tar(500, 45)], barrenado: [t_barren, tar(500, 25)], acabado: [t_acab, tar(500, 20)],
@@ -218,7 +219,7 @@ const GOLDEN = {
   L_aro_mm: 1089.8,
   n_tornillos: 8,
   horas_mod_reales: 2.091,
-  CD: 2899.33,
-  C_T: 3441.4,
-  precio_unitario: 4488.2,
+  CD: 2308.36,
+  C_T: 2777.62,
+  precio_unitario: 3622.52,
 };

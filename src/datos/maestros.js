@@ -44,8 +44,8 @@
       precio_kg_inox_316: 135.0,
       precio_kg_chatarra_acero: 7.0,
       precio_kg_chatarra_inox: 45.0,
-      precio_kg_perfil_angulo: 24.83,
-      precio_kg_solera: 24.8,
+      precio_kg_perfil_angulo: 25.25,
+      precio_kg_solera: 25.21,
       precio_kg_alambre_er70s6: 62.0,
       precio_kg_varilla_er308l: 420.0,
       precio_kg_varilla_er316l: 520.0,
@@ -89,12 +89,12 @@
         PLACA_3_16_3X8: { descripcion: 'Placa lisa 3 × 8 ft · 3/16" (precio como viene en la factura)', material: 'ACERO_CARBON', calibre: 0, esp_mm: 4.7625, ancho_mm: 914, largo_mm: 2438, precio: 2820 },
       },
       barras: {
-        SOL_1_1_2X3_16: { descripcion: 'Solera 1½" × 3/16" (brida estándar)', perfil: 'SOL38x4.8', largo_mm: 6100, precio: 250 },
-        ANG_1_1_2X3_16: { descripcion: 'Ángulo 1½" × 3/16"', perfil: 'L38x4.8', largo_mm: 6100, precio: 470 },
-        ANG_2X3_16: { descripcion: 'Ángulo 2" × 3/16"', perfil: 'L51x4.8', largo_mm: 6100, precio: 616 },
-        ANG_1_1_4X1_8: { descripcion: 'Ángulo 1¼" × 1/8"', tipo: 'ANGULO', ancho_mm: 31.75, esp_mm: 3.175, largo_mm: 6100, precio: 260 },
-        ANG_3_4X1_8: { descripcion: 'Ángulo ¾" × 1/8"', tipo: 'ANGULO', ancho_mm: 19.05, esp_mm: 3.175, largo_mm: 6100, precio: 160 },
-        SOL_1_1_4X1_8: { descripcion: 'Solera 1¼" × 1/8"', tipo: 'SOLERA', ancho_mm: 31.75, esp_mm: 3.175, largo_mm: 6100, precio: 150 },
+        SOL_1_1_2X3_16: { descripcion: 'Solera 1½" × 3/16" (brida estándar)', perfil: 'SOL38x4.8', largo_mm: 6000, precio: 250 },
+        ANG_1_1_2X3_16: { descripcion: 'Ángulo 1½" × 3/16"', perfil: 'L38x4.8', largo_mm: 6000, precio: 470 },
+        ANG_2X3_16: { descripcion: 'Ángulo 2" × 3/16"', perfil: 'L51x4.8', largo_mm: 6000, precio: 616 },
+        ANG_1_1_4X1_8: { descripcion: 'Ángulo 1¼" × 1/8"', tipo: 'ANGULO', ancho_mm: 31.75, esp_mm: 3.175, largo_mm: 6000, precio: 260 },
+        ANG_3_4X1_8: { descripcion: 'Ángulo ¾" × 1/8"', tipo: 'ANGULO', ancho_mm: 19.05, esp_mm: 3.175, largo_mm: 6000, precio: 160 },
+        SOL_1_1_4X1_8: { descripcion: 'Solera 1¼" × 1/8"', tipo: 'SOLERA', ancho_mm: 31.75, esp_mm: 3.175, largo_mm: 6000, precio: 150 },
         CANAL_U_6: { descripcion: 'Canal U 6" × 6 m (12.2 kg/m)', kg_m: 12.2, largo_mm: 6000, precio: 2177.18 },
       },
     },
@@ -357,10 +357,11 @@
     /* ------------------------------------------------------------------ */
     /* TARIFAS DE OPERACIÓN                                               */
     /* mo_h = salario_hora × FSR   (FSR = Factor de Salario Real)         */
-    /* Los trabajadores ganan $500 por hora (dato del taller).            */
+    /* Los trabajadores ganan $500 por hora y esa cifra YA INCLUYE las    */
+    /* prestaciones (dato del taller): por eso FSR = 1.00.                */
     /* ------------------------------------------------------------------ */
     mano_obra: {
-      FSR: 1.55,
+      FSR: 1.0,
       operaciones: {
         corte: { salario_hora: 500, equipo_h: 45 },
         rolado: { salario_hora: 500, equipo_h: 55 },
