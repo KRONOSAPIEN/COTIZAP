@@ -24,7 +24,7 @@ try {
 
 const { crearMaestros } = require('../../src/datos/maestros');
 
-const URL = pathToFileURL(path.resolve(__dirname, '../../src/web/index.html')).href;
+const URL_APP = pathToFileURL(path.resolve(__dirname, '../../src/web/index.html')).href;
 let fallos = 0;
 const ok = (cond, msg) => {
   if (cond) console.log('  ✓', msg);
@@ -41,7 +41,7 @@ const ok = (cond, msg) => {
     // Google Fonts puede estar bloqueado en entornos sin red: no es un error de la app.
     page.on('console', (m) => { if (m.type() === 'error' && !/ERR_CERT|ERR_INTERNET|fonts\./.test(m.text())) errores.push(m.text()); });
     page.on('pageerror', (e) => errores.push(`[pageerror] ${e.message}`));
-    await page.goto(URL);
+    await page.goto(URL_APP);
     await page.waitForSelector('#lista-partidas .partida');
     return page;
   };
@@ -644,7 +644,6 @@ const ok = (cond, msg) => {
     const par = () => estadoApp(p, () => window.COTIZAP.web.estadoApp.cot.parametros);
     const campo = (id) => p.locator(`#c_${id}`);
     const marcado = (id, clase) => p.locator(`.campo-param[data-param="${id}"]`).evaluate((e, c) => e.classList.contains(c), clase);
-    const maestros = crearMaestros();
     ok(await campo('utilidad').inputValue() === '20' && await campo('comision').inputValue() === '2' && await campo('descuento').inputValue() === '0' && await campo('dias_cobro').inputValue() === '45',
       'arrancan con lo de las tablas maestras: margen 20 %, comisión 2 %, descuento 0 % y 45 días de cobro');
     ok(await p.locator('#c_parametros_mas').evaluate((e) => !e.open) && await campo('administracion').inputValue() === '8' && await campo('tasa').inputValue() === '14' && await campo('iva').inputValue() === '16',
@@ -739,6 +738,178 @@ const ok = (cond, msg) => {
     await p.click('#tab-cotizacion');
     ok(await campo('utilidad').inputValue() === '22' && (await marcado('utilidad', 'modificado')) === false, 'si se cambia el margen en las tablas maestras, el campo (sin tocar) lo sigue');
     await p.context().close();
+  }
+
+  console.log('20) Robustez: datos guardados dañados, números ilegibles, importaciones hostiles y tablas con ceros');
+  {
+    const LLAVE_COT = 'cotizap.cotizacion.v1';
+    const LLAVE_MAE = 'cotizap.maestros.v2';
+    const RECTO = { id: 'pA', familia: 'RECTO', forma: 'REDONDA', D_mm: 304.8, L_mm: 3000, material_id: 'ACERO_CARBON', calibre: 16, cantidad: 2, tipo_union: 'BRIDADO', clase_sellado: 'C', ref_diametro: 'INTERIOR', descripcion: 'Tramo sano' };
+    const conAlmacen = (almacen) => (ctx) => ctx.addInitScript((a) => { Object.keys(a).forEach((k) => localStorage.setItem(k, a[k])); localStorage.setItem('cotizap.migrado.v2', '1'); }, almacen);
+
+    // a) lo guardado en el navegador está dañado: la app abre igual y rescata lo sano
+    const sucia = await nuevaPagina({}, conAlmacen({
+      [LLAVE_COT]: JSON.stringify({ cliente: { a: 1 }, vigencia_dias: 'mucho', unidad_diam: 'parsecs', riesgo: {}, parametros: 'x', partidas: [null, 5, 'x', [], RECTO, { ...RECTO, id: 'pA' }, { ...RECTO, id: 7, familia: '__proto__' }] }),
+      [LLAVE_MAE]: JSON.stringify({ proceso: null, capas: 5, precios: { precio_kg_acero_carbon: 'veinte' }, herrajes: [] }),
+    }));
+    ok(await sucia.locator('#lista-partidas .partida').count() === 3, 'datos guardados dañados: abre y conserva las 3 partidas que sí son objetos (no las 4 basuras)');
+    const ids = await estadoApp(sucia, () => window.COTIZAP.web.estadoApp.cot.partidas.map((x) => x.id));
+    ok(new Set(ids).size === 3 && ids.every((i) => typeof i === 'string'), 'los id repetidos o que no son texto se reponen únicos');
+    ok(await estadoApp(sucia, () => window.COTIZAP.web.estadoApp.M.proceso.eficiencia_taller === 0.8 && window.COTIZAP.web.estadoApp.M.precios.precio_kg_acero_carbon === 22.47), 'las tablas dañadas se reponen con las de arranque (no se hereda un null ni un texto)');
+    ok(await sucia.locator('#c_cliente').inputValue() === '' && await sucia.locator('#c_unidad_diam').inputValue() === 'in', 'la cabecera con tipos raros vuelve a valores sanos');
+    ok(await sucia.locator('#lista-partidas .partida.err').count() === 1, 'la partida de familia desconocida queda marcada «Revisar datos»');
+    await sucia.locator('#lista-partidas .partida.err button[aria-label^="Editar"]').click();
+    ok(/familia que no existe/.test(await sucia.locator('.toast').last().innerText()) && await sucia.locator('#dlg-partida[open]').count() === 0, 'y al querer editarla se explica en vez de romperse');
+    await sucia.context().close();
+
+    // b) una tabla guardada con un cero: se avisa con la ruta y al corregirla todo vuelve
+    const cero = await nuevaPagina({}, conAlmacen({ [LLAVE_MAE]: JSON.stringify({ proceso: { eficiencia_taller: 0 } }) }));
+    const aviso = await cero.locator('#aviso-error').innerText();
+    ok(/proceso › eficiencia taller: debe ser un número mayor que 0 \(vale 0\)/.test(aviso), `el aviso nombra la tabla y el valor: «${aviso.slice(0, 120)}»`);
+    ok(await cero.locator('#lista-partidas .partida.err').count() === 6 && /Tablas maestras/.test(await cero.locator('.partida.err .chip-err').first().getAttribute('title')), 'las 6 partidas de taller se marcan con error; la comprada sigue calculándose');
+    ok((await cero.locator('.hero-val').innerText()).startsWith('$'), 'la pantalla sigue viva: el total se muestra');
+    await cero.click('#tab-maestros');
+    await cero.fill('#maestros-buscar', 'eficiencia_taller');
+    const ef = cero.locator('input#m_proceso__eficiencia_taller');
+    ok(await ef.inputValue() === '0', 'el editor muestra el 0 que hay que corregir');
+    await ef.fill('0.8'); await ef.dispatchEvent('change');
+    ok(await cero.locator('#aviso-error').isHidden() && await cero.locator('#lista-partidas .partida.err').count() === 0, 'al capturar 0.8 desaparecen el aviso y los errores');
+    await cero.context().close();
+
+    // c) formulario de partida: lo escrito que no es un número no pasa como «automático»
+    const f = await nuevaPagina();
+    await f.click('#btn-nueva');
+    await f.click('#btn-agregar');
+    await f.waitForSelector('#dlg-partida[open]');
+    const msg = async () => (await f.locator('#dlg-prev .errores').innerText().catch(() => '')).replace(/\s+/g, ' ');
+    const escribir = async (sel, v) => { await f.fill(sel, v); await f.waitForTimeout(40); return msg(); };
+    ok(/«3O00» no es una medida válida/.test(await escribir('#f_L_mm', '3O00')), 'una longitud con la letra O no se toma por un campo vacío');
+    ok(/Longitud máx\. por pieza: «xx» no es una medida válida/.test(await escribir('#f_L_max_pieza_mm', 'xx')), 'tampoco en un campo opcional');
+    await f.fill('#f_L_mm', '3000'); await f.fill('#f_L_max_pieza_mm', '');
+    ok(/Diámetro: debe estar entre 25 mm y 6000 mm/.test(await escribir('#f_D_mm', '9999')), 'un diámetro de 9 999″ se rechaza con el límite del taller');
+    ok(/Diámetro: debe estar entre 25 mm y 6000 mm/.test(await escribir('#f_D_mm', '-5')), 'uno negativo también');
+    await f.fill('#f_D_mm', '12');
+    ok(/Cantidad: debe estar entre 1 y 100000/.test(await escribir('#f_cantidad', '1000000')), 'una cantidad de un millón se rechaza');
+    ok(/Cantidad: debe ser un número entero/.test(await escribir('#f_cantidad', '2.5')), 'una cantidad fraccionaria también');
+    await f.fill('#f_cantidad', '2');
+    ok(await f.locator('#dlg-prev .errores').count() === 0, 'con datos sanos vuelve a calcular');
+    await f.click('.fam:has(span:text-is("Codo"))');
+    const kr = f.locator('#f_k_R');
+    await kr.click(); await kr.press('Control+A'); await kr.press('Backspace'); await kr.press('1'); await kr.press('e');
+    await f.waitForTimeout(60);
+    ok(/Relación R\/D: lo escrito no es un número/.test(await msg()), 'un número a medias («1e») en un campo numérico se avisa');
+    await f.click('#dlg-guardar');
+    ok(await f.locator('#dlg-partida[open]').count() === 1, 'y no se puede guardar');
+    await kr.fill('1.5');
+    await f.click('.avanzado > summary');
+    await f.click('button:has-text("Agregar subcontrato")');
+    const sp = f.locator('.sc-precio').first();
+    await sp.click(); await sp.press('1'); await sp.press('e');
+    await f.waitForTimeout(60);
+    ok(/Subcontrato 1: el precio debe ser un número/.test(await msg()), 'un precio de subcontrato ilegible no se descarta en silencio');
+    await f.click('#dlg-cancelar');
+    await f.context().close();
+
+    // d) importaciones hostiles: se rechazan sin dejar el estado a medias
+    const im = await nuevaPagina();
+    const importar = async (txt) => {
+      await im.click('#btn-io');
+      await im.waitForSelector('#dlg-io[open]');
+      await im.fill('#io-texto', txt);
+      await im.click('#io-cargar');
+      await im.waitForTimeout(150);
+      const abierto = await im.locator('#dlg-io[open]').count();
+      if (abierto) await im.click('#io-cerrar');
+      return { cargo: !abierto, toast: await im.locator('.toast').last().innerText().catch(() => '') };
+    };
+    const antes = await estadoApp(im, () => JSON.stringify([window.COTIZAP.web.estadoApp.cot.partidas.map((x) => x.id), window.COTIZAP.web.estadoApp.M.precios.precio_kg_acero_carbon]));
+    const rechazados = ['{{{', '{}', '[]', '{"cotizacion":null}', '{"cotizacion":{"partidas":"x"},"maestros":{"precios":{"precio_kg_acero_carbon":99}}}'];
+    let todosRechazados = true;
+    for (const txt of rechazados) todosRechazados = todosRechazados && !(await importar(txt)).cargo;
+    ok(todosRechazados, 'un texto que no es JSON, un objeto vacío, un arreglo y una cotización sin lista de partidas se rechazan');
+    ok(await estadoApp(im, (a) => JSON.stringify([window.COTIZAP.web.estadoApp.cot.partidas.map((x) => x.id), window.COTIZAP.web.estadoApp.M.precios.precio_kg_acero_carbon]) === a, antes), 'y no cambian la cotización ni los precios (tampoco el «99» del archivo rechazado)');
+    const r = await importar(JSON.stringify({ version: 2, cotizacion: { partidas: [null, 5, RECTO] }, maestros: { proceso: null, capas: 5, precios: { precio_kg_acero_carbon: 'x' } } }));
+    ok(r.cargo && /3 valores de las tablas no tenían la forma esperada y se ignoraron/.test(r.toast), `un archivo con tablas dañadas se carga rescatando lo sano y avisa cuántos valores ignoró («${r.toast.slice(0, 80)}»)`);
+    ok(await im.locator('#lista-partidas .partida').count() === 1, 'las partidas que no eran objetos se descartan');
+    await importar('{"cotizacion":{"partidas":[]},"maestros":{"__proto__":{"polluted":1},"proceso":{"__proto__":{"polluted":2}}}}');
+    ok(await im.evaluate(() => ({}).polluted === undefined), 'una llave __proto__ no contamina los objetos');
+    await im.context().close();
+
+    // e) editor de tablas maestras: lo que rompería el cálculo no entra
+    const ed = await nuevaPagina();
+    await ed.click('#tab-maestros');
+    const probar = async (buscar, id, valor) => {
+      await ed.fill('#maestros-buscar', buscar);
+      const inp = ed.locator(`input#${id}`);
+      const antes1 = await inp.inputValue();
+      await inp.evaluate((e, v) => { e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); }, valor);
+      await ed.waitForTimeout(50);
+      return { igual: (await inp.inputValue()) === antes1, toast: await ed.locator('.toast').last().innerText().catch(() => '') };
+    };
+    let t = await probar('eficiencia_taller', 'm_proceso__eficiencia_taller', '0');
+    ok(t.igual && /mayor que 0/.test(t.toast), 'la eficiencia del taller en 0 se rechaza');
+    t = await probar('eficiencia_taller', 'm_proceso__eficiencia_taller', '1e999');
+    ok(t.igual, 'un número infinito se rechaza');
+    t = await probar('paso_tornillo_mm', 'm_herrajes__uniones__BRIDADO__paso_tornillo_mm', '0');
+    ok(t.igual, 'el paso de los tornillos en 0 se rechaza');
+    t = await probar('merma RECTO', 'm_merma__RECTO', '100');
+    ok(t.igual && /menor que 100/.test(t.toast), 'una merma de 100 % se rechaza');
+    t = await probar('FSR', 'm_mano_obra__FSR', '0');
+    ok(t.igual, 'el FSR en 0 se rechaza');
+    await ed.fill('#maestros-buscar', 'v_m_min');
+    const celda = ed.locator('.m-tabla input[data-ruta*="GUILLOTINA"]').nth(1);
+    const velAntes = await celda.inputValue();
+    await celda.evaluate((e) => { e.value = '0'; e.dispatchEvent(new Event('change', { bubbles: true })); });
+    ok(await celda.inputValue() === velAntes, 'una velocidad de corte en 0 dentro de la tabla se rechaza');
+    await ed.fill('#maestros-buscar', 'limites');
+    ok(await ed.locator('input#m_proceso__limites__seccion_max_mm').inputValue() === '6000' && await ed.locator('input#m_proceso__limites__largo_max_mm').inputValue() === '100000' && await ed.locator('input#m_proceso__limites__piezas_max').inputValue() === '1000',
+      'los límites de captura (sección máx. 6 000 mm, longitud máx. 100 000 mm, 1 000 piezas) están en «Proceso de fabricación»');
+    await ed.fill('#maestros-buscar', 'limites');
+    ok(JSON.stringify(await ed.evaluate(() => [...document.querySelectorAll('.m-sub')].filter((e) => e.offsetParent !== null).map((e) => e.querySelector('summary').textContent.trim()))) === '["limites"]',
+      'al buscar, los subgrupos sin ningún renglón que coincida no quedan como encabezados vacíos');
+    const lim = ed.locator('input#m_proceso__limites__largo_max_mm');
+    await lim.fill('2000'); await lim.dispatchEvent('change');
+    await ed.click('#tab-cotizacion');
+    ok(await ed.locator('#lista-partidas .partida.err').count() > 0 && /Longitud total: debe estar entre 10 mm y 2000 mm/.test(await ed.locator('.partida.err .chip-err').first().getAttribute('title')), 'bajar el límite de longitud a 2 000 mm marca las partidas que lo pasan (3 000 mm) con el mensaje del límite');
+    await ed.context().close();
+
+    // f) sin almacenamiento del navegador la app trabaja igual
+    const bloq = await nuevaPagina({}, (ctx) => ctx.addInitScript(() => { Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('bloqueado', 'SecurityError'); } }); }));
+    await bloq.click('#btn-agregar'); await bloq.waitForSelector('#dlg-partida[open]'); await bloq.click('#dlg-guardar'); await bloq.waitForTimeout(80);
+    ok(await bloq.locator('#lista-partidas .partida').count() === 8, 'con el almacenamiento bloqueado se puede seguir trabajando');
+    await bloq.context().close();
+    const lleno = await nuevaPagina({}, (ctx) => ctx.addInitScript(() => { Storage.prototype.setItem = function setItem() { throw new DOMException('lleno', 'QuotaExceededError'); }; }));
+    await lleno.click('#btn-agregar'); await lleno.waitForSelector('#dlg-partida[open]'); await lleno.click('#dlg-guardar'); await lleno.waitForTimeout(80);
+    ok(await lleno.locator('#lista-partidas .partida').count() === 8, 'con el almacenamiento lleno también');
+    await lleno.context().close();
+
+    // g) pantalla de 320 px: los avisos no aplastan su texto y la página no se desplaza de lado
+    const m = await nuevaPagina({ viewport: { width: 320, height: 800 } });
+    const med = await m.evaluate(() => ({ txt: document.querySelector('#aviso-ilustrativo .aviso-txt').getBoundingClientRect().width, scroll: document.documentElement.scrollWidth, ancho: document.documentElement.clientWidth }));
+    ok(med.txt >= 200 && med.scroll <= med.ancho, `a 320 px el texto del aviso mide ${Math.round(med.txt)} px (≥ 200) y no hay desplazamiento horizontal`);
+    await m.context().close();
+
+    // h) la fecha de una cotización nueva es la del día LOCAL: a las 9:30 pm en la Ciudad de México sigue siendo hoy (en UTC ya sería mañana)
+    const noche = await nuevaPagina({ timezoneId: 'America/Mexico_City' }, (ctx) => ctx.addInitScript(() => {
+      const fijo = Date.parse('2026-10-06T03:30:00Z'); // 21:30 del 5 de octubre en México
+      const Real = Date;
+      window.Date = class Falsa extends Real { constructor(...a) { if (a.length) super(...a); else super(fijo); } static now() { return fijo; } };
+    }));
+    await noche.click('#btn-nueva');
+    ok(await noche.locator('#c_fecha').inputValue() === '2026-10-05', `a las 9:30 pm del 5 de octubre en México la cotización nueva lleva la fecha 2026-10-05 («${await noche.locator('#c_fecha').inputValue()}»)`);
+    await noche.context().close();
+
+    // i) un texto que Excel tomaría por fórmula se exporta como texto
+    const csv = await nuevaPagina();
+    await csv.click('#btn-nueva');
+    await csv.click('#btn-agregar'); await csv.waitForSelector('#dlg-partida[open]');
+    await csv.fill('#f_descripcion', '=HYPERLINK("http://x","clic")');
+    await csv.click('#dlg-guardar');
+    await csv.click('#btn-io');
+    await csv.click('#io-csv');
+    const lineas = (await csv.inputValue('#io-texto')).split('\n');
+    ok(lineas[1].startsWith('"\'=HYPERLINK(') && !/undefined/.test(lineas.join('\n')), 'en el CSV una descripción que empieza con «=» lleva una comilla delante y no se ejecuta como fórmula');
+    await csv.context().close();
   }
 
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);

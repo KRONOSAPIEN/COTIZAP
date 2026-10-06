@@ -8,12 +8,12 @@
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('./util'));
+    module.exports = factory();
   } else {
     root.COTIZAP = root.COTIZAP || {};
-    root.COTIZAP.consumibles = factory(root.COTIZAP.util);
+    root.COTIZAP.consumibles = factory();
   }
-}(typeof self !== 'undefined' ? self : this, function (U) {
+}(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
   function cantidades(PF, her, tmp, pint, mat, e, M) {

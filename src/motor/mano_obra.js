@@ -7,12 +7,12 @@
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('./util'), require('./material'));
+    module.exports = factory(require('./util'));
   } else {
     root.COTIZAP = root.COTIZAP || {};
-    root.COTIZAP.manoObra = factory(root.COTIZAP.util, root.COTIZAP.material);
+    root.COTIZAP.manoObra = factory(root.COTIZAP.util);
   }
-}(typeof self !== 'undefined' ? self : this, function (U, MAT) {
+}(typeof self !== 'undefined' ? self : this, function (U) {
   'use strict';
 
   const OPERACIONES = ['corte', 'rolado', 'armado', 'aros', 'soldadura', 'engargolado', 'barrenado', 'acabado', 'pintura', 'qc_embalaje'];

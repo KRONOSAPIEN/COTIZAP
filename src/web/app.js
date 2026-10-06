@@ -39,7 +39,11 @@
   });
   W.almacen = Almacen;
   const idNuevo = () => `p${Math.random().toString(36).slice(2, 8)}`;
-  const hoy = () => new Date().toISOString().slice(0, 10);
+  /** Fecha de hoy (AAAA-MM-DD) en la hora LOCAL: toISOString() da la fecha UTC y de noche, en México, ya sería «mañana». */
+  const hoy = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
 
   function cotizacionEjemplo() {
     const base = { cantidad: 1, material_id: 'ACERO_CARBON', calibre: 16, tipo_union: 'BRIDADO', clase_sellado: 'C', ref_diametro: 'INTERIOR' };
@@ -75,17 +79,14 @@
       }
       guardarLS(LLAVE_MIGRADO, true);
     }
-    estado.M = parche ? U.mezclar(base, C.maestros.migrarParche(parche)) : base;
-    const c = leerLS(LLAVE_COT);
-    estado.cot = c && Array.isArray(c.partidas) ? { ...cotizacionVacia(), ...c } : cotizacionEjemplo();
-    migrarUnidades(estado.cot);
+    estado.M = parche ? C.maestros.crearMaestros(parche) : base; // sólo entra lo que tiene la forma de las tablas
+    estado.cot = cotizacionValida(leerLS(LLAVE_COT), estado.M) || cotizacionEjemplo();
     if (estado.cot.ejemplo === true) {
       // La cotización de muestra que nadie ha tocado se renueva con la versión actual de la muestra (nombres de taller,
       // partidas nuevas); se respetan los ajustes generales que ya hubiera cambiado.
       const guardada = estado.cot;
       estado.cot = { ...cotizacionEjemplo(), ...Object.fromEntries(['unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'fecha', 'vigencia_dias', 'parametros'].filter((k) => guardada[k] !== undefined).map((k) => [k, guardada[k]])) };
     }
-    estado.cot.partidas.forEach((p) => { if (!p.id) p.id = idNuevo(); });
     estado.sel = estado.cot.partidas.length ? estado.cot.partidas[0].id : null;
   }
 
@@ -95,6 +96,38 @@
     delete cot.unidad;
     if (!cot.unidad_diam) cot.unidad_diam = 'in';
     if (!cot.unidad_long) cot.unidad_long = 'mm';
+  }
+
+  const esObjeto = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+
+  /**
+   * Una cotización que viene de fuera (navegador o archivo): conserva lo que tiene la forma esperada y repone el resto
+   * (textos, unidades, riesgo, servicio, parámetros, id únicos de las partidas). null si ni siquiera trae una lista de partidas.
+   * Lo que no se puede calcular (medidas absurdas, familia desconocida) se deja tal cual: el motor lo marca partida por partida.
+   */
+  function cotizacionValida(c, M) {
+    if (!esObjeto(c) || !Array.isArray(c.partidas)) return null;
+    const vacia = cotizacionVacia();
+    const crudo = { ...c };
+    migrarUnidades(crudo);
+    const cot = { ...vacia, ...crudo };
+    ['cliente', 'proyecto', 'fecha'].forEach((k) => { if (typeof cot[k] !== 'string') cot[k] = typeof cot[k] === 'number' ? String(cot[k]) : vacia[k]; });
+    if (!(Number.isFinite(cot.vigencia_dias) && cot.vigencia_dias >= 0)) cot.vigencia_dias = vacia.vigencia_dias;
+    if (!['in', 'mm'].includes(cot.unidad_diam)) cot.unidad_diam = vacia.unidad_diam;
+    if (!['mm', 'm', 'in'].includes(cot.unidad_long)) cot.unidad_long = vacia.unidad_long;
+    if (!Object.keys(M.capas.imprevistos_pct).includes(cot.riesgo)) cot.riesgo = vacia.riesgo;
+    if (!Object.keys(M.servicios).includes(cot.servicio)) cot.servicio = vacia.servicio;
+    if (cot.parametros !== undefined && !esObjeto(cot.parametros)) delete cot.parametros;
+    cot.ejemplo = cot.ejemplo === true;
+    const vistos = new Set();
+    cot.partidas = c.partidas.filter(esObjeto).map((p) => {
+      const q = { ...p };
+      if (q.descripcion !== undefined && typeof q.descripcion !== 'string') q.descripcion = typeof q.descripcion === 'number' ? String(q.descripcion) : '';
+      while (typeof q.id !== 'string' || !q.id || vistos.has(q.id)) q.id = idNuevo();
+      vistos.add(q.id);
+      return q;
+    });
+    return cot;
   }
   const unidades = () => ({ diam: estado.cot.unidad_diam, long: estado.cot.unidad_long });
 
@@ -129,14 +162,23 @@
 
   function calcular() {
     const cot = estado.cot;
-    estado.res = C.cotizador.cotizar({ riesgo: cot.riesgo, servicio: cot.servicio, parametros: cot.parametros, partidas: cot.partidas }, estado.M);
+    try {
+      estado.res = C.cotizador.cotizar({ riesgo: cot.riesgo, servicio: cot.servicio, parametros: cot.parametros, partidas: cot.partidas }, estado.M);
+    } catch (err) {
+      // No debería pasar (cotizar() atrapa lo que falle en cada partida): si pasa, la pantalla sigue viva y lo dice.
+      const msg = `No se pudo calcular la cotización (${String((err && err.message) || err)}). Revise las tablas maestras.`;
+      estado.res = C.cotizador.cotizar({ partidas: [] }, C.maestros.crearMaestros());
+      estado.res.partidas = cot.partidas.map((p, indice) => ({ ok: false, indice, interno: true, errores: [msg], entrada: p }));
+      estado.res.totales.n_partidas_error = cot.partidas.length;
+      estado.res.avisos = [msg];
+    }
   }
 
   /* ================================================================== */
   /* Utilidades de presentación                                         */
   /* ================================================================== */
-  const NOMBRE_FAM = Object.fromEntries([...W.FAMILIAS, ...W.FAMILIAS_RETIRADAS]);
-  const ETQ_OP = Object.fromEntries(W.OPERACIONES);
+  const NOMBRE_FAM = Object.assign(Object.create(null), Object.fromEntries([...W.FAMILIAS, ...W.FAMILIAS_RETIRADAS]));
+  const ETQ_OP = Object.assign(Object.create(null), Object.fromEntries(W.OPERACIONES));
   const nombreMaterial = (p) => {
     const m = estado.M.materiales[p.material_id];
     return m ? m.nombre.split(' (')[0] : p.material_id;
@@ -800,11 +842,13 @@
     const campos = [...W.CAMPOS[dlg.familia], ...(dlg.familia === 'COMPRADO' ? [] : [...W.CAMPOS_MATERIAL, ...W.CAMPOS_AVANZADOS])];
     const crudo = {};
     $$('#dlg-campos [name]').forEach((el) => { crudo[el.name] = el.value; });
+    dlg.invalidos = []; // lo que se escribió y no es un número: no se deja pasar como «automático» en silencio
     campos.forEach((c) => {
       const el = $(`#f_${c.id}`);
       if (!el) return;
       if (c.visible && !c.visible(crudo)) return;
       let v = el.value;
+      if (el.validity && el.validity.badInput) dlg.invalidos.push(`${c.etiqueta}: lo escrito no es un número.`);
       if (c.tipo === 'select') {
         if (v === '') return;
         p[c.id] = c.id === 'caras_pintadas' || c.numerico ? Number(v) : v;
@@ -818,13 +862,22 @@
       if (v === '') return;
       if (c.tipo === 'dim') {
         if (el.dataset.mm !== undefined && v === el.dataset.texto) p[c.id] = Number(el.dataset.mm); // campo sin tocar: valor exacto
-        else { v = W.leerNumero(v); p[c.id] = Number.isNaN(v) ? undefined : deUnidad(v, c.eje); }
+        else {
+          const texto = v;
+          v = W.leerNumero(v);
+          if (Number.isNaN(v)) dlg.invalidos.push(`${c.etiqueta}: «${texto}» no es una medida válida (use 12, 12.5, 12 1/2 o 3/8).`);
+          p[c.id] = Number.isNaN(v) ? undefined : deUnidad(v, c.eje);
+        }
       } else if (c.tipo === 'pct') p[c.id] = Number(v) / 100;
       else p[c.id] = Number(v);
     });
     p.descripcion = ($('#f_descripcion') || { value: '' }).value.trim();
     p.cantidad = Number(($('#f_cantidad') || { value: 1 }).value);
     if (dlg.familia !== 'COMPRADO') {
+      $$('.sub-fila', $('#dlg-campos')).forEach((fila, i) => {
+        const el = $('.sc-precio', fila);
+        if ((el.validity && el.validity.badInput) || Number(el.value || 0) < 0) dlg.invalidos.push(`Subcontrato ${i + 1}: el precio debe ser un número, 0 o mayor.`);
+      });
       const subs = $$('.sub-fila', $('#dlg-campos')).map((fila) => ({
         concepto: $('.sc-concepto', fila).value.trim() || 'Subcontrato', driver: $('.sc-driver', fila).value, precio: Number($('.sc-precio', fila).value || 0),
       })).filter((s) => s.precio > 0);
@@ -916,6 +969,12 @@
     const cont = $('#dlg-prev');
     const p = leerDialogo();
     const tit = h('h3', null, 'Vista previa');
+    const bloqueErrores = (msgs) => h('div', { class: 'errores' }, h('p', { class: 'errores-tit' }, W.icono('error'), 'Revise estos datos'), h('ul', null, msgs.map((m) => h('li', null, m))));
+    if (dlg.invalidos.length) {
+      dlg.error = dlg.invalidos;
+      cont.replaceChildren(tit, bloqueErrores(dlg.invalidos));
+      return;
+    }
     try {
       const defs = { riesgo: estado.cot.riesgo, servicio: estado.cot.servicio };
       const f = C.cotizador.cotizarPartida({ ...defs, ...p }, estado.res.maestros);
@@ -933,7 +992,7 @@
     } catch (err) {
       const msgs = err instanceof U.ErrorValidacion ? err.errores : [String(err.message || err)];
       dlg.error = msgs;
-      cont.replaceChildren(tit, h('div', { class: 'errores' }, h('p', { class: 'errores-tit' }, W.icono('error'), 'Revise estos datos'), h('ul', null, msgs.map((m) => h('li', null, m)))));
+      cont.replaceChildren(tit, bloqueErrores(msgs));
     }
   }
 
@@ -942,7 +1001,12 @@
     dlg.id = id;
     let p;
     if (id) {
-      p = U.clonar(estado.cot.partidas.find((x) => x.id === id));
+      const original = estado.cot.partidas.find((x) => x.id === id);
+      if (!original || !Object.prototype.hasOwnProperty.call(W.CAMPOS, original.familia)) {
+        toast('Esta partida tiene una familia que no existe en esta versión: elimínela y vuelva a capturarla.');
+        return;
+      }
+      p = U.clonar(original);
       dlg.familia = p.familia;
       if (p.espesor_mm > 0) p.calibre = 'PROPIO';
       if (p.calibre !== undefined) p.calibre = String(p.calibre);
@@ -1024,13 +1088,16 @@
   /* Intercambio (guardar / cargar / CSV) y propuesta impresa           */
   /* ================================================================== */
   function csvPartidas() {
-    const esc = (s) => `"${String(s).replace(/"/g, '""')}"`;
-    const filas = [['Descripción', 'Familia', 'Material', 'Calibre', 'Cantidad', 'Precio unitario', 'Importe', 'Peso neto total kg'].map(esc).join(',')];
+    const esc = (s) => `"${String(s === undefined || s === null ? '' : s).replace(/"/g, '""')}"`;
+    // Un texto que empieza con = + - @ se tomaría por fórmula al abrirlo en Excel: se le antepone una comilla.
+    const txt = (s) => esc(/^[=+\-@\t\r]/.test(String(s === undefined || s === null ? '' : s)) ? `'${s}` : s);
+    const fila = (c) => [txt(c[0]), txt(c[1]), txt(c[2]), esc(c[3]), esc(c[4]), esc(c[5]), esc(c[6]), esc(c[7])].join(',');
+    const filas = [fila(['Descripción', 'Familia', 'Material', 'Calibre', 'Cantidad', 'Precio unitario', 'Importe', 'Peso neto total kg'])];
     estado.res.partidas.forEach((f, i) => {
       const p = estado.cot.partidas[i];
-      if (!f.ok) { filas.push([p.descripcion, p.familia, '', '', p.cantidad, 'ERROR', '', ''].map(esc).join(',')); return; }
-      filas.push([p.descripcion || NOMBRE_FAM[p.familia], p.familia, p.familia === 'COMPRADO' ? '' : nombreMaterial(p), p.calibre || p.espesor_mm || '', p.cantidad,
-        f.precio.unitario.toFixed(2), f.precio.importe.toFixed(2), f.peso.neto_total_kg.toFixed(3)].map(esc).join(','));
+      if (!f.ok) { filas.push(fila([p.descripcion || NOMBRE_FAM[p.familia], p.familia, '', '', p.cantidad, 'ERROR', '', ''])); return; }
+      filas.push(fila([p.descripcion || NOMBRE_FAM[p.familia], p.familia, p.familia === 'COMPRADO' ? '' : nombreMaterial(p), p.calibre || p.espesor_mm || '', p.cantidad,
+        f.precio.unitario.toFixed(2), f.precio.importe.toFixed(2), f.peso.neto_total_kg.toFixed(3)]));
     });
     return filas.join('\n');
   }
@@ -1048,22 +1115,27 @@
   function cargarJSON(txt) {
     let obj;
     try { obj = JSON.parse(txt); } catch (e) { toast('El texto no es un JSON válido'); return false; }
-    if (!obj || !obj.cotizacion || !Array.isArray(obj.cotizacion.partidas)) { toast('El archivo no contiene una cotización de COTIZAP'); return false; }
-    estado.cot = { ...cotizacionVacia(), ...obj.cotizacion };
-    estado.cot.partidas.forEach((p) => { if (!p.id) p.id = idNuevo(); });
     // La versión 1 exportaba los maestros completos, con los herrajes de arranque de entonces (ángulos por diámetro):
     // se descartan para que mande el estándar de bridas del taller; precios, tarifas y procesos sí se respetan.
-    const antigua = !!obj.maestros && !(Number(obj.version) >= 2);
-    if (obj.maestros) {
+    const antigua = esObjeto(obj) && esObjeto(obj.maestros) && !(Number(obj.version) >= 2);
+    let parche = null;
+    if (esObjeto(obj) && esObjeto(obj.maestros)) {
       const { herrajes, ...resto } = obj.maestros;
-      estado.M = U.mezclar(C.maestros.crearMaestros(), C.maestros.migrarParche(antigua ? resto : obj.maestros));
+      parche = antigua ? resto : obj.maestros;
     }
+    const M = parche ? C.maestros.crearMaestros(parche) : estado.M;
+    const cot = esObjeto(obj) ? cotizacionValida(obj.cotizacion, M) : null;
+    if (!cot) { toast('El archivo no contiene una cotización de COTIZAP'); return false; }
+    const ignorados = parche ? C.maestros.leerParche(parche).descartados.length : 0;
+    estado.M = M;
+    estado.cot = cot;
     estado.sel = estado.cot.partidas[0] ? estado.cot.partidas[0].id : null;
     persistir();
     sincronizarEncabezado();
     render();
     if (root.COTIZAP.web.maestrosUI) root.COTIZAP.web.maestrosUI.render();
-    toast(antigua ? 'Cotización cargada · archivo de una versión anterior: se aplicó la brida estándar del taller' : 'Cotización cargada');
+    toast(antigua ? 'Cotización cargada · archivo de una versión anterior: se aplicó la brida estándar del taller'
+      : ignorados ? `Cotización cargada · ${ignorados} ${ignorados === 1 ? 'valor' : 'valores'} de las tablas no tenían la forma esperada y se ignoraron` : 'Cotización cargada');
     return true;
   }
 
@@ -1106,6 +1178,7 @@
 
   function renderPropuesta() {
     const c = estado.cot;
+    const vigencia = Number.isFinite(c.vigencia_dias) && c.vigencia_dias > 0 ? Math.min(3650, Math.round(c.vigencia_dias)) : 0;
     const T = estado.res.totales;
     const filas = estado.res.partidas.map((f, i) => ({ f, p: c.partidas[i] })).filter((x) => x.f.ok);
     const dias = estado.res.capas.financiamiento.dias_cobro;
@@ -1114,7 +1187,7 @@
       h('header', { class: 'prop-cab' },
         h('h1', null, 'Propuesta de fabricación de ductería'),
         h('dl', null,
-          kv('Cliente', c.cliente || '—'), kv('Proyecto', c.proyecto || '—'), kv('Fecha', fechaLarga(c.fecha)), kv('Vigencia', `${c.vigencia_dias} días naturales`))),
+          kv('Cliente', c.cliente || '—'), kv('Proyecto', c.proyecto || '—'), kv('Fecha', fechaLarga(c.fecha)), kv('Vigencia', vigencia ? `${vigencia} días naturales` : '—'))),
       tabla([{ t: 'Partida' }, { t: 'Material' }, { t: 'Cant.', num: true }, { t: 'P. unitario', num: true }, { t: 'Importe', num: true }],
         filas.map(({ f, p }) => [h('div', null, h('strong', null, p.descripcion || NOMBRE_FAM[p.familia]), h('div', { class: 'prop-dim' }, W.resumenDims(p, { diam: c.unidad_diam, long: c.unidad_long }))), resumenMaterial(p) || 'Compra', String(p.cantidad), W.mxn(f.precio.unitario), W.mxn(f.precio.importe)])),
       h('dl', { class: 'prop-tot' },
@@ -1122,7 +1195,7 @@
         T.descuento > 0 ? kv(`Descuento ${pctCorto(T.descuento_pct)}`, `−${W.mxn(T.descuento)}`) : null,
         kv(`IVA ${pctCorto(T.iva_pct)}`, W.mxn(T.iva)),
         kv('Total', W.mxn(T.total))),
-      h('p', { class: 'prop-nota' }, `Precios en pesos mexicanos (MXN), antes de IVA salvo indicación. Peso neto aproximado: ${W.num(T.peso_neto_kg, 1)} kg. Vigencia de ${c.vigencia_dias} días a partir de la fecha de emisión; sujeta a variación del precio del acero. Condiciones de pago: ${dias > 0 ? `crédito a ${dias} días` : 'de contado'}.`));
+      h('p', { class: 'prop-nota' }, `Precios en pesos mexicanos (MXN), antes de IVA salvo indicación. Peso neto aproximado: ${W.num(T.peso_neto_kg, 1)} kg. ${vigencia ? `Vigencia de ${vigencia} días a partir de la fecha de emisión; ` : ''}sujeta a variación del precio del acero. Condiciones de pago: ${dias > 0 ? `crédito a ${dias} días` : 'de contado'}.`));
   }
 
   /* ================================================================== */

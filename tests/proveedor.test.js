@@ -117,7 +117,8 @@ test('El cálculo usa la hoja cotizada de ese material y calibre (la del tamaño
 
 test('Un precio inválido (0, negativo o sin medidas) no se usa: el cálculo cae a la tabla por kg', () => {
   [0, -5, 'abc'].forEach((precio) => {
-    const Mx = crearMaestros({ proveedor: { hojas: { GALV_C22_4X10: { precio } } } });
+    const Mx = crearMaestros();
+    Mx.proveedor.hojas.GALV_C22_4X10.precio = precio; // a mano: crearMaestros descarta un parche con un texto donde va un número
     assert.equal(PROV.laminaDe(Mx, 'GALVANIZADO', 22), null, `precio ${precio}`);
   });
   const Msm = crearMaestros({ proveedor: { hojas: { GALV_C22_4X10: { ancho_mm: 0 } } } });

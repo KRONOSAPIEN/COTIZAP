@@ -21,7 +21,7 @@
     ['mano_obra', 'Mano de obra y equipo', 'Costo por hora = salario por hora × FSR. El salario del taller ya incluye prestaciones, por eso FSR = 1.00 (el Factor de Salario Real las suma cuando el salario no las trae).'],
     ['merma', 'Merma por familia', 'Fracción del material comprado que no queda en la pieza (se captura en %).'],
     ['capas', 'Pila de precio', 'Indirectos, imprevistos, financiamiento, utilidad, comisión e IVA.'],
-    ['proceso', 'Proceso de fabricación', 'Velocidades, tiempos fijos, soldadura, pintura y eficiencia del taller.'],
+    ['proceso', 'Proceso de fabricación', 'Velocidades, tiempos fijos, soldadura, pintura, eficiencia del taller y límites de captura de las partidas.'],
     ['herrajes', 'Herrajes de unión', 'Perfiles de aros, tipos de unión, empaque y sellador.'],
     ['materiales', 'Materiales', 'Densidad, tabla de calibre, variables de precio y consumibles por material.'],
     ['calibres', 'Espesor por calibre', 'En pulgadas. Cada familia de calibre (MSG, GSG, USSG) tiene su propia tabla.'],
@@ -34,7 +34,6 @@
     [/_mm$/, 'mm'], [/_mm2$/, 'mm²'], [/_m_min$/, 'm/min'], [/_min_m2$/, 'min/m²'], [/_min_m$/, 'min/m'], [/_min_kg$/, 'min/kg'], [/_min$/, 'min'], [/_deg$/, '°'],
     [/_kg_m3$/, 'kg/m³'], [/_g_cm3$/, 'g/cm³'], [/_L_min$/, 'L/min'], [/_um$/, 'µm'], [/^dias_cobro$/, 'días'], [/ml_por_m/, 'mL/m'], [/^cartucho_ml$/, 'mL'],
   ];
-  const POSITIVOS = ['eficiencia_taller', 'FO', 'eta_dep', 'eta_transf', 'v_mult', 'FSR', 'cartucho_ml', 'paso_tornillo_mm', 'paso_fijacion_mm', 'densidad_kg_m3', 'dft_um', 'sv_pct', 'L_max_pieza_mm'];
 
   // Se guardan como fracción (0.20) y se muestran en % (20): `utilidad_pct_precio`, `administracion_pct_cd`, `iva_pct`… (`_pct` en cualquier parte del nombre)
   const esPct = (ruta) => ruta[0] === 'merma' || ruta.some((k) => typeof k === 'string' && /_pct(_|$)|^tasa_/.test(k) && k !== 'sv_pct');
@@ -230,7 +229,11 @@
       });
       g.hidden = q !== '' && visibles === 0;
       if (q) g.open = visibles > 0;
-      if (q) $$('.m-sub', g).forEach((s) => { s.open = true; });
+      // Un subgrupo sin ningún renglón que coincida no se deja como un encabezado vacío
+      $$('.m-sub', g).forEach((s) => {
+        s.hidden = q !== '' && !$('.m-fila:not([hidden]), .m-tabla:not([hidden])', s);
+        if (q) s.open = true;
+      });
     });
   }
 
@@ -244,12 +247,13 @@
       aplicar(ruta, el.value);
     } else {
       const n = Number(el.value);
-      const k = ruta[ruta.length - 1];
-      if (el.value === '' || Number.isNaN(n) || n < 0 || (POSITIVOS.includes(k) && n <= 0)) {
+      // Qué celdas no admiten cero lo dice el motor (validacion.js): la misma lista con la que calcula; una merma es menos de 100 %
+      const masDelTope = ruta[0] === 'merma' && n >= 100;
+      if (el.value === '' || !Number.isFinite(n) || n < 0 || masDelTope || (C.validacion.exigePositivo(ruta) && n <= 0)) {
         let o = estado.M;
         ruta.forEach((x) => { o = o[x]; });
         el.value = String(tipo === 'pct' ? Number((o * 100).toFixed(6)) : o);
-        W.toast('Valor no válido: use un número positivo');
+        W.toast(masDelTope ? 'Valor no válido: la merma debe ser menor que 100 %' : C.validacion.exigePositivo(ruta) ? 'Valor no válido: este dato debe ser mayor que 0' : 'Valor no válido: use un número, 0 o mayor');
         return;
       }
       aplicar(ruta, tipo === 'pct' ? n / 100 : n);

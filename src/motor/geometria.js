@@ -32,6 +32,7 @@
   function dimensionesRedondas(D_nom_mm, e_mm, ref) {
     const exterior = ref === 'EXTERIOR';
     const D_int = exterior ? D_nom_mm - 2 * e_mm : D_nom_mm;
+    exigir(D_int > 0, `El diámetro exterior (${D_nom_mm} mm) debe ser mayor que el doble del espesor (${2 * e_mm} mm): con esa medida no existe el diámetro interior.`);
     return { D_int, D_med: D_int + e_mm, D_ext: D_int + 2 * e_mm };
   }
 
@@ -39,6 +40,7 @@
     const exterior = ref === 'EXTERIOR';
     const a_int = exterior ? a_nom_mm - 2 * e_mm : a_nom_mm;
     const b_int = exterior ? b_nom_mm - 2 * e_mm : b_nom_mm;
+    exigir(a_int > 0 && b_int > 0, `Los lados exteriores a × b deben ser mayores que el doble del espesor (${2 * e_mm} mm): con esa medida no existe el interior.`);
     return {
       a_int, b_int, a_med: a_int + e_mm, b_med: b_int + e_mm, a_ext: a_int + 2 * e_mm, b_ext: b_int + 2 * e_mm,
     };
@@ -52,6 +54,9 @@
     forma: 'RECTANGULAR', a_ext_mm: d.a_ext, b_ext_mm: d.b_ext,
     P_ext_mm: 2 * (d.a_ext + d.b_ext), P_med_mm: 2 * (d.a_med + d.b_med),
   });
+
+  /** Protección del motor, aunque los maestros no traigan límites: ningún arreglo de extremos o piezas pasa de esto. */
+  const TOPE_PIEZAS = 100000;
 
   function nuevoPF(familia) {
     return {
@@ -130,7 +135,10 @@
 
     const L_total = p.L_mm;
     const L_max = p.L_max_pieza_mm || M.proceso.L_max_pieza_mm;
+    exigir(L_max > 0, 'La longitud máxima por pieza debe ser mayor que 0.');
     const n_piezas = Math.max(1, Math.ceil(L_total / L_max - 1e-9));
+    const tope = Math.min(M.proceso.limites && M.proceso.limites.piezas_max > 0 ? M.proceso.limites.piezas_max : Infinity, TOPE_PIEZAS);
+    exigir(n_piezas <= tope, `Un tramo de ${L_total} mm en piezas de ${L_max} mm serían ${n_piezas} piezas (el máximo es ${tope}): revise la longitud total y la longitud máxima por pieza.`);
     const L_pieza = L_total / n_piezas;
     const n_cost = forma === 'REDONDA' ? 1 : (p.n_costuras_long || 1);
 
@@ -579,10 +587,11 @@
     return PF;
   }
 
-  function personalizado(p, e, M) {
+  function personalizado(p, e) {
     const PF = nuevoPF('PERSONALIZADO');
     exigir(p.A_neta_m2 > 0, 'El área neta de la pieza personalizada debe ser mayor que 0.');
     const n_ext = p.n_extremos === undefined ? 0 : p.n_extremos;
+    exigir(Number.isInteger(n_ext) && n_ext >= 0 && n_ext <= 1000, 'Los extremos a unir deben ser un entero de 0 a 1000.');
     const D_ref = p.D_ref_mm || 0;
     exigir(n_ext === 0 || D_ref > 0, 'Indicar el diámetro de referencia de los extremos (D_ref_mm).');
     const dRef = D_ref ? dimensionesRedondas(D_ref, e, p.ref_diametro) : null;
@@ -611,7 +620,7 @@
       case 'RAMAL': PF = ramal(p, e, M); break;
       case 'REDUCCION_INJERTO': PF = reduccionInjerto(p, e, M); break;
       case 'PANTALON': PF = pantalon(p, e, M); break; // retirada: sólo para abrir cotizaciones anteriores
-      case 'PERSONALIZADO': PF = personalizado(p, e, M); break;
+      case 'PERSONALIZADO': PF = personalizado(p, e); break;
       default: throw new U.ErrorValidacion([`Familia desconocida: ${p.familia}`]);
     }
     // Superficie exterior (pintura): exacta en recto y codo; en el resto A_ext ≈ A_neta · (D_ref + e)/D_ref

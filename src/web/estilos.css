@@ -205,7 +205,7 @@ main { padding: 16px 24px 48px; max-width: 1540px; margin-inline: auto; }
   display: flex; align-items: center; gap: 12px; padding: 9px 14px; border-radius: 10px;
   background: var(--surface-2); border: 1px solid var(--line); color: var(--fg);
 }
-.aviso-txt { flex: 1; min-width: 0; }
+.aviso-txt { flex: 1 1 14em; min-width: 0; } /* base de 14 em: en pantallas angostas el botón pasa a otro renglón en vez de aplastar el texto */
 .aviso-icono {
   flex: none; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
   font: 700 12px var(--font-ui); background: var(--fg-3); color: var(--surface);

@@ -55,7 +55,7 @@
 
   /* ---------------- Íconos ---------------- */
   const svg = (inner, vb, cls) => `<svg class="${cls || 'ico'}" viewBox="${vb || '0 0 24 24'}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${inner}</svg>`;
-  W.icono = (nombre) => W.h('span', { class: 'icono', html: svg(W.ICONOS[nombre] || '') });
+  W.icono = (nombre) => W.h('span', { class: 'icono', html: svg(Object.prototype.hasOwnProperty.call(W.ICONOS, nombre) ? W.ICONOS[nombre] : '') });
   W.ICONOS = {
     mas: '<path d="M12 5v14M5 12h14"/>',
     editar: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
@@ -85,5 +85,5 @@
     PERSONALIZADO: '<path d="M10 25l15-15 6 6-15 15H10z"/><path d="M28 7l3-3 6 6-3 3"/>',
     COMPRADO: '<path d="M8 11l16-7 16 7v14l-16 6-16-6z"/><path d="M8 11l16 6 16-6M24 17v14"/>',
   };
-  W.iconoFamilia = (fam) => W.h('span', { class: 'icono-fam', html: svg(FAM[fam] || '', '0 0 48 32', 'ico-fam') });
+  W.iconoFamilia = (fam) => W.h('span', { class: 'icono-fam', html: svg(Object.prototype.hasOwnProperty.call(FAM, fam) ? FAM[fam] : '', '0 0 48 32', 'ico-fam') });
 }(typeof self !== 'undefined' ? self : this));

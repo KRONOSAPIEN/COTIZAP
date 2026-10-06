@@ -322,6 +322,19 @@
 | `comision_ventas_pct_precio` | 2 % | `otros_pct_precio` | 0 % |
 | `iva_pct` | 16 % | `cargo_minimo_partida` | 250.00 MXN |
 
+**T10 · Límites de captura** (`proceso.limites`; son **política del taller**, no física: protegen de un cero de más al teclear y de archivos dañados. Una partida fuera de ellos se rechaza con un mensaje que dice el límite; se pueden ampliar en las tablas maestras)
+
+| Límite (`proceso.limites.*`) | Valor | Qué limita |
+| --- | --- | --- |
+| `cantidad_max` | 100,000 | piezas por partida |
+| `seccion_min_mm` | 25 | diámetro o lado más chico (nominal) |
+| `seccion_max_mm` | 6,000 | diámetro o lado más grande (nominal) |
+| `largo_min_mm` | 10 | longitud más corta que se captura (tramo, injerto, tangente…) |
+| `largo_max_mm` | 100,000 | longitud más larga (100 m) |
+| `espesor_min_mm` | 0.2 | espesor propio (placa) mínimo |
+| `espesor_max_mm` | 50 | espesor propio (placa) máximo |
+| `piezas_max` | 1,000 | piezas en que se parte un tramo recto, o piezas a armar de una pieza personalizada |
+
 ### 2.3 Reglas de validación
 
 | # | Regla | Efecto |
@@ -339,6 +352,15 @@
 | V11 | Lista del proveedor: un renglón con precio ≤ 0 o sin medidas válidas no se usa (el cálculo cae al precio por kg de T3) | Silencioso; el renglón se ve como sin $/kg |
 | V12 | `salario_hora ≥ 0` en cada operación | Error (con el nombre de la operación) |
 | V13 | `cotizacion.parametros`: un valor fuera de sus límites (§5.4), no numérico o —en días— no entero se **ignora** y rige el de las tablas maestras; vacío = sin parámetro | Aviso con el nombre del parámetro |
+| V14 | **Tipo:** todo campo numérico de la partida es un número finito. Un texto numérico («12.5», «1e3») se acepta y se convierte; `NaN`, `±Infinity`, texto no numérico, listas, objetos y booleanos se rechazan. Un vacío opcional («», `null`) significa «automático» | Error: «Diámetro: «abc» no es un número» |
+| V15 | **Rango:** cada medida, longitud, espesor, cantidad y conteo está dentro de T10 o de su rango propio (por ejemplo costuras longitudinales 1–8, gajos 2–60, merma 0–90 %); cero, negativos y «casi cero» (1 mm, 10⁻⁹) se rechazan; en un campo opcional el 0 equivale a vacío | Error con el rango y lo que trae la partida |
+| V16 | **Pertenencia:** `familia`, `material_id`, `forma`, `ref_diametro`, `tipo_union`, `clase_sellado`, `pintura`, `servicio`, `riesgo`, `proceso_corte`, `perfil_id`, `tipo_costura` y `excentrica` deben existir (ni `constructor` ni `__proto__`); `omitir_operaciones` y `subcontratos` son listas de lo esperado; `caras_pintadas` ∈ {1, 2}; `usa_empaque` es sí/no | Error con las opciones válidas |
+| V17 | **Geometría física:** una dimensión **exterior** debe ser mayor que el doble del espesor (si no, no existe el interior); un tramo recto no se parte en más piezas que `piezas_max` | Error |
+| V18 | **Tablas maestras sanas:** divisores y rendimientos (`eficiencia_taller`, velocidades, `paso_tornillo_mm`, `cartucho_ml`, densidad, `FSR`, `sv_pct`, `eta_*`, `FO`…) **> 0**; todo número de las tablas finito y **≥ 0**; merma en [0, 1); tablas espesor → velocidad con espesores crecientes y velocidades > 0; las listas de ángulos y los límites de T10 presentes. Una partida comprada sólo depende de `capas` | Error «Tablas maestras · ruta: …» en cada partida afectada, y aviso general; nunca un NaN ni un precio infinito |
+| V19 | **Resultado numérico:** nada de lo que sale del cálculo de una partida puede ser `NaN` ni infinito | Error que dice dónde |
+| V20 | **Datos que vienen de fuera** (navegador, almacén compartido, archivo importado): un parche de maestros conserva sólo lo que tiene la forma de las tablas (un número donde va un número…; lo demás se descarta y se cuenta); una cotización importada conserva lo sano: las partidas que no son objetos se descartan, los `id` se reponen únicos, y los textos, unidades, riesgo y servicio inválidos vuelven a su valor por defecto. `__proto__` nunca entra | Se avisa cuántos valores se ignoraron; un archivo sin lista de partidas se rechaza sin tocar nada |
+
+La validación vive en `src/motor/validacion.js` (V14–V16, V18, V19), `src/motor/geometria.js` (V17) y `sanearParche` en `src/datos/maestros.js` (V20). Una partida que no se puede calcular **no detiene la cotización**: queda como `{ ok: false, errores }` y las demás se calculan; una falla inesperada del cálculo se atrapa por partida (`interno: true`) en vez de romper la pantalla.
 
 ---
 
@@ -834,13 +856,15 @@ La pantalla muestra el descuento en el total, la **utilidad** (en pesos y como %
 ```text
 FUNCIÓN cotizar(cotización, M):                          # M = snapshot de maestros (versión congelada)
     Mq ← maestros_efectivos(cotización.parametros, M)    # capas de T9 con los parámetros de la cotización encima (§5.4); no muta M
+    problemas ← problemas_maestros(Mq)                   # tablas sanas (V18): una sola vez para todas las partidas
     PARA CADA partida p EN cotización.partidas:
-        resultado[p] ← cotizar_partida(p, Mq)            # un error en una partida no tumba las demás
+        resultado[p] ← cotizar_partida(p, Mq)            # un error —de datos o inesperado— en una partida no tumba las demás
     subtotal ← Σ resultado.importe ;  descuento ← subtotal · Mq.descuento ;  neto ← subtotal − descuento
     IVA ← neto · Mq.iva ;  total ← neto + IVA
 
 FUNCIÓN cotizar_partida(p, M):
-    validar(p, M)                                        # errores bloquean · advertencias se reportan
+    exigir_maestros_sanos(M)                             # V18: un divisor en cero daría NaN o un precio infinito
+    p ← normalizar_y_validar(p, M)                       # tipo, rango y pertenencia (V14–V16) y política del taller · errores bloquean · advertencias se reportan
     mat ← M.materiales[p.material_id]
     e   ← M.calibres[mat.tabla_calibre][p.calibre] · 25.4          # o p.espesor_mm (placa)
 
@@ -855,6 +879,7 @@ FUNCIÓN cotizar_partida(p, M):
     # ── Valorización: aquí, y sólo aquí, entran los precios ──────────────────────────────
     CD  ← valorizar(p.cantidad, lam, her, t, con, M.precios, M.proveedor, M.tarifas, M.η)
     PR  ← pila(CD, CD.h_MOD, p.riesgo, M.capas)          # CI → imprevistos → financiamiento → margen
+    exigir_resultado_numérico(...)                       # V19: ningún NaN ni infinito sale del cálculo
     RETORNAR { QTO, desglose: CD, pila: PR, precio_unitario, indicadores, advertencias }
 ```
 
@@ -1199,6 +1224,7 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 | §5.1.1 Lista de precios del proveedor (kg por pieza, $/kg sin IVA, qué renglón usa el cálculo) | `src/motor/proveedor.js` |
 | §4.3 Consumibles | `src/motor/consumibles.js` |
 | §5 Valorización y pila de precio | `src/motor/precios.js` |
+| §2.3 Validación de entrada: tipos, rangos, pertenencia, tablas maestras sanas, resultados finitos (V14–V19) | `src/motor/validacion.js` |
 | §5.4 y §6 Parámetros de la cotización, orquestación y validación | `src/motor/cotizador.js` |
 | Interfaz web (captura, desglose, editor de maestros, propuesta imprimible) | `src/web/` (`index.html`, `app.js`, `maestros_ui.js`, `esquemas.js`, `dom.js`, `estilos.css`) |
 | Guardado automático de las tablas maestras (artefacto y navegador) | `src/web/almacen.js` |
@@ -1221,6 +1247,7 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 - **Oráculos geométricos independientes:** codo, reducción excéntrica, transición, injerto simple (distancia media de silleta y área del orificio por fuerza bruta) y reducción con injerto (silleta sobre el cono por bisección, polilínea y rejilla; ensamble recalculado línea por línea) se comparan contra mallas 3D y promedios numéricos de fuerza bruta (`tests/geometria.test.js`). **Toda familia nueva debe traer su oráculo independiente.**
 - **Lista del proveedor y mano de obra** (`tests/proveedor.test.js`): la lista reproduce al centavo los precios sin IVA de la factura; kg por hoja y por barra y $/kg recalculados desde las medidas; qué renglón usa el cálculo (hoja estándar, calibre sin cotizar, placa, inoxidable); IVA incluido o no; un precio inválido cae a la tabla; el salario es por hora y el costo de la hora es salario × FSR; un parche guardado con el salario diario de antes se limpia.
 - **Parámetros de la cotización** (`tests/parametros.test.js`): cada parámetro recalculado desde `C_base` (margen, comisión, administración, días y tasa de cobro, IVA); descuento con IVA sobre el neto; utilidad real y su forma cerrada; valores inválidos que se ignoran con aviso; las tablas maestras no se mutan; la vista previa de una partida coincide con la lista; y los campos del encabezado en las pruebas de interfaz (sección 19).
+- **Robustez** (`tests/robustez.test.js`): 640 partidas válidas al azar con semilla fija de todas las familias (sin excepciones ni `NaN`, pila de precio cerrada, cantidades independientes de los precios, ida y vuelta por JSON); cada campo numérico de cada familia corrompido con `NaN`, `±Infinity`, texto, listas, objetos y booleanos (siempre se rechaza); medidas en cero, negativas, «casi cero» y de `1e12` (se rechazan sin agotar memoria); vacíos opcionales; enumeraciones y listas; maestros con ceros, negativos, tablas de velocidad rotas o secciones ausentes (error que nombra la ruta); `cotizar()` con cotizaciones y partidas mal formadas (nunca lanza); y `sanearParche` contra parches dañados y `__proto__`. Las secciones 20 de `tests/e2e/ui.e2e.js` repiten lo visible: almacenamiento dañado, números ilegibles en el formulario, importaciones hostiles, tablas con ceros, almacenamiento bloqueado o lleno, fecha local y pantalla de 320 px.
 - **Pruebas de política:** separación cantidades/precios, identidades de la pila (`P·(1 − u − c − o) = C_base`), cargo mínimo, subcontratos, validaciones, uniones, materiales (`tests/motor.test.js`).
 - **Estándar de bridas del taller** (`tests/motor.test.js`): la solera de 1½" × 3/16" pesa `b·t·ρ`; el taller usa la misma brida (barreno Ø3/8", tornillo 5/16" × 1¼") en todos los diámetros; `L_aro = π·(D_ext + b) + holgura`; nº de barrenos múltiplo de 4 por paso; cada aro se valoriza con el precio de su propio perfil y el tornillo con el suyo; el cierre del aro se suelda a tope al espesor de la solera; marco rectangular; y `ESPIGA` no genera aros ni barrenos.
 - **Persistencia de maestros** (`tests/util.test.js`): `mezclar(base, diferencia(base, actual))` reconstruye lo editado y los valores de arranque nuevos no quedan enmascarados.
@@ -1323,3 +1350,16 @@ Lo que pidió el taller: ajustar el margen de utilidad y los demás parámetros 
 | El descuento reduce también la comisión | La comisión de ventas se paga sobre el precio ya descontado | `capas.comision_ventas_pct_precio` | Si la comisión se calcula sobre el precio de lista, la utilidad real baja `c · d` puntos más. |
 | Dónde se aplica el descuento | Una sola cifra sobre el subtotal de toda la cotización, antes de IVA; las partidas conservan su precio | — | Un descuento por partida necesita un campo en cada partida. |
 | Límites de los parámetros | Margen 0–80 %, comisión 0–20 %, descuento 0–50 %, administración 0–50 %, financiamiento 0–100 %, IVA 0–30 %, cobro 0–365 días | `PARAMETROS_COTIZACION` | Ampliarlos si la política del taller lo requiere; la pantalla toma los mismos límites. |
+
+### 10.8 Supuestos de los límites de captura por confirmar
+
+Los límites de T10 se **supusieron**: son los de un taller de ducto de colección de polvo y se cambian en las tablas maestras (`proceso › limites`), no en el código.
+
+| Supuesto | Valor usado | Efecto si es distinto |
+| --- | --- | --- |
+| Sección (diámetro o lado) | 25 mm a 6 000 mm | Un ducto de silo o chimenea de más de 6 m exige subir `seccion_max_mm`; uno de menos de 1″, bajar `seccion_min_mm`. |
+| Longitud de un tramo, injerto o tangente | 10 mm a 100 000 mm | Una pieza de menos de 1 cm no es ducto: se rechaza para no confundirla con un cero mal tecleado. |
+| Espesor propio (placa) | 0.2 mm a 50 mm | Una placa mayor a 2″ se cotiza como pieza personalizada o comprada. |
+| Cantidad por partida | 1 a 100 000 | Una corrida mayor se parte en varias partidas. |
+| Piezas de un tramo recto | Hasta 1 000 | Con la longitud máxima por pieza de las tablas (3 000 mm) un tramo de 100 m son 34 piezas: el tope sólo se alcanza si `L_max_pieza_mm` se captura absurdamente chico. |
+| Tope de cordura de otros valores | Merma ≤ 90 %, costuras longitudinales 1–8, gajos 2–60, R/D 0.5–20, longitudes de proceso de una pieza personalizada ≤ 10 000 m, precios de compra y de subcontrato ≤ 100 millones | Son del código (`validacion.js`), no de las tablas: sólo detienen lo absurdo. |

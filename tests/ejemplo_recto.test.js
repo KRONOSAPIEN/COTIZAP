@@ -189,6 +189,22 @@ test('Ejemplo A — la merma NO se omite: con φ=0 el costo de lámina baja exac
   assert.ok(sin.precio.unitario < con.precio.unitario);
 });
 
+/* Vector de referencia: coincide con las cifras del Ejemplo A del documento de arquitectura. */
+const GOLDEN = {
+  espesor_mm: 1.5189,
+  D_med_mm: 306.3189,
+  ancho_plantilla_mm: 963.329,
+  A_neta_m2: 2.89,
+  m_neta_kg: 34.459,
+  m_bruta_kg: 37.455,
+  L_aro_mm: 1089.8,
+  n_tornillos: 8,
+  horas_mod_reales: 2.091,
+  CD: 2308.36,
+  C_T: 2777.62,
+  precio_unitario: 3622.52,
+};
+
 test('Ejemplo A — vector de referencia (valores redondeados que cita el documento)', () => {
   const r = C.cotizarPartida(entrada, M);
   const f = (x, d) => Number(x.toFixed(d));
@@ -208,18 +224,3 @@ test('Ejemplo A — vector de referencia (valores redondeados que cita el docume
   }, GOLDEN);
 });
 
-/* Vector de referencia: coincide con las cifras del Ejemplo A del documento de arquitectura. */
-const GOLDEN = {
-  espesor_mm: 1.5189,
-  D_med_mm: 306.3189,
-  ancho_plantilla_mm: 963.329,
-  A_neta_m2: 2.89,
-  m_neta_kg: 34.459,
-  m_bruta_kg: 37.455,
-  L_aro_mm: 1089.8,
-  n_tornillos: 8,
-  horas_mod_reales: 2.091,
-  CD: 2308.36,
-  C_T: 2777.62,
-  precio_unitario: 3622.52,
-};

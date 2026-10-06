@@ -10,13 +10,13 @@
   if (typeof module === 'object' && module.exports) {
     module.exports = factory(
       require('./util'), require('./geometria'), require('./material'),
-      require('./mano_obra'), require('./consumibles'), require('./precios'),
+      require('./mano_obra'), require('./consumibles'), require('./precios'), require('./validacion'),
     );
   } else {
     const C = root.COTIZAP;
-    root.COTIZAP.cotizador = factory(C.util, C.geometria, C.material, C.manoObra, C.consumibles, C.precios);
+    root.COTIZAP.cotizador = factory(C.util, C.geometria, C.material, C.manoObra, C.consumibles, C.precios, C.validacion);
   }
-}(typeof self !== 'undefined' ? self : this, function (U, GEO, MAT, MO, CON, PRE) {
+}(typeof self !== 'undefined' ? self : this, function (U, GEO, MAT, MO, CON, PRE, VAL) {
   'use strict';
 
   const FAMILIAS = {
@@ -111,32 +111,25 @@
 
   const dimensionCaracteristica = (p) => Math.max(p.D_mm || 0, p.D1_mm || 0, p.D2_mm || 0, p.a_mm || 0, p.b_mm || 0);
 
-  /** Validación previa. `errores` bloquean el cálculo; `advertencias` se reportan. */
-  function validarPartida(p, M) {
-    const errores = [];
+  /**
+   * Validación previa de una partida. Primero la compuerta de entrada (tipos, rangos, listas y pertenencia: validacion.js);
+   * si pasa, la política del taller (ángulos) y lo que depende de las tablas (calibre, servicio). `errores` bloquean el
+   * cálculo; `advertencias` se reportan. `p` es la partida normalizada (números ya convertidos), la que se calcula.
+   */
+  function validarPartida(entrada, M) {
+    const { p, errores } = VAL.normalizarPartida(entrada, M);
     const advertencias = [];
-    if (!FAMILIAS[p.familia]) errores.push(`Familia desconocida: ${p.familia}`);
-    if (!(p.cantidad > 0) || !Number.isInteger(p.cantidad)) errores.push('La cantidad debe ser un entero mayor que 0.');
+    if (errores.length) return { p, errores, advertencias };
     validarAngulos(p, M, errores);
     if (p.familia === 'COMPRADO') {
       if (!(p.precio_compra_unitario >= 0)) errores.push('Capturar el costo de compra unitario.');
-      return { errores, advertencias };
+      return { p, errores, advertencias };
     }
-    (p.omitir_operaciones || []).forEach((op) => {
-      if (!MO.OPERACIONES.includes(op)) errores.push(`Operación desconocida en omitir_operaciones: ${op}`);
-    });
-    (p.subcontratos || []).forEach((sc, i) => {
-      if (!PRE.DRIVERS_SUBCONTRATO.includes(sc.driver)) errores.push(`Subcontrato ${i + 1}: driver desconocido «${sc.driver}».`);
-      if (!(Number(sc.precio) >= 0)) errores.push(`Subcontrato ${i + 1}: precio inválido.`);
-    });
     const mat = M.materiales[p.material_id];
-    if (!mat) {
-      errores.push(`Material desconocido: ${p.material_id}`);
-      return { errores, advertencias };
-    }
     if (!(p.espesor_mm > 0)) {
       const tabla = M.calibres[mat.tabla_calibre];
-      if (!tabla || tabla[p.calibre] === undefined) errores.push(`El calibre ${p.calibre} no existe en la tabla ${mat.tabla_calibre}.`);
+      if (p.calibre === undefined) errores.push('Falta el calibre (o capture el espesor propio).');
+      else if (!tabla || tabla[p.calibre] === undefined) errores.push(`El calibre ${p.calibre} no existe en la tabla ${mat.tabla_calibre}.`);
     }
     const serv = M.servicios[p.servicio || 'POLVO'];
     if (serv && p.calibre && !(p.espesor_mm > 0)) {
@@ -146,7 +139,7 @@
         advertencias.push(`Calibre ${p.calibre} más delgado que el mínimo recomendado (${fila.calibre_max}) para ${dim.toFixed(0)} mm en servicio ${p.servicio || 'POLVO'}.`);
       }
     }
-    return { errores, advertencias };
+    return { p, errores, advertencias };
   }
 
   /** Levantamiento de cantidades: todo lo físico, nada monetario. */
@@ -204,11 +197,33 @@
     };
   }
 
-  function cotizarPartida(entrada, M) {
-    const p = { cantidad: 1, ...entrada };
-    const val = validarPartida(p, M);
+  /** Las tablas maestras deben estar sanas para calcular: un cero en un divisor o un valor negativo no dan un precio, dan basura. */
+  function exigirMaestrosSanos(M, familia, previos) {
+    const todos = previos || VAL.problemasMaestros(M);
+    const propios = familia === 'COMPRADO' ? todos.filter((x) => x.ruta[0] === 'capas') : todos; // lo comprado sólo usa la pila de precio
+    if (propios.length) {
+      const lista = propios.slice(0, 6).map((x) => `Tablas maestras · ${VAL.textoProblema(x)}`);
+      if (propios.length > lista.length) lista.push(`…y ${propios.length - lista.length} valores más en las tablas maestras.`);
+      throw new U.ErrorValidacion(lista);
+    }
+  }
+
+  /** Nada que salga del cálculo puede ser NaN ni infinito: si algo se escapó a la validación, se dice dónde. */
+  function exigirResultadoNumerico(resultado) {
+    const malos = VAL.noFinitos(resultado);
+    if (malos.length) {
+      throw new U.ErrorValidacion([`El cálculo dio un resultado que no es un número (${malos.join(', ')}): revise los datos de la partida y las tablas maestras.`]);
+    }
+    return resultado;
+  }
+
+  /** Una partida: validar → levantar cantidades → valorizar → pila de precio. `previos` = problemas de maestros ya calculados (cotizar() los calcula una vez). */
+  function cotizarPartida(entrada, M, previos) {
+    exigirMaestrosSanos(M, entrada && entrada.familia, previos);
+    const val = validarPartida(entrada !== null && typeof entrada === 'object' && !Array.isArray(entrada) ? { cantidad: 1, ...entrada } : entrada, M);
     if (val.errores.length) throw new U.ErrorValidacion(val.errores);
-    if (p.familia === 'COMPRADO') return cotizarComprado(p, M);
+    const p = val.p;
+    if (p.familia === 'COMPRADO') return exigirResultadoNumerico(cotizarComprado(p, M));
 
     const q = levantarCantidades(p, M);
     const costos = PRE.valorizar(q, M);
@@ -222,7 +237,7 @@
     if (p.familia === 'RECTO') {
       cierre.indicadores.precio_por_m_lineal = importe / ((p.L_mm * p.cantidad) / 1000);
     }
-    return {
+    return exigirResultadoNumerico({
       ok: true,
       entrada: p,
       familia: p.familia,
@@ -240,21 +255,40 @@
         aros_neto_kg: q.her.m_aros_neta_kg,
       },
       ...cierre,
-    };
+    });
   }
 
-  /** Cotización completa: lista de partidas + totales con IVA. */
+  const esObjeto = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+  const sinValor = (v) => v === undefined || v === null || v === '';
+
+  /**
+   * Cotización completa: lista de partidas + totales con IVA. Nunca lanza por una partida: la que no se puede calcular
+   * queda como { ok: false, errores } (y `interno: true` si fue una falla inesperada del cálculo, no de los datos).
+   * Una cotización o una lista de partidas mal formada se toma como vacía.
+   */
   function cotizar(cot, M0) {
-    const ef = maestrosEfectivos(cot, M0);
+    const c = esObjeto(cot) ? cot : {};
+    const ef = maestrosEfectivos(c, M0);
     const M = ef.M;
-    const defs = { riesgo: cot.riesgo || 'MEDIO', servicio: cot.servicio, ...(cot.defaults || {}) };
-    Object.keys(defs).forEach((k) => defs[k] === undefined && delete defs[k]);
-    const filas = (cot.partidas || []).map((p, indice) => {
+    const problemas = VAL.problemasMaestros(M); // una sola vez para todas las partidas
+    // Valores de la cotización que heredan las partidas que no los traen (o los dejan vacíos: «según la cotización»)
+    const defs = { riesgo: c.riesgo || 'MEDIO', servicio: c.servicio, ...(esObjeto(c.defaults) ? c.defaults : {}) };
+    Object.keys(defs).forEach((k) => sinValor(defs[k]) && delete defs[k]);
+    const heredar = (p) => {
+      const fusion = { ...defs, ...p };
+      Object.keys(defs).forEach((k) => { if (sinValor(p[k])) fusion[k] = defs[k]; });
+      return fusion;
+    };
+    const lista = Array.isArray(c.partidas) ? c.partidas : [];
+    const filas = lista.map((p, indice) => {
       try {
-        return { indice, ...cotizarPartida({ ...defs, ...p }, M) };
+        if (!esObjeto(p)) throw new U.ErrorValidacion(['La partida no es válida (se esperaba un objeto con sus datos).']);
+        return { indice, ...cotizarPartida(heredar(p), M, problemas) };
       } catch (err) {
         if (err instanceof U.ErrorValidacion) return { ok: false, indice, errores: err.errores, entrada: p };
-        throw err;
+        return {
+          ok: false, indice, interno: true, errores: [`No se pudo calcular esta partida (falla inesperada: ${String((err && err.message) || err)}). Revise sus datos y las tablas maestras.`], entrada: p,
+        };
       }
     });
     const ok = filas.filter((f) => f.ok);
@@ -268,12 +302,16 @@
     const C_T_total = ok.reduce((s, f) => s + f.pila.C_T, 0);
     // Utilidad real = lo que queda del precio descontado después de la comisión y de todo el costo (C_base, con financiamiento)
     const utilidad = ok.reduce((s, f) => s + f.precio.importe * (1 - ef.descuento_pct) * (1 - C.comision_ventas_pct_precio - C.otros_pct_precio) - f.pila.C_base, 0);
+    const avisos = [...ef.avisos];
+    if (problemas.length) {
+      avisos.push(`Tablas maestras con ${problemas.length === 1 ? 'un valor no válido' : `${problemas.length} valores no válidos`}: ${VAL.textoProblema(problemas[0])}${problemas.length > 1 ? ' (y otros)' : ''}.`);
+    }
     return {
       partidas: filas,
       maestros: M, // las tablas con las capas de esta cotización: lo que usó cada partida
       capas: C,
       parametros: ef.aplicados,
-      avisos: ef.avisos,
+      avisos,
       totales: {
         subtotal, descuento_pct: ef.descuento_pct, descuento, subtotal_neto,
         iva_pct: C.iva_pct, iva, total: U.redondear(subtotal_neto + iva, 2),

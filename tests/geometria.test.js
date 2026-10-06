@@ -255,17 +255,6 @@ test('Injerto simple: área neta = tronco − orificio + injerto; requiere L_ram
 
 /* ---------- oráculos por fuerza bruta del injerto (sin las fórmulas cerradas del motor) ---------- */
 
-/** Distancia media, sobre el eje del injerto, del eje del tronco a la silleta: promedio sobre el ángulo del injerto. */
-function tMedioBruto(Rm, rb, betaDeg, N = 200000) {
-  const beta = (betaDeg * PI) / 180;
-  let s = 0;
-  for (let i = 0; i < N; i += 1) {
-    const phi = (2 * PI * (i + 0.5)) / N;
-    s += (Math.sqrt(Rm * Rm - (rb * Math.sin(phi)) ** 2) - rb * Math.cos(phi) * Math.cos(beta)) / Math.sin(beta);
-  }
-  return s / N;
-}
-
 /**
  * Área del orificio que el injerto abre en el tronco: malla fina sobre la superficie del cilindro principal
  * (eje x, y² + z² = Rm²); el eje del injerto pasa por el origen con dirección (cosβ, sinβ, 0).

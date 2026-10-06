@@ -25,7 +25,7 @@
 
   const base = {
     meta: {
-      version: '1.2.0',
+      version: '1.3.0',
       moneda: 'MXN',
       aviso: 'Mano de obra y lámina/perfiles del proveedor son reales; el resto son valores ilustrativos. Revisar antes de cotizar.',
     },
@@ -223,6 +223,19 @@
       k_entrepierna: 0.08, // pantalón (retirado)
       tolerancia_area_pantalon: 0.15, // pantalón (retirado)
 
+      // Límites de captura: lo que el cotizador acepta como dato de una partida. Protegen de un cero de más al teclear
+      // y de archivos dañados (una pieza de 1 000 000 m no es un tramo de ducto). Se pueden ampliar si el taller lo requiere.
+      limites: {
+        cantidad_max: 100000, // piezas por partida
+        seccion_min_mm: 25, // diámetro o lado más chico (nominal)
+        seccion_max_mm: 6000, // diámetro o lado más grande (nominal)
+        largo_min_mm: 10, // longitud más corta que se captura (tramo, injerto, tangente…)
+        largo_max_mm: 100000, // longitud más larga (100 m)
+        espesor_min_mm: 0.2, // espesor propio (placa) mínimo
+        espesor_max_mm: 50, // espesor propio (placa) máximo
+        piezas_max: 1000, // piezas en que se parte un tramo recto, o piezas a armar de una pieza personalizada
+      },
+
       costuras: {
         A_TOPE: { nombre: 'Soldada a tope', allowance_mm: 1.0, soldada: true, cordon: 'TOPE' },
         TRASLAPE: { nombre: 'Soldada a traslape', allowance_mm: 25.0, soldada: true, cordon: 'FILETE' },
@@ -395,9 +408,62 @@
     },
   };
 
-  /** Devuelve una copia independiente de los maestros de arranque. */
+  /**
+   * Un parche de maestros viene de fuera (navegador, almacén compartido, archivo importado): sólo se conserva lo que
+   * tiene la forma de las tablas de arranque. Un número debe ser un número finito, un texto un texto, una lista una
+   * lista no vacía de elementos de la misma forma, una tabla una tabla. Lo que no cumple se descarta (queda el valor de
+   * arranque) y se anota su ruta. Los renglones que no existen en el arranque (otra hoja del proveedor, otro material)
+   * se respetan si son datos simples. No muta lo recibido.
+   * Devuelve { parche, descartados: ['proceso.hoja.ancho_mm', …] }.
+   */
+  function sanearParche(parche) {
+    const descartados = [];
+    const esObj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+    const hay = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+    const simple = (v) => {
+      if (typeof v === 'number') return Number.isFinite(v);
+      if (typeof v === 'string' || typeof v === 'boolean') return true;
+      if (Array.isArray(v)) return v.every(simple);
+      return esObj(v) && Object.keys(v).every((k) => simple(v[k]));
+    };
+    // ¿v tiene la forma de la referencia?
+    const forma = (v, ref) => {
+      if (typeof ref === 'number') return typeof v === 'number' && Number.isFinite(v);
+      if (typeof ref === 'string') return typeof v === 'string';
+      if (typeof ref === 'boolean') return typeof v === 'boolean';
+      if (Array.isArray(ref)) return Array.isArray(v) && v.length > 0 && (!ref.length || v.every((x) => forma(x, ref[0])));
+      if (esObj(ref)) return esObj(v) && Object.keys(ref).every((k) => hay(v, k) && forma(v[k], ref[k]));
+      return true;
+    };
+    const limpiar = (p, ref, ruta) => {
+      const salida = {};
+      Object.keys(p).forEach((k) => {
+        if (k === '__proto__') return; // nunca toca prototipos
+        const v = p[k];
+        const r = hay(ref, k) ? ref[k] : undefined;
+        const aqui = [...ruta, k].join('.');
+        if (r === undefined) {
+          if (simple(v)) salida[k] = v; else descartados.push(aqui);
+        } else if (esObj(r)) {
+          if (esObj(v)) {
+            const sub = limpiar(v, r, [...ruta, k]);
+            if (Object.keys(sub).length) salida[k] = sub;
+          } else descartados.push(aqui);
+        } else if (forma(v, r)) salida[k] = v;
+        else descartados.push(aqui);
+      });
+      return salida;
+    };
+    if (!esObj(parche)) return { parche: {}, descartados: parche === undefined || parche === null ? [] : ['(todo el parche)'] };
+    return { parche: limpiar(parche, base, []), descartados };
+  }
+
+  /** Un parche guardado o importado, listo para mezclar: sin lo obsoleto de versiones anteriores y sin lo que no tiene la forma de las tablas. */
+  const leerParche = (parche) => sanearParche(migrarParche(parche));
+
+  /** Devuelve una copia independiente de los maestros de arranque, con el parche encima (ya migrado y saneado). */
   function crearMaestros(parche) {
-    return U.mezclar(base, parche || {});
+    return U.mezclar(base, leerParche(parche).parche);
   }
 
   /**
@@ -425,5 +491,7 @@
     return p;
   }
 
-  return { crearMaestros, migrarParche, base };
+  return {
+    crearMaestros, migrarParche, sanearParche, leerParche, base,
+  };
 }));

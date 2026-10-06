@@ -12,7 +12,7 @@ Cotizador para ducterías de lámina (colección de polvo y control ambiental). 
 | **Motor de cálculo** | `src/motor/` | Funciones puras, sin dependencias. Separa *cantidades* de *precios*. |
 | **Tablas maestras** | `src/datos/maestros.js` | Lista de precios del proveedor, materiales, calibres, perfiles, uniones, velocidades, tarifas, merma y capas de precio. |
 | **Aplicación web** | `src/web/` | Captura de partidas, desglose paso a paso, editor de tablas maestras, propuesta imprimible. |
-| **Pruebas** | `tests/` | Geometría contra mallas 3D independientes, ejemplo recalculado línea por línea, política de precios, interfaz de extremo a extremo. |
+| **Pruebas** | `tests/` | Geometría contra mallas 3D independientes, ejemplo recalculado línea por línea, política de precios, robustez ante datos absurdos o dañados, interfaz de extremo a extremo. |
 
 ## Empezar
 
@@ -28,7 +28,7 @@ Cotizador para ducterías de lámina (colección de polvo y control ambiental). 
 **Pruebas.** Requiere Node 22 o superior.
 
 ```bash
-npm test                 # motor y guardado: geometría, ejemplo, precios, validaciones, almacén de tablas
+npm test                 # motor y guardado: geometría, ejemplo, precios, validaciones, robustez, almacén de tablas
 npm run test:e2e         # interfaz (opcional): npm i -D playwright && npx playwright install chromium
 ```
 
@@ -50,7 +50,7 @@ console.log(r.pila);                       // CD, CI, imprevistos, financiamient
 console.log(r.qto);                        // cantidades físicas, sin precios
 ```
 
-`cotizar({ riesgo, servicio, partidas }, M)` cotiza varias partidas y suma IVA. Una partida con datos inválidos devuelve sus errores sin tumbar a las demás.
+`cotizar({ riesgo, servicio, partidas }, M)` cotiza varias partidas y suma IVA. Una partida con datos inválidos devuelve sus errores (`{ ok: false, errores }`) sin tumbar a las demás, y `cotizar` no lanza aunque la cotización o sus partidas vengan mal formadas. `cotizarPartida` lanza `ErrorValidacion` con la lista de mensajes.
 
 ## Dónde se guardan los precios
 
@@ -89,6 +89,19 @@ El encabezado de la cotización lleva los parámetros comerciales que se ajustan
 - Los totales muestran el descuento, la **utilidad real** (en pesos y como % del precio, ya con el descuento) y el **costo total**, y avisan en rojo si el descuento deja el precio por debajo del piso (sin utilidad). La propuesta imprimible lleva el descuento y las condiciones de pago.
 - Los parámetros viajan con la cotización al exportar e importar el JSON; un valor inválido de un archivo se ignora y se avisa. Cuatro supuestos quedan por confirmar: [§10.7 del documento](docs/arquitectura-cotizador-ducterias.md#107-supuestos-de-los-parámetros-de-la-cotización-por-confirmar).
 
+## Datos que el cotizador no acepta
+
+Todo dato pasa por una compuerta de validación (`src/motor/validacion.js`) antes de calcular; así un error de dedo o un archivo dañado produce un mensaje claro y no un precio absurdo:
+
+- **Tipo:** los números son números (se acepta «12.5» escrito como texto); `NaN`, infinitos, listas o texto no numérico se rechazan. Un campo opcional vacío significa «automático».
+- **Rango:** diámetros y lados de 25 a 6 000 mm, longitudes de 10 a 100 000 mm, espesor propio de 0.2 a 50 mm, cantidad de 1 a 100 000, hasta 1 000 piezas por tramo. Son **política del taller** y se cambian en *Tablas maestras → Proceso de fabricación → limites* ([T10 y §10.8 del documento](docs/arquitectura-cotizador-ducterias.md#108-supuestos-de-los-límites-de-captura-por-confirmar)).
+- **Pertenencia:** la familia, el material, el servicio, el tipo de unión… deben existir; no hay valores «desconocidos» que se tomen por otra cosa.
+- **Tablas maestras sanas:** una eficiencia, una velocidad, un paso de tornillos o una densidad en 0, un valor negativo o una tabla de velocidades desordenada se señalan **por su ruta** («proceso › eficiencia taller: debe ser un número mayor que 0») en el aviso de la cotización y en cada partida afectada. El editor de tablas no deja teclear esos valores.
+- **Datos guardados o importados:** de un archivo, del navegador o del almacén compartido sólo entra lo que tiene la forma esperada; se avisa cuántos valores se ignoraron y una importación rechazada no cambia nada.
+- En el formulario de partida, un número que no se puede leer (por ejemplo «3O00» con la letra O) se marca como error en vez de tomarse por «automático».
+
+Las reglas completas están en [§2.3 del documento](docs/arquitectura-cotizador-ducterias.md#23-reglas-de-validación) (V14–V20).
+
 ## Brida estándar del taller
 
 Todos los ductos se unen con **bridas de solera 1½" × 3/16", barreno Ø3/8" y tornillo 5/16" × 1¼"**, sin importar el diámetro. Así viene precargado (perfil `SOL38x4.8` en `src/datos/maestros.js`): la solera se rola de canto, el barreno va al centro de su ancho y cada junta lleva múltiplo de 4 tornillos. Los ángulos siguen disponibles como opción por partida (*Perfil de aros*).
@@ -116,7 +129,7 @@ Cinco detalles se **supusieron** y conviene confirmarlos con el taller (se edita
 docs/arquitectura-cotizador-ducterias.md   especificación
 src/
   datos/maestros.js                        tablas maestras (valores ilustrativos)
-  motor/                                   util · geometria · material · proveedor · mano_obra · consumibles · precios · cotizador
+  motor/                                   util · geometria · material · proveedor · mano_obra · consumibles · precios · validacion · cotizador
   web/                                     index.html · app.js · almacen.js · maestros_ui.js · esquemas.js · dom.js · estilos.css
 tests/                                     *.test.js (node:test) · e2e/ui.e2e.js (Playwright, opcional)
 scripts/construir.js                       empaquetado a un solo HTML
