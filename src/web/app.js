@@ -75,7 +75,7 @@
       }
       guardarLS(LLAVE_MIGRADO, true);
     }
-    estado.M = parche ? U.mezclar(base, parche) : base;
+    estado.M = parche ? U.mezclar(base, C.maestros.migrarParche(parche)) : base;
     const c = leerLS(LLAVE_COT);
     estado.cot = c && Array.isArray(c.partidas) ? { ...cotizacionVacia(), ...c } : cotizacionEjemplo();
     migrarUnidades(estado.cot);
@@ -115,7 +115,7 @@
   function aplicarRemoto(remoto, arranque) {
     const base = C.maestros.crearMaestros();
     const ediciones = U.diferencia(U.mezclar(base, arranque), estado.M);
-    estado.M = U.mezclar(U.mezclar(base, remoto), ediciones);
+    estado.M = U.mezclar(U.mezclar(base, C.maestros.migrarParche(remoto)), ediciones);
     persistir();
     render();
     if (estado.tab === 'maestros' && W.maestrosUI) {
@@ -553,9 +553,26 @@
     ];
   }
 
+  /** Base de cálculo de los dos materiales que se compran por kg: cuántos kg, a qué precio y de dónde sale ese precio. */
+  function basesMaterial(f) {
+    const pu = f.costos.precios_usados;
+    const q = f.qto;
+    const base = {};
+    if (!pu || !q) return base;
+    const n = f.entrada.cantidad;
+    const fuente = (p) => (p.fuente === 'PROVEEDOR' ? ` (${p.descripcion} · ${W.mxn(p.precio)} con IVA)` : ' (precio por kg de la tabla)');
+    base.lamina = `${W.num(q.lam.m_bruta_kg * n, 3)} kg × ${W.mxn(pu.lamina.precio_kg)}/kg${fuente(pu.lamina)}`;
+    const porPerfil = {};
+    q.her.aros.forEach((a) => { porPerfil[a.perfil_id] = (porPerfil[a.perfil_id] || 0) + a.m_aro_bruta_kg * n; });
+    const ids = Object.keys(porPerfil);
+    if (ids.length) base.perfiles = ids.map((id) => `${W.num(porPerfil[id], 3)} kg × ${W.mxn(pu.perfiles[id].precio_kg)}/kg${fuente(pu.perfiles[id])}`).join(' · ');
+    return base;
+  }
+
   function detalleCostos(f) {
     const c = f.costos;
     const filas = [];
+    const bases = basesMaterial(f);
     const ETQ = {
       lamina: 'Lámina', credito_chatarra: 'Crédito por chatarra', perfiles: 'Perfil de aros', tornilleria: 'Tornillería', fijaciones: 'Fijaciones de espiga', empaque: 'Empaque',
       sellador: 'Sellador', flete: 'Flete de entrada', compra: 'Compra', alambre: 'Alambre / varilla', gas: 'Gas de protección', corte: 'Consumibles de corte', pintura: 'Pintura y diluyente',
@@ -563,18 +580,18 @@
     const grupo = (tit, obj) => {
       const ks = Object.keys(obj).filter((k) => Math.abs(obj[k]) > 0);
       if (!ks.length) return;
-      filas.push({ clase: 'grupo', celdas: [tit, ''] });
-      ks.forEach((k) => filas.push([`  ${ETQ[k] || k}`, W.mxn(obj[k])]));
+      filas.push({ clase: 'grupo', celdas: [tit, '', ''] });
+      ks.forEach((k) => filas.push([`  ${ETQ[k] || k}`, tit === 'Materiales' ? bases[k] || '' : '', W.mxn(obj[k])]));
     };
     grupo('Materiales', c.materiales);
     grupo('Consumibles', c.consumibles);
-    filas.push({ clase: 'grupo', celdas: ['Mano de obra, equipo y terceros', ''] });
-    filas.push(['  Mano de obra directa', W.mxn(c.subtotales.mano_obra)]);
-    filas.push(['  Equipo (hora-máquina)', W.mxn(c.subtotales.equipo)]);
-    filas.push(['  Herramienta menor', W.mxn(c.subtotales.herramienta_menor)]);
-    Object.keys(c.subcontratos || {}).forEach((k) => filas.push([`  Subcontrato ${k}`, W.mxn(c.subcontratos[k])]));
-    filas.push({ clase: 'total', celdas: ['Costo directo (CD)', W.mxn(c.CD)] });
-    return tabla([{ t: 'Concepto' }, { t: 'MXN', num: true }], filas);
+    filas.push({ clase: 'grupo', celdas: ['Mano de obra, equipo y terceros', '', ''] });
+    filas.push(['  Mano de obra directa', c.h_MOD > 0 ? `${W.num(c.h_MOD, 3)} h reales` : '', W.mxn(c.subtotales.mano_obra)]);
+    filas.push(['  Equipo (hora-máquina)', '', W.mxn(c.subtotales.equipo)]);
+    filas.push(['  Herramienta menor', '', W.mxn(c.subtotales.herramienta_menor)]);
+    Object.keys(c.subcontratos || {}).forEach((k) => filas.push([`  Subcontrato ${k}`, '', W.mxn(c.subcontratos[k])]));
+    filas.push({ clase: 'total', celdas: ['Costo directo (CD)', '', W.mxn(c.CD)] });
+    return tabla([{ t: 'Concepto' }, { t: 'Base' }, { t: 'MXN', num: true }], filas);
   }
 
   function detallePila(f) {
@@ -943,7 +960,7 @@
     const antigua = !!obj.maestros && !(Number(obj.version) >= 2);
     if (obj.maestros) {
       const { herrajes, ...resto } = obj.maestros;
-      estado.M = U.mezclar(C.maestros.crearMaestros(), antigua ? resto : obj.maestros);
+      estado.M = U.mezclar(C.maestros.crearMaestros(), C.maestros.migrarParche(antigua ? resto : obj.maestros));
     }
     estado.sel = estado.cot.partidas[0] ? estado.cot.partidas[0].id : null;
     persistir();

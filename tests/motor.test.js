@@ -103,7 +103,7 @@ test('Cantidades múltiples: sin setup el precio unitario no cambia; con corte C
   // Ahorro exacto: P(10) = 10·P(1) − 9·ΔP_setup, con ΔP_setup = K·[(1+adm)·CD_setup + GIF·h_setup]
   const K = ((1 + 0.04) * (1 + (0.14 * 45) / 365)) / (1 - 0.2 - 0.02);
   const h_setup = M.proceso.corte.t_prog_cnc_min / M.proceso.eficiencia_taller / 60;
-  const mo_h = (480 * 1.55) / 8;
+  const mo_h = 500 * 1.55; // $500 por hora × FSR
   const CD_setup = h_setup * (mo_h + 45) + 0.03 * h_setup * mo_h;
   const dP_setup = K * ((1 + 0.08) * CD_setup + 85 * h_setup);
   casi(c10.pila.precio, c1.pila.precio * 10 - 9 * dP_setup, 1e-9);
@@ -509,16 +509,24 @@ test('Paso entre barrenos: n = múltiplo de 4 ≥ máx(4, ⌈π·D_bc / paso⌉)
   assert.equal(n(609.6, M) % 4, 0);
 });
 
-test('Cada aro se valoriza con el precio de SU perfil: solera ≠ ángulo', () => {
+test('Cada aro se valoriza con el precio de SU perfil: solera ≠ ángulo (barra cotizada o, si no la hay, precio por kg)', () => {
+  // La solera estándar y el ángulo 1½" × 3/16" tienen barra cotizada: el precio por kg de la tabla no los toca.
+  const base = C.cotizarPartida({ ...recto }, M);
   const sol = (precios) => C.cotizarPartida({ ...recto }, crearMaestros({ precios }));
-  const base = sol({});
-  casi(sol({ precio_kg_solera: M.precios.precio_kg_solera * 1.1 }).costos.materiales.perfiles, base.costos.materiales.perfiles * 1.1, 1e-12);
-  casi(sol({ precio_kg_perfil_angulo: 999 }).costos.materiales.perfiles, base.costos.materiales.perfiles, 1e-12, 'el precio del ángulo no afecta a la solera');
-  const ang = C.cotizarPartida({ ...recto, perfil_id: 'L38x3.2' }, crearMaestros({ precios: { precio_kg_solera: 999 } }));
-  const angBase = C.cotizarPartida({ ...recto, perfil_id: 'L38x3.2' }, M);
-  casi(ang.costos.materiales.perfiles, angBase.costos.materiales.perfiles, 1e-12, 'el precio de la solera no afecta al ángulo');
-  assert.equal(ang.qto.her.aros[0].perfil_id, 'L38x3.2');
-  assert.equal(ang.qto.her.aros[0].tornillo, 'M10');
+  casi(sol({ precio_kg_solera: 999, precio_kg_perfil_angulo: 999 }).costos.materiales.perfiles, base.costos.materiales.perfiles, 1e-12, 'con barra cotizada manda la lista del proveedor');
+  assert.equal(base.costos.precios_usados.perfiles['SOL38x4.8'].fuente, 'PROVEEDOR');
+  // Con el precio de la barra ×1.1 el costo del perfil sube exactamente 10 %
+  const barra = M.proveedor.barras.SOL_1_1_2X3_16;
+  const caro = C.cotizarPartida({ ...recto }, crearMaestros({ proveedor: { barras: { SOL_1_1_2X3_16: { precio: barra.precio * 1.1 } } } }));
+  casi(caro.costos.materiales.perfiles, base.costos.materiales.perfiles * 1.1, 1e-12);
+  // El ángulo 1½" × 1/8" no tiene barra cotizada: usa el precio por kg de la tabla, y la solera no lo afecta
+  const ang = (precios) => C.cotizarPartida({ ...recto, perfil_id: 'L38x3.2' }, crearMaestros({ precios }));
+  const angBase = ang({});
+  assert.equal(angBase.costos.precios_usados.perfiles['L38x3.2'].fuente, 'TABLA');
+  casi(ang({ precio_kg_solera: 999 }).costos.materiales.perfiles, angBase.costos.materiales.perfiles, 1e-12, 'el precio de la solera no afecta al ángulo');
+  casi(ang({ precio_kg_perfil_angulo: M.precios.precio_kg_perfil_angulo * 1.1 }).costos.materiales.perfiles, angBase.costos.materiales.perfiles * 1.1, 1e-12);
+  assert.equal(angBase.qto.her.aros[0].perfil_id, 'L38x3.2');
+  assert.equal(angBase.qto.her.aros[0].tornillo, 'M10');
 });
 
 test('El tornillo 5/16" × 1¼" se valoriza con su propia variable de precio', () => {

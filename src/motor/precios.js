@@ -1,8 +1,8 @@
 /**
  * COTIZAP · precios.js — Valorización de cantidades y pila de precio.
  *
- * Aquí (y sólo aquí) se leen los precios: `M.precios[<variable_referencial>]`.
- * El levantamiento de cantidades (QTO) no conoce ningún precio.
+ * Aquí (y sólo aquí) se leen los precios: `M.precios[<variable_referencial>]` y la lista del proveedor (`M.proveedor`,
+ * ver proveedor.js). El levantamiento de cantidades (QTO) no conoce ningún precio.
  *
  *   CD = materiales + consumibles + mano de obra + equipo + herramienta menor
  *   CI = GIF·h_MOD + adm%·CD
@@ -13,12 +13,12 @@
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('./util'), require('./mano_obra'));
+    module.exports = factory(require('./util'), require('./mano_obra'), require('./proveedor'));
   } else {
     root.COTIZAP = root.COTIZAP || {};
-    root.COTIZAP.precios = factory(root.COTIZAP.util, root.COTIZAP.manoObra);
+    root.COTIZAP.precios = factory(root.COTIZAP.util, root.COTIZAP.manoObra, root.COTIZAP.proveedor);
   }
-}(typeof self !== 'undefined' ? self : this, function (U, MO) {
+}(typeof self !== 'undefined' ? self : this, function (U, MO, PROV) {
   'use strict';
 
   function precioDe(M, ref) {
@@ -27,6 +27,21 @@
       throw new U.ErrorValidacion([`Falta el precio de la variable «${ref}» en las tablas maestras.`]);
     }
     return Number(v);
+  }
+
+  /**
+   * Precio por kg (sin IVA) de la lámina de una partida: el de la hoja que cotiza el proveedor para ese material y
+   * calibre; si no hay (otro calibre, placa de espesor capturado, otro material) se usa el de la tabla de precios.
+   */
+  function precioLamina(M, p, mat) {
+    const prov = PROV.laminaDe(M, p.material_id, p.espesor_mm > 0 ? 0 : p.calibre);
+    return prov || { fuente: 'TABLA', ref: mat.precio_ref, precio_kg: precioDe(M, mat.precio_ref) };
+  }
+
+  /** Igual para el perfil de un aro: la barra cotizada que lo enlaza, o el precio por kg de la tabla. */
+  function precioPerfil(M, aro) {
+    const prov = PROV.perfilDe(M, aro.perfil_id);
+    return prov || { fuente: 'TABLA', ref: aro.precio_ref, precio_kg: precioDe(M, aro.precio_ref) };
   }
 
   const DRIVERS_SUBCONTRATO = ['PIEZA', 'KG_NETO', 'KG_BRUTO', 'M2_NETO', 'M_CORTE', 'M_SOLDADURA'];
@@ -58,10 +73,15 @@
     const omitir = new Set((q.p && q.p.omitir_operaciones) || []);
 
     /* Materiales */
-    const lamina = n * lam.m_bruta_kg * precioDe(M, mat.precio_ref);
+    const pLamina = precioLamina(M, q.p, mat);
+    const lamina = n * lam.m_bruta_kg * pLamina.precio_kg;
     const credito_chatarra = -n * C.recuperacion_chatarra_pct * lam.m_merma_kg * precioDe(M, mat.chatarra_ref);
     // cada aro se valoriza con el precio de SU perfil (solera ≠ ángulo)
-    const perfiles = her.aros.reduce((acc, a) => acc + n * a.m_aro_bruta_kg * precioDe(M, a.precio_ref), 0);
+    const pPerfiles = {};
+    const perfiles = her.aros.reduce((acc, a) => {
+      if (!pPerfiles[a.perfil_id]) pPerfiles[a.perfil_id] = precioPerfil(M, a);
+      return acc + n * a.m_aro_bruta_kg * pPerfiles[a.perfil_id].precio_kg;
+    }, 0);
     let tornilleria = 0;
     Object.keys(her.tornillos_por_tipo).forEach((tipo) => {
       const reserva = M.herrajes.uniones.BRIDADO.f_reserva_tornilleria;
@@ -120,6 +140,7 @@
     const CD = U.suma(subtotales);
     return {
       materiales, consumibles, mano_obra, equipo, herramienta_menor, subcontratos, subtotales, CD, h_MOD, horas_std, horas_reales,
+      precios_usados: { lamina: pLamina, perfiles: pPerfiles },
     };
   }
 
@@ -149,5 +170,5 @@
     };
   }
 
-  return { DRIVERS_SUBCONTRATO, precioDe, valorizar, pila };
+  return { DRIVERS_SUBCONTRATO, precioDe, precioLamina, precioPerfil, valorizar, pila };
 }));

@@ -8,7 +8,7 @@
  *
  * El oráculo recalcula TODO paso a paso con aritmética directa (sin llamar a las funciones del motor)
  * y compara contra la salida del motor. Los valores monetarios dependen de las tablas maestras
- * ilustrativas: si se cambian, este vector debe regenerarse.
+ * (mano de obra a $500/h, lista del proveedor, valores ilustrativos): si se cambian, este vector debe regenerarse.
  */
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -75,7 +75,10 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   const m_aros_bruta = m_aros_neta / (1 - 0.05);
   casi(r.qto.her.m_aros_neta_kg, m_aros_neta);
   casi(r.qto.her.m_aros_bruta_kg, m_aros_bruta);
-  const costo_perfiles = m_aros_bruta * P.precio_kg_solera;
+  // la solera estándar se cotiza por barra y con IVA: $/kg = (precio / (1 + IVA)) / (kg/m · largo de la barra)
+  const barra = M.proveedor.barras.SOL_1_1_2X3_16;
+  const precio_kg_solera = (barra.precio / (1 + M.proveedor.iva_incluido_pct)) / (w * (barra.largo_mm / 1000));
+  const costo_perfiles = m_aros_bruta * precio_kg_solera;
 
   /* Paso 6 · tornillería: 8 por junta; 2 extremos × 0.5 junta = 1 junta; reserva 5 % */
   const P_perno = PI * (D_ext + 2 * gramil);
@@ -139,11 +142,12 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   const costo_pintura = litros * P.precio_L_primario + litros * 0.1 * P.precio_L_diluyente;
 
   /* Paso 13 · mano de obra y equipo (η = 0.80) */
-  const tar = (s, eq) => ({ mo: (s * 1.55) / 8, eq });
+  // los trabajadores ganan $500 por hora; el costo de la hora es salario × FSR (1.55)
+  const tar = (s, eq) => ({ mo: s * 1.55, eq });
   const ops = {
-    corte: [t_corte, tar(480, 45)], rolado: [t_rolado, tar(500, 55)], armado: [t_armado, tar(520, 25)], aros: [t_aros, tar(520, 40)],
-    soldadura: [t_sold, tar(600, 45)], barrenado: [t_barren, tar(450, 25)], acabado: [t_acab, tar(450, 20)],
-    pintura: [t_pint, tar(480, 40)], qc_embalaje: [t_qc, tar(450, 0)],
+    corte: [t_corte, tar(500, 45)], rolado: [t_rolado, tar(500, 55)], armado: [t_armado, tar(500, 25)], aros: [t_aros, tar(500, 40)],
+    soldadura: [t_sold, tar(500, 45)], barrenado: [t_barren, tar(500, 25)], acabado: [t_acab, tar(500, 20)],
+    pintura: [t_pint, tar(500, 40)], qc_embalaje: [t_qc, tar(500, 0)],
   };
   let MO = 0; let EQ = 0; let hMOD = 0;
   Object.values(ops).forEach(([t, tr]) => {
@@ -214,7 +218,7 @@ const GOLDEN = {
   L_aro_mm: 1089.8,
   n_tornillos: 8,
   horas_mod_reales: 2.091,
-  CD: 1415.3,
-  C_T: 1774.53,
-  precio_unitario: 2314.3,
+  CD: 2899.33,
+  C_T: 3441.4,
+  precio_unitario: 4488.2,
 };

@@ -17,11 +17,12 @@
 
   const OPERACIONES = ['corte', 'rolado', 'armado', 'aros', 'soldadura', 'engargolado', 'barrenado', 'acabado', 'pintura', 'qc_embalaje'];
 
-  /** Tarifa horaria cargada: mo_h = salario_diario · FSR / jornada. */
+  /** Tarifa horaria cargada: mo_h = salario_hora · FSR (el factor de salario real suma prestaciones al salario). */
   function tarifa(M, op) {
     const o = M.mano_obra.operaciones[op];
     if (!o) throw new U.ErrorValidacion([`Operación sin tarifa: ${op}`]);
-    const mo_h = (o.salario_diario * M.mano_obra.FSR) / M.mano_obra.jornada_h;
+    if (!(Number(o.salario_hora) >= 0)) throw new U.ErrorValidacion([`Falta el salario por hora de la operación «${op}» en las tablas maestras.`]);
+    const mo_h = o.salario_hora * M.mano_obra.FSR;
     return { mo_h, equipo_h: o.equipo_h, total_h: mo_h + o.equipo_h };
   }
 

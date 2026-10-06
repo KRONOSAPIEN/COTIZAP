@@ -314,7 +314,7 @@ const ok = (cond, msg) => {
     ok(await esperarHasta(() => Object.keys(bd.docs.get('config/maestros').parche).length === 0), 'restablecer guarda un parche vacío');
     await p4.context().close();
     const p5 = await nuevaPagina({}, instalarClaude(bd));
-    ok(await esperarHasta(async () => (await aceroGuardado(p5)) === 22), 'al abrir de nuevo siguen los valores ilustrativos');
+    ok(await esperarHasta(async () => (await aceroGuardado(p5)) === crearMaestros().precios.precio_kg_acero_carbon), 'al abrir de nuevo siguen los valores de arranque');
     await p5.context().close();
   }
 
@@ -561,6 +561,80 @@ const ok = (cond, msg) => {
     await p.waitForTimeout(150);
     ok(/1 partida no se puede calcular/.test(await p.locator('#aviso-error').innerText()), 'queda sólo el codo de 75° por corregir');
     await p.context().close();
+  }
+
+  console.log('18) Lista de precios del proveedor y mano de obra por hora');
+  {
+    const p = await nuevaPagina();
+    const abrirCostos = async (titulo) => {
+      await p.locator(`#lista-partidas .partida:has(.partida-titulo:has-text("${titulo}"))`).click();
+      await p.waitForTimeout(120);
+      await p.click('summary:has-text("Costo directo por concepto")');
+    };
+    // una partida galvanizada cal. 22: su lámina se cuesta con la hoja cotizada ($920 con IVA)
+    await p.click('#btn-agregar');
+    await p.waitForSelector('#dlg-partida[open]');
+    await p.selectOption('#f_material_id', 'GALVANIZADO');
+    await p.selectOption('#f_calibre', '22');
+    await p.fill('#f_descripcion', 'Tramo galvanizado cal. 22');
+    await p.click('#dlg-guardar');
+    await p.waitForTimeout(150);
+    await abrirCostos('Tramo galvanizado cal. 22');
+    const costos1 = await p.locator('#detalle').innerText();
+    ok(/Lámina galvanizada 4 × 10 ft · cal\. 22 · \$920\.00 con IVA/.test(costos1), 'el desglose dice que la lámina sale de la hoja cotizada: $920.00 con IVA');
+    ok(/\$31\.86\/kg/.test(costos1), 'y a cuánto queda por kg sin IVA: $31.86/kg');
+    ok(/Solera 1½" × 3\/16" \(brida estándar\) · \$250\.00 con IVA/.test(costos1), 'los aros se cuestan con la barra de solera: $250.00 con IVA');
+    ok(/\d+\.\d{3} h reales/.test(costos1), 'la mano de obra muestra las horas reales');
+    // una partida de la muestra (acero al carbón cal. 16) no tiene hoja cotizada: usa el precio por kg de la tabla
+    await abrirCostos('Tramo recto Ø12″ × 3 m');
+    ok(/precio por kg de la tabla/.test(await p.locator('#detalle').innerText()), 'sin hoja cotizada para ese calibre, el desglose dice que usa el precio por kg de la tabla');
+
+    // Tablas maestras: la lista del proveedor
+    await p.click('#tab-maestros');
+    await p.fill('#maestros-buscar', 'galvanizada');
+    const grupo = p.locator('.m-grupo[data-grupo="proveedor"]');
+    ok(await grupo.isVisible() && await grupo.evaluate((e) => e.open), 'la búsqueda abre la lista de precios del proveedor');
+    ok(await p.locator('.m-grupo').first().getAttribute('data-grupo') === 'proveedor', 'es el primer grupo de las tablas maestras');
+    const fila22 = p.locator('tr[data-prov="hojas"][data-id="GALV_C22_4X10"]');
+    ok((await fila22.locator('input').inputValue()) === '920', 'la hoja galvanizada cal. 22 trae el precio cotizado de $920');
+    const txt22 = await fila22.innerText();
+    ok(/793\.10/.test(txt22) && /24\.89/.test(txt22) && /31\.86/.test(txt22) && /Cálculo/.test(txt22), 'y se ven el precio sin IVA ($793.10), los kg de la hoja (24.89) y el $/kg (31.86)');
+    await fila22.locator('input').fill('1000');
+    await fila22.locator('input').dispatchEvent('change');
+    const txt22b = await fila22.innerText();
+    ok(/862\.07/.test(txt22b) && /34\.63/.test(txt22b), 'al cambiar el precio a $1,000 se recalculan el precio sin IVA ($862.07) y el $/kg ($34.63)');
+    await fila22.locator('input').fill('-5');
+    await fila22.locator('input').dispatchEvent('change');
+    ok((await fila22.locator('input').inputValue()) === '1000', 'un precio negativo se rechaza y se restaura');
+    await p.fill('#maestros-buscar', 'canal');
+    ok(/Referencia/.test(await p.locator('tr[data-prov="barras"][data-id="CANAL_U_6"]').innerText()), 'lo que el cotizador no usa (canal U) se marca como referencia');
+    await p.fill('#maestros-buscar', 'iva incluido');
+    ok(await p.locator('input#m_proveedor__iva_incluido_pct').inputValue() === '16', 'el IVA incluido en los precios es 16 %');
+    await p.click('#tab-cotizacion');
+    await abrirCostos('Tramo galvanizado cal. 22');
+    ok(/\$1,000\.00 con IVA/.test(await p.locator('#detalle').innerText()), 'el desglose de la partida refleja el precio nuevo al instante');
+
+    // mano de obra: $500 por hora, sin salario diario ni jornada
+    await p.click('#tab-maestros');
+    await p.fill('#maestros-buscar', 'salario_hora');
+    ok(await p.locator('input#m_mano_obra__operaciones__corte__salario_hora').inputValue() === '500', 'los trabajadores ganan $500 por hora');
+    ok((await p.locator('.m-fila:has(input#m_mano_obra__operaciones__corte__salario_hora) .sufijo').innerText()) === 'MXN/h', 'con la unidad MXN/h');
+    ok(await p.locator('[id*="salario_diario"], [id*="jornada_h"]').count() === 0, 'ya no hay salario diario ni jornada en las tablas');
+    await p.context().close();
+
+    // un parche guardado con el salario diario de antes se limpia al abrir y la app calcula con el salario por hora
+    const pv = await nuevaPagina({}, async (ctx) => {
+      await ctx.addInitScript(() => {
+        if (!window.localStorage.getItem('__sembrado_mo')) {
+          window.localStorage.setItem('cotizap.maestros.v2', JSON.stringify({ mano_obra: { FSR: 1.6, jornada_h: 9, operaciones: { corte: { salario_diario: 700 } } } }));
+          window.localStorage.setItem('cotizap.maestros.migrado_v1', 'true');
+          window.localStorage.setItem('__sembrado_mo', '1');
+        }
+      });
+    });
+    const mo = await estadoApp(pv, () => { const M = window.COTIZAP.web.estadoApp.M; return { jornada: M.mano_obra.jornada_h, diario: M.mano_obra.operaciones.corte.salario_diario, hora: M.mano_obra.operaciones.corte.salario_hora, fsr: M.mano_obra.FSR }; });
+    ok(mo.jornada === undefined && mo.diario === undefined && mo.hora === 500 && mo.fsr === 1.6, 'un parche anterior con salario diario y jornada se limpia: queda el salario por hora ($500) y se respeta el FSR editado');
+    await pv.context().close();
   }
 
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);

@@ -2,7 +2,7 @@
 
 Cotizador para ducterías de lámina (colección de polvo y control ambiental). Calcula el desarrollo geométrico de cada pieza, el peso con merma, los herrajes de unión, las horas de taller, los consumibles y la pila de precio completa: costo directo → indirectos → imprevistos → financiamiento → utilidad.
 
-> ⚠ **Los precios, tarifas, velocidades y tiempos incluidos son ILUSTRATIVOS.** Sirven para que todo funcione desde el primer minuto y como vector de prueba. Antes de cotizar a un cliente hay que sustituirlos por los reales (ver [Calibración](docs/arquitectura-cotizador-ducterias.md#10-calibración-límites-conocidos-y-siguientes-pasos)). Ninguna fórmula contiene un precio: todas leen variables como `precio_kg_acero_carbon`, editables en la app.
+> ⚠ **Sólo son reales la mano de obra ($500 por hora) y la lámina y los perfiles de la lista del proveedor (cotizaciones y factura del 30-sep-2026).** Los demás precios, tarifas, velocidades y tiempos (consumibles, equipo, indirectos, utilidad) son ILUSTRATIVOS: sirven para que todo funcione desde el primer minuto y como vector de prueba. Antes de cotizar a un cliente hay que sustituirlos por los reales (ver [Calibración](docs/arquitectura-cotizador-ducterias.md#10-calibración-límites-conocidos-y-siguientes-pasos)). Ninguna fórmula contiene un precio: todas leen variables como `precio_m3_gas_argon` o la lista del proveedor, editables en la app.
 
 ## Qué incluye
 
@@ -10,7 +10,7 @@ Cotizador para ducterías de lámina (colección de polvo y control ambiental). 
 | --- | --- | --- |
 | **Documento de arquitectura** | [`docs/arquitectura-cotizador-ducterias.md`](docs/arquitectura-cotizador-ducterias.md) | Insumos, fórmulas geométricas, mano de obra y consumibles, estructura de precios, pseudocódigo y un ejemplo resuelto paso a paso. Es la especificación. |
 | **Motor de cálculo** | `src/motor/` | Funciones puras, sin dependencias. Separa *cantidades* de *precios*. |
-| **Tablas maestras** | `src/datos/maestros.js` | Materiales, calibres, perfiles, uniones, velocidades, tarifas, merma y capas de precio. |
+| **Tablas maestras** | `src/datos/maestros.js` | Lista de precios del proveedor, materiales, calibres, perfiles, uniones, velocidades, tarifas, merma y capas de precio. |
 | **Aplicación web** | `src/web/` | Captura de partidas, desglose paso a paso, editor de tablas maestras, propuesta imprimible. |
 | **Pruebas** | `tests/` | Geometría contra mallas 3D independientes, ejemplo recalculado línea por línea, política de precios, interfaz de extremo a extremo. |
 
@@ -44,7 +44,7 @@ const r = cotizarPartida({
   D_mm: 304.8, L_mm: 3000, tipo_union: 'BRIDADO', cantidad: 1,
 }, M);
 
-console.log(r.precio.unitario);            // 2314.3 MXN
+console.log(r.precio.unitario);            // 4488.2 MXN (mano de obra a $500/h)
 console.log(r.peso.neto_total_kg);         // 37.564 kg (lámina + aros de brida)
 console.log(r.pila);                       // CD, CI, imprevistos, financiamiento, utilidad…
 console.log(r.qto);                        // cantidades físicas, sin precios
@@ -54,7 +54,7 @@ console.log(r.qto);                        // cantidades físicas, sin precios
 
 ## Dónde se guardan los precios
 
-Cada cambio en **Tablas maestras** (precios, tarifas, tiempos…) se guarda automáticamente, sin botón de guardar. Una línea bajo el título de la pestaña dice cómo va: *Guardando…*, *Guardado automáticamente a las 20:41*, o el aviso si algo falla.
+Cada cambio en **Tablas maestras** (lista del proveedor, precios, tarifas, tiempos…) se guarda automáticamente, sin botón de guardar. Una línea bajo el título de la pestaña dice cómo va: *Guardando…*, *Guardado automáticamente a las 20:41*, o el aviso si algo falla.
 
 | Dónde se abre | Dónde se guardan las tablas | Qué se mantiene al volver a abrir |
 | --- | --- | --- |
@@ -66,6 +66,12 @@ Cada cambio en **Tablas maestras** (precios, tarifas, tiempos…) se guarda auto
 - Si una escritura falla, el cambio queda marcado como pendiente y se reintenta solo (hay un botón *Reintentar ahora*); si se cierra la página antes, se sube en la próxima apertura.
 - Los precios capturados con la primera versión de la app (que los guardaba completos en el navegador) se recuperan una sola vez al abrir.
 - La **cotización** (cliente, partidas) sigue guardándose sólo en el navegador; *Guardar y cargar* exporta e importa todo en JSON.
+
+## Mano de obra y precios del proveedor
+
+- **Mano de obra:** los trabajadores ganan **$500 por hora**; el salario se captura por hora en cada operación y el costo de la hora es salario × FSR (1.55 → $775). Si los $500 ya incluyen las prestaciones, FSR = 1.00 en *Tablas maestras → Mano de obra y equipo*.
+- **Lista de precios del proveedor** (primer grupo de *Tablas maestras*): hojas y barras **por pieza y con IVA incluido**, tal como las cotiza el proveedor (lámina galvanizada 4 × 10 cal. 22 = $920, cal. 24 = $700, la factura del 30-sep-2026, etc.). El cotizador las convierte a **$/kg sin IVA** con los kg de la pieza y las usa para la lámina (mismo material y calibre) y para los aros (barra del perfil); lo que no está cotizado usa el precio por kg de respaldo. Cada renglón muestra su precio sin IVA, sus kg, su $/kg y si el cálculo lo usa; el desglose de cada partida dice de dónde salió el precio de su lámina y de sus aros.
+- Se confirman seis supuestos con el proveedor y el taller (IVA incluido, largo de barra de 6.10 m, qué son los $500, calibres sin cotizar, lámina por fracción de hoja, placa 3 × 8): [§10.6 del documento](docs/arquitectura-cotizador-ducterias.md#106-supuestos-de-la-lista-del-proveedor-y-de-la-mano-de-obra-por-confirmar).
 
 ## Brida estándar del taller
 
@@ -94,7 +100,7 @@ Cinco detalles se **supusieron** y conviene confirmarlos con el taller (se edita
 docs/arquitectura-cotizador-ducterias.md   especificación
 src/
   datos/maestros.js                        tablas maestras (valores ilustrativos)
-  motor/                                   util · geometria · material · mano_obra · consumibles · precios · cotizador
+  motor/                                   util · geometria · material · proveedor · mano_obra · consumibles · precios · cotizador
   web/                                     index.html · app.js · almacen.js · maestros_ui.js · esquemas.js · dom.js · estilos.css
 tests/                                     *.test.js (node:test) · e2e/ui.e2e.js (Playwright, opcional)
 scripts/construir.js                       empaquetado a un solo HTML

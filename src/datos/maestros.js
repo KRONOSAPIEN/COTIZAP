@@ -1,13 +1,14 @@
 /**
  * COTIZAP · maestros.js — Bases de datos maestras (valores de arranque).
  *
- * ⚠ TODOS LOS VALORES MONETARIOS, TARIFAS, VELOCIDADES Y TIEMPOS DE ESTE ARCHIVO SON
- *   ILUSTRATIVOS. Existen para que el motor funcione de inmediato y para servir de
- *   vector de prueba. Antes de cotizar a un cliente deben sustituirse por:
- *     · precios vigentes de proveedor (lámina, perfiles, gas, alambre, pintura),
- *     · tarifas reales de mano de obra y hora-máquina,
+ * ⚠ SON REALES la mano de obra ($500 por hora) y la lámina y los perfiles de la lista del proveedor
+ *   (cotizaciones y factura del 30-sep-2026). TODO LO DEMÁS (consumibles, equipo, tiempos, indirectos,
+ *   utilidad) es ILUSTRATIVO: existe para que el motor funcione de inmediato y para servir de vector
+ *   de prueba. Antes de cotizar a un cliente debe sustituirse por:
+ *     · precios vigentes de gas, alambre, pintura y tornillería,
+ *     · tarifas reales de hora-máquina,
  *     · estudios de tiempos del taller (velocidades de corte, rolado, soldadura).
- *   Las fórmulas del motor NUNCA contienen precios: sólo leen `precios[<variable>]`.
+ *   Las fórmulas del motor NUNCA contienen precios: sólo leen `precios[<variable>]` y `proveedor`.
  *
  * Unidades internas: mm, m², kg, min, MXN. Los calibres se guardan en pulgadas
  * (como los publican las normas) y el motor los convierte a mm.
@@ -24,23 +25,27 @@
 
   const base = {
     meta: {
-      version: '1.1.0-ilustrativo',
+      version: '1.2.0',
       moneda: 'MXN',
-      aviso: 'Valores ilustrativos. Sustituir por precios, tarifas y tiempos reales antes de cotizar.',
+      aviso: 'Mano de obra y lámina/perfiles del proveedor son reales; el resto son valores ilustrativos. Revisar antes de cotizar.',
     },
 
     /* ------------------------------------------------------------------ */
-    /* PRECIOS — variables referenciales (MXN por unidad indicada)        */
+    /* PRECIOS — variables referenciales (MXN por unidad, SIN IVA)        */
+    /* Los precios por kg de lámina y de perfil sólo se usan para lo que  */
+    /* no esté en la lista del proveedor (calibre o perfil sin cotizar);  */
+    /* salen de esa lista: lámina negra cal. 12, promedio de galvanizado  */
+    /* cal. 22 y 24, promedio de ángulos y solera 1½" × 3/16".            */
     /* ------------------------------------------------------------------ */
     precios: {
-      precio_kg_acero_carbon: 22.0,
-      precio_kg_acero_galvanizado: 27.5,
+      precio_kg_acero_carbon: 22.47,
+      precio_kg_acero_galvanizado: 30.69,
       precio_kg_inox_304: 98.0,
       precio_kg_inox_316: 135.0,
       precio_kg_chatarra_acero: 7.0,
       precio_kg_chatarra_inox: 45.0,
-      precio_kg_perfil_angulo: 21.5,
-      precio_kg_solera: 21.0,
+      precio_kg_perfil_angulo: 24.83,
+      precio_kg_solera: 24.8,
       precio_kg_alambre_er70s6: 62.0,
       precio_kg_varilla_er308l: 420.0,
       precio_kg_varilla_er316l: 520.0,
@@ -59,6 +64,39 @@
       precio_L_primario: 220.0,
       precio_L_esmalte: 260.0,
       precio_L_diluyente: 70.0,
+    },
+
+    /* ------------------------------------------------------------------ */
+    /* LISTA DE PRECIOS DEL PROVEEDOR DE ACERO (30-sep-2026)              */
+    /* Cotizaciones y factura: el proveedor cotiza por PIEZA y con IVA    */
+    /* incluido (su factura desglosa el IVA de precios redondos). El      */
+    /* motor los convierte a $/kg sin IVA (motor/proveedor.js). Las hojas */
+    /* con calibre y las barras con perfil alimentan el cálculo; el resto */
+    /* es referencia. Un renglón nuevo es un id nuevo con los mismos      */
+    /* campos.                                                            */
+    /* ------------------------------------------------------------------ */
+    proveedor: {
+      fecha: '2026-09-30',
+      iva_incluido_pct: 0.16, // IVA que ya traen los precios capturados (0 si se capturan antes de IVA)
+      hojas: {
+        GALV_C22_4X10: { descripcion: 'Lámina galvanizada 4 × 10 ft · cal. 22', material: 'GALVANIZADO', calibre: 22, esp_mm: 0, ancho_mm: 1219, largo_mm: 3048, precio: 920 },
+        GALV_C24_4X10: { descripcion: 'Lámina galvanizada 4 × 10 ft · cal. 24', material: 'GALVANIZADO', calibre: 24, esp_mm: 0, ancho_mm: 1219, largo_mm: 3048, precio: 700 },
+        NEGRA_C12_4X10: { descripcion: 'Lámina negra 4 × 10 ft · cal. 12', material: 'ACERO_CARBON', calibre: 12, esp_mm: 0, ancho_mm: 1219, largo_mm: 3048, precio: 2020 },
+        NEGRA_C12_4X8: { descripcion: 'Lámina negra 4 × 8 ft · cal. 12', material: 'ACERO_CARBON', calibre: 12, esp_mm: 0, ancho_mm: 1219, largo_mm: 2438, precio: 1620 },
+        NEGRA_C12_3X10: { descripcion: 'Lámina negra 3 × 10 ft · cal. 12', material: 'ACERO_CARBON', calibre: 12, esp_mm: 0, ancho_mm: 914, largo_mm: 3048, precio: 1515 },
+        NEGRA_C12_3X8: { descripcion: 'Lámina negra 3 × 8 ft · cal. 12', material: 'ACERO_CARBON', calibre: 12, esp_mm: 0, ancho_mm: 914, largo_mm: 2438, precio: 1210 },
+        PLACA_3_16_4X8: { descripcion: 'Placa lisa 4 × 8 ft · 3/16"', material: 'ACERO_CARBON', calibre: 0, esp_mm: 4.7625, ancho_mm: 1219, largo_mm: 2438, precio: 2820 },
+        PLACA_3_16_3X8: { descripcion: 'Placa lisa 3 × 8 ft · 3/16" (precio como viene en la factura)', material: 'ACERO_CARBON', calibre: 0, esp_mm: 4.7625, ancho_mm: 914, largo_mm: 2438, precio: 2820 },
+      },
+      barras: {
+        SOL_1_1_2X3_16: { descripcion: 'Solera 1½" × 3/16" (brida estándar)', perfil: 'SOL38x4.8', largo_mm: 6100, precio: 250 },
+        ANG_1_1_2X3_16: { descripcion: 'Ángulo 1½" × 3/16"', perfil: 'L38x4.8', largo_mm: 6100, precio: 470 },
+        ANG_2X3_16: { descripcion: 'Ángulo 2" × 3/16"', perfil: 'L51x4.8', largo_mm: 6100, precio: 616 },
+        ANG_1_1_4X1_8: { descripcion: 'Ángulo 1¼" × 1/8"', tipo: 'ANGULO', ancho_mm: 31.75, esp_mm: 3.175, largo_mm: 6100, precio: 260 },
+        ANG_3_4X1_8: { descripcion: 'Ángulo ¾" × 1/8"', tipo: 'ANGULO', ancho_mm: 19.05, esp_mm: 3.175, largo_mm: 6100, precio: 160 },
+        SOL_1_1_4X1_8: { descripcion: 'Solera 1¼" × 1/8"', tipo: 'SOLERA', ancho_mm: 31.75, esp_mm: 3.175, largo_mm: 6100, precio: 150 },
+        CANAL_U_6: { descripcion: 'Canal U 6" × 6 m (12.2 kg/m)', kg_m: 12.2, largo_mm: 6000, precio: 2177.18 },
+      },
     },
 
     /* ------------------------------------------------------------------ */
@@ -318,22 +356,22 @@
 
     /* ------------------------------------------------------------------ */
     /* TARIFAS DE OPERACIÓN                                               */
-    /* mo_h = salario_diario × FSR / jornada_h   (FSR = Factor de Salario Real) */
+    /* mo_h = salario_hora × FSR   (FSR = Factor de Salario Real)         */
+    /* Los trabajadores ganan $500 por hora (dato del taller).            */
     /* ------------------------------------------------------------------ */
     mano_obra: {
       FSR: 1.55,
-      jornada_h: 8,
       operaciones: {
-        corte: { salario_diario: 480, equipo_h: 45 },
-        rolado: { salario_diario: 500, equipo_h: 55 },
-        armado: { salario_diario: 520, equipo_h: 25 },
-        aros: { salario_diario: 520, equipo_h: 40 },
-        soldadura: { salario_diario: 600, equipo_h: 45 },
-        engargolado: { salario_diario: 480, equipo_h: 35 },
-        barrenado: { salario_diario: 450, equipo_h: 25 },
-        acabado: { salario_diario: 450, equipo_h: 20 },
-        pintura: { salario_diario: 480, equipo_h: 40 },
-        qc_embalaje: { salario_diario: 450, equipo_h: 0 },
+        corte: { salario_hora: 500, equipo_h: 45 },
+        rolado: { salario_hora: 500, equipo_h: 55 },
+        armado: { salario_hora: 500, equipo_h: 25 },
+        aros: { salario_hora: 500, equipo_h: 40 },
+        soldadura: { salario_hora: 500, equipo_h: 45 },
+        engargolado: { salario_hora: 500, equipo_h: 35 },
+        barrenado: { salario_hora: 500, equipo_h: 25 },
+        acabado: { salario_hora: 500, equipo_h: 20 },
+        pintura: { salario_hora: 500, equipo_h: 40 },
+        qc_embalaje: { salario_hora: 500, equipo_h: 0 },
       },
     },
 
@@ -361,5 +399,30 @@
     return U.mezclar(base, parche || {});
   }
 
-  return { crearMaestros, base };
+  /**
+   * Quita de un parche guardado lo que ya no existe en las tablas, para que no quede como un campo suelto y sin efecto:
+   * el salario diario y la jornada (ahora el salario se captura por hora). No muta el parche recibido.
+   */
+  function migrarParche(parche) {
+    if (parche === null || typeof parche !== 'object' || Array.isArray(parche)) return parche;
+    const p = U.clonar(parche);
+    const mo = p.mano_obra;
+    if (mo && typeof mo === 'object' && !Array.isArray(mo)) {
+      delete mo.jornada_h;
+      const ops = mo.operaciones;
+      if (ops && typeof ops === 'object' && !Array.isArray(ops)) {
+        Object.keys(ops).forEach((k) => {
+          if (ops[k] && typeof ops[k] === 'object' && !Array.isArray(ops[k])) {
+            delete ops[k].salario_diario;
+            if (!Object.keys(ops[k]).length) delete ops[k];
+          }
+        });
+        if (!Object.keys(ops).length) delete mo.operaciones;
+      }
+      if (!Object.keys(mo).length) delete p.mano_obra;
+    }
+    return p;
+  }
+
+  return { crearMaestros, migrarParche, base };
 }));
