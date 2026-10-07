@@ -1279,7 +1279,7 @@ const ok = (cond, msg) => {
     await fila(GAS).locator('.m-ayuda').click();
     ok(await pop.isHidden(), 'pulsar otra vez el mismo ⓘ la cierra');
     await fila(GAS).locator('.m-ayuda').click();
-    await p.mouse.click(700, 120);
+    await p.mouse.click(10, 10); // el encabezado: fuera de la ventana (que ahora queda más arriba)
     ok(await pop.isHidden(), 'un clic fuera la cierra');
     await fila('m_precios__precio_kg_solera').locator('.m-ayuda').click();
     await fila(GAS).locator('.m-ayuda').click();
@@ -1869,7 +1869,9 @@ const ok = (cond, msg) => {
     await p.emulateMedia({ media: 'screen' });
 
     // h) sin piezas: la pestaña lo dice y ofrece el ejemplo; la lista vacía también
+    await p.click('#tab-cotizacion'); // «Nueva» está en la cotización detallada
     await p.click('#btn-nueva');
+    await p.click('#tab-planos');
     await p.waitForTimeout(100);
     ok(/Todavía no hay piezas que dibujar/.test(await p.locator('#planos-hojas').innerText()) && await p.locator('#btn-imprimir-planos').isDisabled(), 'sin piezas, la pestaña lo dice y no deja imprimir');
     await p.click('#tab-cotizacion');
@@ -1998,6 +2000,56 @@ const ok = (cond, msg) => {
     const lam = await m.locator('.lam-svg').boundingBox();
     ok(lam && lam.width > 200 && lam.x >= 0 && lam.x + lam.width <= 321, 'en 320 px la lámina dibujada cabe a lo ancho');
     await m.context().close();
+  }
+
+  console.log('27) Reorganización: encabezado de un renglón, pestañas en orden de trabajo, avisos donde aplican y texto para el cliente');
+  {
+    const p = await nuevaPagina({ viewport: { width: 1366, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
+    const caja = (sel) => p.locator(sel).boundingBox();
+    const marca = await caja('.marca');
+    const tabs = await caja('.tabs');
+    ok(Math.abs(marca.y - tabs.y) < 20 && (await caja('.barra')).height < 80, 'en 1366 px el encabezado es un solo renglón: la marca y las pestañas');
+    ok((await p.locator('.tabs [role="tab"]').evaluateAll((els) => els.map((e) => e.id))).join(',') === 'tab-rapida,tab-cotizacion,tab-planos,tab-compras,tab-maestros'
+      && await p.getByRole('tab', { name: 'Cotización detallada' }).count() === 1, 'pestañas en el orden de trabajo: rápida, detallada, planos, compras y gastos, tablas maestras');
+    ok(await p.locator('#panel-cotizacion #btn-nueva').isVisible() && await p.locator('#panel-cotizacion #btn-io').isVisible() && await p.locator('.barra #btn-nueva').count() === 0,
+      'Nueva, Guardar y cargar e Imprimir propuesta están en la cotización detallada (no en el encabezado)');
+    ok(await p.locator('#aviso-ilustrativo').isVisible() && await p.locator('#aviso-ejemplo').isVisible(), 'en la cotización detallada se ven los avisos de valores ilustrativos y de ejemplo');
+    await p.click('#tab-rapida');
+    ok(await p.locator('#aviso-ilustrativo').isHidden() && await p.locator('#aviso-ejemplo').isHidden(), 'en la cotización rápida no estorban los avisos de la detallada');
+    await p.click('#tab-maestros');
+    ok(await p.locator('#aviso-ilustrativo').isHidden() && await p.locator('#aviso-ejemplo').isHidden(), 'en tablas maestras tampoco (es ahí donde se cambian los valores)');
+    await p.click('#tab-planos');
+    ok(await p.locator('#aviso-ejemplo').isVisible(), 'en planos sí: dibujan la cotización de ejemplo');
+
+    // el texto para el cliente: sin el desglose interno, se copia y se imprime solo
+    await p.click('#tab-rapida');
+    await p.fill('#r_cliente', 'Nave 3');
+    await p.fill('#r_diam', '11');
+    await p.fill('#r_metros', '40');
+    await p.fill('#r_dias_fab', '5');
+    await p.fill('#r_dias_ins', '3');
+    const txt = await p.inputValue('#rapida-texto');
+    ok(/^Cotización de ductería · Nave 3/.test(txt) && /Ø11″, 40 m/.test(txt) && /Incluye suministro, fabricación e instalación\./.test(txt) && /\$44,006\.90 \+ IVA 16 % = \$51,048\.00/.test(txt)
+      && /Plazo: 5 días de fabricación \+ 3 días de instalación = 8 días/.test(txt) && /Vigencia: 15 días/.test(txt) && !/tilidad|factor|× 3/.test(txt),
+      'el texto para el cliente: cliente, ducto, qué incluye, precio con IVA, plazo y vigencia; sin factor ni utilidad');
+    await p.click('#rapida-copiar');
+    await p.waitForTimeout(150);
+    ok(await p.evaluate(() => navigator.clipboard.readText()) === txt, '«Copiar texto» lo deja en el portapapeles');
+    await p.fill('#r_dias_ins', '');
+    ok(/Incluye suministro y fabricación\./.test(await p.inputValue('#rapida-texto')), 'sin días de instalación, no dice que la incluye');
+    await p.fill('#r_dias_ins', '3');
+    await p.evaluate(() => { window.print = () => {}; });
+    await p.click('#rapida-imprimir');
+    await p.waitForTimeout(60); // la app quita la clase al terminar de imprimir (aquí, de inmediato): se vuelve a poner para revisar la hoja
+    await p.evaluate(() => document.body.classList.add('imprimir-rapida'));
+    await p.emulateMedia({ media: 'print' });
+    const imp = await p.locator('#rapida-impresion').innerText();
+    ok(await p.locator('#rapida-impresion').isVisible() && await p.locator('.barra').isHidden() && await p.locator('main').isHidden() && /Total\s*\$51,048\.00/.test(imp) && /Cliente: Nave 3/.test(imp) && !/tilidad/.test(imp),
+      'al imprimir la cotización rápida sale sólo la hoja del cliente (subtotal, IVA, total, plazo y vigencia)');
+    await p.emulateMedia({ media: 'screen' });
+    await p.evaluate(() => document.body.classList.remove('imprimir-rapida'));
+    ok(await p.locator('#rapida-impresion').isHidden(), 'en pantalla la hoja de impresión no se ve');
+    await p.context().close();
   }
 
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);

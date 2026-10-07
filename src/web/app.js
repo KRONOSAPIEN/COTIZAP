@@ -1712,17 +1712,25 @@
     if (t === 'maestros' && W.maestrosUI) W.maestrosUI.render();
     if (t === 'planos' && W.planosUI) W.planosUI.render();
     if (t === 'rapida' && W.rapidaUI) W.rapidaUI.render();
+    if (estado.res) renderAvisos();
     const el = destino ? $(destino) : null;
     if (el) el.scrollIntoView({ block: 'start', behavior: root.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   }
 
+  /**
+   * Los avisos de arriba, sólo donde aplican: el de valores ilustrativos no se repite en las tablas maestras (es ahí donde se
+   * cambian) ni en la cotización rápida (usa la lista del proveedor y la regla del taller); el de la cotización de ejemplo y el
+   * de las partidas con error, sólo en lo que trabaja sobre la cotización detallada.
+   */
   function renderAvisos() {
-    $('#aviso-ilustrativo').hidden = !!estado.M.meta.revisado;
-    $('#aviso-ejemplo').hidden = !estado.cot.ejemplo;
+    const t = estado.tab;
+    const deLaCotizacion = ['cotizacion', 'planos', 'compras'].includes(t);
+    $('#aviso-ilustrativo').hidden = !!estado.M.meta.revisado || t === 'maestros' || t === 'rapida';
+    $('#aviso-ejemplo').hidden = !estado.cot.ejemplo || !deLaCotizacion;
     const nErr = estado.res.totales.n_partidas_error;
     const avisos = estado.res.avisos || [];
     const el = $('#aviso-error');
-    el.hidden = !nErr && !avisos.length;
+    el.hidden = (!nErr && !avisos.length) || t === 'rapida';
     el.querySelector('.aviso-txt').textContent = [
       nErr ? `${nErr} ${nErr === 1 ? 'partida no se puede calcular' : 'partidas no se pueden calcular'}: revise sus datos o las tablas maestras.` : '',
       ...avisos,

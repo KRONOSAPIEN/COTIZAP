@@ -22,7 +22,8 @@
   const MAX_TIRA = 24; // láminas que se dibujan en la tira; más se resumen
 
   /** Lo capturado (textos, como se tecleó): diámetro (en la unidad de la cotización), metros, yarda (mm), lámina, utilidad (%) y días. */
-  const VACIA = { diam: '', metros: '', yarda: '', hoja_id: '', utilidad: '', dias_fab: '', dias_ins: '' };
+  const VACIA = { cliente: '', diam: '', metros: '', yarda: '', hoja_id: '', utilidad: '', dias_fab: '', dias_ins: '' };
+  const SOLO_COPIAR = !!root.COTIZAP_ENTORNO_ARTIFACT; // en un visor restringido no se puede imprimir
   let captura = null;
   function leerGuardado() {
     try {
@@ -151,6 +152,82 @@
     return partes.length ? `${partes.join(' + ')}${partes.length > 1 ? ` = ${corto(p.total)} ${p.total === 1 ? 'día' : 'días'}` : ''}` : 'sin días';
   }
 
+  /** El material para el cliente: «lámina galvanizada cal. 22». */
+  function materialCliente(r) {
+    const mat = E().M.materiales[r.hoja.material];
+    const nombre = mat && mat.nombre ? mat.nombre.replace(/\s*\(.*\)\s*$/, '').toLowerCase() : 'lámina';
+    return `${/lámina/.test(nombre) ? nombre : `lámina de ${nombre}`} cal. ${r.hoja.calibre}`;
+  }
+
+  /**
+   * El texto para el cliente (WhatsApp, correo o impresión): qué incluye, el precio y el plazo. Sin el desglose interno (factor,
+   * utilidad): eso es del taller.
+   */
+  function textoCliente(r) {
+    const c = texto(captura.cliente).trim();
+    const vig = Number(E().cot.vigencia_dias);
+    const incluye = r.mano_obra.instalacion.dias > 0 ? 'suministro, fabricación e instalación' : 'suministro y fabricación';
+    return [
+      `Cotización de ductería${c ? ` · ${c}` : ''}`,
+      `Ducto de Ø${nominal(r.entrada.D_mm)}, ${corto(r.entrada.L_m)} m hasta el punto más alejado, en ${materialCliente(r)}, con bridas.`,
+      `Incluye ${incluye}.`,
+      `Precio: ${W.mxn(r.precio)} + IVA ${W.pct(r.iva_pct, 0)} = ${W.mxn(r.total)}`,
+      r.plazo ? `Plazo: ${textoPlazo(r.plazo).replace(' de fabricación de bridas', ' de fabricación')}.` : '',
+      vig > 0 ? `Vigencia: ${W.num(vig, 0)} días; sujeta a variación del precio del acero.` : 'Sujeta a variación del precio del acero.',
+      'Precio estimado con el diámetro mayor y la longitud total; se ajusta con el plano definitivo.',
+    ].filter(Boolean).join('\n');
+  }
+
+  async function copiar(txt, area) {
+    try {
+      await root.navigator.clipboard.writeText(txt);
+      W.toast('Texto copiado: péguelo en WhatsApp o en un correo');
+    } catch (err) {
+      // sin permiso para el portapapeles (un visor restringido): se selecciona para copiarlo a mano
+      area.focus();
+      area.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
+      W.toast(ok ? 'Texto copiado: péguelo en WhatsApp o en un correo' : 'El texto quedó seleccionado: cópielo con Ctrl+C (o mantenga presionado en el celular)');
+    }
+  }
+
+  /** Imprime sólo la cotización para el cliente (una hoja carta). */
+  function imprimir(r) {
+    const c = texto(captura.cliente).trim();
+    const hoy = new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' });
+    const vig = Number(E().cot.vigencia_dias);
+    const fila = (a, b, clase) => h('tr', { class: clase || null }, h('td', null, a), h('td', { class: 'num' }, b));
+    W.reemplazar($('#rapida-impresion'),
+      h('header', { class: 'ri-cab' }, h('h1', null, 'Cotización de ductería'), h('p', null, hoy)),
+      c ? h('p', { class: 'ri-cliente' }, h('strong', null, 'Cliente: '), c) : null,
+      h('p', null, `Ducto de Ø${nominal(r.entrada.D_mm)}, ${corto(r.entrada.L_m)} m hasta el punto más alejado, en ${materialCliente(r)}, con bridas. Incluye ${r.mano_obra.instalacion.dias > 0 ? 'suministro, fabricación e instalación' : 'suministro y fabricación'}.`),
+      h('table', { class: 'ri-tabla' }, h('tbody', null,
+        fila('Subtotal', W.mxn(r.precio)),
+        fila(`IVA ${W.pct(r.iva_pct, 0)}`, W.mxn(r.iva)),
+        fila('Total', W.mxn(r.total), 'ri-total'))),
+      r.plazo ? h('p', null, h('strong', null, 'Plazo: '), `${textoPlazo(r.plazo).replace(' de fabricación de bridas', ' de fabricación')}.`) : null,
+      h('p', { class: 'ri-nota' }, `Precios en pesos mexicanos. ${vig > 0 ? `Vigencia de ${W.num(vig, 0)} días; ` : ''}sujeta a variación del precio del acero. Precio estimado con el diámetro mayor y la longitud total; se ajusta con el plano definitivo.`));
+    document.body.classList.add('imprimir-rapida');
+    const quitar = () => { document.body.classList.remove('imprimir-rapida'); root.removeEventListener('afterprint', quitar); };
+    root.addEventListener('afterprint', quitar);
+    root.print();
+    setTimeout(quitar, 0);
+  }
+
+  function paraElCliente(r) {
+    const txt = textoCliente(r);
+    const area = h('textarea', { id: 'rapida-texto', class: 'rapida-texto', readonly: true, rows: String(txt.split('\n').length + 2) /* los renglones largos se parten */, 'aria-label': 'Texto para el cliente' });
+    area.value = txt;
+    return h('div', { class: 'tarjeta rapida-cliente' },
+      h('div', { class: 'rapida-cliente-cab' }, h('h3', null, 'Para el cliente'),
+        h('div', { class: 'planos-acc' },
+          h('button', { type: 'button', class: 'btn btn-primario', id: 'rapida-copiar', onclick: () => copiar(area.value, area) }, W.icono('copiar'), 'Copiar texto'),
+          SOLO_COPIAR ? null : h('button', { type: 'button', class: 'btn btn-sec', id: 'rapida-imprimir', onclick: () => imprimir(r) }, W.icono('imprimir'), 'Imprimir'))),
+      area,
+      h('p', { class: 'nota' }, 'Sin el desglose interno (factor y utilidad). Para WhatsApp o un correo; el nombre del cliente se pone arriba.'));
+  }
+
   function resultado(r) {
     const hj = r.hoja;
     const tramo = r.bridas.desde_m > 0 ? `de ${W.num(r.bridas.desde_m, 0)} a ${W.num(r.bridas.hasta_m, 0)} m` : `hasta ${W.num(r.bridas.hasta_m, 0)} m`;
@@ -177,6 +254,7 @@
         renglon('Total', null, W.mxn(r.total), 'r-total')));
     return [
       h('div', { class: 'tarjeta totales' }, total, plazo, ...r.advertencias.map((a) => h('p', { class: 'nota' }, W.icono('aviso'), a))),
+      paraElCliente(r),
       seccionAcomodo(r),
       h('div', { class: 'tarjeta' }, desglose),
     ];
@@ -221,7 +299,7 @@
     if (e.D_mm === undefined && e.L_m === undefined) {
       W.reemplazar(cont, h('div', { class: 'tarjeta rapida-vacia' },
         h('p', null, 'Capture el diámetro máximo y los metros hasta el punto más alejado.'),
-        h('p', { class: 'nota' }, `Regla: lámina en hojas enteras × ${M.rapida ? corto(M.rapida.factor_lamina) : '3'}, más las bridas según los metros, más la utilidad y el IVA. Se cambia en Tablas maestras › Cotización rápida.`)));
+        h('p', { class: 'nota' }, `Regla: lámina en hojas enteras × ${M.rapida ? corto(M.rapida.factor_lamina) : '3'}, más las bridas según los metros, la mano de obra de los días, la utilidad y el IVA. Se cambia en Tablas maestras › Cotización rápida.`)));
       return;
     }
     try {
@@ -234,7 +312,7 @@
 
   function iniciar() {
     captura = { ...VACIA, ...leerGuardado() };
-    const campos = [['#r_diam', 'diam'], ['#r_metros', 'metros'], ['#r_utilidad', 'utilidad'], ['#r_dias_fab', 'dias_fab'], ['#r_dias_ins', 'dias_ins']];
+    const campos = [['#r_cliente', 'cliente'], ['#r_diam', 'diam'], ['#r_metros', 'metros'], ['#r_utilidad', 'utilidad'], ['#r_dias_fab', 'dias_fab'], ['#r_dias_ins', 'dias_ins']];
     campos.forEach(([sel, k]) => {
       const el = $(sel);
       el.value = texto(captura[k]);

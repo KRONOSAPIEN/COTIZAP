@@ -23,7 +23,7 @@
     ['proveedor', 'Lista de precios del proveedor', 'Lo que cotiza el proveedor de acero, por pieza (hoja o barra) y con IVA incluido. El cálculo lo convierte a precio por kg sin IVA.'],
     ['precios', 'Precios', 'Variables referenciales en MXN, sin IVA. Los precios por kg de lámina y perfil sólo se usan para lo que no esté en la lista del proveedor.'],
     ['compras', 'Catálogo de compras', 'Lo que se compra hecho (mangueras, abrazaderas, taquetes, selladores…): precio, si trae IVA y en qué renglón del control de gastos cae. También cómo se redondea la lista de compras.'],
-    ['mano_obra', 'Mano de obra y equipo', 'Costo por hora = salario por día × días pagados ÷ (días trabajados × horas por día) × FSR: $500 × 7 ÷ (5 × 8) = $87.50. El salario ya incluye prestaciones, por eso FSR = 1.00.'],
+    ['mano_obra', 'Mano de obra y equipo', 'Costo por hora = salario por día ÷ horas por día × FSR: $500 ÷ 8 h = $62.50. El salario es sin utilidades ni prestaciones; para cobrarlas, suba el FSR.'],
     ['merma', 'Merma por familia', 'Fracción del material comprado que no queda en la pieza (se captura en %).'],
     ['capas', 'Pila de precio', 'Indirectos, imprevistos, financiamiento, utilidad, comisión e IVA.'],
     ['rapida', 'Cotización rápida', 'Lámina en hojas enteras × factor, más las bridas por metros, la mano de obra de los días (fabricación de bridas e instalación), la utilidad y el IVA. Sólo la usa la pestaña «Cotización rápida».'],

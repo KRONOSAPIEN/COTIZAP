@@ -21,17 +21,12 @@
     </div>
   </div>
   <nav class="tabs" role="tablist" aria-label="Secciones">
-    <button type="button" role="tab" id="tab-cotizacion" data-tab="cotizacion" aria-selected="true" aria-controls="panel-cotizacion">Cotización</button>
     <button type="button" role="tab" id="tab-rapida" data-tab="rapida" aria-selected="false" aria-controls="panel-rapida" aria-label="Cotización rápida"><span class="tab-largo">Cotización rápida</span><span class="tab-corto" aria-hidden="true">Rápida</span></button>
+    <button type="button" role="tab" id="tab-cotizacion" data-tab="cotizacion" aria-selected="true" aria-controls="panel-cotizacion" aria-label="Cotización detallada"><span class="tab-largo">Cotización detallada</span><span class="tab-corto" aria-hidden="true">Detallada</span></button>
     <button type="button" role="tab" id="tab-planos" data-tab="planos" aria-selected="false" aria-controls="panel-planos">Planos</button>
     <button type="button" role="tab" id="tab-compras" data-tab="compras" aria-selected="false" aria-controls="panel-compras">Compras y gastos</button>
     <button type="button" role="tab" id="tab-maestros" data-tab="maestros" aria-selected="false" aria-controls="panel-maestros">Tablas maestras</button>
   </nav>
-  <div class="acciones">
-    <button type="button" class="btn btn-sec" id="btn-nueva">Nueva</button>
-    <button type="button" class="btn btn-sec" id="btn-io">Guardar y cargar</button>
-    <button type="button" class="btn btn-sec" id="btn-imprimir">Imprimir propuesta</button>
-  </div>
 </header>
 
 <main>
@@ -53,6 +48,17 @@
   </div>
 
   <section id="panel-cotizacion" class="panel" role="tabpanel" aria-labelledby="tab-cotizacion">
+    <div class="planos-cab cot-cab">
+      <div>
+        <h2>Cotización detallada</h2>
+        <p>Pieza por pieza: cada partida con su dibujo, su desglose y su precio, y la propuesta para el cliente. Lo que capture se guarda solo en este navegador.</p>
+      </div>
+      <div class="planos-acc acciones">
+        <button type="button" class="btn btn-sec" id="btn-nueva">Nueva</button>
+        <button type="button" class="btn btn-sec" id="btn-io">Guardar y cargar</button>
+        <button type="button" class="btn btn-sec" id="btn-imprimir">Imprimir propuesta</button>
+      </div>
+    </div>
     <form class="datos" aria-label="Datos de la cotización">
       <div class="campo"><label for="c_cliente">Cliente</label><input id="c_cliente" type="text" autocomplete="organization" placeholder="Razón social"></div>
       <div class="campo"><label for="c_proyecto">Proyecto</label><input id="c_proyecto" type="text" placeholder="Nombre del proyecto"></div>
@@ -66,7 +72,7 @@
         <select id="c_servicio"><option value="VENTILACION">Ventilación</option><option value="POLVO">Colección de polvo</option><option value="ABRASIVO">Material abrasivo</option></select></div>
       <div class="campo"><label for="c_riesgo">Riesgo (imprevistos)</label>
         <select id="c_riesgo"><option value="BAJO">Bajo · 2 %</option><option value="MEDIO">Medio · 4 %</option><option value="ALTO">Alto · 8 %</option></select></div>
-      <div class="datos-sub">Fabricación <span class="datos-sub-nota">La yarda es el ancho de la lámina con que se arma el ducto recto (3 ft = 914 mm, 4 ft = 1 220 mm). La instalación decide la pintura: el acero al carbón va con sólo pintura en interior y con primario y pintura en exterior; la lámina galvanizada sólo se pinta en las bridas. Lo elige quien diseña, y cada partida puede cambiarlo.</span></div>
+      <div class="datos-sub">Fabricación <span class="datos-sub-nota">La yarda es el ancho de la lámina del ducto recto (3 ft = 914 mm, 4 ft = 1 220 mm). La instalación decide la pintura (el galvanizado sólo se pinta en las bridas). Cada partida puede cambiar los dos.</span></div>
       <div class="campo"><label for="c_yarda_mm">Ancho de la yarda</label><select id="c_yarda_mm"></select></div>
       <div class="campo"><label for="c_ubicacion">Instalación (pintura)</label>
         <select id="c_ubicacion"><option value="INTERIOR">Interior · bajo techo</option><option value="EXTERIOR">Exterior · a la intemperie</option></select></div>
@@ -97,12 +103,13 @@
     <div class="planos-cab">
       <div>
         <h2>Cotización rápida</h2>
-        <p>Un precio en minutos con el diámetro mayor y los metros hasta el punto más alejado: la lámina en hojas enteras por 3, más las bridas según los metros, más la mano de obra de los días de fabricación de bridas y de instalación, más la utilidad y el IVA. Para el precio pieza por pieza, capture las partidas en «Cotización».</p>
+        <p>Un precio en minutos con el diámetro mayor y los metros hasta el punto más alejado, listo para mandarlo al cliente. Para el precio pieza por pieza, use la «Cotización detallada».</p>
       </div>
       <div class="planos-acc"><button type="button" class="btn btn-sec" id="rapida-limpiar">Limpiar</button></div>
     </div>
     <div class="rapida">
       <form class="datos rapida-datos" id="rapida-form" aria-label="Datos de la cotización rápida" novalidate>
+        <div class="campo"><label for="r_cliente">Cliente u obra <span class="opcional">(opcional)</span></label><input id="r_cliente" type="text" autocomplete="off" placeholder="Para el texto del cliente"></div>
         <div class="datos-sub">Ducto</div>
         <div class="campo"><label for="r_diam">Diámetro máximo (<span id="r_diam_unidad">pulgadas</span>)</label><input id="r_diam" type="text" inputmode="decimal" autocomplete="off" placeholder="p. ej. 11"></div>
         <div class="campo"><label for="r_metros">Metros hasta el punto más alejado</label><input id="r_metros" type="text" inputmode="decimal" autocomplete="off" placeholder="p. ej. 40"></div>
@@ -260,6 +267,7 @@
   </div>
 </dialog>
 
+<div id="rapida-impresion" class="rapida-impresion" aria-hidden="true"></div>
 <div id="toasts" aria-live="polite"></div>
 
 <script src="../motor/util.js"></script>

@@ -166,7 +166,7 @@ code, .m-et code { font-family: var(--font-mono); font-size: 0.92em; }
 .tabs [role="tab"]:hover { background: var(--surface-2); }
 .tabs [role="tab"][aria-selected="true"] { color: var(--accent); background: var(--accent-soft); }
 .tab-corto { display: none; }
-@media (max-width: 1439px) { .tab-largo { display: none; } .tab-corto { display: inline; } } /* «Rápida» donde no cabe «Cotización rápida» */
+@media (max-width: 1099px) { .tab-largo { display: none; } .tab-corto { display: inline; } } /* «Rápida» y «Detallada» donde no caben los nombres completos */
 .acciones { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* -------------------------------------------------------------------------- botones y campos */
@@ -737,6 +737,12 @@ kbd { font: 500 11.5px var(--font-mono); padding: 1px 6px; border: 1px solid var
 .segmento input:checked + span small { color: var(--accent); }
 .segmento input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: -3px; }
 .r-cuadrilla { font-size: 12px; color: var(--fg-3); }
+.opcional { font-weight: 400; color: var(--fg-3); }
+.rapida-cliente { display: grid; gap: 8px; }
+.rapida-cliente-cab { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.rapida-cliente h3 { font: 600 15px var(--font-ui); }
+.rapida-texto { width: 100%; resize: vertical; field-sizing: content; min-height: 8em; font: 14px/1.45 var(--font-ui); color: var(--fg); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.rapida-impresion { display: none; }
 .r-plazo { font-size: 14px; color: var(--fg-2); padding-top: 10px; border-top: 1px solid var(--line); }
 .r-plazo strong { color: var(--fg); }
 /* la lámina dibujada: la hoja, sus yardas numeradas y el sobrante rayado */
@@ -793,7 +799,18 @@ kbd { font: 500 11.5px var(--font-mono); padding: 1px 6px; border: 1px solid var
 @media print {
   @page { size: letter; margin: 16mm; }
   html, body { background: #fff !important; color: #111 !important; }
-  body:not(.imprimir-planos) > *:not(#propuesta) { display: none !important; }
+  body:not(.imprimir-planos):not(.imprimir-rapida) > *:not(#propuesta) { display: none !important; }
+  /* «Imprimir» de la cotización rápida: sólo lo que va al cliente */
+  body.imprimir-rapida > *:not(#rapida-impresion) { display: none !important; }
+  body.imprimir-rapida #rapida-impresion { display: block !important; font: 11pt/1.5 "Barlow", system-ui, sans-serif; color: #111; }
+  #rapida-impresion .ri-cab { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1.5pt solid #111; padding-bottom: 6pt; margin-bottom: 12pt; }
+  #rapida-impresion h1 { font-size: 18pt; margin: 0; }
+  #rapida-impresion p { margin: 0 0 8pt; }
+  #rapida-impresion .ri-tabla { width: 60%; margin: 6pt 0 12pt auto; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  #rapida-impresion .ri-tabla td { padding: 4pt 6pt; border-bottom: 0.75pt solid #999; }
+  #rapida-impresion .ri-tabla .num { text-align: right; }
+  #rapida-impresion .ri-total td { font-weight: 700; font-size: 13pt; border-bottom: 0; border-top: 1.5pt solid #111; }
+  #rapida-impresion .ri-nota { font-size: 9pt; color: #444; margin-top: 16pt; }
   /* «Imprimir planos»: sólo las hojas, cada una en su página horizontal, en negro sobre blanco aunque la pantalla esté en oscuro */
   @page planos { size: letter landscape; margin: 9mm; }
   :root:root:root, :root:root:root[data-theme] {

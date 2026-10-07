@@ -18,11 +18,17 @@ Cotizador para ducterías de lámina (colección de polvo y control ambiental). 
 
 **Usar la app.** Abra `src/web/index.html` en el navegador (doble clic). No necesita servidor ni instalación; la cotización se guarda en el propio navegador y las tablas maestras se guardan solas cada vez que las cambia (ver [Dónde se guardan los precios](#dónde-se-guardan-los-precios)). Arranca con una cotización de ejemplo para explorar el cálculo. Las tipografías (Barlow, IBM Plex Mono) se piden a Google Fonts; sin conexión se usan las del sistema.
 
-1. **Tablas maestras** → capture precios, tarifas y velocidades reales.
-2. **Cotización** → en el encabezado elija el **ancho de la yarda** (3 ó 4 pies) de los tramos rectos, la **instalación** (interior o exterior: decide la pintura) y ajuste, para esa cotización, el **margen de utilidad, la comisión, el descuento y los días de cobro** (y, en *Más parámetros de precio*, administración, financiamiento e IVA) sin ir a las tablas maestras; luego *Agregar partida*, elija la familia y capture dimensiones; el precio se recalcula mientras escribe.
-3. Seleccione una partida para ver el desglose: geometría, merma, tiempos, consumibles y cada capa del precio.
-4. **Compras y gastos** → la lista de lo que hay que comprar en piezas enteras, la venta pactada contra el precio mínimo y el control de gastos real contra cotizado ([ver abajo](#compras-y-gastos-del-proyecto)).
-5. *Imprimir propuesta* genera la hoja para el cliente (sin costos internos). *Guardar y cargar* exporta/importa JSON y copia un CSV de partidas para Excel.
+Las cinco pestañas van en el orden en que se trabaja:
+
+| Pestaña | Para qué | Qué hace |
+| --- | --- | --- |
+| **Cotización rápida** | Dar un precio en minutos | Con el diámetro mayor y los metros hasta el punto más alejado: láminas enteras × 3, bridas por metros, mano de obra de los días, utilidad e IVA. Dibuja cómo salen las yardas de cada lámina y prepara el **texto para el cliente** (*Copiar texto* para WhatsApp o correo, *Imprimir*). [Ver abajo](#cotización-rápida). |
+| **Cotización detallada** | El precio pieza por pieza | Arriba, los datos de la cotización: cliente, unidades, **ancho de la yarda**, **instalación** (decide la pintura) y, sólo para esta cotización, **margen, comisión, descuento y días de cobro** (más en *Más parámetros de precio*). Luego *Agregar partida*, elegir la familia y capturar medidas: el precio se recalcula mientras escribe. Al seleccionar una partida se ve su dibujo y su desglose. Aquí están *Nueva*, *Guardar y cargar* (JSON y CSV para Excel) e *Imprimir propuesta* (la hoja para el cliente, sin costos internos). |
+| **Planos** | Mandar a fabricar | Cada pieza dibujada y acotada en hojas por tipo de pieza, con marcas y el cuadre de bridas. [Ver abajo](#planos-de-las-piezas). |
+| **Compras y gastos** | Comprar y controlar | Lo que hay que comprar en piezas enteras, la venta pactada contra el precio mínimo y lo gastado contra lo cotizado. [Ver abajo](#compras-y-gastos-del-proyecto). |
+| **Tablas maestras** | Poner los precios del taller | La lista del proveedor, precios, tarifas, tiempos y las reglas de la cotización rápida; cada dato con su ayuda (ⓘ). Se guardan solas. |
+
+Los avisos de arriba (valores ilustrativos, cotización de ejemplo) sólo aparecen en las pestañas a las que aplican.
 
 **Un solo archivo.** `npm run construir` genera `dist/cotizap.html` (app completa en un archivo, se abre con doble clic).
 
@@ -102,7 +108,7 @@ Para dar un precio en minutos, la pestaña **Cotización rápida** (*Rápida* en
 
 Ejemplo: 11″ y 40 m con yardas de 4 ft son 33 yardas, 11 hojas ($8,724.14), × 3 = $26,172.41, más $5,000 de bridas, más 20 % y el IVA: **$43,392.00**. Con yardas de 3 ft son 44 yardas en 15 hojas galvanizadas de 3 × 10 ft: **$44,220.00**. La de 3 × 10 ft trae un precio **aproximado** (cal. 22 $690, cal. 24 $525 con IVA, prorrateados por área de la de 4 × 10): cámbielo por el real en la lista del proveedor.
 
-La pestaña **dibuja una lámina** a escala con sus yardas numeradas y el sobrante rayado, y una tira con todas las láminas y cuántas yardas lleva cada una; dice qué tanto se aprovecha la hoja. Tiene además un apartado de **plazo y mano de obra**: los días de fabricación de bridas y de instalación se muestran junto al total y suman su mano de obra. Con 11″ y 40 m, 5 días de bridas ($2,500) y 3 de instalación ($3,000): **$51,048.00**. La lámina se elige de la lista del proveedor. El factor, los rangos de bridas, la utilidad, las personas y el pago por día, y la lámina de arranque están en *Tablas maestras › Cotización rápida*. Más de 120 m no tiene precio de bridas: agregue un renglón. La regla y sus supuestos están en el [documento, §5.8](docs/arquitectura-cotizador-ducterias.md#58-cotización-rápida) y [§10.14](docs/arquitectura-cotizador-ducterias.md#1014-supuestos-de-la-cotización-rápida-por-confirmar).
+La pestaña **dibuja una lámina** a escala con sus yardas numeradas y el sobrante rayado, y una tira con todas las láminas y cuántas yardas lleva cada una; dice qué tanto se aprovecha la hoja. El recuadro **Para el cliente** arma el texto que se le manda (cliente u obra, ducto, qué incluye, precio con IVA, plazo y vigencia; sin el factor ni la utilidad): *Copiar texto* lo deja listo para WhatsApp o un correo, e *Imprimir* saca una hoja carta con eso (en el archivo `cotizap.html`; el visor de la app no imprime). Tiene además un apartado de **plazo y mano de obra**: los días de fabricación de bridas y de instalación se muestran junto al total y suman su mano de obra. Con 11″ y 40 m, 5 días de bridas ($2,500) y 3 de instalación ($3,000): **$51,048.00**. La lámina se elige de la lista del proveedor. El factor, los rangos de bridas, la utilidad, las personas y el pago por día, y la lámina de arranque están en *Tablas maestras › Cotización rápida*. Más de 120 m no tiene precio de bridas: agregue un renglón. La regla y sus supuestos están en el [documento, §5.8](docs/arquitectura-cotizador-ducterias.md#58-cotización-rápida) y [§10.14](docs/arquitectura-cotizador-ducterias.md#1014-supuestos-de-la-cotización-rápida-por-confirmar).
 
 ## Compras y gastos del proyecto
 
