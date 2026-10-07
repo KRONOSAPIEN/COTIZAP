@@ -434,18 +434,15 @@ const ok = (cond, msg) => {
     const basePrecio = (await resRI()).precio;
     await p.click('#tab-maestros');
     await p.fill('#maestros-buscar', 'injerto_inclinado_hacia');
-    const hacia = p.locator('input#m_proceso__injerto_inclinado_hacia');
-    ok(await hacia.inputValue() === 'MENOR', 'en Tablas maestras: "injerto inclinado hacia" = MENOR (de extremo mayor a menor)');
-    await hacia.fill('MAYOR');
-    await hacia.dispatchEvent('change');
+    const hacia = p.locator('select#m_proceso__injerto_inclinado_hacia');
+    ok(await hacia.inputValue() === 'MENOR', 'en Tablas maestras: "injerto inclinado hacia" = MENOR (de extremo mayor a menor), y se elige de una lista');
+    await hacia.selectOption('MAYOR');
     const invertido = await resRI();
     ok(invertido.ok && invertido.precio > basePrecio, 'si el taller lo cambiara a MAYOR, la reducción con injerto cuesta más y se recalcula al instante');
-    await hacia.fill('ARRIBA');
-    await hacia.dispatchEvent('change');
+    await estadoApp(p, () => { window.COTIZAP.web.estadoApp.M.proceso.injerto_inclinado_hacia = 'ARRIBA'; window.COTIZAP.web.recalcular(); }); // un valor que la lista no ofrece (archivo dañado, almacén compartido)
     const malo = await resRI();
     ok(!malo.ok && /injerto inclinado hacia/.test(malo.errores.join(' ')), 'un valor inválido se avisa con el nombre del dato de maestros');
-    await hacia.fill('MENOR');
-    await hacia.dispatchEvent('change');
+    await hacia.selectOption('MENOR');
     ok((await resRI()).precio === basePrecio, 'al volver a MENOR el precio vuelve al de antes');
     await p.click('#tab-cotizacion');
 
@@ -867,7 +864,7 @@ const ok = (cond, msg) => {
     ok(await ed.locator('input#m_proceso__limites__seccion_max_mm').inputValue() === '6000' && await ed.locator('input#m_proceso__limites__largo_max_mm').inputValue() === '100000' && await ed.locator('input#m_proceso__limites__piezas_max').inputValue() === '1000',
       'los límites de captura (sección máx. 6 000 mm, longitud máx. 100 000 mm, 1 000 piezas) están en «Proceso de fabricación»');
     await ed.fill('#maestros-buscar', 'limites');
-    ok(JSON.stringify(await ed.evaluate(() => [...document.querySelectorAll('.m-sub')].filter((e) => e.offsetParent !== null).map((e) => e.querySelector('summary').textContent.trim()))) === '["limites"]',
+    ok(JSON.stringify(await ed.evaluate(() => [...document.querySelectorAll('.m-sub')].filter((e) => e.offsetParent !== null).map((e) => e.querySelector('summary').textContent.trim()))) === '["Límites de captura"]',
       'al buscar, los subgrupos sin ningún renglón que coincida no quedan como encabezados vacíos');
     const lim = ed.locator('input#m_proceso__limites__largo_max_mm');
     await lim.fill('2000'); await lim.dispatchEvent('change');
@@ -1235,6 +1232,266 @@ const ok = (cond, msg) => {
     await p.click('#tab-cotizacion');
     ok(await p.locator('#aviso-error').isHidden() || !/pintura cuerpo/.test(await p.locator('#aviso-error').innerText()), 'al elegir uno válido el aviso desaparece');
     await p.context().close();
+  }
+
+  console.log('23) Tablas maestras más intuitivas: ayuda emergente (ⓘ), «¿y si…?», datos de lista, último cambio con deshacer, guía y ranking');
+  {
+    const p = await nuevaPagina();
+    const W = (fn, arg) => estadoApp(p, fn, arg);
+    const subtotal = () => W(() => window.COTIZAP.web.estadoApp.res.totales.subtotal_neto);
+    const mxn = (x) => W((v) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(v), x);
+    const pop = p.locator('#m-pop');
+    const fila = (id) => p.locator(`.m-fila:has(#${id})`);
+    await p.click('#tab-maestros');
+
+    // a) todo tiene su ⓘ: una por cada dato, sección, tabla y grupo que el editor dibuja
+    const nUnidades = await W(() => window.COTIZAP.ayudaMaestros.recorrer(window.COTIZAP.web.estadoApp.M).length);
+    ok(await p.locator('.m-ayuda').count() === nUnidades && nUnidades > 400, `cada dato, sección, tabla y grupo trae su ⓘ (${nUnidades})`);
+    ok(await p.locator('.m-ayuda').evaluateAll((bs) => bs.every((b) => /^Ayuda: .{3,}/.test(b.getAttribute('aria-label')) && b.getAttribute('aria-haspopup') === 'dialog' && b.getAttribute('aria-expanded') === 'false')), 'todos tienen nombre accesible, avisan que abren una ventana y arrancan cerrados');
+    ok(await p.locator('.m-grupo > summary .m-ayuda').first().getAttribute('tabindex') === null && await p.locator('.m-fila .m-ayuda').first().getAttribute('tabindex') === '-1', 'los de grupo y sección se alcanzan con Tab; los de cada renglón se abren con F1 (no estorban al recorrer 450 campos)');
+    ok(await p.locator('.m-grupo[data-grupo="proveedor"] .m-chip-real').count() === 1 && await p.locator('.m-grupo[data-grupo="proceso"] .m-chip-ilustrativo').count() === 1, 'cada grupo dice si sus valores son reales o ilustrativos');
+
+    // b) ventana: qué es, cómo se llena, qué esperar
+    await p.locator('.m-grupo[data-grupo="precios"] > summary').click();
+    const GAS = 'm_precios__precio_m3_gas_mezcla_ar_co2';
+    ok((await fila(GAS).locator('.m-et').innerText()) === 'Gas mezcla Ar/CO₂' && (await fila(GAS).locator('.m-clave').innerText()) === 'precio_m3_gas_mezcla_ar_co2', 'cada renglón dice qué es en palabras y conserva debajo el nombre de la variable');
+    await fila(GAS).locator('.m-ayuda').click();
+    ok(await pop.isVisible() && await pop.getAttribute('role') === 'dialog' && /Gas mezcla Ar\/CO₂/.test(await pop.locator('h3').innerText()), 'el ⓘ abre una ventana con el título del dato');
+    const hs = await pop.locator('h4').allInnerTexts();
+    ok(['¿QUÉ ES?', '¿CÓMO SE LLENA?', '¿QUÉ ESPERAR AL CAMBIARLO?'].every((t) => hs.some((h4) => h4.toUpperCase() === t)), 'explica qué es, cómo se llena y qué esperar al cambiarlo');
+    ok(/precios › precio m3 gas mezcla ar co2/.test(await pop.locator('.m-pop-ruta').innerText()) && /MXN\/m³/.test(await pop.locator('.m-pop-meta').innerText()), 'dice dónde vive el dato y en qué unidad se captura');
+    ok(await pop.locator('.m-rango').count() === 1 && /Rango usual: 80 – 300 MXN\/m³/.test(await pop.locator('.m-rango-txt').innerText()), 'trae el rango usual con una barra que marca dónde está el valor');
+    ok(await fila(GAS).locator('.m-ayuda').getAttribute('aria-expanded') === 'true', 'el botón avisa que su ventana está abierta');
+    await p.keyboard.press('Escape');
+    ok(await pop.isHidden() && await p.evaluate(() => document.activeElement && document.activeElement.classList.contains('m-ayuda')), 'Esc la cierra y devuelve el foco al botón');
+    await fila(GAS).locator('.m-ayuda').click();
+    await fila(GAS).locator('.m-ayuda').click();
+    ok(await pop.isHidden(), 'pulsar otra vez el mismo ⓘ la cierra');
+    await fila(GAS).locator('.m-ayuda').click();
+    await p.mouse.click(700, 120);
+    ok(await pop.isHidden(), 'un clic fuera la cierra');
+    await fila('m_precios__precio_kg_solera').locator('.m-ayuda').click();
+    await fila(GAS).locator('.m-ayuda').click();
+    ok(await p.locator('#m-pop:not([hidden])').count() === 1 && /Gas mezcla/.test(await pop.locator('h3').innerText()), 'abrir otro ⓘ cambia de ventana (nunca hay dos)');
+    await p.keyboard.press('Escape');
+
+    // c) con su cotización: cuánto movería el precio, calculado de verdad
+    await fila(GAS).locator('input').focus();
+    await p.keyboard.press('F1');
+    ok(await pop.isVisible() && /Gas mezcla/.test(await pop.locator('h3').innerText()), 'F1 con el cursor en un campo abre su ayuda');
+    const base = await subtotal();
+    const sube = await W(() => { const Wa = window.COTIZAP.web; const M = window.COTIZAP.util.clonar(Wa.estadoApp.M); M.precios.precio_m3_gas_mezcla_ar_co2 *= 1.1; return Wa.cotizarCon(M).totales.subtotal_neto - Wa.estadoApp.res.totales.subtotal_neto; });
+    const sens = await pop.locator('.m-sens').innerText();
+    ok(sens.includes(`+${await mxn(sube)}`) && /Si sube 10 %/.test(sens) && /Si baja 10 %/.test(sens), `«si sube 10 %» dice cuánto sube de verdad la cotización (+${sube.toFixed(2)})`);
+    ok(sube > 0 && /▲/.test(sens) && /▼/.test(sens), 'con la flecha de cada sentido');
+    await pop.locator('.m-sim-rap button:has-text("+10 %")').click();
+    await p.waitForTimeout(200);
+    ok((await pop.locator('.m-sim-in').inputValue()) === '159.5' && /▲/.test(await pop.locator('.m-sim-res').innerText()), 'probar +10 % pone 159.5 y muestra el efecto sin guardar');
+    ok(await subtotal() === base && await p.locator(`#${GAS}`).inputValue() === '145', 'probar no cambia nada guardado');
+    await pop.locator('.m-sim-in').fill('-5');
+    await p.waitForTimeout(150);
+    ok(/Use un número, 0 o mayor/.test(await pop.locator('.m-sim-res').innerText()) && await pop.locator('button:has-text("Aplicar este valor")').isDisabled(), 'un valor no válido se avisa y no se puede aplicar');
+    await pop.locator('.m-sim-in').fill('159.5');
+    await p.waitForTimeout(150);
+    await pop.locator('button:has-text("Aplicar este valor")').click();
+    await p.waitForTimeout(150);
+    ok(await p.locator(`#${GAS}`).inputValue() === '159.5' && Math.abs((await subtotal()) - base - sube) < 0.006, 'aplicar escribe el valor en la tabla y recalcula la cotización (igual a lo que se vio)');
+    ok(await fila(GAS).getAttribute('data-mod') === '1' && /Modificado/.test(await pop.locator('.m-pop-meta').innerText()) && /Valor de arranque: 145/.test(await pop.locator('.m-pop-pie').innerText()), 'el dato queda marcado como modificado y la ventana dice cuál era el valor de arranque');
+    // la barra de último cambio
+    const ultimo = p.locator('#maestros-ultimo');
+    ok(await ultimo.isVisible() && /Gas mezcla Ar\/CO₂: 145 MXN\/m³ → 159.5 MXN\/m³/.test(await ultimo.innerText()) && /▲/.test(await ultimo.locator('.m-ultimo-efecto').innerText()), 'la barra «Último cambio» dice qué se cambió y cuánto subió la cotización');
+    ok(/Sólo modificados \(1\)/.test(await p.locator('#maestros-solo-mod').innerText()) && /1 modificado/.test(await p.locator('.m-grupo[data-grupo="precios"] .m-grupo-mod').innerText()), 'y el encabezado y el grupo cuentan lo modificado');
+    await p.keyboard.press('Escape');
+    await p.click('#maestros-deshacer');
+    await p.waitForTimeout(150);
+    ok(await p.locator(`#${GAS}`).inputValue() === '145' && Math.abs((await subtotal()) - base) < 0.006 && await fila(GAS).getAttribute('data-mod') === '' && await ultimo.isHidden(), 'Deshacer devuelve el valor y el precio, y quita la marca');
+    ok(/Sólo modificados \(0\)/.test(await p.locator('#maestros-solo-mod').innerText()), 'el contador vuelve a 0');
+
+    // d) escribir en el campo también deja su efecto y se puede deshacer
+    await p.fill(`#${GAS}`, '170');
+    await p.locator(`#${GAS}`).dispatchEvent('change');
+    ok(await ultimo.isVisible() && /145 MXN\/m³ → 170 MXN\/m³/.test(await ultimo.innerText()), 'al teclear en el campo también aparece «Último cambio»');
+    await p.fill(`#${GAS}`, '165');
+    await p.locator(`#${GAS}`).dispatchEvent('change');
+    await p.click('#maestros-deshacer');
+    ok(await p.locator(`#${GAS}`).inputValue() === '170', 'los cambios se deshacen de uno en uno, del último al primero');
+    await p.click('#maestros-deshacer');
+    ok(await p.locator(`#${GAS}`).inputValue() === '145', 'hasta el valor de arranque');
+    // «sólo modificados»
+    await p.fill(`#${GAS}`, '150');
+    await p.locator(`#${GAS}`).dispatchEvent('change');
+    await p.click('#maestros-solo-mod');
+    ok(await p.locator('.m-fila:not([hidden])').count() === 1 && await p.locator(`#${GAS}`).isVisible() && await p.locator('#maestros-solo-mod').getAttribute('aria-pressed') === 'true', '«Sólo modificados» deja a la vista únicamente lo que se ha cambiado');
+    await p.click('#maestros-solo-mod');
+    await p.click('#maestros-deshacer');
+    ok(await p.locator('.m-fila:not([hidden])').count() > 100, 'al apagarlo vuelve todo');
+
+    // e) un dato que la cotización no usa lo dice
+    await fila('m_precios__precio_kg_chatarra_acero').locator('.m-ayuda').click();
+    ok(/no usa este dato/.test(await pop.locator('.m-pop-cuerpo').innerText()), 'si la cotización no usa el dato (chatarra, con recuperación en 0 %) lo dice en vez de mostrar ceros');
+    await p.keyboard.press('Escape');
+
+    // f) fuera del rango usual
+    await p.locator('.m-grupo[data-grupo="capas"] > summary').click();
+    await p.fill('#m_capas__utilidad_pct_precio', '70');
+    await p.locator('#m_capas__utilidad_pct_precio').dispatchEvent('change');
+    ok(await fila('m_capas__utilidad_pct_precio').getAttribute('data-rango') === 'alto' && /Fuera del rango usual/.test(await p.locator('#m_capas__utilidad_pct_precio').getAttribute('title')), 'un valor fuera del rango usual (utilidad de 70 %) se marca, sin impedirlo');
+    await fila('m_capas__utilidad_pct_precio').locator('.m-ayuda').click();
+    ok(/por encima/.test(await pop.locator('.m-rango-txt').innerText()) && await pop.locator('.m-rango-marca.fuera').count() === 1, 'y la ventana lo explica');
+    await p.keyboard.press('Escape');
+    await p.click('#maestros-deshacer');
+    ok(await fila('m_capas__utilidad_pct_precio').getAttribute('data-rango') === '', 'al volver al valor usual la marca desaparece');
+
+    // g) datos de lista: opciones comparadas con la cotización
+    await p.fill('#maestros-buscar', 'extremo_ajuste');
+    const EXT = 'm_proceso__armado_yardas__extremo_ajuste_defecto';
+    const baseExt = await subtotal();
+    await fila(EXT).locator('.m-ayuda').click();
+    const ops = pop.locator('.m-comp-op');
+    ok(await ops.count() === 3 && await pop.locator('.m-comp-op.actual').count() === 1 && /Ahora/.test(await pop.locator('.m-comp-op.actual').innerText()), 'una lista muestra cada opción, cuál es la de ahora, y qué significa cada una');
+    ok(await pop.locator('.m-comp-op:not(.actual) .m-efecto').count() === 2 && (await pop.locator('.m-comp-op:not(.actual) .m-efecto').allInnerTexts()).every((t) => /\$/.test(t)), 'y cuánto cambiaría la cotización con cada una de las otras');
+    await pop.locator('.m-comp-op:has-text("Sin brida") button:has-text("Usar")').click();
+    await p.waitForTimeout(150);
+    ok(await p.locator(`#${EXT}`).inputValue() === 'SIN_BRIDA' && (await subtotal()) < baseExt, '«Usar» aplica la opción y recalcula (sin brida cuesta menos)');
+    await p.keyboard.press('Escape');
+    await p.click('#maestros-deshacer');
+    ok(await p.locator(`#${EXT}`).inputValue() === 'SUELTA' && Math.abs((await subtotal()) - baseExt) < 0.006, 'Deshacer regresa la opción');
+
+    // h) lo que antes se tecleaba ahora se elige: precios, calibres, procesos, cordón, Sí/No
+    await p.fill('#maestros-buscar', 'gas_ref');
+    const gasRef = p.locator('select#m_materiales__ACERO_CARBON__gas_ref');
+    const opsGas = await gasRef.locator('option').allInnerTexts();
+    ok(/^precio_m3_gas_mezcla_ar_co2 · 145 MXN\/m³$/.test(opsGas[0]) && opsGas[1].startsWith('precio_m3_gas_argon') && opsGas[2] === '— otros precios —', 'los precios a los que apunta un material se eligen de una lista, con su precio actual, y primero los del tipo que corresponde');
+    ok(await gasRef.locator('option:checked').innerText() !== '' && await gasRef.inputValue() === 'precio_m3_gas_mezcla_ar_co2', 'el valor guardado queda elegido');
+    await fila('m_materiales__ACERO_CARBON__gas_ref').locator('.m-ayuda').click();
+    ok(/145 MXN\/m³/.test(await pop.locator('.m-pop-cuerpo').innerText()) && await pop.locator('button:has-text("Ir a ese precio")').count() === 1, 'su ayuda dice cuánto vale ese precio y lleva a él');
+    await pop.locator('button:has-text("Ir a ese precio")').click();
+    await p.waitForTimeout(300);
+    ok(await pop.isHidden() && await p.locator('#maestros-buscar').inputValue() === '' && await p.locator('#m_precios__precio_m3_gas_mezcla_ar_co2').isVisible() && await p.evaluate(() => document.activeElement.id) === 'm_precios__precio_m3_gas_mezcla_ar_co2', '«Ir a ese precio» limpia el filtro, abre el grupo y deja el cursor en el campo');
+    await p.fill('#maestros-buscar', 'tabla_calibre');
+    ok(await p.locator('select#m_materiales__GALVANIZADO__tabla_calibre').inputValue() === 'GSG' && (await p.locator('select#m_materiales__GALVANIZADO__tabla_calibre option').allInnerTexts()).join('|') === 'MSG|GSG|USSG', 'la tabla de calibres de un material se elige entre las que existen');
+    await p.fill('#maestros-buscar', 'proceso_sold');
+    ok((await p.locator('select#m_materiales__INOX_304__proceso_sold option').allInnerTexts()).join('|') === 'GMAW|GTAW', 'el proceso de soldadura se elige entre los definidos');
+    await p.fill('#maestros-buscar', 'proceso_recto');
+    ok((await p.locator('select#m_proceso__corte__proceso_recto option').allInnerTexts()).join('|') === 'GUILLOTINA|PLASMA|LASER', 'la máquina de corte se elige entre las que tienen tabla de velocidades');
+
+    // i) booleanos y vacíos: antes se guardaban como texto «false» (verdadero para JavaScript) y el guardado los descartaba
+    await p.fill('#maestros-buscar', 'soldada');
+    const sold = p.locator('select#m_proceso__costuras__A_TOPE__soldada');
+    ok((await sold.locator('option').allInnerTexts()).join('|') === 'Sí|No' && await sold.inputValue() === 'true', '«la costura se suelda» es Sí/No');
+    await sold.selectOption('false');
+    ok(await W(() => window.COTIZAP.web.estadoApp.M.proceso.costuras.A_TOPE.soldada) === false && await W(() => window.COTIZAP.web.estadoApp.M.proceso.costuras.A_TOPE.cordon) === 'TOPE', 'se guarda como verdadero booleano (no como el texto «false»)');
+    await p.waitForTimeout(150);
+    await p.reload();
+    await p.waitForSelector('#lista-partidas .partida');
+    await p.click('#tab-maestros');
+    await p.fill('#maestros-buscar', 'soldada');
+    ok(await p.locator('select#m_proceso__costuras__A_TOPE__soldada').inputValue() === 'false', 'y sobrevive a recargar la página');
+    await p.locator('select#m_proceso__costuras__A_TOPE__soldada').selectOption('true');
+    await p.fill('#maestros-buscar', 'cordon');
+    const cord = p.locator('select#m_proceso__costuras__PITTSBURGH__cordon');
+    ok(await cord.inputValue() === '' && await W(() => window.COTIZAP.web.estadoApp.M.proceso.costuras.PITTSBURGH.cordon) === null, 'una costura sin cordón (null) se ve como «Sin cordón», no como el texto «null»');
+    await cord.selectOption('FILETE');
+    ok(await W(() => window.COTIZAP.web.estadoApp.M.proceso.costuras.PITTSBURGH.cordon) === 'FILETE', 'se puede elegir un cordón');
+    await cord.selectOption('');
+    ok(await W(() => window.COTIZAP.web.estadoApp.M.proceso.costuras.PITTSBURGH.cordon) === null, 'y volver a «sin cordón» lo deja en null');
+    await p.fill('#maestros-buscar', 'sistemas');
+    ok(await p.locator('select#m_proceso__pintura__sistemas__PRIMARIO_ESMALTE__1').inputValue() === 'esmalte', 'las manos de cada sistema de pintura se eligen entre las pinturas definidas');
+    // un cero en el ancho de un perfil con punto en su clave se rechaza
+    await p.fill('#maestros-buscar', 'SOL38x4.8');
+    const ancho = p.locator('[id="m_herrajes__perfiles__SOL38x4.8__ancho_mm"]');
+    await ancho.fill('0');
+    await ancho.dispatchEvent('change');
+    ok(await ancho.inputValue() === '38.1' && /mayor que 0/.test(await p.locator('#toasts').innerText()), 'un cero en el ancho del perfil SOL38x4.8 se rechaza y se conserva 38.1');
+
+    // j) buscar por lo que es, no sólo por su nombre técnico
+    await p.fill('#maestros-buscar', 'factor de operación');
+    ok(await p.locator('.m-fila:not([hidden])').count() === 2 && await p.locator('#m_proceso__soldadura__procesos__GMAW__FO').isVisible(), 'se busca por el nombre en palabras («factor de operación» encuentra FO)');
+    await p.fill('#maestros-buscar', 'zzzz');
+    ok(await p.locator('#maestros-sin-resultados').isVisible(), 'sin coincidencias lo dice');
+    await p.fill('#maestros-buscar', '');
+
+    // k) grupos y secciones: qué mueve más el precio ahí
+    await p.locator('.m-grupo[data-grupo="mano_obra"] > summary .m-ayuda').click();
+    ok(/Ajustar todos de golpe/i.test(await pop.innerText()) && /¿QUÉ MUEVE MÁS EL PRECIO AQUÍ\?/i.test(await pop.innerText()), 'el grupo de mano de obra ofrece ajustar todos los salarios y ver qué pesa más');
+    await pop.locator('.m-pop-cuerpo .m-sim-in').first().fill('10');
+    await p.waitForTimeout(150);
+    ok(/10 salarios por hora cambiarían/.test(await pop.locator('.m-sim-res').first().innerText()), 'dice cuántos valores cambiarían');
+    const baseMO = await subtotal();
+    await pop.locator('button:has-text("Aplicar a todos")').click();
+    await p.waitForTimeout(200);
+    ok(await W(() => Object.values(window.COTIZAP.web.estadoApp.M.mano_obra.operaciones).every((o) => o.salario_hora === 550)) && (await subtotal()) > baseMO, 'un solo clic sube 10 % todos los salarios por hora ($500 → $550) y recalcula');
+    ok(/10 % a todos los salarios por hora/.test(await ultimo.innerText()), 'y la barra lo cuenta como un solo cambio');
+    await p.click('#maestros-deshacer');
+    ok(await W(() => Object.values(window.COTIZAP.web.estadoApp.M.mano_obra.operaciones).every((o) => o.salario_hora === 500)) && Math.abs((await subtotal()) - baseMO) < 0.006, 'y un solo Deshacer los regresa todos');
+    await p.locator('.m-grupo[data-grupo="mano_obra"] > summary .m-ayuda').click(); // un clic en «Deshacer» cerró la ventana: se vuelve a abrir
+    await p.locator('.m-pop button:has-text("Calcular qué mueve")').click();
+    await p.waitForSelector('.m-pop .m-rank-fila');
+    const filasRank = await p.locator('.m-pop .m-rank-fila').count();
+    ok(filasRank >= 3 && filasRank <= 8 && /Factor de Salario Real|Salario por hora/.test(await p.locator('.m-pop .m-rank-fila').first().innerText()), 'ordena los datos del grupo por cuánto mueven el precio de la cotización');
+    await p.locator('.m-pop .m-rank-btn').first().click();
+    await p.waitForTimeout(400);
+    ok(await pop.isHidden() && await p.evaluate(() => /^m_mano_obra__/.test(document.activeElement.id)), 'pulsar uno lleva a ese dato');
+    // tablas: el proveedor se ajusta de golpe
+    await p.fill('#maestros-buscar', '');
+    await p.locator('.m-grupo[data-grupo="proveedor"] > summary').click();
+    await p.locator('.m-prov').first().locator('.m-tabla-tit .m-ayuda').click();
+    ok(/Concepto/.test(await pop.locator('.m-cols').innerText()) && /ES LO ÚNICO QUE SE CAPTURA AQUÍ/.test(await pop.locator('.m-cols').innerText()), 'la tabla del proveedor explica cada columna y cuál es la única que se captura');
+    await pop.locator('.m-pop-cuerpo .m-sim-in').first().fill('6');
+    await pop.locator('button:has-text("Aplicar a todos")').click();
+    await p.waitForTimeout(200);
+    ok(await W(() => window.COTIZAP.web.estadoApp.M.proveedor.hojas.NEGRA_C12_4X10.precio) === 2141.2 && /6 % a todos los precios de las hojas/.test(await ultimo.innerText()), 'el proveedor subió 6 %: un clic ajusta los precios de todas las hojas (2 020 → 2 141.2)');
+    await p.click('#maestros-deshacer');
+    ok(await W(() => window.COTIZAP.web.estadoApp.M.proveedor.hojas.NEGRA_C12_4X10.precio) === 2020, 'y se deshace');
+    await p.keyboard.press('Escape');
+
+    // l) ranking y guía
+    await p.click('#maestros-ranking');
+    await p.waitForSelector('#dlg-ranking .m-rank-fila', { timeout: 20000 });
+    const nr = await p.locator('#dlg-ranking .m-rank-fila').count();
+    const vals = await p.locator('#dlg-ranking .m-rank-val').allInnerTexts();
+    const abs = vals.map((t) => Number(t.split('·')[0].replace(/[^0-9.]/g, '')));
+    ok(nr === 15 && abs.every((v, i) => i === 0 || abs[i - 1] >= v - 0.005), 'el ranking muestra los 15 datos que más mueven el precio, de mayor a menor');
+    ok(/Eficiencia del taller|Factor de Salario Real|Utilidad/.test(await p.locator('#dlg-ranking').innerText()), 'con datos que de verdad pesan (eficiencia, salario, utilidad…)');
+    await p.locator('#dlg-ranking .m-rank-btn').first().click();
+    await p.waitForTimeout(500);
+    ok(await p.locator('#dlg-ranking').count() === 0 && await p.evaluate(() => /^m_/.test(document.activeElement.id)), 'pulsar uno cierra el ranking y lleva al dato');
+    await p.click('#maestros-guia');
+    ok(/Así se arma un precio/.test(await p.locator('#dlg-guia').innerText()) && await p.locator('#dlg-guia .guia-flujo li').count() === 7 && await p.locator('#dlg-guia .guia-pasos li').count() === 5, 'la guía rápida explica cómo se arma un precio (7 pasos) y en qué orden llenar (5)');
+    await p.locator('#dlg-guia .guia-pasos li').nth(4).locator('button').click();
+    await p.waitForTimeout(400);
+    ok(await p.locator('#dlg-guia').count() === 0 && await p.locator('.m-grupo[data-grupo="capas"]').evaluate((g) => g.open), '«Ir» cierra la guía y abre el grupo');
+    await p.keyboard.press('Escape');
+    await p.context().close();
+
+    // m) en el celular la ayuda es una hoja desde abajo y nada se sale de la pantalla
+    const m = await nuevaPagina({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await m.click('#tab-maestros');
+    await m.locator('.m-grupo[data-grupo="capas"] > summary').click();
+    await m.locator('.m-fila:has(#m_capas__utilidad_pct_precio) .m-ayuda').tap();
+    const hoja = m.locator('#m-pop');
+    const caja = await hoja.boundingBox();
+    ok(await hoja.evaluate((e) => e.classList.contains('m-pop-hoja')) && caja.x === 0 && Math.abs(caja.width - 390) < 1 && Math.abs(caja.y + caja.height - 844) < 2, 'la ayuda sale como hoja pegada al borde inferior, a lo ancho de la pantalla');
+    ok(await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'sin desplazamiento horizontal');
+    await m.locator('#m-pop .m-pop-x').tap();
+    ok(await hoja.isHidden(), 'se cierra con la ✕');
+    await m.locator('#maestros-ranking').scrollIntoViewIfNeeded();
+    await m.context().close();
+
+    // n) sólo lectura: la ayuda se lee, pero «aplicar» no escribe nada
+    const bdL = nuevoAlmacen();
+    bdL.puedeEditar = false;
+    const pl = await nuevaPagina({}, instalarClaude(bdL));
+    await pl.click('#tab-maestros');
+    await pl.waitForTimeout(400);
+    await pl.locator('.m-grupo[data-grupo="precios"] > summary').click();
+    await pl.locator('.m-fila:has(#m_precios__precio_m3_gas_mezcla_ar_co2) .m-ayuda').click();
+    ok(await pl.locator('#m-pop').isVisible(), 'en sólo lectura la ayuda se puede leer');
+    await pl.locator('#m-pop .m-sim-in').fill('200');
+    await pl.waitForTimeout(150);
+    await pl.locator('#m-pop button:has-text("Aplicar este valor")').click();
+    ok(await pl.evaluate(() => window.COTIZAP.web.estadoApp.M.precios.precio_m3_gas_mezcla_ar_co2) === 145 && /Sólo lectura/.test(await pl.locator('#toasts').innerText()), 'pero aplicar un valor avisa «Sólo lectura» y no cambia nada');
+    await pl.context().close();
   }
 
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);

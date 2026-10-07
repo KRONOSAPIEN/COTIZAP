@@ -10,8 +10,8 @@ Cotizador para ducterías de lámina (colección de polvo y control ambiental). 
 | --- | --- | --- |
 | **Documento de arquitectura** | [`docs/arquitectura-cotizador-ducterias.md`](docs/arquitectura-cotizador-ducterias.md) | Insumos, fórmulas geométricas, mano de obra y consumibles, estructura de precios, pseudocódigo y un ejemplo resuelto paso a paso. Es la especificación. |
 | **Motor de cálculo** | `src/motor/` | Funciones puras, sin dependencias. Separa *cantidades* de *precios*. |
-| **Tablas maestras** | `src/datos/maestros.js` | Lista de precios del proveedor, materiales, calibres, perfiles, uniones, velocidades, tarifas, merma y capas de precio. |
-| **Aplicación web** | `src/web/` | Captura de partidas, desglose paso a paso, editor de tablas maestras, propuesta imprimible. |
+| **Tablas maestras** | `src/datos/maestros.js` · `src/datos/ayuda_maestros.js` | Lista de precios del proveedor, materiales, calibres, perfiles, uniones, velocidades, tarifas, merma y capas de precio; y la ayuda de cada dato (qué es, cómo se llena, qué esperar). |
+| **Aplicación web** | `src/web/` | Captura de partidas, desglose paso a paso, editor de tablas maestras con ayuda integrada, propuesta imprimible. |
 | **Pruebas** | `tests/` | Geometría contra mallas 3D independientes, ejemplo recalculado línea por línea, política de precios, robustez ante datos absurdos o dañados, interfaz de extremo a extremo. |
 
 ## Empezar
@@ -139,6 +139,19 @@ Lo que se pinta depende del **material**, y el sistema, de **dónde va instalado
 
 El ducto y las bridas se calculan por separado (superficie, manos, litros y tiempo); el aro suelto del tramo de ajuste se pinta como las demás bridas. Si una partida elige un sistema de pintura, vale para todo lo que se pinta. Qué sistema lleva cada material y la instalación por omisión (*interior*) están en *Tablas maestras*; el documento explica la regla ([§4.3](docs/arquitectura-cotizador-ducterias.md#43-consumibles)) y sus supuestos por confirmar ([§10.10](docs/arquitectura-cotizador-ducterias.md#1010-supuestos-de-la-pintura-por-confirmar)). Una cotización guardada sin instalación abre en interior.
 
+## Tablas maestras con ayuda integrada
+
+Cada dato, sección, tabla y grupo de *Tablas maestras* trae un botón **ⓘ** (con el cursor en un campo, `F1` hace lo mismo): una ventana que dice **qué es**, **cómo se llena** (unidad, de dónde sale, rango usual) y **qué esperar al cambiarlo**, con ejemplos y advertencias. Son 449 elementos explicados por un catálogo propio (`src/datos/ayuda_maestros.js`) y una prueba falla si se agrega un dato a las tablas sin su explicación.
+
+Lo que depende de **su cotización** se calcula en vez de escribirse (se cotiza de nuevo con una copia de las tablas, sin tocar lo guardado):
+
+- *Si baja o sube 10 %*: cuánto cambia el precio, con la flecha de cada sentido; o **pruebe otro valor** y vea el resultado antes de aplicarlo.
+- En una lista de opciones (por ejemplo, el extremo del tramo de ajuste): **cuánto cuesta con cada una** y un botón *Usar*.
+- En la lista del proveedor, los salarios o los precios: **ajustar todos de golpe** («el proveedor subió 6 %»).
+- En un grupo o sección: **qué datos de ahí mueven más el precio**.
+
+Además: cada renglón dice qué es en palabras y conserva el nombre de la variable; lo que antes se tecleaba como texto (a qué precio apunta un material, la tabla de calibres, el proceso de soldadura, el cordón, Sí/No) ahora **se elige de una lista**; lo modificado y lo que sale del rango usual se marca (*Sólo modificados* lo filtra); cada cambio deja una barra **«Último cambio»** con lo que movió el precio y un botón **Deshacer**; la **Guía rápida** explica cómo se arma un precio y en qué orden llenar las tablas; y **¿Qué mueve más mi precio?** sube cada dato 10 %, uno por uno, y ordena cuáles pesan. Cada grupo dice si sus valores son reales, de norma o ilustrativos. El documento lo describe en [§2.2.1](docs/arquitectura-cotizador-ducterias.md#221-ayuda-integrada-en-el-editor-de-tablas-maestras) y sus supuestos por confirmar en [§10.11](docs/arquitectura-cotizador-ducterias.md#1011-supuestos-de-la-ayuda-de-las-tablas-maestras-por-confirmar).
+
 ## Brida estándar del taller
 
 Todos los ductos se unen con **bridas de solera 1½" × 3/16", barreno Ø3/8" y tornillo 5/16" × 1¼"**, sin importar el diámetro. Así viene precargado (perfil `SOL38x4.8` en `src/datos/maestros.js`): la solera se rola de canto, el barreno va al centro de su ancho y cada junta lleva múltiplo de 4 tornillos. Los ángulos siguen disponibles como opción por partida (*Perfil de aros*).
@@ -166,8 +179,9 @@ Cinco detalles se **supusieron** y conviene confirmarlos con el taller (se edita
 docs/arquitectura-cotizador-ducterias.md   especificación
 src/
   datos/maestros.js                        tablas maestras (valores ilustrativos)
+  datos/ayuda_maestros.js                  ayuda de cada dato de las tablas (qué es · cómo se llena · qué esperar)
   motor/                                   util · geometria · material · proveedor · mano_obra · consumibles · precios · validacion · cotizador
-  web/                                     index.html · app.js · almacen.js · maestros_ui.js · esquemas.js · dom.js · estilos.css
+  web/                                     index.html · app.js · almacen.js · maestros_ui.js · maestros_ayuda_ui.js · esquemas.js · dom.js · estilos.css
 tests/                                     *.test.js (node:test) · e2e/ui.e2e.js (Playwright, opcional)
 scripts/construir.js                       empaquetado a un solo HTML
 ```

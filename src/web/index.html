@@ -103,11 +103,23 @@
       </div>
       <div class="maestros-acc">
         <div class="buscar"><span class="icono" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg></span>
-          <input id="maestros-buscar" type="search" placeholder="Buscar parámetro (p. ej. gas, merma, soldadura)" aria-label="Buscar parámetro"></div>
+          <input id="maestros-buscar" type="search" placeholder="Buscar por nombre (p. ej. gas, merma, soldadura, utilidad)" aria-label="Buscar parámetro"></div>
+        <button type="button" class="btn btn-sec" id="maestros-guia">Guía rápida</button>
+        <button type="button" class="btn btn-sec" id="maestros-ranking">¿Qué mueve más mi precio?</button>
+        <button type="button" class="btn btn-sec" id="maestros-solo-mod" aria-pressed="false">Sólo modificados (0)</button>
         <button type="button" class="btn btn-sec" id="maestros-reset">Restablecer valores ilustrativos</button>
       </div>
     </div>
+    <p class="m-consejo">Pulse <span class="m-consejo-i" aria-hidden="true">ⓘ</span> junto a cualquier dato para ver qué es, cómo se llena y qué pasa si lo cambia; con el cursor en un campo, <kbd>F1</kbd> hace lo mismo.</p>
     <div id="maestros-cuerpo"></div>
+    <p id="maestros-sin-resultados" class="nota" hidden>Ningún dato coincide con el filtro. Borre la búsqueda o desactive «Sólo modificados».</p>
+    <div id="maestros-ultimo" class="m-ultimo" role="status" aria-live="polite" hidden>
+      <div class="m-ultimo-cuerpo"><span class="m-ultimo-et">Último cambio</span> <strong class="m-ultimo-tit"></strong> <span class="m-ultimo-efecto"></span></div>
+      <div class="m-ultimo-acc">
+        <button type="button" class="btn btn-sec btn-chico" id="maestros-deshacer">Deshacer</button>
+        <button type="button" class="btn-icono" id="maestros-ultimo-cerrar" aria-label="Ocultar el último cambio"><span class="icono" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span></button>
+      </div>
+    </div>
   </section>
 </main>
 
@@ -164,6 +176,7 @@
 
 <script src="../motor/util.js"></script>
 <script src="../datos/maestros.js"></script>
+<script src="../datos/ayuda_maestros.js"></script>
 <script src="../motor/geometria.js"></script>
 <script src="../motor/material.js"></script>
 <script src="../motor/proveedor.js"></script>
@@ -174,6 +187,7 @@
 <script src="../motor/cotizador.js"></script>
 <script src="dom.js"></script>
 <script src="esquemas.js"></script>
+<script src="maestros_ayuda_ui.js"></script>
 <script src="maestros_ui.js"></script>
 <script src="almacen.js"></script>
 <script src="app.js"></script>

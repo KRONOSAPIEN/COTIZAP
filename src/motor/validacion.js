@@ -298,15 +298,12 @@
   // Tablas espesor → velocidad ([[espesor, m/min], …]) y espesores por calibre: cada celda > 0 (se revisan con su propio mensaje).
   const TABLAS_VELOCIDAD = ['proceso.corte.v_m_min.*', 'proceso.rolado.v_m_min', 'proceso.engargolado.v_m_min', 'proceso.soldadura.v_m_min'];
   const CELDAS_POSITIVAS = ['calibres.*.*', 'proceso.corte.v_m_min.*.*.*', 'proceso.rolado.v_m_min.*.*', 'proceso.engargolado.v_m_min.*.*', 'proceso.soldadura.v_m_min.*.*'];
-  const aRegExp = (patron) => new RegExp(`^${patron.replace(/\./g, '\\.').replace(/\*/g, '[^.]+')}$`);
-  const RE_POSITIVOS = [...POSITIVOS, ...CELDAS_POSITIVAS].map(aRegExp);
+  // Se compara segmento por segmento: hay claves con punto (el perfil «SOL38x4.8»), que un texto unido con puntos no distinguiría.
+  const PATRONES_POSITIVOS = [...POSITIVOS, ...CELDAS_POSITIVAS].map((p) => p.split('.'));
   const LIMITES_REQUERIDOS = ['cantidad_max', 'seccion_min_mm', 'seccion_max_mm', 'largo_min_mm', 'largo_max_mm', 'espesor_min_mm', 'espesor_max_mm', 'piezas_max', 'yarda_min_mm', 'yarda_max_mm'];
 
   /** ¿La celda de las tablas en esa ruta debe ser mayor que 0? (el editor de la interfaz lo usa para rechazar un cero al teclear) */
-  const exigePositivo = (ruta) => {
-    const s = ruta.join('.');
-    return RE_POSITIVOS.some((re) => re.test(s));
-  };
+  const exigePositivo = (ruta) => PATRONES_POSITIVOS.some((partes) => partes.length === ruta.length && partes.every((x, i) => x === '*' || x === String(ruta[i])));
 
   /** Lo que hay en esa ruta con comodines: [{ ruta, valor }] (`valor` es undefined si el camino se corta). */
   function expandir(raiz, patron) {

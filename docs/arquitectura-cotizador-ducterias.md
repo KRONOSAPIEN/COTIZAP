@@ -376,6 +376,54 @@ Las **manos** (valores ilustrativos: confirmar con la ficha técnica de la pintu
 | `yarda_min_mm` | 300 | ancho de yarda (de lámina) más angosto |
 | `yarda_max_mm` | 2,000 | ancho de yarda (de lámina) más ancho |
 
+#### 2.2.1 Ayuda integrada en el editor de tablas maestras
+
+Las tablas maestras son el lugar donde el taller mete sus números, y un número sin explicación se llena mal. Por eso **cada dato, sección, tabla y grupo del editor trae un botón ⓘ** que abre una ventana emergente (con el cursor en un campo, `F1` hace lo mismo; `Esc` la cierra). Los textos viven en un catálogo propio, `src/datos/ayuda_maestros.js` —no en la interfaz—, y no contienen cifras de cálculo: sólo explicaciones, rangos usuales de referencia y ejemplos.
+
+El catálogo tiene **213 entradas** (cada una con un patrón de ruta, donde `*` cubre una clave) que explican los **449 elementos** que dibuja el editor: 10 grupos, 76 secciones, 351 datos y 12 tablas.
+
+Cada entrada responde tres preguntas y dice qué parte del precio mueve:
+
+| Pregunta | Qué dice |
+| --- | --- |
+| **¿Qué es?** | El dato en palabras del taller, no en nombres técnicos. |
+| **¿Cómo se llena?** | Unidad, de dónde sale el valor, y su **rango usual** (una barra marca dónde está el valor actual; un valor fuera de rango se señala, sin impedirlo). |
+| **¿Qué esperar al cambiarlo?** | Hacia dónde mueve el precio y cuánto, con una cifra de ejemplo. Más, según el dato: un *ejemplo* con números, un *Ojo* (por ejemplo «si el encabezado trae su propio margen, el de aquí no se usa»), las *opciones* de una lista o las *columnas* de una tabla. |
+
+Un ejemplo de lo que ve quien pulsa ⓘ junto a la utilidad (el último renglón lo calcula el cotizador con la cotización abierta, no está escrito):
+
+> **Utilidad** · `capas › utilidad_pct_precio`
+>
+> **¿Qué es?** La ganancia que busca en la venta, como % DEL PRECIO (margen), no del costo.
+>
+> **¿Cómo se llena?** En %. Margen de 20 % significa que de cada $100 de venta, $20 son utilidad.
+>
+> *Rango usual: 0 – 50 %*
+>
+> **¿Qué esperar al cambiarlo?** Precio = costo ÷ (1 − utilidad − comisión − otros). De 20 % a 25 % el precio sube ≈ 6.8 % (no 5 %).
+>
+> **Ejemplo.** Costo $800 con utilidad 20 % y comisión 2 %: precio = 800 ÷ 0.78 = $1 025.64.
+>
+> **Ojo.** Si el encabezado de la cotización trae su propio margen, se usa ése en ella.
+>
+> **Con su cotización** (Ejemplo A, $3,645.10 antes de IVA): si baja 10 % (18 %): ▼ −$91.13 · −2.50 % · si sube 10 % (22 %): ▲ +$95.92 · +2.63 %.
+
+Lo que **sí depende de la cotización abierta** se calcula, no se escribe: cotizar de nuevo con **una copia** de las tablas (`cotizarCon(M)`, que no toca lo guardado). Así la ventana de un número muestra *si baja o sube 10 %* cuánto cambia el precio y permite **probar otro valor sin guardar**; la de una lista **compara cada opción** con la cotización; la de una tabla del proveedor o un grupo de salarios **ajusta todos los valores de golpe** («el proveedor subió 6 %»); y la de un grupo o sección calcula **qué datos de ahí mueven más el precio**. Si la cotización no usa el dato (por ejemplo, la chatarra con recuperación en 0 %), lo dice en vez de mostrar ceros.
+
+Alrededor de la ayuda, el editor se volvió más claro de usar:
+
+| Mejora | Qué hace |
+| --- | --- |
+| **Nombre en palabras** | Cada renglón dice qué es («Gas mezcla Ar/CO₂») y conserva debajo el nombre de la variable (`precio_m3_gas_mezcla_ar_co2`); se busca por cualquiera de los dos. |
+| **Datos que se eligen** | Lo que antes se tecleaba como texto (a qué precio apunta un material o un perfil, la tabla de calibres, el proceso de soldadura, la máquina de corte, el tipo de perfil, las manos de cada sistema de pintura, el cordón) es ahora una **lista**; las de precios traen el valor de cada uno y primero los del tipo que corresponde. Las costuras «se suelda» (Sí/No) y «cordón» (con «Sin cordón») también: antes se editaban como texto libre, y «false» se guardaba como la palabra «false» —que el guardado automático descartaba por no ser un Sí/No— y «null» como la palabra «null». |
+| **Lo modificado se ve** | Un renglón distinto del valor de arranque lleva una marca; cada grupo cuenta cuántos tiene; «Sólo modificados (N)» deja a la vista únicamente eso. |
+| **Último cambio, con Deshacer** | Cada cambio —tecleado, aplicado desde la ayuda o un ajuste de golpe— deja una barra con lo que se cambió y cuánto movió el precio de la cotización; **Deshacer** regresa uno por uno (hasta 50), un ajuste de golpe cuenta como uno. |
+| **Guía rápida** | Cómo se arma un precio (siete pasos, cada uno con enlaces a sus grupos), en qué orden llenar las tablas, cómo leer cada marca y reglas para no equivocarse (unidades, %, ceros). |
+| **¿Qué mueve más mi precio?** | Sube cada dato 10 %, uno por uno, vuelve a cotizar la cotización abierta (≈ 330 cálculos, 1–2 s) y ordena: así se ve en qué datos vale la pena invertir tiempo (la eficiencia del taller, el salario, la utilidad…) y cuáles no pesan. |
+| **Origen de los datos** | Cada grupo dice si sus valores son *reales* (la lista del proveedor), *parcialmente reales* (mano de obra: salario real, equipo ilustrativo), *de norma* (calibres) o *ilustrativos*. |
+
+La prueba `tests/ayuda_maestros.test.js` hace cumplir las reglas del catálogo: **todo lo que dibuja el editor tiene explicación** (si se agrega un dato a las tablas y no a la ayuda, la prueba falla); ninguna entrada queda sin uso ni tapada por otra; los textos son completos y breves (con tope de caracteres); el valor de arranque de cada número cae dentro de su rango usual; las columnas explicadas son exactamente las que dibuja la tabla; y las opciones que describe son las que el motor acepta.
+
 ### 2.3 Reglas de validación
 
 | # | Regla | Efecto |
@@ -1375,6 +1423,7 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 | Sección del documento | Archivo |
 | --- | --- |
 | Tablas maestras (T1–T9) | `src/datos/maestros.js` |
+| §2.2.1 Ayuda de cada dato de las tablas (qué es, cómo se llena, qué esperar; rangos usuales; origen) | `src/datos/ayuda_maestros.js` |
 | Utilidades numéricas (Simpson, interpolación, parche de maestros) | `src/motor/util.js` |
 | §3.1–3.4 Geometría por familia | `src/motor/geometria.js` |
 | §3.3, §3.5 y T7d Lámina, merma, herrajes y pintura (qué se pinta y con qué sistema) | `src/motor/material.js` |
@@ -1384,7 +1433,7 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 | §5 Valorización y pila de precio | `src/motor/precios.js` |
 | §2.3 Validación de entrada: tipos, rangos, pertenencia, tablas maestras sanas, resultados finitos (V14–V19) | `src/motor/validacion.js` |
 | §5.4 y §6 Parámetros de la cotización, orquestación y validación | `src/motor/cotizador.js` |
-| Interfaz web (captura, desglose, editor de maestros, propuesta imprimible) | `src/web/` (`index.html`, `app.js`, `maestros_ui.js`, `esquemas.js`, `dom.js`, `estilos.css`) |
+| Interfaz web (captura, desglose, editor de maestros, propuesta imprimible) | `src/web/` (`index.html`, `app.js`, `maestros_ui.js`, `maestros_ayuda_ui.js`, `esquemas.js`, `dom.js`, `estilos.css`) |
 | Guardado automático de las tablas maestras (artefacto y navegador) | `src/web/almacen.js` |
 | Empaquetado a un solo HTML | `scripts/construir.js` |
 | Pruebas y vector de referencia | `tests/` |
@@ -1412,6 +1461,7 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 - **Estándar de bridas del taller** (`tests/motor.test.js`): la solera de 1½" × 3/16" pesa `b·t·ρ`; el taller usa la misma brida (barreno Ø3/8", tornillo 5/16" × 1¼") en todos los diámetros; `L_aro = π·(D_ext + b) + holgura`; nº de barrenos múltiplo de 4 por paso; cada aro se valoriza con el precio de su propio perfil y el tornillo con el suyo; el cierre del aro se suelda a tope al espesor de la solera; marco rectangular; y `ESPIGA` no genera aros ni barrenos.
 - **Persistencia de maestros** (`tests/util.test.js`): `mezclar(base, diferencia(base, actual))` reconstruye lo editado y los valores de arranque nuevos no quedan enmascarados.
 - **Guardado automático** (`tests/almacen.test.js` con un almacén de mentira, y las secciones 11–14 de `tests/e2e/ui.e2e.js` con un `window.claude` simulado cuyo almacén vive fuera del navegador): qué manda al abrir, una ráfaga de cambios = una escritura, una escritura a la vez, pendientes y reintentos, sólo lectura, cambios hechos durante la carga, y recuperación única de los precios de la versión 1.
+- **Ayuda de las tablas maestras** (`tests/ayuda_maestros.test.js`, sección 23 de `tests/e2e/ui.e2e.js`): cobertura exhaustiva del catálogo contra lo que dibuja el editor (grupos, secciones, datos y tablas, incluidas las claves con punto como el perfil `SOL38x4.8`), sin entradas muertas ni tapadas; calidad de los textos (completos, con tope de longitud, sin marcas ni nombres técnicos); rangos usuales que contienen a los valores de arranque; columnas de tabla y opciones que coinciden con las reales. En el navegador: un ⓘ por cada elemento; la ventana (qué es, cómo se llena, qué esperar; Esc, clic fuera y F1); la sensibilidad «si sube 10 %» comparada con una cotización independiente; probar, aplicar y deshacer (el precio vuelve al centavo); marcas de modificado y de fuera de rango; la comparación de opciones; las listas de precios, calibres y procesos; los booleanos y el cordón vacío que sobreviven a recargar; el ajuste de golpe de salarios y precios del proveedor como un solo cambio; el ranking ordenado; la guía; la hoja del celular sin desbordamiento; y sólo lectura.
 - **Interfaz de extremo a extremo (opcional, Playwright):** `tests/e2e/ui.e2e.js` da de alta cada familia, edita y guarda cada partida **sin cambios** en tres combinaciones de unidades y exige que el precio no se mueva (el formulario no pierde datos), y recorre validaciones, subcontratos, tablas maestras, persistencia, guardar/cargar y pantalla móvil.
 
 ---
@@ -1556,3 +1606,16 @@ Lo que describió el taller: la lámina galvanizada no se pinta más que las bri
 | Preparación | Una vez por parte (ducto, bridas), con `t_prep` por m², aunque lleve dos manos; cada mano suma `t_aplicación` | `proceso.pintura.t_prep_min_m2`, `t_aplic_min_m2` | Si la preparación se repite por mano, sube el tiempo de pintura del exterior. |
 | Aros sueltos | Se pintan con el sistema de las bridas, como los de taller | — | — |
 | Sistema elegido en la partida | Vale para todo lo que se pinta (ducto y bridas), también en galvanizado | `pintura` (partida) | Para pintar sólo el ducto o sólo las bridas habría que separar el dato. |
+
+### 10.11 Supuestos de la ayuda de las tablas maestras por confirmar
+
+La ayuda explica **cómo calcula este cotizador**; no sustituye al criterio del taller. Lo que se **supuso** y conviene revisar:
+
+| Supuesto | Valor usado | Dónde se cambia | Efecto si es distinto |
+| --- | --- | --- | --- |
+| Rangos usuales | Intervalos **de referencia** de la industria (por ejemplo, utilidad 0–50 %, factor de operación 0.15–0.8). No son normas ni límites | `tip` de cada entrada de `ayuda_maestros.js` | Un valor fuera de rango sólo se marca y se avisa en la ayuda; nunca se impide. Si el taller opera legítimamente fuera de ellos, se amplía el rango. |
+| Textos de «qué esperar» | Describen el efecto con los valores de arranque (por ejemplo «de 20 % a 25 % el precio sube ≈ 6.8 %») | `efecto` y `ej` de cada entrada | Si se cambia una fórmula del motor, hay que cambiar el texto que la explica: la prueba verifica que el texto exista y su forma, no que siga siendo cierto. |
+| Sensibilidad ±10 % y ranking | Es relativa al valor actual (×0.9 y ×1.1) y a la cotización abierta; un dato con valor 0 no se prueba | `FACTOR_PRUEBA` y `masMueve` en `maestros_ayuda_ui.js` | Con otra cotización el ranking cambia: es una fotografía de *esa* cotización, no una propiedad de las tablas. |
+| Origen de los datos | Reales: lista del proveedor y salario por hora. De norma: calibres. Ilustrativos: el resto | `origen` y `origenTxt` de cada grupo | Al sustituir valores ilustrativos por reales, se actualiza la etiqueta del grupo. |
+| Listas cerradas | Un dato que sólo admite ciertos valores se elige de una lista (precios con prefijo afín primero, luego «otros precios») | `OPCIONES_TEXTO` en `maestros_ui.js` | Un valor guardado que no está en la lista se muestra marcado «(no válido)» y el cálculo lo avisa, como antes. |
+| Deshacer | Hasta 50 cambios, sólo en esta sesión de la pantalla (no sobrevive a recargar la página; lo guardado sí) | `historial` en `maestros_ui.js` | — |

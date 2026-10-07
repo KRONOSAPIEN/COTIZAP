@@ -172,10 +172,16 @@
     }
   }
 
+  /** Lo que se cotiza: la cotización abierta tal como la calcula la pantalla. */
+  const entradaCotizacion = () => {
+    const cot = estado.cot;
+    return { riesgo: cot.riesgo, servicio: cot.servicio, ubicacion: cot.ubicacion, parametros: cot.parametros, yarda_mm: cot.yarda_mm, partidas: cot.partidas };
+  };
+
   function calcular() {
     const cot = estado.cot;
     try {
-      estado.res = C.cotizador.cotizar({ riesgo: cot.riesgo, servicio: cot.servicio, ubicacion: cot.ubicacion, parametros: cot.parametros, yarda_mm: cot.yarda_mm, partidas: cot.partidas }, estado.M);
+      estado.res = C.cotizador.cotizar(entradaCotizacion(), estado.M);
     } catch (err) {
       // No debería pasar (cotizar() atrapa lo que falle en cada partida): si pasa, la pantalla sigue viva y lo dice.
       const msg = `No se pudo calcular la cotización (${String((err && err.message) || err)}). Revise las tablas maestras.`;
@@ -1429,6 +1435,8 @@
   }
 
   W.estadoApp = estado;
+  /** Cotiza la cotización abierta con otras tablas maestras, sin tocar el estado: la ayuda de las tablas lo usa para «¿y si…?». */
+  W.cotizarCon = (M) => C.cotizador.cotizar(entradaCotizacion(), M);
   W.recalcular = () => { persistir(); render(); };
   W.toast = toast;
 
