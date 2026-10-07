@@ -131,6 +131,7 @@ test('Las tablas de arranque están sanas y una tabla rápida rota no bloquea la
 
 test('Yarda de 3 o 4 ft: con la hoja de 4 × 10 ft la de 3 ft deja una franja de sobrante; con la de 3 × 10 ft la ocupa entera', () => {
   const M = crearMaestros();
+  delete M.proveedor.hojas.GALV_C22_3X10; // como antes de cotizar la de 3 × 10 ft
   const de4 = R.cotizar({ D_mm: 279.4, L_m: 40, yarda_mm: 1220 }, M);
   const de3 = R.cotizar({ D_mm: 279.4, L_m: 40, yarda_mm: 914 }, M);
   assert.equal(de3.yardas, Math.ceil(40000 / 914)); // 44 yardas de 3 ft
@@ -145,6 +146,11 @@ test('Yarda de 3 o 4 ft: con la hoja de 4 × 10 ft la de 3 ft deja una franja de
   assert.equal(con3.yardas_por_hoja, 3);
   assert.ok(con3.aprovechamiento > 0.85);
   assert.equal(R.cotizar({ D_mm: 279.4, L_m: 40, yarda_mm: 1220 }, M).hoja.id, 'GALV_C22_4X10', 'la de 4 ft sigue en la hoja de 4 ft');
+  // la de las tablas de arranque: 3 × 10 ft aproximada ($690 con IVA) → 15 hojas, casi el mismo precio que con yardas de 4 ft
+  const arr = R.cotizar({ D_mm: 279.4, L_m: 40, yarda_mm: 914 }, crearMaestros());
+  assert.equal(arr.hoja.id, 'GALV_C22_3X10');
+  assert.equal(arr.hojas, 15);
+  cerca(arr.lamina, 15 * 690 / 1.16, 1e-6);
   assert.equal(R.cotizar({ D_mm: 279.4, L_m: 40, yarda_mm: 914, hoja_id: 'GALV_C22_4X10' }, M).hoja.id, 'GALV_C22_4X10', 'la lámina elegida manda');
   // la yarda que no cabe en la hoja, o fuera de los límites, es error
   assert.throws(() => R.cotizar({ D_mm: 279.4, L_m: 40, yarda_mm: 100 }, M), /yarda debe ser de 300 a 2000 mm/);

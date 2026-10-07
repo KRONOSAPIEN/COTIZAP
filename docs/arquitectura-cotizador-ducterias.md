@@ -227,12 +227,14 @@
 
 **T3b · Lista de precios del proveedor de acero** (cotizaciones y factura del 30-sep-2026). El proveedor cotiza **por pieza y con IVA incluido**; aquí se conserva el precio *como se cotiza* y se muestran los valores que el motor deriva de él (§5.1.1). `iva_incluido_pct` = 16 % (0 % si se capturan antes de IVA). «Cálculo» = el cotizador usa ese renglón; «Referencia» = se guarda para comparar, ninguna pieza lo usa todavía. La lámina de la factura está en cal. 12 (negra); las galvanizadas cal. 22 y 24 vienen de las cotizaciones.
 
-*Lámina en hoja*
+*Lámina en hoja* (las galvanizadas de 3 × 10 ft son **aproximadas**: el precio de la 4 × 10 prorrateado por área, a falta de la cotización del proveedor)
 
 | Renglón | Concepto | Hoja (mm) | Precio cotizado (con IVA) | Sin IVA | kg por hoja | $/kg sin IVA | Uso |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `GALV_C22_4X10` | Lámina galvanizada 4 × 10 ft · cal. 22 | 1219 × 3048 | 920.00 | 793.10 | 24.89 | 31.86 | **Cálculo** |
 | `GALV_C24_4X10` | Lámina galvanizada 4 × 10 ft · cal. 24 | 1219 × 3048 | 700.00 | 603.45 | 20.45 | 29.51 | **Cálculo** |
+| `GALV_C22_3X10` | Lámina galvanizada 3 × 10 ft · cal. 22 (aprox., prorrateada de la 4 × 10) | 914 × 3048 | 690.00 | 594.83 | 18.66 | 31.87 | **Cálculo** |
+| `GALV_C24_3X10` | Lámina galvanizada 3 × 10 ft · cal. 24 (aprox., prorrateada de la 4 × 10) | 914 × 3048 | 525.00 | 452.59 | 15.33 | 29.52 | **Cálculo** |
 | `NEGRA_C12_4X10` | Lámina negra 4 × 10 ft · cal. 12 | 1219 × 3048 | 2,020.00 | 1,741.38 | 77.49 | 22.47 | **Cálculo** |
 | `NEGRA_C12_4X8` | Lámina negra 4 × 8 ft · cal. 12 | 1219 × 2438 | 1,620.00 | 1,396.55 | 61.98 | 22.53 | Referencia |
 | `NEGRA_C12_3X10` | Lámina negra 3 × 10 ft · cal. 12 | 914 × 3048 | 1,515.00 | 1,306.03 | 58.10 | 22.48 | **Cálculo** |
@@ -1341,14 +1343,14 @@ Con la lámina galvanizada cal. 22 de 4 × 10 ft ($920 con IVA = $793.10 sin IVA
 | Diámetro | Metros | Yarda | Yardas | Por lámina | Láminas | Aprovechamiento | Lámina sin IVA | Lámina × 3 | Bridas | Costo | Utilidad 20 % | Total con IVA |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 11″ | 40 | 4 ft | 33 | 3 | 11 | 90 % | 8,724.14 | 26,172.41 | 5,000.00 | 31,172.41 | 6,234.48 | **43,392.00** |
-| 11″ | 40 | 3 ft | 44 | 3 | 15 | 66 % | 11,896.55 | 35,689.66 | 5,000.00 | 40,689.66 | 8,137.93 | **56,640.00** |
+| 11″ | 40 | 3 ft | 44 | 3 | 15 | 88 % | 8,922.41 | 26,767.24 | 5,000.00 | 31,767.24 | 6,353.45 | **44,220.00** |
 | 11″ | 41 | 4 ft | 34 | 3 | 12 | 85 % | 9,517.24 | 28,551.72 | 12,000.00 | 40,551.72 | 8,110.34 | **56,448.00** |
 | 6″ | 60 | 4 ft | 50 | 5 | 10 | 84 % | 7,931.03 | 23,793.10 | 12,000.00 | 35,793.10 | 7,158.62 | **49,824.00** |
-| 3″ | 40 | 3 ft | 44 | 14 (mixto) | 4 | 74 % | 3,172.41 | 9,517.24 | 5,000.00 | 14,517.24 | 2,903.45 | **20,208.00** |
+| 3″ | 40 | 3 ft | 44 | 11 | 4 | 99 % | 2,379.31 | 7,137.93 | 5,000.00 | 12,137.93 | 2,427.59 | **16,896.00** |
 | 11″ | 100 | 4 ft | 82 | 3 | 28 | 88 % | 22,206.90 | 66,620.69 | 18,000.00 | 84,620.69 | 16,924.14 | **117,792.00** |
 | 18″ | 80 | 4 ft | 66 | 2 | 33 | 97 % | 26,172.41 | 78,517.24 | 12,000.00 | 90,517.24 | 18,103.45 | **126,000.00** |
 
-Para 11″ y 40 m con yardas de 4 ft: la plantilla de una yarda mide π × (279.4 + 0.85) + 32 = 912 mm, así que cada hoja de 3,048 mm da 3 yardas; 40 m son 33 yardas, es decir, 11 hojas. Con yardas de 3 ft son 44 yardas: la hoja de 4 ft también da 3 (una franja de 305 mm se desperdicia), así que salen 15 hojas.
+Para 11″ y 40 m con yardas de 4 ft: la plantilla de una yarda mide π × (279.4 + 0.85) + 32 = 912 mm, así que cada hoja de 3,048 mm da 3 yardas; 40 m son 33 yardas, es decir, 11 hojas. Con yardas de 3 ft son 44 yardas en 15 hojas de 3 × 10 ft (3 por hoja, sin franja de sobrante): $44,220.00, casi lo mismo que con yardas de 4 ft. Si se cortaran de la hoja de 4 × 10 ft, se desperdiciaría una franja de 305 mm en cada una y saldría en $56,640.00.
 
 **El plazo y su mano de obra** (el taller, 7-oct-2026). La pestaña tiene un apartado para los **días de fabricación de bridas** y los **días de instalación** (de 0 a 365, admite medios días). Se muestran junto al total («5 días de fabricación de bridas + 3 días de instalación = 8 días») y **suman su mano de obra al costo**, antes de la utilidad: la fabricación de las bridas, 1 persona a $500 por día; la instalación, 2 personas a $500 por día. Con 11″ y 40 m, 5 días de bridas ($2,500) y 3 de instalación ($3,000) llevan el costo de $31,172.41 a $36,672.41 y el total de $43,392.00 a **$51,048.00**. Sin días no se suma nada. La utilidad capturada en la pestaña vale sólo para esa cotización rápida; vacía, se usa la de T11. El diámetro se captura en la unidad de la cotización (pulgadas o mm) y lo capturado se recuerda en el navegador. Más metros que el último renglón de las bridas no tienen precio: la app lo dice y no da un total.
 
@@ -1908,7 +1910,7 @@ La de 6″ que falta «va en otra unión» (el taller, 7-oct-2026): mandará el 
 | Lámina neta (kg) | 209.6 | 222.3 |
 | Mano de obra (h) | 49.4 | 48.2 |
 | Consumibles (MXN) | 799.37 | 335.75 |
-| Costo directo (MXN) | 13,555.06 | 13,758.64 |
+| Costo directo (MXN) | 13,556.67 | 13,760.34 |
 
 No se suelda un solo metro de lámina: la soldadura de las costuras y las juntas pasa a engargolado (sumada al de las juntas entre yardas que ya había) y la de las bridas al ducto, a 56 cejas; la lámina sube por la holgura del Pittsburgh y por las cejas, y los consumibles bajan a menos de la mitad porque ya no hay alambre ni gas. Con los tiempos de arranque, el costo directo queda muy parecido.
 
@@ -1916,11 +1918,11 @@ No se suelda un solo metro de lámina: la soldadura de las costuras y las juntas
 
 | Escenario (30 partidas de ductería) | Costo directo | Material | Mano de obra | kg | Precio mínimo | Precio calculado | Costo directo / proveedor |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **Cal. 22, con las bridas metidas y su ceja (el pedido)** | 13,758.64 | 8,861.51 | 48.2 h · 3,010.32 | 222 | 20,460.94 | 26,821.53 | 73 % |
-| Cal. 22, sin meter las bridas | 12,670.03 | 8,764.18 | 37.1 h · 2,317.23 | 220 | 18,174.14 | 23,983.17 | 67 % |
-| Cal. 24 (lo que dicen los planos), con las bridas y su ceja | 11,776.76 | 6,890.40 | 48.0 h · 3,003.06 | 183 | 18,139.60 | 23,935.43 | 62 % |
+| **Cal. 22, con las bridas metidas y su ceja (el pedido)** | 13,760.34 | 8,863.21 | 48.2 h · 3,010.32 | 222 | 20,462.92 | 26,824.03 | 73 % |
+| Cal. 22, sin meter las bridas | 12,671.72 | 8,765.87 | 37.1 h · 2,317.23 | 220 | 18,176.11 | 23,985.57 | 67 % |
+| Cal. 24 (lo que dicen los planos), con las bridas y su ceja | 11,778.05 | 6,891.69 | 48.0 h · 3,003.06 | 183 | 18,141.11 | 23,937.24 | 62 % |
 
-Hecha en el taller, la ductería costaría en directo $13,758.64: el **73 %** de lo que cobró el proveedor. Pero con los indirectos ilustrativos de las tablas el **precio mínimo** sería de $20,460.94, **más que el precio del proveedor**: comprarla convino, salvo que el taller tenga tiempo libre (sus indirectos ya pagados), en cuyo caso hacerla ahorraría hasta unos $5,200. Dos salvedades: los tiempos de taller de la ductería no están calibrados (sólo los de las bridas, §7.4), y el precio calculado incluye el cargo mínimo de las 6 uniones ($250 cada una). Para decidir conviene capturar las horas reales de una yarda, de un codo y de una ceja (§10.1).
+Hecha en el taller, la ductería costaría en directo $13,760.34: el **73 %** de lo que cobró el proveedor. Pero con los indirectos ilustrativos de las tablas el **precio mínimo** sería de $20,462.92, **más que el precio del proveedor**: comprarla convino, salvo que el taller tenga tiempo libre (sus indirectos ya pagados), en cuyo caso hacerla ahorraría hasta unos $5,200. Dos salvedades: los tiempos de taller de la ductería no están calibrados (sólo los de las bridas, §7.4), y el precio calculado incluye el cargo mínimo de las 6 uniones ($250 cada una). Para decidir conviene capturar las horas reales de una yarda, de un codo y de una ceja (§10.1).
 
 ---
 
@@ -2247,5 +2249,5 @@ Los planos de pedido del 30-sep-2026 confirmaron el gramil (24 mm), los barrenos
 | Más de 120 m | Sin precio: la app pide agregar un renglón | T11 | — |
 | La hoja y la yarda | Galvanizada cal. 22 de 4 × 10 ft; la yarda es su ancho (1.22 m), como en el tramo recto | T11 (`hoja_defecto`) o la pestaña | Con yardas de 3 ft (hoja de 3 × 10 ft) salen otras hojas: elegirla en la pestaña si está en la lista del proveedor. |
 | Retazos | No se aprovechan entre láminas; en una lámina, el acomodo de guillotina mete las que quepan (incluso giradas) | §5.8 | Si el taller usa los retazos para codos o reducciones, cuenta menos hojas: el factor ya lo cubre. |
-| Yarda de 3 ft en galvanizado | La lista del proveedor sólo trae la galvanizada de 4 × 10 ft: se corta la yarda de 3 ft de ella y se desperdicia una franja de 1 ft | Lista del proveedor (T3b): agregar la de 3 × 10 ft | Con la hoja de 3 × 10 ft (si se compra), la yarda de 3 ft la toma sola y salen menos hojas. |
+| Precio de la galvanizada de 3 × 10 ft | **Aproximado:** el de la 4 × 10 prorrateado por área (× 914 / 1,219): cal. 22 $690 y cal. 24 $525 con IVA, el mismo $/kg | Lista del proveedor (T3b) | Con la cotización real del proveedor cambia el precio de las yardas de 3 ft (en la cotización rápida y en los tramos rectos con yarda de 3 ft). |
 | Días de fabricación e instalación | **Confirmado (7-oct-2026):** suman su mano de obra: bridas, 1 persona × $500 por día; instalación, 2 personas × $500 por día; con utilidad e IVA encima | T11 | Otra cuadrilla u otro pago se cambian en T11. Los viáticos (hospedaje, comidas) no están: la instalación es local. |

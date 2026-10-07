@@ -81,6 +81,9 @@
       hojas: {
         GALV_C22_4X10: { descripcion: 'Lámina galvanizada 4 × 10 ft · cal. 22', material: 'GALVANIZADO', calibre: 22, esp_mm: 0, ancho_mm: 1219, largo_mm: 3048, precio: 920 },
         GALV_C24_4X10: { descripcion: 'Lámina galvanizada 4 × 10 ft · cal. 24', material: 'GALVANIZADO', calibre: 24, esp_mm: 0, ancho_mm: 1219, largo_mm: 3048, precio: 700 },
+        // 3 × 10 ft: aproximada, prorrateada por área de la de 4 × 10 (× 914 / 1 219); cambiarla por la cotización real del proveedor
+        GALV_C22_3X10: { descripcion: 'Lámina galvanizada 3 × 10 ft · cal. 22 (aprox., prorrateada de la 4 × 10)', material: 'GALVANIZADO', calibre: 22, esp_mm: 0, ancho_mm: 914, largo_mm: 3048, precio: 690 },
+        GALV_C24_3X10: { descripcion: 'Lámina galvanizada 3 × 10 ft · cal. 24 (aprox., prorrateada de la 4 × 10)', material: 'GALVANIZADO', calibre: 24, esp_mm: 0, ancho_mm: 914, largo_mm: 3048, precio: 525 },
         NEGRA_C12_4X10: { descripcion: 'Lámina negra 4 × 10 ft · cal. 12', material: 'ACERO_CARBON', calibre: 12, esp_mm: 0, ancho_mm: 1219, largo_mm: 3048, precio: 2020 },
         NEGRA_C12_4X8: { descripcion: 'Lámina negra 4 × 8 ft · cal. 12', material: 'ACERO_CARBON', calibre: 12, esp_mm: 0, ancho_mm: 1219, largo_mm: 2438, precio: 1620 },
         NEGRA_C12_3X10: { descripcion: 'Lámina negra 3 × 10 ft · cal. 12', material: 'ACERO_CARBON', calibre: 12, esp_mm: 0, ancho_mm: 914, largo_mm: 3048, precio: 1515 },

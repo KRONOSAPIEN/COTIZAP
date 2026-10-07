@@ -1924,9 +1924,12 @@ const ok = (cond, msg) => {
     const de3 = await p.locator('#rapida-acomodo').innerText();
     ok(/44 yardas ÷ 3 = 15 láminas; la última lleva 2 yardas/.test(de3) && await p.locator('.lam-tira li').count() === 15 && await p.locator('.lam-tira li.lam-parcial').count() === 1 && await total() !== '$43,392.00',
       'con yardas de 3 ft: 44 yardas, 15 láminas (la última con 2) y otro precio');
+    ok(/Lámina galvanizada 3 × 10 ft/.test(await desglose()) && await p.locator('.lam-svg .lam-yarda').count() === 3, 'con yardas de 3 ft toma sola la lámina galvanizada de 3 × 10 ft (aproximada)');
+    await p.selectOption('#r_hoja', 'GALV_C22_4X10');
     await p.fill('#r_diam', '3');
     ok(/14 yardas \(11 a lo ancho y 3 a lo largo de la lámina\)/.test(await p.locator('#rapida-acomodo').innerText()) && await p.locator('.lam-svg .lam-girada').count() === 3 && /a lo largo de la lámina/.test(await p.locator('.lam-leyenda').innerText()),
       'de 3″ con yardas de 3 ft: 14 por lámina, con una franja girada en el sobrante (y su leyenda)');
+    await p.selectOption('#r_hoja', '');
     await p.fill('#r_diam', '11');
     await p.locator('#r_yarda input[value="1220"]').check();
 

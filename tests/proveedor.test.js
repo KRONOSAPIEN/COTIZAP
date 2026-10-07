@@ -110,7 +110,7 @@ test('El cálculo usa la hoja cotizada de ese material y calibre (la del tamaño
   const usos = Object.fromEntries(todos().map((r) => [r.id, r.uso]));
   // la hoja de 3 ft (914 mm) también se usa: es la de las yardas de 3 ft
   assert.deepEqual(Object.keys(usos).filter((k) => usos[k] === 'CALCULO').sort(),
-    ['ANG_1_1_2X3_16', 'ANG_2X3_16', 'GALV_C22_4X10', 'GALV_C24_4X10', 'NEGRA_C12_3X10', 'NEGRA_C12_4X10', 'SOL_1_1_2X3_16']);
+    ['ANG_1_1_2X3_16', 'ANG_2X3_16', 'GALV_C22_3X10', 'GALV_C22_4X10', 'GALV_C24_3X10', 'GALV_C24_4X10', 'NEGRA_C12_3X10', 'NEGRA_C12_4X10', 'SOL_1_1_2X3_16']);
   assert.equal(usos.CANAL_U_6, 'REFERENCIA');
   assert.equal(usos.PLACA_3_16_4X8, 'REFERENCIA');
   assert.equal(usos.NEGRA_C12_4X8, 'REFERENCIA', 'otro largo de la misma lámina: no es la hoja de ninguna yarda');
@@ -121,7 +121,15 @@ test('La lámina de una yarda es la hoja de ese ancho (3 ft = 914 mm, 4 ft = 1 2
   assert.equal(PROV.laminaDe(M, 'ACERO_CARBON', 12, 914).id, 'NEGRA_C12_3X10');
   assert.equal(PROV.laminaDe(M, 'ACERO_CARBON', 12, 1220).id, 'NEGRA_C12_4X10', '1 220 y 1 219 son la misma hoja de 4 ft');
   assert.equal(PROV.laminaDe(M, 'ACERO_CARBON', 12).id, 'NEGRA_C12_4X10', 'sin ancho, la hoja estándar del taller');
-  assert.equal(PROV.laminaDe(M, 'GALVANIZADO', 22, 914).id, 'GALV_C22_4X10', 'no hay galvanizada de 3 ft cotizada: se usa la de 4 ft');
+  assert.equal(PROV.laminaDe(M, 'GALVANIZADO', 22, 914).id, 'GALV_C22_3X10', 'la galvanizada de 3 × 10 ft (aproximada, prorrateada de la 4 × 10)');
+  assert.equal(PROV.laminaDe(M, 'GALVANIZADO', 24, 914).id, 'GALV_C24_3X10');
+  // prorrateada por área: por kg cuesta casi lo mismo que la de 4 × 10 (redondeada a pesos)
+  casi(PROV.laminaDe(M, 'GALVANIZADO', 22, 914).precio_kg, PROV.laminaDe(M, 'GALVANIZADO', 22, 1220).precio_kg, 0.02);
+  casi(M.proveedor.hojas.GALV_C22_3X10.precio, 920 * 914 / 1219, 0.5);
+  casi(M.proveedor.hojas.GALV_C24_3X10.precio, 700 * 914 / 1219, 0.5);
+  const Msin = crearMaestros();
+  delete Msin.proveedor.hojas.GALV_C22_3X10;
+  assert.equal(PROV.laminaDe(Msin, 'GALVANIZADO', 22, 914).id, 'GALV_C22_4X10', 'sin la de 3 ft cotizada, se usa la de 4 ft');
   // por kg cuestan lo mismo (el proveedor cobra por área): cambiar de ancho de hoja no mueve el precio de la lámina
   casi(PROV.laminaDe(M, 'ACERO_CARBON', 12, 914).precio_kg, PROV.laminaDe(M, 'ACERO_CARBON', 12, 1220).precio_kg, 1e-3);
   // y el desglose de una partida dice cuál usó
@@ -134,9 +142,10 @@ test('Un precio inválido (0, negativo o sin medidas) no se usa: el cálculo cae
   [0, -5, 'abc'].forEach((precio) => {
     const Mx = crearMaestros();
     Mx.proveedor.hojas.GALV_C22_4X10.precio = precio; // a mano: crearMaestros descarta un parche con un texto donde va un número
+    Mx.proveedor.hojas.GALV_C22_3X10.precio = precio;
     assert.equal(PROV.laminaDe(Mx, 'GALVANIZADO', 22), null, `precio ${precio}`);
   });
-  const Msm = crearMaestros({ proveedor: { hojas: { GALV_C22_4X10: { ancho_mm: 0 } } } });
+  const Msm = crearMaestros({ proveedor: { hojas: { GALV_C22_4X10: { ancho_mm: 0 }, GALV_C22_3X10: { ancho_mm: 0 } } } });
   assert.equal(PROV.laminaDe(Msm, 'GALVANIZADO', 22), null);
   assert.equal(PROV.tablas(Msm).hojas.find((r) => r.id === 'GALV_C22_4X10').precio_kg, null, 'se muestra sin $/kg');
   assert.doesNotThrow(() => PROV.tablas({ ...M, proveedor: undefined }), 'maestros sin lista: no se rompe');
