@@ -856,6 +856,11 @@
     kvs.append(kv('Área neta de lámina', W.num(g.A_neta_m2, 4), 'm²'));
     if (g.A_orificio_m2) kvs.append(kv('Orificio descontado', W.num(g.A_orificio_m2, 4), 'm²'));
     kvs.append(kv('Piezas a armar', String(g.n_piezas)), kv('Longitud de corte', W.num(f.qto.tmp.detalle.L_corte_m, 3), 'm'), kv('Longitud de soldadura', W.num(f.qto.tmp.detalle.L_soldadura_m, 3), 'm'));
+    // el galvanizado se engargola: costuras y juntas que en otro material se soldarían
+    if (g.costura === 'ENGARGOLADA' && f.familia !== 'RECTO') {
+      kvs.append(kv('Costuras y juntas', 'engargoladas (la costura del material)'),
+        kv('Engargolado: costuras / juntas', `${W.num(g.engargolado_long_m, 3)} / ${W.num(g.engargolado_circ_m, 3)}`, 'm'));
+    }
     const mat = h('dl', { class: 'kvs' },
       kv('Densidad', W.num(f.qto.mat.densidad_kg_m3, 0), 'kg/m³'),
       kv('Peso por m² (ρ·e)', W.num(lam.kg_m2, 4), 'kg/m²'),
@@ -903,6 +908,8 @@
           : kv('Junta: empaque', W.num(her.L_empaque_m, 3), 'm'));
     }
     if (her.n_espigas) kvs.append(kv('Espigas', String(her.n_espigas)), kv('Fijaciones', String(her.n_fijaciones)), kv('Lámina extra de espiga', W.num(her.A_espiga_m2, 4), 'm²'));
+    if (her.bridas_aparte) kvs.append(kv('Bridas de otra partida (aquí sólo se fijan al ducto)', String(her.n_aros_aparte)));
+    if (her.n_cejas) kvs.append(kv('Bridas con ceja (no se sueldan al ducto)', String(her.n_cejas)), kv('Lámina de las cejas', W.num(her.A_ceja_m2, 4), 'm²'));
     kvs.append(kv(her.junta === 'SELLADOR' ? 'Sellado de la clase (sin las juntas de bridas)' : 'Sellado', `${W.num(her.L_sellado_m, 3)} m`),
       kv('Sellador en total', W.num(her.V_sellador_ml, 1), 'mL'));
     const cons = h('dl', { class: 'kvs' },

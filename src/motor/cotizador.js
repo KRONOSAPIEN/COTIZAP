@@ -30,7 +30,7 @@
     PERSONALIZADO: 'Pieza personalizada (CAD)',
     COMPRADO: 'Artículo comprado',
     BRIDA: 'Bridas sueltas (sólo aros)',
-    UNION: 'Armado de piezas (unión soldada)',
+    UNION: 'Armado de piezas (unión entre piezas)',
     INSTALACION: 'Instalación en obra',
     SOPORTE: 'Soportería',
   };
@@ -167,7 +167,7 @@
     const e = MAT.espesorMm(M, mat, p);
     const PF = GEO.perfilFabricacion(p, e, M);
     const her = MAT.herrajes(PF, p, mat, e, M);
-    const lam = MAT.lamina(PF, her.A_espiga_m2, p, mat, e, M);
+    const lam = MAT.lamina(PF, her.A_espiga_m2 + (her.A_ceja_m2 || 0), p, mat, e, M); // la lámina de las espigas y de las cejas
     const pint = MAT.pintura(PF, her, p, mat, M);
     const tmp = MO.tiempos(PF, her, lam, pint, p, mat, e, M);
     const con = CON.cantidades(PF, her, tmp, pint, mat, e, M);

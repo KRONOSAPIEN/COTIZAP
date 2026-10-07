@@ -1810,7 +1810,7 @@ const ok = (cond, msg) => {
     const ped = await R(() => { const E = window.COTIZAP.web.estadoApp; return { n: E.cot.partidas.length, err: E.res.totales.n_partidas_error }; });
     ok(ped.n === 36 && ped.err === 0, 'el pedido de ejemplo trae sus 36 partidas (bridas, codos, reducciones con injerto, yardas y armados) y todas se calculan');
     const cabs = await texto('.hoja-cab h3');
-    ok(cabs.length === 8 && cabs[0] === 'Bridas' && /^Codos.*Acero galvanizado · cal\. 24$/.test(cabs[1]) && /^Reducciones con injerto e injertos.*cal\. 24$/.test(cabs[2])
+    ok(cabs.length === 8 && cabs[0] === 'Bridas' && /^Codos.*Acero galvanizado · cal\. 22$/.test(cabs[1]) && /^Reducciones con injerto e injertos.*cal\. 22$/.test(cabs[2])
       && ['11″', '10″', '6″', '5″'].every((x, i) => cabs[3 + i].startsWith(`Ductos de ${x}`)) && cabs[7] === 'Armado de piezas',
     'ocho hojas, como los planos: bridas, codos, reducciones con injerto, ductos de 11″, 10″, 6″ y 5″ y el armado de piezas');
     const marcas = await texto('.pieza-marca');

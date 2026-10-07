@@ -511,6 +511,16 @@
     'Se elige de la lista de «Soldadura» en Proceso: MIG (GMAW) para acero, TIG (GTAW) para inox.',
     'TIG es más lento (≈ la mitad de velocidad) y usa varilla y argón: cambiar un material a TIG sube sus horas y su consumo de soldadura.',
     { nom: MATERIALES, afecta: ['mo', 'cons'] });
+  E('materiales.*.costura', 'Costura de la lámina · {0}',
+    'Cómo se cierran las costuras y se unen las piezas de lámina de este material: soldadas o engargoladas.',
+    'Se elige de la lista de costuras de Proceso. El taller engargola siempre el galvanizado (Pittsburgh); el acero al carbón y el inoxidable se sueldan a tope.',
+    'Engargolada: lo que en otro material se suelda (codos, reducciones, transiciones, injertos, armado de piezas) se engargola: horas de engargolado en vez de soldadura, su holgura en la lámina y sellador en las juntas. En el tramo recto es la costura por omisión.',
+    { nom: MATERIALES, afecta: ['mat', 'mo', 'cons'], ej: 'Galvanizado: Engargolado Pittsburgh. Acero al carbón: Soldada a tope.' });
+  E('materiales.*.brida_al_ducto', 'Cómo se fija la brida al ducto · {0}',
+    'Si la brida se suelda al ducto o se le hace una ceja: el aro se mete en el ducto y al extremo del ducto se le dobla una ceja para que no se salga; luego se sella con su otra pieza.',
+    'Se elige de la lista. El taller pone con ceja las bridas del galvanizado (las de solera y las de placa); el acero al carbón y el inoxidable, soldadas.',
+    'Con ceja no hay filete aro–ducto (ni su alambre, gas y acabado): cada brida suma el tiempo de la ceja en el armado y la franja de lámina que se dobla («Lámina de la ceja»).',
+    { nom: MATERIALES, afecta: ['mo', 'cons', 'mat'], opc: { SOLDADA: 'Soldada: un cordón de filete del aro al ducto.', CEJA: 'Con ceja: sin soldadura; el ducto se dobla sobre la brida.' } });
   E('materiales.*.alambre_ref', 'Alambre o varilla de aporte · {0}',
     'La variable de «Precios» del alambre o varilla con que se suelda este material.',
     'Se elige de la lista de precios. Debe corresponder al proceso de soldadura (alambre para MIG, varilla para TIG).',
@@ -878,6 +888,16 @@
     'En min por aro. No aplica a los aros sueltos (no se arman al ducto).',
     'Se multiplica por el número de aros armados de la pieza: con 4 min y 2 bridas suma 8 min por pieza.',
     { afecta: ['mo', 'eq'], tip: [1, 15] });
+  E('proceso.armado.t_ceja_aro_min', 'Ceja de cada brida (fijo)',
+    'Minutos de hacerle la ceja al extremo del ducto con la brida ya metida, por cada brida que no se suelda (materiales con brida «con ceja», como el galvanizado).',
+    'En min por brida, además del ajuste del aro. Valor supuesto: 2 min; tómelo de una pieza real.',
+    'Se suma al armado por cada brida con ceja (sin el factor de dificultad de la familia: es una operación en la boca), en lugar de soldar el aro al ducto.',
+    { afecta: ['mo', 'eq'], tip: [0, 30] });
+  E('proceso.armado.t_ceja_aro_min_m', 'Ceja de cada brida (por metro)',
+    'Minutos por metro de perímetro de la ceja: una ceja grande lleva más tiempo.',
+    'En min por metro de perímetro exterior del ducto. Valor supuesto: 3 min/m.',
+    'Cada ceja cuesta el fijo más este valor × perímetro (m): pesa más en diámetros grandes.',
+    { afecta: ['mo', 'eq'], tip: [0, 20] });
   E('proceso.armado.t_fijacion_min', 'Poner cada fijación',
     'Minutos de poner un tornillo autotaladrante en una junta de espiga.',
     'En min por fijación.',
@@ -1366,6 +1386,11 @@
     'Sin unidad. 1.0 = cordón continuo; 0.5 = punteado a la mitad; 2.0 = cordón por ambos lados.',
     'Multiplica los metros de soldadura del aro al ducto: de 1.0 a 2.0 duplica esa soldadura (alambre, gas y horas).',
     { afecta: ['mo', 'cons'], tip: [0.25, 2] });
+  E('herrajes.uniones.BRIDADO.ceja_mm', 'Lámina de la ceja',
+    'Lo que se deja de más en el extremo del ducto para doblarlo sobre la brida (la ceja que la detiene), en los materiales cuya brida va con ceja.',
+    'En mm. Valor supuesto: 10 mm; mídalo en una pieza.',
+    'Suma esa franja de lámina (perímetro × ceja) por cada brida de taller con ceja: más kilos de lámina.',
+    { afecta: ['mat', 'peso'], tip: [0, 30] });
   E('herrajes.uniones.ESPIGA.prof_espiga_mm', 'Profundidad de la espiga',
     'Cuánto entra el macho en la hembra en una unión de espiga.',
     'En mm. 60 es usual.',

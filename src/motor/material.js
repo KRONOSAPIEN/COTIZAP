@@ -109,7 +109,10 @@
    *            se arman y se sueldan al ducto; las SUELTAS (`PF.extremos_sueltos`) no se unen al ducto: se mandan con sus tornillos
    *            y el material de su junta para soldarlas en obra donde se corta el tramo.
    *            Con `bridas_aparte` los aros (y su tornillería y su junta) son de otra partida —bridas de solera de la familia Brida o
-   *            bridas de placa compradas—: aquí sólo se arman y se sueldan al ducto las de taller; las sueltas no cuestan nada aquí.
+   *            bridas de placa compradas—: aquí sólo se arman y se fijan al ducto las de taller; las sueltas no cuestan nada aquí.
+   *            Cómo se fija la brida al ducto lo dice el material (`brida_al_ducto`): SOLDADA (filete aro–ducto) o CEJA —el aro se
+   *            mete y al ducto se le hace una ceja para que no se salga (el galvanizado)—: sin soldadura, con el tiempo de la ceja y la
+   *            franja de lámina que se dobla (`ceja_mm`).
    *            La junta (`uniones.BRIDADO.junta`) es SELLADOR —el taller pone Sikaflex en lugar del empaque: un cordón de
    *            `ml_sellador_junta_m` mL por metro sobre el círculo de barrenos, que es también el sello de la junta transversal (no
    *            se suma el cordón de la clase C en esa junta)— o EMPAQUE (cinta de neopreno, y aparte el cordón de la clase).
@@ -153,7 +156,11 @@
       sold_aros: { filete_m: 0, cierres: [] }, // cierres: costura a tope del aro, con el espesor del PERFIL (no el de la lámina)
       A_pintura_aros_m2: 0,
       bridas_aparte: false,
-      n_aros_aparte: 0, // aros de otra partida que aquí se arman y se sueldan al ducto
+      n_aros_aparte: 0, // aros de otra partida que aquí se arman y se fijan al ducto
+      brida_al_ducto: 'SOLDADA', // SOLDADA (filete aro–ducto) o CEJA (sin soldar: se le hace una ceja al ducto)
+      n_cejas: 0, // bridas de taller fijadas con ceja
+      L_cejas_m: 0, // perímetro de esas cejas
+      A_ceja_m2: 0, // lámina que se dobla en las cejas (se suma a la de la pieza)
       // cada brida que lleva la pieza, de taller o suelta, hecha aquí o en otra partida: con su medida nominal (el cuadre de bridas
       // por diámetro) y el extremo en que va (el dibujo)
       bridas: [],
@@ -163,8 +170,18 @@
       const holgura = M.proceso.aros.holgura_corte_mm;
       const conSellador = (U_.junta || 'EMPAQUE') === 'SELLADOR';
       const aparte = p.bridas_aparte === true && PF.familia !== 'BRIDA'; // la partida de bridas sueltas es la que las hace
+      const conCeja = !!mat && mat.brida_al_ducto === 'CEJA';
       out.junta = conSellador ? 'SELLADOR' : 'EMPAQUE';
       out.bridas_aparte = aparte;
+      out.brida_al_ducto = conCeja ? 'CEJA' : 'SOLDADA';
+      // Fijar al ducto una brida de taller (propia o de otra partida): con ceja (sin soldar) o con el filete aro–ducto
+      const fijar = (ext) => {
+        if (conCeja) {
+          out.n_cejas += 1;
+          out.L_cejas_m += ext.P_ext_mm / 1000;
+          out.A_ceja_m2 += (ext.P_ext_mm * (U_.ceja_mm || 0)) / 1e6;
+        } else out.sold_aros.filete_m += (U_.f_cont_soldadura_aro * ext.P_ext_mm) / 1000;
+      };
       // Una brida del extremo `ext`. Toda brida se fabrica como aro terminado —se rola la solera, se suelda el cierre del aro, se
       // barrena y se pinta— y lleva el material de su media junta: tornillería y cordón de Sikaflex (o empaque). La de taller
       // además se arma y se suelda al ducto y, con empaque, sella su media junta con el cordón de la clase. La SUELTA sale igual
@@ -194,7 +211,7 @@
           if (suelta) return;
           out.n_aros_aparte += 1;
           if (clase !== 'NINGUNA' && !(conSellador && p.usa_empaque !== false)) out.L_sellado_m += (0.5 * ext.P_ext_mm) / 1000;
-          out.sold_aros.filete_m += (U_.f_cont_soldadura_aro * ext.P_ext_mm) / 1000;
+          fijar(ext);
           return;
         }
         // Material de la junta que lleva toda brida: media tornillería y medio cordón de la junta o medio empaque (la otra mitad es
@@ -223,7 +240,7 @@
         out.m_aros_neta_kg += m_aro;
         // con la junta de sellador, ese cordón ya sella la junta transversal: no se suma el de la clase C
         if (clase !== 'NINGUNA' && !(conSellador && p.usa_empaque !== false)) out.L_sellado_m += (0.5 * ext.P_ext_mm) / 1000;
-        out.sold_aros.filete_m += (U_.f_cont_soldadura_aro * ext.P_ext_mm) / 1000;
+        fijar(ext);
       };
       PF.extremos.forEach((ext) => brida(ext, false));
       (PF.extremos_sueltos || []).forEach((ext) => brida(ext, true));

@@ -93,6 +93,11 @@
     ['proceso.pintura.sistemas.*.*', () => claves(W.estadoApp.M.proceso.pintura.capas)],
     ['materiales.*.tabla_calibre', () => claves(W.estadoApp.M.calibres)],
     ['materiales.*.proceso_sold', () => claves(W.estadoApp.M.proceso.soldadura.procesos)],
+    ['materiales.*.costura', () => {
+      const c = W.estadoApp.M.proceso.costuras;
+      return Object.keys(c).map((k) => [k, c[k] && c[k].nombre ? c[k].nombre : k]);
+    }],
+    ['materiales.*.brida_al_ducto', () => [['SOLDADA', 'Soldada (filete aro–ducto)'], ['CEJA', 'Con ceja (se mete y se le hace una ceja al ducto)']]],
     ['proceso.corte.proceso_recto', () => claves(W.estadoApp.M.proceso.corte.v_m_min)],
     ['proceso.corte.proceso_perfilado', () => claves(W.estadoApp.M.proceso.corte.v_m_min)],
     ['proceso.injerto_inclinado_hacia', () => [['MENOR', 'MENOR (de mayor a menor)'], ['MAYOR', 'MAYOR']]],

@@ -439,9 +439,11 @@
     const R = D / 2;
     const Lb = 1.3 * D;
     const z = D * 0.08;
+    const eng = f.geometria.costura === 'ENGARGOLADA'; // el galvanizado se engargola, como las yardas entre sí
+    const modo = eng ? 'engargolada' : 'soldada';
     d.titulo = `${n > 1 ? `${n} uniones` : 'Unión'} de piezas ${diam(D)}`;
     d.titulo_corto = d.titulo;
-    d.datos = [`D = ${nominal(D)}`, n > 1 ? `${n} uniones soldadas por pieza` : 'Unión soldada (filete continuo)', 'Los extremos que se unen van sin brida'];
+    d.datos = [`D = ${nominal(D)}`, n > 1 ? `${n} uniones ${modo}s por pieza` : `Unión ${modo}${eng ? ', como las yardas' : ' (filete continuo)'}`, 'Los extremos que se unen van sin brida'];
     [[-Lb, 0], [0, Lb]].forEach(([a, b]) => {
       d.trazos.push({ t: 'relleno', d: [P(a, -R), P(b, -R), P(b, R), P(a, R)] });
       d.trazos.push(ruta([P(a, -R), P(b, -R)], 'pieza'));
@@ -449,10 +451,10 @@
     });
     // las piezas siguen: corte en cada lado
     [-Lb, Lb].forEach((x) => d.trazos.push(ruta([P(x, -R - z), P(x + z * 0.6, -R / 2), P(x - z * 0.6, R / 2), P(x, R + z)], 'corte')));
-    d.trazos.push(ruta([P(0, -R - z * 0.5), P(0, R + z * 0.5)], 'soldadura'));
+    d.trazos.push(ruta([P(0, -R - z * 0.5), P(0, R + z * 0.5)], eng ? 'engargolado' : 'soldadura'));
     d.trazos.push(ruta([P(-Lb * 1.08, 0), P(Lb * 1.08, 0)], 'eje'));
     d.cotas.push(cota(P(-Lb * 0.6, R), P(-Lb * 0.6, -R), diam(D), 'D_mm', 1, 1));
-    d.cotas.push(nota(P(0, -R), 60, n > 1 ? `${n} uniones soldadas` : 'Unión soldada', 'n_uniones'));
+    d.cotas.push(nota(P(0, -R), 60, n > 1 ? `${n} uniones ${modo}s` : `Unión ${modo}`, 'n_uniones'));
   }
 
   /** Brida vista de lado en la boca `cara`: sobresale del ducto el ancho de la solera; la suelta va punteada y separada. */
@@ -476,7 +478,9 @@
       const t = sin.length === 2 && sin.includes('tronco_1') && sin.includes('tronco_2') ? ['los dos extremos del tronco'] : f.familia === 'CODO' && sin.length === 2 ? ['los dos extremos'] : lista;
       d.datos.push(`Sin brida: ${t.join(' y ')} (se une${sin.length > 1 ? 'n' : ''} a otra pieza)`);
     }
-    if (her.bridas_aparte) d.notas.push('Bridas de otra partida (aquí sólo se unen al ducto)');
+    if (her.bridas_aparte) d.notas.push('Bridas de otra partida (aquí sólo se fijan al ducto)');
+    if (her.n_cejas) d.notas.push('Bridas con ceja: se meten y se le hace una ceja al ducto (sin soldar)');
+    if (f.geometria.costura === 'ENGARGOLADA') d.notas.push('Costuras y juntas engargoladas');
   }
 
   /**

@@ -4,7 +4,7 @@
  *   · el extremo final del tramo recto («bridas en ambos extremos» / «brida en un extremo»), con o sin tramo de ajuste;
  *   · extremos sin brida en codos, reducciones e injertos (se unen a otra pieza o a una manguera);
  *   · bridas de otra partida (las piezas sólo las unen al ducto; los aros, su tornillería y su junta se cotizan aparte);
- *   · la familia «Armado de piezas» (la unión soldada entre dos piezas);
+ *   · la familia «Armado de piezas» (la unión entre dos piezas: engargolada en galvanizado, soldada en los demás);
  *   · el cuadre de bridas por diámetro: las que piden las piezas contra las partidas de bridas.
  */
 const test = require('node:test');
@@ -66,7 +66,7 @@ test('Extremos sin brida: cada familia nombra sus extremos y la brida del que se
   casi(sin.costos.CD, calc({ ...inj, tipo_union: 'LISO' }).costos.CD, 1e-9, 'igual que con extremos lisos');
 });
 
-test('Bridas de otra partida: la pieza sólo arma y suelda el aro al ducto; los aros, su tornillería y su junta no se cuentan aquí', () => {
+test('Bridas de otra partida: la pieza sólo arma y fija el aro al ducto; los aros, su tornillería y su junta no se cuentan aquí', () => {
   const p = { familia: 'CODO', D_mm: 279.4, theta_deg: 90, k_R: 1.5, n_gajos: 5 };
   const propia = calc(p);
   const aparte = calc({ ...p, bridas_aparte: true });
@@ -80,8 +80,22 @@ test('Bridas de otra partida: la pieza sólo arma y suelda el aro al ducto; los 
   assert.equal(h.sold_aros.cierres.length, 0, 'el cierre del aro lo hace la otra partida');
   assert.equal(h.A_pintura_aros_m2, 0);
   assert.equal(h.V_sellador_junta_ml, 0, 'el Sikaflex de la junta va con la brida');
-  casi(h.sold_aros.filete_m, propia.qto.her.sold_aros.filete_m, 1e-12, 'el filete aro–ducto sí');
-  casi(h.sold_aros.filete_m, (2 * Math.PI * (279.4 + 2 * e24)) / 1000, 1e-9, '2 · π · D_ext');
+  // en galvanizado la brida no se suelda: se mete y se le hace una ceja al ducto, igual que a una brida propia
+  const P_ext = Math.PI * (279.4 + 2 * e24);
+  assert.equal(h.sold_aros.filete_m, 0, 'sin filete aro–ducto');
+  assert.deepEqual([h.brida_al_ducto, h.n_cejas, propia.qto.her.n_cejas], ['CEJA', 2, 2]);
+  casi(h.L_cejas_m, (2 * P_ext) / 1000, 1e-9, '2 · π · D_ext de ceja');
+  casi(h.A_ceja_m2, (2 * P_ext * M.herrajes.uniones.BRIDADO.ceja_mm) / 1e6, 1e-12, 'la franja de lámina que se dobla');
+  // el armado: el ajuste de los dos aros (con la dificultad del codo) y las dos cejas (sin ella)
+  const A = M.proceso.armado;
+  const liso = calc({ ...p, tipo_union: 'LISO' });
+  casi(aparte.qto.tmp.unitarios_min.armado - liso.qto.tmp.unitarios_min.armado,
+    A.k_dif.CODO * 2 * A.t_ajuste_aro_min + 2 * A.t_ceja_aro_min + ((2 * P_ext) / 1000) * A.t_ceja_aro_min_m, 1e-9, 'ajuste + ceja');
+  casi(aparte.qto.lam.A_neta_m2 - liso.qto.lam.A_neta_m2, h.A_ceja_m2, 1e-12, 'la lámina de las cejas entra en la pieza');
+  // en acero al carbón sí: el filete aro–ducto de las dos bridas
+  const negro = C.cotizarPartida({ ...galv24, ...p, material_id: 'ACERO_CARBON', calibre: 16, bridas_aparte: true }, M).qto.her;
+  casi(negro.sold_aros.filete_m, (2 * Math.PI * (279.4 + 2 * 0.0598 * 25.4)) / 1000, 1e-9, '2 · π · D_ext (cal. 16 MSG)');
+  assert.equal(negro.n_cejas, 0);
   // el ajuste del aro en el armado: el mismo tiempo que con aros propios
   casi(aparte.qto.tmp.unitarios_min.armado, propia.qto.tmp.unitarios_min.armado, 1e-9);
   assert.equal(aparte.qto.tmp.unitarios_min.aros, 0, 'no se rola solera aquí');
@@ -96,21 +110,35 @@ test('Bridas de otra partida: la pieza sólo arma y suelda el aro al ducto; los 
   assert.equal(calc({ familia: 'BRIDA', D_mm: 279.4, bridas_aparte: true }).qto.her.aros_sueltos.length, 1);
 });
 
-test('Armado de piezas: una junta de armado y un filete continuo al perímetro exterior por unión, sin lámina', () => {
+test('Armado de piezas: una junta de armado por unión; en galvanizado se engargola (como las yardas), en acero al carbón se suelda', () => {
   const u = calc({ familia: 'UNION', D_mm: 279.4 });
   assert.equal(u.ok, true);
   const PF = u.geometria;
   assert.equal(PF.n_juntas_internas, 1);
   assert.equal(PF.n_piezas, 0);
-  casi(PF.sold.filete_m, (Math.PI * (279.4 + 2 * e24)) / 1000, 1e-9, 'π · D_ext');
+  // galvanizado: la unión es una junta transversal engargolada, sin soldadura
+  const L_union = (Math.PI * (279.4 + 2 * e24)) / 1000;
+  assert.equal(PF.costura, 'ENGARGOLADA');
+  assert.equal(PF.sold.filete_m, 0);
+  casi(PF.engargolado_circ_m, L_union, 1e-9, 'π · D_ext engargolado');
+  assert.equal(PF.n_engargolados, 1);
+  const Eg = M.proceso.engargolado;
+  const U = require('../src/motor/util');
+  casi(u.qto.tmp.unitarios_min.engargolado, Eg.t_fijo_pieza_min + L_union / U.interpolar(Eg.v_m_min, e24), 1e-9, 'una operación de engargolado');
+  casi(u.qto.her.L_sellado_m, L_union, 1e-9, 'la junta engargolada se sella (clase C)');
   assert.equal(u.peso.neto_total_kg, 0);
   assert.equal(u.qto.her.n_aros, 0);
   const A = M.proceso.armado;
   const t_junta = A.t_junta_base_min + A.t_junta_por_m_min * (PF.D_ref_mm / 1000);
   casi(u.qto.tmp.unitarios_min.armado, t_junta, 1e-9, 'una junta de armado (k_dif 1)');
-  // dos uniones en la misma pieza: el doble de soldadura y de armado
+  // acero al carbón: un filete continuo al perímetro exterior
+  const negro = C.cotizarPartida({ ...galv24, familia: 'UNION', D_mm: 279.4, material_id: 'ACERO_CARBON', calibre: 16 }, M).geometria;
+  casi(negro.sold.filete_m, (Math.PI * (279.4 + 2 * 0.0598 * 25.4)) / 1000, 1e-9, 'π · D_ext soldado');
+  assert.equal(negro.engargolado_m, 0);
+  // dos uniones en la misma pieza: el doble de engargolado y de armado
   const dos = calc({ familia: 'UNION', D_mm: 279.4, n_uniones: 2 });
-  casi(dos.geometria.sold.filete_m, 2 * PF.sold.filete_m, 1e-12);
+  casi(dos.geometria.engargolado_circ_m, 2 * PF.engargolado_circ_m, 1e-12);
+  assert.equal(dos.geometria.n_engargolados, 2);
   casi(dos.qto.tmp.unitarios_min.armado, 2 * t_junta, 1e-9);
   assert.ok(u.costos.CD > 0 && u.precio.unitario > 0);
   assert.throws(() => calc({ familia: 'UNION', D_mm: 279.4, n_uniones: 0 }), /Uniones por pieza/);
@@ -145,4 +173,31 @@ test('Cuadre de bridas por diámetro: las que piden las piezas (de taller y suel
   assert.equal(C.cotizar({ partidas: cot.partidas.filter((p) => !p.bridas_aparte) }, M).bridas.activo, false);
   // las bridas de placa del catálogo dicen para qué ducto son
   assert.deepEqual(['BRIDA_PLACA_5', 'BRIDA_PLACA_6', 'BRIDA_PLACA_7'].map((k) => M.compras.articulos[k].ducto_D_mm), [127, 152.4, 177.8]);
+});
+
+test('Galvanizado: las costuras y juntas que en otro material se sueldan se engargolan (holgura en la lámina, sellador en las juntas)', () => {
+  const soldado = crearMaestros({ materiales: { GALVANIZADO: { costura: 'A_TOPE', brida_al_ducto: 'SOLDADA' } } });
+  const p = { ...galv24, familia: 'CODO', D_mm: 279.4, theta_deg: 90, k_R: 1.5, n_gajos: 5, clase_sellado: 'B' };
+  const s = C.cotizarPartida(p, soldado).geometria;
+  const g = C.cotizarPartida(p, M);
+  const PF = g.geometria;
+  const hol = M.proceso.costuras.PITTSBURGH.allowance_mm;
+  // lo que se soldaba ahora se engargola: las juntas entre gajos (transversales) y las costuras de cada gajo (longitudinales)
+  casi(PF.engargolado_m, s.sold.tope_m + s.sold.filete_m, 1e-12, 'los mismos metros');
+  casi(PF.engargolado_circ_m, s.sold_transversal_m, 1e-12, 'las 4 juntas entre gajos');
+  casi(PF.engargolado_long_m, s.sold.tope_m - s.sold_transversal_m, 1e-12, 'las costuras de los 5 gajos');
+  assert.deepEqual([PF.sold.tope_m, PF.sold.filete_m, PF.n_engargolados], [0, 0, 5 + 4]);
+  casi(PF.A_neta_m2 - s.A_neta_m2, (PF.engargolado_long_m * hol) / 1000, 1e-12, 'la holgura del Pittsburgh en las costuras longitudinales');
+  // el sellador: con clase B, las juntas y las costuras engargoladas (con Sikaflex en la cara de las bridas, nada más)
+  casi(g.qto.her.L_sellado_m, PF.engargolado_circ_m + PF.engargolado_long_m, 1e-9);
+  assert.ok(g.qto.tmp.unitarios_min.soldadura < C.cotizarPartida(p, soldado).qto.tmp.unitarios_min.soldadura, 'sólo queda el cierre de los aros');
+  // la reducción con injerto: la silleta es junta transversal
+  const r = C.cotizarPartida({ ...galv24, familia: 'REDUCCION_INJERTO', D1_mm: 279.4, D2_mm: 254, d_mm: 127, beta_deg: 30, L_reduccion_mm: 500, L_ramal_mm: 450 }, M).geometria;
+  const rs = C.cotizarPartida({ ...galv24, familia: 'REDUCCION_INJERTO', D1_mm: 279.4, D2_mm: 254, d_mm: 127, beta_deg: 30, L_reduccion_mm: 500, L_ramal_mm: 450 }, soldado).geometria;
+  casi(r.engargolado_circ_m, rs.sold.filete_m, 1e-12, 'la silleta');
+  casi(r.engargolado_long_m, rs.sold.tope_m, 1e-12, 'la costura del cono y la del injerto');
+  // el acero al carbón y la pieza personalizada no cambian
+  assert.equal(C.cotizarPartida({ ...p, material_id: 'ACERO_CARBON', calibre: 16 }, M).geometria.engargolado_m, 0);
+  const pers = { ...galv24, familia: 'PERSONALIZADO', A_neta_m2: 1, L_corte_m: 4, L_sold_tope_m: 2, n_piezas: 1, n_extremos: 0 };
+  assert.equal(C.cotizarPartida(pers, M).geometria.sold.tope_m, 2, 'lo capturado manda');
 });

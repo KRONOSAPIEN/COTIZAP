@@ -480,6 +480,10 @@
         Object.keys(M.materiales).forEach((id) => {
           const mat = M.materiales[id];
           if (!esObjeto(mat)) return;
+          // la costura de la lámina (una de «proceso › costuras») y cómo se fija la brida al ducto
+          const costuras = esObjeto(M.proceso) && esObjeto(M.proceso.costuras) ? M.proceso.costuras : {};
+          if (mat.costura !== undefined && !tiene(costuras, mat.costura)) agregar(['materiales', id, 'costura'], `debe ser una costura de «proceso › costuras» (${claves(costuras).join(', ')}); vale ${texto(mat.costura)}`);
+          if (mat.brida_al_ducto !== undefined && !['SOLDADA', 'CEJA'].includes(mat.brida_al_ducto)) agregar(['materiales', id, 'brida_al_ducto'], `debe ser SOLDADA o CEJA; vale ${texto(mat.brida_al_ducto)}`);
           ['pintura_cuerpo', 'pintura_bridas'].forEach((campo) => {
             if (!esObjeto(mat[campo])) { agregar(['materiales', id, campo], 'falta el sistema de pintura por ubicación (INTERIOR y EXTERIOR)'); return; }
             MAT.UBICACIONES.forEach((u) => {

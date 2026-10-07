@@ -85,6 +85,8 @@
       k_rolado: 1,
       L_corte_m: 0,
       sold: { tope_m: 0, filete_m: 0 },
+      sold_transversal_m: 0, // la parte de la soldadura que es junta transversal (entre gajos, silleta, unión entre piezas); el resto es costura longitudinal
+      costura: 'SOLDADA', // SOLDADA o ENGARGOLADA: cómo se cierran las costuras y juntas de la pieza (la del material)
       engargolado_m: 0, // total (longitudinal + entre yardas): lo que se cobra en tiempo de engargolado
       engargolado_long_m: 0, // costura longitudinal engargolada (Pittsburgh)
       engargolado_circ_m: 0, // juntas engargoladas entre yardas (transversales: se sellan en toda clase de sellado)
@@ -264,8 +266,12 @@
   function recto(p, e, M) {
     const PF = nuevoPF('RECTO');
     const forma = p.forma || 'REDONDA';
-    const costura = M.proceso.costuras[p.tipo_costura || 'A_TOPE'];
-    exigir(costura, `Tipo de costura desconocido: ${p.tipo_costura}`);
+    // sin elegirla, la costura del material (el galvanizado se engargola: PITTSBURGH)
+    const delMaterial = M.materiales && M.materiales[p.material_id] && M.materiales[p.material_id].costura;
+    const tipoCostura = p.tipo_costura || delMaterial || 'A_TOPE';
+    const costura = M.proceso.costuras[tipoCostura];
+    exigir(costura, `Tipo de costura desconocido: ${tipoCostura}`);
+    PF.costura = costura.soldada ? 'SOLDADA' : 'ENGARGOLADA';
     exigir(p.L_mm > 0, 'La longitud total del tramo debe ser mayor que 0.');
 
     const AY = M.proceso.armado_yardas;
@@ -343,7 +349,7 @@
     }
 
     Object.assign(PF.detalle, {
-      ancho_plantilla_mm: B, allowance_costura_mm: costura.allowance_mm, n_costuras: n_cost,
+      ancho_plantilla_mm: B, allowance_costura_mm: costura.allowance_mm, n_costuras: n_cost, tipo_costura: tipoCostura,
       yarda_mm: Y, n_anillos: arm.n_anillos, n_juntas_yardas: arm.n_juntas, L_capa_mm: L_capa, armado: arm,
     });
     return PF;
@@ -377,6 +383,7 @@
     PF.k_rolado = 1;
     PF.L_corte_m = (PI * d.D_med * (2 * j * kappa + 2) + 2 * L_tot) / 1000;
     PF.sold.tope_m = (j * P_j + L_tot) / 1000;
+    PF.sold_transversal_m = (j * P_j) / 1000; // las juntas entre gajos
     PF.n_juntas_internas = j;
     PF.extremos = [extremoRedondo(d, 'A'), extremoRedondo(d, 'B')];
     PF.espigas_defecto = 2;
@@ -543,6 +550,7 @@
     PF.L_corte_m = (2 * (B_c + L_c) + P_h + 2 * (PI * db.D_med + L_r)) / 1000;
     PF.sold.tope_m = (L_c + (L_r - t_med)) / 1000;
     PF.sold.filete_m = P_h / 1000;
+    PF.sold_transversal_m = P_h / 1000; // la silleta
     PF.n_juntas_internas = 1;
     PF.extremos = [extremoRedondo(dm, 'tronco_1'), extremoRedondo(dm, 'tronco_2'), extremoRedondo(db, 'injerto')];
     PF.espigas_defecto = 3;
@@ -710,6 +718,7 @@
     PF.L_corte_m = (PI * (dT.D_med + dS.D_med) + 2 * s_cono + g.P_h + 2 * (PI * db.D_med + L_r)) / 1000;
     PF.sold.tope_m = (s_cono + (L_r - g.t_med)) / 1000; // costura del cono + costura del injerto
     PF.sold.filete_m = g.P_h / 1000; // silleta
+    PF.sold_transversal_m = g.P_h / 1000;
     PF.n_juntas_internas = 1;
     PF.extremos = [extremoRedondo(dT, 'D1'), extremoRedondo(dS, 'D2'), extremoRedondo(db, 'injerto')];
     PF.espigas_defecto = 3;
@@ -749,6 +758,7 @@
     PF.L_corte_m = (2 * (PI * dT.D_med + p.L_tronco_mm) + 2 * (PI * d1.D_med + p.L1_mm) + 2 * (PI * d2.D_med + p.L2_mm) + PI * (d1.D_med + d2.D_med)) / 1000;
     PF.sold.tope_m = (p.L_tronco_mm + p.L1_mm + p.L2_mm) / 1000;
     PF.sold.filete_m = (PI * (d1.D_med + d2.D_med)) / 1000;
+    PF.sold_transversal_m = PF.sold.filete_m;
     PF.n_juntas_internas = 2;
     PF.extremos = [extremoRedondo(dT, 'tronco'), extremoRedondo(d1, 'ramal_1'), extremoRedondo(d2, 'ramal_2')];
     PF.espigas_defecto = 3;
@@ -799,10 +809,10 @@
   }
 
   /**
-   * Armado de piezas: la unión soldada entre dos piezas de otras partidas («unir injerto de 11″ con codo de 60° para obtener
-   * 90°», como en los planos de pedido). Sin lámina: el ajuste de las dos bocas (una junta de armado por unión) y un cordón
-   * de filete continuo al perímetro exterior. Los extremos que se unen van sin brida en sus partidas (`extremos_sin_brida`, o
-   * «brida en un extremo» en el tramo recto).
+   * Armado de piezas: la unión entre dos piezas de otras partidas («unir injerto de 11″ con codo de 60° para obtener 90°»,
+   * como en los planos de pedido). Sin lámina: el ajuste de las dos bocas (una junta de armado por unión) y un cordón de
+   * filete continuo al perímetro exterior, que en galvanizado se vuelve engargolado transversal (`engargolar`). Los extremos
+   * que se unen van sin brida en sus partidas (`extremos_sin_brida`, o «brida en un extremo» en el tramo recto).
    */
   function union(p, e) {
     const PF = nuevoPF('UNION');
@@ -814,9 +824,38 @@
     PF.n_virolas = 0;
     PF.n_juntas_internas = n;
     PF.sold.filete_m = (n * PI * d.D_ext) / 1000;
+    PF.sold_transversal_m = PF.sold.filete_m; // la unión es una junta transversal: en galvanizado se engargola, como las yardas
     PF.D_ref_mm = d.D_med;
     PF.detalle = { D_ext_mm: d.D_ext, n_uniones: n, origen: 'Sólo la unión: las piezas que se unen están en otras partidas' };
     return PF;
+  }
+
+  /**
+   * Lámina que no se suelda: si la costura del material (`materiales.*.costura`) es engargolada —el galvanizado «se engargola
+   * siempre»—, las costuras y juntas que la familia soldaría se engargolan: las longitudinales llevan en la lámina la holgura de
+   * esa costura (la del Pittsburgh) y las transversales (juntas entre gajos, silleta del injerto, unión entre piezas) se pliegan
+   * como las juntas entre yardas, con su pliegue en la merma. Una operación de engargolado por costura y por junta. El tramo
+   * recto lo dice su costura (y su junta entre yardas) y la pieza personalizada trae lo que se capturó.
+   */
+  function engargolar(PF, p, M) {
+    const mat = M.materiales && M.materiales[p.material_id];
+    const c = mat && M.proceso.costuras ? M.proceso.costuras[mat.costura] : null;
+    if (!c || c.soldada !== false) return;
+    if (['RECTO', 'PERSONALIZADO', 'BRIDA'].includes(PF.familia)) return;
+    const total = PF.sold.tope_m + PF.sold.filete_m;
+    PF.costura = 'ENGARGOLADA';
+    if (!(total > 0)) return;
+    const transversal = Math.min(total, PF.sold_transversal_m || 0);
+    const longitudinal = total - transversal;
+    PF.A_neta_m2 += (longitudinal * (c.allowance_mm || 0)) / 1000;
+    PF.engargolado_long_m += longitudinal;
+    PF.engargolado_circ_m += transversal;
+    PF.engargolado_m = PF.engargolado_long_m + PF.engargolado_circ_m;
+    PF.n_engargolados = (longitudinal > 0 ? PF.n_virolas || 1 : 0) + (transversal > 0 ? PF.n_juntas_internas || 1 : 0);
+    PF.sold.tope_m = 0;
+    PF.sold.filete_m = 0;
+    PF.sold_transversal_m = 0;
+    PF.detalle = { ...PF.detalle, costura: mat.costura, engargolado_long_m: longitudinal, engargolado_circ_m: transversal, holgura_engargolado_mm: c.allowance_mm || 0 };
   }
 
   /** Quita la brida de los extremos que la partida pide sin brida (`extremos_sin_brida`: se unen a otra pieza o a una manguera). */
@@ -847,6 +886,7 @@
       default: throw new U.ErrorValidacion([`Familia desconocida: ${p.familia}`]);
     }
     quitarBridas(PF, p);
+    engargolar(PF, p, M);
     // Superficie exterior (pintura): exacta en recto y codo; en el resto A_ext ≈ A_neta · (D_ref + e)/D_ref
     if (!(PF.A_ext_m2 > 0)) PF.A_ext_m2 = PF.D_ref_mm > 0 ? PF.A_neta_m2 * (1 + e / PF.D_ref_mm) : PF.A_neta_m2;
     return PF;

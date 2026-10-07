@@ -400,6 +400,7 @@ svg.plano { display: block; max-width: 100%; height: auto; overflow: visible; }
 .pl-brida { fill: none; stroke: var(--fg); stroke-width: 3.2px; stroke-linecap: butt; vector-effect: non-scaling-stroke; }
 .pl-brida-suelta { fill: none; stroke: var(--fg); stroke-width: 2.2px; stroke-dasharray: 4 3; stroke-linecap: butt; vector-effect: non-scaling-stroke; }
 .pl-soldadura { fill: none; stroke: var(--s2); stroke-width: 3.2px; vector-effect: non-scaling-stroke; }
+.pl-engargolado { fill: none; stroke: var(--s2); stroke-width: 2.4px; stroke-dasharray: 5 2.5; vector-effect: non-scaling-stroke; }
 .pl-barreno { fill: var(--surface); stroke: var(--fg); stroke-width: 1px; }
 .pl-eje, .pl-eje-fino { fill: none; stroke: var(--fg-3); stroke-width: 0.8px; stroke-dasharray: 10 3 2 3; vector-effect: non-scaling-stroke; }
 .pl-oculta { fill: none; stroke: var(--fg-3); stroke-width: 0.8px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }

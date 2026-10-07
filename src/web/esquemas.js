@@ -64,7 +64,7 @@
     servicio: [['', 'Según la cotización'], ['VENTILACION', 'Ventilación'], ['POLVO', 'Colección de polvo'], ['ABRASIVO', 'Material abrasivo']],
     riesgo: [['', 'Según la cotización'], ['BAJO', 'Bajo'], ['MEDIO', 'Medio'], ['ALTO', 'Alto']],
     proceso_corte: [['', 'Automático'], ['GUILLOTINA', 'Guillotina'], ['PLASMA', 'Plasma CNC'], ['LASER', 'Láser']],
-    tipo_costura: [['A_TOPE', 'Soldada a tope'], ['TRASLAPE', 'Soldada a traslape'], ['PITTSBURGH', 'Engargolado Pittsburgh']],
+    tipo_costura: [['', 'Según el material (galvanizado: engargolado)'], ['A_TOPE', 'Soldada a tope'], ['TRASLAPE', 'Soldada a traslape'], ['PITTSBURGH', 'Engargolado Pittsburgh']],
     excentrica: [['NO', 'Concéntrica'], ['CARA_PLANA', 'Excéntrica · cara plana']],
     // Extremo libre del tramo de ajuste (el de las tablas maestras se ofrece aparte, como «Predeterminado»)
     ajuste: [['SUELTA', 'Brida suelta (aro terminado, tornillos y junta)'], ['SIN_BRIDA', 'Sin brida (brida en un solo extremo)'], ['CON_BRIDA', 'Brida de taller (bridas en ambos extremos)']],
@@ -89,7 +89,7 @@
       { id: 'a_mm', etiqueta: 'Ancho a', tipo: 'dim', visible: rect, defecto: 500 },
       { id: 'b_mm', etiqueta: 'Alto b', tipo: 'dim', visible: rect, defecto: 300 },
       { id: 'L_mm', etiqueta: 'Longitud total', tipo: 'dim', defecto: 3000 },
-      { id: 'tipo_costura', etiqueta: 'Costura longitudinal', tipo: 'select', opciones: 'tipo_costura', defecto: 'A_TOPE' },
+      { id: 'tipo_costura', etiqueta: 'Costura longitudinal', tipo: 'select', opciones: 'tipo_costura', defecto: '' },
       {
         id: 'yarda_mm', grupo: 'armado', etiqueta: 'Ancho de la yarda', tipo: 'select', opciones: 'yardas', numerico: true, sufijoFuera: ' mm',
         ayuda: 'La yarda es un anillo rolado del ancho de la lámina; se engargolan hasta 3 por pieza',
@@ -177,7 +177,7 @@
       { id: 'a_mm', etiqueta: 'Ancho a del ducto', tipo: 'dim', visible: rect, defecto: 500 },
       { id: 'b_mm', etiqueta: 'Alto b del ducto', tipo: 'dim', visible: rect, defecto: 300 },
     ],
-    UNION: [ // la unión soldada entre dos piezas de otras partidas: «unir injerto de 11″ con codo de 60° para obtener 90°»
+    UNION: [ // la unión entre dos piezas de otras partidas (engargolada en galvanizado): «unir injerto de 11″ con codo de 60° para obtener 90°»
       { id: 'D_mm', etiqueta: 'Diámetro de la unión', tipo: 'dim', defecto: 279.4, ayuda: 'El de las bocas que se unen. Las piezas van en sus partidas, sin brida en esos extremos' },
       { id: 'n_uniones', etiqueta: 'Uniones por pieza', tipo: 'int', opcional: true, min: 1, paso: 1, ayuda: 'Vacío = 1. Un codo, un injerto y una yarda armados en una pieza son 2 uniones' },
     ],
@@ -353,8 +353,11 @@
       }
       case 'BRIDA':
         return p.forma === 'RECTANGULAR' ? `marco para ducto ${s(p.a_mm)} × ${s(p.b_mm)}` : `aro para ducto ${d(p.D_mm)}`;
-      case 'UNION':
-        return `unión soldada ${d(p.D_mm)}${Number(p.n_uniones) > 1 ? ` · ${plural(p.n_uniones, 'unión', 'uniones')} por pieza` : ''}`;
+      case 'UNION': { // engargolada si la costura del material no se suelda (galvanizado), soldada en los demás
+        const mat = M && M.materiales && M.materiales[p.material_id];
+        const costura = mat && M.proceso && M.proceso.costuras ? M.proceso.costuras[mat.costura] : null;
+        return `unión ${costura && costura.soldada === false ? 'engargolada' : 'soldada'} ${d(p.D_mm)}${Number(p.n_uniones) > 1 ? ` · ${plural(p.n_uniones, 'unión', 'uniones')} por pieza` : ''}`;
+      }
       case 'SOPORTE': {
         const largo = p.largo_pieza_mm !== undefined && p.largo_pieza_mm !== '' ? `${l(p.largo_pieza_mm)} por pieza`
           : Number(p.abrazadera_D_mm) > 0 ? `abrazadera para ducto ${d(p.abrazadera_D_mm)}` : 'sin largo';

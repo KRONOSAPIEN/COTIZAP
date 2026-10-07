@@ -186,8 +186,13 @@ test('Clases de sellado SMACNA: A ≥ B ≥ C ≥ NINGUNA (costura engargolada c
 });
 
 test('Costura soldada vs engargolada: Pittsburgh no suelda la costura longitudinal y suma tiempo de engargolado', () => {
-  const sol = C.cotizarPartida({ ...recto, material_id: 'GALVANIZADO', calibre: 20, servicio: 'VENTILACION', tipo_union: 'ESPIGA' }, M);
+  const sol = C.cotizarPartida({ ...recto, material_id: 'GALVANIZADO', calibre: 20, servicio: 'VENTILACION', tipo_union: 'ESPIGA', tipo_costura: 'A_TOPE' }, M);
   const eng = C.cotizarPartida({ ...recto, material_id: 'GALVANIZADO', calibre: 20, servicio: 'VENTILACION', tipo_union: 'ESPIGA', tipo_costura: 'PITTSBURGH' }, M);
+  // sin elegirla, la costura del tramo es la del material: el galvanizado se engargola
+  const porMaterial = C.cotizarPartida({ ...recto, material_id: 'GALVANIZADO', calibre: 20, servicio: 'VENTILACION', tipo_union: 'ESPIGA', tipo_costura: undefined }, M);
+  assert.equal(porMaterial.geometria.detalle.tipo_costura, 'PITTSBURGH');
+  assert.equal(porMaterial.precio.importe, eng.precio.importe);
+  assert.equal(C.cotizarPartida({ ...recto, tipo_costura: undefined }, M).geometria.detalle.tipo_costura, 'A_TOPE', 'el acero al carbón, a tope');
   // Las yardas de una pieza siempre se engargolan entre sí: hay engargolado aun con la costura longitudinal soldada...
   assert.ok(sol.qto.tmp.unitarios_min.engargolado > 0);
   assert.equal(sol.qto.PF.engargolado_long_m, 0);

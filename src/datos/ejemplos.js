@@ -16,14 +16,17 @@
  * compró) y cada abrazadera es de media vuelta para el ducto de 11″, con dos orejas.
  *
  * pedidoDucteria(): el pedido de ductería de los planos del 30-sep-2026 (bridas, codos, reducciones con injerto y yardas) y del
- * armado de piezas del 2-oct-2026, tal como se pidió. Lámina galvanizada cal. 24, yardas de 914 mm, codos con R = 1.5D e injertos
- * a 30° con los largos de los planos. Las bridas son partidas aparte (las de solera se hacen en el taller; las de 5″ y 6″ son de
- * placa cortada): cada pieza lleva sus bridas «de otra partida» —sólo se arman y se sueldan al ducto— en los extremos que dicen
- * los planos, y van sin brida los que se unen a otra pieza (armado) o a una manguera; el cuadre de bridas compara unas y otras.
+ * armado de piezas del 2-oct-2026, tal como se pidió y se compró: el proveedor lo cobró en $22,000 con IVA y fue en lámina
+ * galvanizada cal. 22 (el taller, 7-oct-2026; los planos dicen cal. 24). Yardas de 914 mm, codos con R = 1.5D e injertos a 30° con
+ * los largos de los planos. El galvanizado se engargola siempre (costuras, juntas y el armado de piezas, como las yardas entre sí)
+ * y las bridas no se sueldan: se meten y se le hace una ceja al ducto (lo dicen las tablas del material). Las bridas son partidas
+ * aparte (las de solera se hacen en el taller; las de 5″ y 6″ son de placa cortada): cada pieza lleva sus bridas «de otra
+ * partida» —aquí sólo se meten y se les hace la ceja— en los extremos que dicen los planos, y van sin brida los que se unen a
+ * otra pieza (armado) o a una manguera; el cuadre de bridas compara unas y otras.
  * «De 11″ a 11″ con injerto» y «de 6″ a 6″ con injerto» no reducen: son Injertos simples (ducto con injerto).
- * Supuestos: «unir» es una unión soldada, sin bridas; el injerto de 3″ va a una manguera (no hay bridas de 3″); la «yarda de 3″»
- * del armado del codo de 6″ es la yarda de 6″ (no hay ducto de 3″ en las yardas); el codo de 60° de 5″ que pide el armado de la
- * reducción de 11″ a 10″ no viene en la hoja de codos y no se agrega.
+ * Supuestos: el injerto de 3″ va a una manguera (no hay bridas de 3″); la «yarda de 3″» del armado del codo de 6″ es la yarda de
+ * 6″; el codo de 60° de 5″ que pide el armado de la reducción de 11″ a 10″ no viene en la hoja de codos y no se agrega; la brida
+ * de 6″ que falta en el cuadre «va en otra unión» (el taller mandará el diagrama).
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -92,8 +95,8 @@
 
   function pedidoDucteria() {
     const pulg = (x) => x * 25.4;
-    // las bridas de cada pieza son de las partidas de bridas: aquí sólo se arman y se sueldan al ducto
-    const lamina = { material_id: 'GALVANIZADO', calibre: 24, tipo_union: 'BRIDADO', bridas_aparte: true, ref_diametro: 'INTERIOR' };
+    // las bridas de cada pieza son de las partidas de bridas: aquí sólo se meten y se les hace la ceja (galvanizado)
+    const lamina = { material_id: 'GALVANIZADO', calibre: 22, tipo_union: 'BRIDADO', bridas_aparte: true, ref_diametro: 'INTERIOR' };
     const sin = (lista) => (lista && lista.length ? { extremos_sin_brida: lista } : {});
     const codo = (D, theta, gajos, n, sinBrida) => ({ familia: 'CODO', ...lamina, D_mm: pulg(D), theta_deg: theta, k_R: 1.5, n_gajos: gajos, cantidad: n, ...sin(sinBrida) });
     const reduccion = (D1, D2, d, L, Lr, n, sinBrida) => ({
@@ -101,12 +104,13 @@
     });
     const injerto = (D, d, L, Lr, n, sinBrida) => ({ familia: 'RAMAL', ...lamina, D_mm: pulg(D), d_mm: pulg(d), beta_deg: 30, L_cuerpo_mm: L, L_ramal_mm: Lr, cantidad: n, ...sin(sinBrida) });
     // yardas: «bridas en ambos extremos» (CON_BRIDA) o «brida en un extremo» (SIN_BRIDA); con ajuste, la brida suelta de las tablas
-    const yardas = (D, L, n, extremo) => ({ familia: 'RECTO', ...lamina, D_mm: pulg(D), L_mm: L, tipo_costura: 'PITTSBURGH', cantidad: n, ...(extremo ? { extremo_ajuste: extremo } : {}) });
-    const union = (D, descripcion, n) => ({ familia: 'UNION', material_id: 'GALVANIZADO', calibre: 24, tipo_union: 'LISO', ref_diametro: 'INTERIOR', D_mm: pulg(D), descripcion, cantidad: 1, ...(n > 1 ? { n_uniones: n } : {}) });
-    const brida = (D, n) => ({ familia: 'BRIDA', material_id: 'GALVANIZADO', calibre: 24, ref_diametro: 'INTERIOR', D_mm: pulg(D), cantidad: n });
+    // la costura longitudinal es la del material (engargolado Pittsburgh)
+    const yardas = (D, L, n, extremo) => ({ familia: 'RECTO', ...lamina, D_mm: pulg(D), L_mm: L, cantidad: n, ...(extremo ? { extremo_ajuste: extremo } : {}) });
+    const union = (D, descripcion, n) => ({ familia: 'UNION', material_id: 'GALVANIZADO', calibre: 22, tipo_union: 'LISO', ref_diametro: 'INTERIOR', D_mm: pulg(D), descripcion, cantidad: 1, ...(n > 1 ? { n_uniones: n } : {}) });
+    const brida = (D, n) => ({ familia: 'BRIDA', material_id: 'GALVANIZADO', calibre: 22, ref_diametro: 'INTERIOR', D_mm: pulg(D), cantidad: n });
     return {
       cliente: '',
-      proyecto: 'Ejemplo: pedido de ductería del 30-sep-2026 (bridas, codos, reducciones con injerto, yardas y armado de piezas)',
+      proyecto: 'Ejemplo: pedido de ductería del 30-sep-2026 en cal. 22 (bridas, codos, reducciones con injerto, yardas y armado de piezas)',
       fecha: '2026-09-30', riesgo: 'MEDIO', servicio: 'POLVO', ubicacion: 'INTERIOR', unidad_diam: 'in', unidad_long: 'mm', yarda_mm: 914,
       partidas: [
         // codos (el extremo «B» de los que se unen en el armado va sin brida)

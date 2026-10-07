@@ -214,9 +214,15 @@ test('el pedido del 30-sep-2026 (ejemplo): sus 36 partidas se calculan, se dibuj
   assert.deepEqual(r.partidas.filter((f) => f.familia === 'BRIDA').map((f) => f.qto.her.aros_sueltos[0].n_tornillos), [8, 8, 6, 6]);
   // el cuadre: 11″, 10″, 9″ y 7″ cuadran con la hoja de bridas; con estos planos falta 1 de 6″ y sobran 3 de 5″
   assert.deepEqual(r.bridas.filas.map((x) => [Math.round(x.D_nom_mm * 10) / 10, x.piden, x.hay]), [[279.4, 22, 22], [254, 6, 6], [228.6, 2, 2], [177.8, 4, 4], [152.4, 3, 2], [127, 21, 24]]);
-  // las piezas de lámina: galvanizado cal. 24 con sus bridas de otra partida; los armados, sin bridas
+  // las piezas de lámina: galvanizado cal. 22 (lo que se compró) con sus bridas de otra partida; los armados, sin bridas
   cot.partidas.filter((p) => ['CODO', 'REDUCCION_INJERTO', 'RAMAL', 'RECTO'].includes(p.familia)).forEach((p) => {
-    assert.deepEqual([p.material_id, p.calibre, p.tipo_union, p.bridas_aparte], ['GALVANIZADO', 24, 'BRIDADO', true]);
+    assert.deepEqual([p.material_id, p.calibre, p.tipo_union, p.bridas_aparte], ['GALVANIZADO', 22, 'BRIDADO', true]);
   });
+  // el galvanizado se engargola (costuras, juntas y armados) y sus bridas van con ceja: ni un metro de soldadura
+  const lamina = r.partidas.filter((f) => ['CODO', 'REDUCCION_INJERTO', 'RAMAL', 'RECTO', 'UNION'].includes(f.familia));
+  assert.ok(lamina.every((f) => f.geometria.costura === 'ENGARGOLADA' && f.qto.tmp.detalle.L_soldadura_m === 0));
+  const cejas = lamina.reduce((t, f) => t + f.qto.her.n_cejas * f.entrada.cantidad, 0);
+  assert.equal(cejas, 58 - 2, 'una ceja por brida de taller: las 58 que piden menos las 2 sueltas de los ajustes');
+  assert.ok(dibujos.filter((d) => d.familia === 'UNION').every((d) => d.datos.some((x) => /uni(ón|ones) engargolada/i.test(x))), 'los armados, engargolados como las yardas');
   assert.equal(cot.yarda_mm, 914, 'yardas de 3 ft, como en los planos');
 });

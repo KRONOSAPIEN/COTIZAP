@@ -107,6 +107,10 @@
     /*   pintura_bridas : sistema de los aros de brida, por ubicación                                                    */
     /* Acero al carbón: se pinta; en interior sólo pintura (ESMALTE), en exterior primario + pintura (PRIMARIO_ESMALTE). */
     /* Galvanizado: no se pinta más que las bridas. Inoxidable: no se pinta. Los sistemas son los de proceso.pintura.sistemas. */
+    /* costura: la de proceso.costuras con que se cierran las costuras y se unen las piezas de lámina de este material. El      */
+    /* galvanizado «se engargola siempre» (el taller, 7-oct-2026): PITTSBURGH; el acero al carbón y el inoxidable se sueldan.     */
+    /* brida_al_ducto: SOLDADA (filete aro–ducto) o CEJA (el aro se mete y al ducto se le hace una ceja para que no se salga;    */
+    /* luego se sella con su otra pieza): en galvanizado, CEJA.                                                                    */
     /* ------------------------------------------------------------------ */
     materiales: {
       ACERO_CARBON: {
@@ -121,6 +125,8 @@
         gas_ref: 'precio_m3_gas_mezcla_ar_co2',
         f_sold: 1.0,
         f_acabado: 0.25,
+        costura: 'A_TOPE',
+        brida_al_ducto: 'SOLDADA',
         pintura_cuerpo: { INTERIOR: 'ESMALTE', EXTERIOR: 'PRIMARIO_ESMALTE' },
         pintura_bridas: { INTERIOR: 'ESMALTE', EXTERIOR: 'PRIMARIO_ESMALTE' },
       },
@@ -136,6 +142,8 @@
         gas_ref: 'precio_m3_gas_mezcla_ar_co2',
         f_sold: 1.2,
         f_acabado: 0.35,
+        costura: 'PITTSBURGH', // «al ser acero galvanizado se engargolan siempre»
+        brida_al_ducto: 'CEJA', // «primero se meten y después se les hace una ceja para evitar que salgan»
         pintura_cuerpo: { INTERIOR: 'NINGUNA', EXTERIOR: 'NINGUNA' }, // la lámina galvanizada no se pinta…
         pintura_bridas: { INTERIOR: 'ESMALTE', EXTERIOR: 'PRIMARIO_ESMALTE' }, // …más que las bridas (aros de solera negra)
       },
@@ -151,6 +159,8 @@
         gas_ref: 'precio_m3_gas_argon',
         f_sold: 1.0,
         f_acabado: 0.6,
+        costura: 'A_TOPE',
+        brida_al_ducto: 'SOLDADA',
         pintura_cuerpo: { INTERIOR: 'NINGUNA', EXTERIOR: 'NINGUNA' },
         pintura_bridas: { INTERIOR: 'NINGUNA', EXTERIOR: 'NINGUNA' },
       },
@@ -166,6 +176,8 @@
         gas_ref: 'precio_m3_gas_argon',
         f_sold: 1.0,
         f_acabado: 0.6,
+        costura: 'A_TOPE',
+        brida_al_ducto: 'SOLDADA',
         pintura_cuerpo: { INTERIOR: 'NINGUNA', EXTERIOR: 'NINGUNA' },
         pintura_bridas: { INTERIOR: 'NINGUNA', EXTERIOR: 'NINGUNA' },
       },
@@ -301,6 +313,9 @@
         t_junta_base_min: 3.0,
         t_junta_por_m_min: 6.0,
         t_ajuste_aro_min: 4.0,
+        // la ceja de una brida que no se suelda (materiales.*.brida_al_ducto = CEJA): supuestos por confirmar con el taller
+        t_ceja_aro_min: 2.0,
+        t_ceja_aro_min_m: 3.0,
         t_fijacion_min: 0.4,
         t_formado_espiga_min: 3.0,
         k_dif: { RECTO: 1.0, CODO: 1.35, REDUCCION: 1.2, TRANSICION: 1.5, RAMAL: 1.6, REDUCCION_INJERTO: 1.9, PANTALON: 1.9, PERSONALIZADO: 1.0 },
@@ -403,6 +418,7 @@
           paso_tornillo_mm: 150, n_min_tornillos: 6, multiplo_tornillos: 2,
           f_reserva_tornilleria: 0.05, f_traslape_empaque: 0.05, f_cont_soldadura_aro: 1.0,
           junta: 'SELLADOR', ml_sellador_junta_m: 40,
+          ceja_mm: 10, // lámina que se deja de más en el extremo para doblarla sobre la brida (supuesto por confirmar)
         },
         ESPIGA: {
           nombre: 'Espiga (macho-hembra con fijación y sellador)',
