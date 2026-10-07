@@ -281,7 +281,7 @@ test('Brida de placa cortada por el proveedor: precio sin IVA del catálogo, sus
   // en el control de gastos, la compra va a «compras a terceros» y su tornillería y su junta a material
   const R = G.resumen(res, [], 0.16);
   casi(R.categorias.find((x) => x.clave === 'PROVEEDOR').cotizado, 3440, 1e-9);
-  const material = res.partidas.reduce((s, f) => s + f.costos.subtotales.materiales, 0) - 3440;
+  const material = [...res.partidas, ...res.automaticas].reduce((s, f) => s + f.costos.subtotales.materiales, 0) - 3440; // con el sobrante, que siempre se cobra
   casi(R.categorias.find((x) => x.clave === 'MATERIAL').cotizado, material, 1e-9);
   // el catálogo rechaza juegos que no son enteros
   const malo = crearMaestros({ compras: { articulos: { BRIDA_PLACA_5: { tornillos_pieza: -1 } } } });
@@ -347,20 +347,22 @@ test('Lista de compras: hojas, barras, tornillos por decena, cartuchos y litros 
   casi(L.sobrante, L.renglones.reduce((s, x) => s + x.sobrante, 0), 1e-12);
 });
 
-test('Piezas enteras: la cotización puede cobrar el sobrante como partida automática (sin cargo mínimo); sin pedirlo no cambia nada', () => {
+test('Piezas enteras: el sobrante SIEMPRE se cobra como partida automática (sin cargo mínimo); el sí/no anterior ya no cuenta', () => {
   const cot = { partidas: [{ ...recto, cantidad: 1 }] };
-  const sin = C.cotizar(cot, M);
-  assert.deepEqual(sin.automaticas, []);
-  const con = C.cotizar({ ...cot, piezas_enteras: true }, M);
+  const con = C.cotizar(cot, M);
+  assert.ok(con.compras.sobrante > 0);
   assert.equal(con.automaticas.length, 1);
   const a = con.automaticas[0];
   assert.equal(a.familia, 'AJUSTE_COMPRA');
-  casi(a.costos.CD, sin.compras.sobrante, 1e-12);
-  casi(a.pila.precio, K(sin.compras.sobrante, 0), 1e-9);
+  casi(a.costos.CD, con.compras.sobrante, 1e-12);
+  casi(a.pila.precio, K(con.compras.sobrante, 0), 1e-9);
   assert.equal(a.precio.aplico_cargo_minimo, false);
-  casi(con.totales.subtotal, sin.totales.subtotal + a.precio.importe, 1e-9);
+  casi(con.totales.subtotal, con.partidas.reduce((s, f) => s + f.precio.importe, 0) + a.precio.importe, 1e-9);
   assert.equal(con.partidas.length, 1, 'la partida automática no se mezcla con las del usuario');
-  assert.equal(C.cotizar({ ...cot, piezas_enteras: 'sí' }, M).automaticas.length, 0, 'sólo con true');
+  // una cotización guardada con «no cobrar» (o con el sí) se cobra igual
+  [false, true, 'sí'].forEach((v) => assert.equal(C.cotizar({ ...cot, piezas_enteras: v }, M).automaticas.length, 1, String(v)));
+  // sin sobrante (un artículo comprado entero), no hay partida automática
+  assert.deepEqual(C.cotizar({ partidas: [{ familia: 'COMPRADO', cantidad: 2, precio_compra_unitario: 100 }] }, M).automaticas, []);
 });
 
 test('Venta pactada: margen real, precio mínimo para no perder y aviso si el valor no sirve', () => {

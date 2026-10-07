@@ -567,9 +567,12 @@
         };
       }
     });
-    // Lista de compras (siempre) y, si la cotización lo pide, el sobrante de comprar piezas enteras como partida automática
+    // Lista de compras y el sobrante de comprar piezas enteras, que SIEMPRE se cobra (el taller, 7-oct-2026) como partida
+    // automática; `piezas_enteras` de versiones anteriores ya no se usa
     const compras = COMP.listaCompras(filas, M);
-    const automaticas = c.piezas_enteras === true && compras.sobrante > 0.005 ? [partidaSobrante(compras.sobrante, defs.riesgo || 'MEDIO', M)] : [];
+    // un riesgo ilegible en la cotización no tumba el cálculo (cada partida ya lo señala): el sobrante va con el riesgo medio
+    const riesgoSobrante = typeof defs.riesgo === 'string' && M.capas.imprevistos_pct && Object.prototype.hasOwnProperty.call(M.capas.imprevistos_pct, defs.riesgo) ? defs.riesgo : 'MEDIO';
+    const automaticas = compras.sobrante > 0.005 ? [partidaSobrante(compras.sobrante, riesgoSobrante, M)] : [];
     const ok = [...filas.filter((f) => f.ok), ...automaticas];
     const C = M.capas;
     const subtotal = U.redondear(ok.reduce((s, f) => s + f.precio.importe, 0), 2);

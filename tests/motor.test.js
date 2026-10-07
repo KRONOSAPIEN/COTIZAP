@@ -124,7 +124,7 @@ test('Cotización: totales, IVA y partidas con error no tumban el resto', () => 
   assert.equal(r.totales.n_partidas_error, 1);
   assert.equal(r.partidas[2].ok, false);
   assert.match(r.partidas[2].errores[0], /calibre 99/i);
-  const suma = r.partidas.filter((f) => f.ok).reduce((s, f) => s + f.precio.importe, 0);
+  const suma = [...r.partidas.filter((f) => f.ok), ...r.automaticas].reduce((s, f) => s + f.precio.importe, 0); // con el sobrante, que siempre se cobra
   casi(r.totales.subtotal, suma, 1e-12);
   casi(r.totales.iva, U.redondear(suma * 0.16, 2), 1e-12);
   casi(r.totales.total, r.totales.subtotal + r.totales.iva, 1e-12);

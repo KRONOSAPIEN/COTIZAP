@@ -1294,7 +1294,7 @@
   E('compras.tornillos_multiplo', 'Tornillos: se compran de a',
     'En la lista de compras, la tornillería se redondea hacia arriba a un múltiplo de esto.',
     'Número entero de juegos (hoy 10: 208 exactos con 5 % de reserva son 218.4 → se compran 220).',
-    'Sólo cambia la lista de compras y, si se cobra el sobrante, lo que cuesta.',
+    'Sólo cambia la lista de compras y el sobrante, que siempre se cobra.',
     { afecta: ['mat'], tip: [1, 100] });
   E('compras.pintura_envase_L', 'Pintura: tamaño del envase',
     'En la lista de compras, la pintura se compra en envases completos de este tamaño.',

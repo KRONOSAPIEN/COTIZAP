@@ -42,18 +42,18 @@ const ok = (cond, msg) => {
     page.on('console', (m) => { if (m.type() === 'error' && !/ERR_CERT|ERR_INTERNET|fonts\./.test(m.text())) errores.push(m.text()); });
     page.on('pageerror', (e) => errores.push(`[pageerror] ${e.message}`));
     await page.goto(URL_APP);
-    await page.waitForSelector('#lista-partidas .partida');
+    await page.waitForSelector('#lista-partidas .partida:not(.partida-auto)');
     return page;
   };
   const estadoApp = (page, fn, arg) => page.evaluate(fn, arg);
   const editar = async (page, i) => {
-    await page.locator('#lista-partidas .partida').nth(i).locator('button[aria-label^="Editar"]').click();
+    await page.locator('#lista-partidas .partida:not(.partida-auto)').nth(i).locator('button[aria-label^="Editar"]').click();
     await page.waitForSelector('#dlg-partida[open]');
   };
 
   console.log('1) Carga inicial');
   let page = await nuevaPagina();
-  ok(await page.locator('#lista-partidas .partida').count() === 9, 'la cotización de ejemplo trae 9 partidas (con soportería e instalación)');
+  ok(await page.locator('#lista-partidas .partida:not(.partida-auto)').count() === 9, 'la cotización de ejemplo trae 9 partidas (con soportería e instalación)');
   ok((await page.locator('.hero-val').innerText()).startsWith('$'), 'el total se muestra en pesos');
   ok(await page.locator('#aviso-ilustrativo').isVisible(), 'el aviso de valores ilustrativos está visible');
 
@@ -63,7 +63,7 @@ const ok = (cond, msg) => {
     await page.selectOption('#c_unidad_long', long);
     let iguales = true;
     let exactos = true;
-    const n = await page.locator('#lista-partidas .partida').count();
+    const n = await page.locator('#lista-partidas .partida:not(.partida-auto)').count();
     for (let i = 0; i < n; i += 1) {
       const antes = await estadoApp(page, (k) => window.COTIZAP.web.estadoApp.res.partidas[k].precio.unitario, i);
       const pAntes = await estadoApp(page, (k) => window.COTIZAP.web.estadoApp.cot.partidas[k], i);
@@ -93,7 +93,7 @@ const ok = (cond, msg) => {
     await page.click('#dlg-guardar');
     await page.waitForTimeout(80);
   }
-  ok(await page.locator('#lista-partidas .partida').count() === 9, 'las 9 familias quedaron en la lista');
+  ok(await page.locator('#lista-partidas .partida:not(.partida-auto)').count() === 9, 'las 9 familias quedaron en la lista');
 
   console.log('4) Validación: un injerto demasiado corto no se puede guardar');
   await page.click('#btn-agregar');
@@ -106,12 +106,12 @@ const ok = (cond, msg) => {
   await page.click('#dlg-cancelar');
 
   console.log('5) Duplicar, eliminar y deshacer');
-  await page.locator('#lista-partidas .partida').first().locator('button[aria-label="Duplicar"]').click();
-  ok(await page.locator('#lista-partidas .partida').count() === 10, 'duplicar suma una partida');
-  await page.locator('#lista-partidas .partida').nth(2).locator('button[aria-label="Eliminar"]').click();
-  ok(await page.locator('#lista-partidas .partida').count() === 9, 'eliminar resta una partida');
+  await page.locator('#lista-partidas .partida:not(.partida-auto)').first().locator('button[aria-label="Duplicar"]').click();
+  ok(await page.locator('#lista-partidas .partida:not(.partida-auto)').count() === 10, 'duplicar suma una partida');
+  await page.locator('#lista-partidas .partida:not(.partida-auto)').nth(2).locator('button[aria-label="Eliminar"]').click();
+  ok(await page.locator('#lista-partidas .partida:not(.partida-auto)').count() === 9, 'eliminar resta una partida');
   await page.click('.toast button:has-text("Deshacer")');
-  ok(await page.locator('#lista-partidas .partida').count() === 10, 'deshacer la recupera');
+  ok(await page.locator('#lista-partidas .partida:not(.partida-auto)').count() === 10, 'deshacer la recupera');
 
   console.log('6) Subcontratos y operaciones omitidas');
   const antes = await estadoApp(page, () => window.COTIZAP.web.estadoApp.res.partidas[0].precio.unitario);
@@ -141,7 +141,7 @@ const ok = (cond, msg) => {
   await input.dispatchEvent('change');
   ok(Number(await input.inputValue()) === 40, 'un valor negativo se rechaza y se restaura');
   await page.reload();
-  await page.waitForSelector('#lista-partidas .partida');
+  await page.waitForSelector('#lista-partidas .partida:not(.partida-auto)');
   const t3 = await estadoApp(page, () => window.COTIZAP.web.estadoApp.res.totales.subtotal);
   ok(Math.abs(t3 - t2) < 0.01, 'los cambios persisten tras recargar');
   await page.click('#tab-maestros');
@@ -282,7 +282,7 @@ const ok = (cond, msg) => {
     ok(bd.docs.get('config/maestros').parche.precios.precio_kg_acero_carbon === 33.5, 'lo guardado antes sigue intacto');
     ok(await estadoApp(p2, () => window.localStorage.getItem('cotizap.maestros.pendiente')) === 'true', 'el cambio queda marcado como pendiente en este navegador');
     await p2.reload();
-    await p2.waitForSelector('#lista-partidas .partida');
+    await p2.waitForSelector('#lista-partidas .partida:not(.partida-auto)');
     ok(await esperarHasta(async () => (await aceroGuardado(p2)) === 36), 'tras recargar, lo pendiente manda sobre lo guardado (no se pierde el cambio)');
     await p2.click('#tab-maestros');
     ok(await esperarHasta(async () => /No se pudo guardar/.test(await textoEstado(p2))), 'tras recargar, el aviso sigue: el cambio pendiente aún no llega al almacén');
@@ -343,7 +343,7 @@ const ok = (cond, msg) => {
     ok(await esperarHasta(async () => /sólo en este navegador/i.test(await textoEstado(p))), 'avisa que sólo se guarda en este navegador');
     await editarAcero(p, 37);
     await p.reload();
-    await p.waitForSelector('#lista-partidas .partida');
+    await p.waitForSelector('#lista-partidas .partida:not(.partida-auto)');
     ok((await aceroGuardado(p)) === 37, 'aun así el precio se mantiene al volver a abrir (localStorage)');
     ok(bd.docs.size === 0, 'y no se escribió en el almacén');
     await p.context().close();
@@ -374,7 +374,7 @@ const ok = (cond, msg) => {
     ok(M.empaque === 28 && M.perfiles.length === 1 && M.perfiles[0] === 'SOL38x4.8', 'sin heredar los valores de arranque viejos (empaque, ángulos por diámetro)');
     ok(await esperarHasta(() => bd.docs.has('config/maestros') && bd.docs.get('config/maestros').parche.precios.precio_kg_acero_carbon === 26.5), 'y se sube al artefacto');
     await p.reload();
-    await p.waitForSelector('#lista-partidas .partida');
+    await p.waitForSelector('#lista-partidas .partida:not(.partida-auto)');
     ok((await aceroGuardado(p)) === 26.5, 'la recuperación no se repite ni se pierde al recargar');
     await p.context().close();
   }
@@ -458,8 +458,8 @@ const ok = (cond, msg) => {
     await p.click('#io-cargar');
     await p.waitForTimeout(150);
     ok(await p.locator('#lista-partidas .partida-titulo:has-text("Pantalón (retirado)")').count() === 1, 'el pantalón de una cotización anterior se sigue mostrando, como retirado');
-    ok((await p.locator('#lista-partidas .partida-importe').innerText()).includes('$'), 'y sigue calculando su precio');
-    await p.locator('#lista-partidas .partida').first().locator('button[aria-label^="Editar"]').click();
+    ok((await p.locator('#lista-partidas .partida:not(.partida-auto) .partida-importe').innerText()).includes('$'), 'y sigue calculando su precio');
+    await p.locator('#lista-partidas .partida:not(.partida-auto)').first().locator('button[aria-label^="Editar"]').click();
     await p.waitForSelector('#dlg-partida[open]');
     ok((await p.locator('#dlg-familias .fam span').allInnerTexts()).includes('Pantalón (retirado)'), 'al editarlo aparece su familia retirada');
     await p.click('#dlg-cancelar');
@@ -482,9 +482,9 @@ const ok = (cond, msg) => {
     await p.fill('#io-texto', JSON.stringify(conLado));
     await p.click('#io-cargar');
     await p.waitForTimeout(150);
-    const importes = await p.locator('#lista-partidas .partida-importe').allInnerTexts();
+    const importes = await p.locator('#lista-partidas .partida:not(.partida-auto) .partida-importe').allInnerTexts();
     ok(importes.length === 2 && importes.every((x) => x.includes('$')) && importes[0] === importes[1], 'una cotización anterior con lado (der/izq) y sentido sigue calculando, y los ignora: cuesta lo mismo que la partida sin ellos');
-    await p.locator('#lista-partidas .partida').first().locator('button[aria-label^="Editar"]').click();
+    await p.locator('#lista-partidas .partida:not(.partida-auto)').first().locator('button[aria-label^="Editar"]').click();
     await p.waitForSelector('#dlg-partida[open]');
     ok(await p.locator('#f_lado').count() === 0 && await p.locator('#f_sentido').count() === 0 && !/Lado del injerto|se inclina hacia/.test(await p.locator('#dlg-partida').innerText()), 'y al editarla ya no hay campo de lado ni de inclinación');
     await p.click('#dlg-cancelar');
@@ -499,13 +499,13 @@ const ok = (cond, msg) => {
       await ctx.addInitScript((c) => { if (!window.localStorage.getItem('__sembrado')) { window.localStorage.setItem('cotizap.cotizacion.v1', JSON.stringify(c)); window.localStorage.setItem('__sembrado', '1'); } }, cot);
     };
     const pm = await nuevaPagina({}, sembrar(guardada(true)));
-    const titulos = await pm.locator('#lista-partidas .partida-titulo').allInnerTexts();
+    const titulos = await pm.locator('#lista-partidas .partida:not(.partida-auto) .partida-titulo').allInnerTexts();
     ok(titulos.some((t) => /^Injerto simple a 45°/.test(t)) && titulos.some((t) => /^Reducción con injerto 45°/.test(t)), 'la muestra de una versión anterior se renueva con los nombres y las partidas actuales');
     ok(!titulos.some((t) => /^Ramal/.test(t)), 'ya no aparece "Ramal"');
     ok(await pm.locator('#c_unidad_diam').inputValue() === 'mm' && await pm.locator('#c_unidad_long').inputValue() === 'm' && await pm.locator('#c_riesgo').inputValue() === 'ALTO' && await pm.locator('#c_vigencia_dias').inputValue() === '30', 'conserva los ajustes generales que ya había cambiado');
     await pm.context().close();
     const pp = await nuevaPagina({}, sembrar(guardada(false)));
-    const propios = await pp.locator('#lista-partidas .partida-titulo').allInnerTexts();
+    const propios = await pp.locator('#lista-partidas .partida:not(.partida-auto) .partida-titulo').allInnerTexts();
     ok(propios.length === 1 && /^Ramal a 45°/.test(propios[0]), 'una cotización propia se deja tal cual');
     await pp.context().close();
   }
@@ -714,7 +714,7 @@ const ok = (cond, msg) => {
 
     // persiste al recargar y abre solo «Más parámetros» si algo ahí está modificado
     await p.reload();
-    await p.waitForSelector('#lista-partidas .partida');
+    await p.waitForSelector('#lista-partidas .partida:not(.partida-auto)');
     ok(await campo('descuento').inputValue() === '10' && await campo('iva').inputValue() === '8' && await campo('dias_cobro').inputValue() === '60', 'los parámetros de la cotización se conservan al recargar');
     ok(await p.locator('#c_parametros_mas').evaluate((e) => e.open), '«Más parámetros de precio» abre solo porque hay uno modificado');
 
@@ -759,7 +759,7 @@ const ok = (cond, msg) => {
       [LLAVE_COT]: JSON.stringify({ cliente: { a: 1 }, vigencia_dias: 'mucho', unidad_diam: 'parsecs', riesgo: {}, parametros: 'x', partidas: [null, 5, 'x', [], RECTO, { ...RECTO, id: 'pA' }, { ...RECTO, id: 7, familia: '__proto__' }] }),
       [LLAVE_MAE]: JSON.stringify({ proceso: null, capas: 5, precios: { precio_kg_acero_carbon: 'veinte' }, herrajes: [] }),
     }));
-    ok(await sucia.locator('#lista-partidas .partida').count() === 3, 'datos guardados dañados: abre y conserva las 3 partidas que sí son objetos (no las 4 basuras)');
+    ok(await sucia.locator('#lista-partidas .partida:not(.partida-auto)').count() === 3, 'datos guardados dañados: abre y conserva las 3 partidas que sí son objetos (no las 4 basuras)');
     const ids = await estadoApp(sucia, () => window.COTIZAP.web.estadoApp.cot.partidas.map((x) => x.id));
     ok(new Set(ids).size === 3 && ids.every((i) => typeof i === 'string'), 'los id repetidos o que no son texto se reponen únicos');
     ok(await estadoApp(sucia, () => window.COTIZAP.web.estadoApp.M.proceso.eficiencia_taller === 0.8 && window.COTIZAP.web.estadoApp.M.precios.precio_kg_acero_carbon === 22.47), 'las tablas dañadas se reponen con las de arranque (no se hereda un null ni un texto)');
@@ -840,7 +840,7 @@ const ok = (cond, msg) => {
     ok(await estadoApp(im, (a) => JSON.stringify([window.COTIZAP.web.estadoApp.cot.partidas.map((x) => x.id), window.COTIZAP.web.estadoApp.M.precios.precio_kg_acero_carbon]) === a, antes), 'y no cambian la cotización ni los precios (tampoco el «99» del archivo rechazado)');
     const r = await importar(JSON.stringify({ version: 2, cotizacion: { partidas: [null, 5, RECTO] }, maestros: { proceso: null, capas: 5, precios: { precio_kg_acero_carbon: 'x' } } }));
     ok(r.cargo && /3 valores de las tablas no tenían la forma esperada y se ignoraron/.test(r.toast), `un archivo con tablas dañadas se carga rescatando lo sano y avisa cuántos valores ignoró («${r.toast.slice(0, 80)}»)`);
-    ok(await im.locator('#lista-partidas .partida').count() === 1, 'las partidas que no eran objetos se descartan');
+    ok(await im.locator('#lista-partidas .partida:not(.partida-auto)').count() === 1, 'las partidas que no eran objetos se descartan');
     await importar('{"cotizacion":{"partidas":[]},"maestros":{"__proto__":{"polluted":1},"proceso":{"__proto__":{"polluted":2}}}}');
     ok(await im.evaluate(() => ({}).polluted === undefined), 'una llave __proto__ no contamina los objetos');
     await im.context().close();
@@ -886,11 +886,11 @@ const ok = (cond, msg) => {
     // f) sin almacenamiento del navegador la app trabaja igual
     const bloq = await nuevaPagina({}, (ctx) => ctx.addInitScript(() => { Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('bloqueado', 'SecurityError'); } }); }));
     await bloq.click('#btn-agregar'); await bloq.waitForSelector('#dlg-partida[open]'); await bloq.click('#dlg-guardar'); await bloq.waitForTimeout(80);
-    ok(await bloq.locator('#lista-partidas .partida').count() === 10, 'con el almacenamiento bloqueado se puede seguir trabajando');
+    ok(await bloq.locator('#lista-partidas .partida:not(.partida-auto)').count() === 10, 'con el almacenamiento bloqueado se puede seguir trabajando');
     await bloq.context().close();
     const lleno = await nuevaPagina({}, (ctx) => ctx.addInitScript(() => { Storage.prototype.setItem = function setItem() { throw new DOMException('lleno', 'QuotaExceededError'); }; }));
     await lleno.click('#btn-agregar'); await lleno.waitForSelector('#dlg-partida[open]'); await lleno.click('#dlg-guardar'); await lleno.waitForTimeout(80);
-    ok(await lleno.locator('#lista-partidas .partida').count() === 10, 'con el almacenamiento lleno también');
+    ok(await lleno.locator('#lista-partidas .partida:not(.partida-auto)').count() === 10, 'con el almacenamiento lleno también');
     await lleno.context().close();
 
     // g) pantalla de 320 px: los avisos no aplastan su texto y la página no se desplaza de lado
@@ -942,7 +942,7 @@ const ok = (cond, msg) => {
       for (let i = 0; i < await secs.count(); i += 1) if (!(await secs.nth(i).evaluate((e) => e.open))) await secs.nth(i).locator('summary').click();
     };
     // a) el tramo de 3 m de la muestra: 2 yardas de 1 220 mm y un ajuste de 560 mm, en una pieza con una brida de taller y el aro suelto del extremo libre
-    await p.locator('#lista-partidas .partida').first().click();
+    await p.locator('#lista-partidas .partida:not(.partida-auto)').first().click();
     await abrirTodo();
     ok((await p.locator('.arm-resumen').first().innerText()) === '2 yardas + ajuste de 560 mm', 'el desglose dice el armado: «2 yardas + ajuste de 560 mm»');
     ok(await p.locator('.arm-fig svg.arm rect.arm-anillo').count() === 2 && await p.locator('.arm-fig svg.arm rect.arm-ajuste').count() === 1, 'el diagrama dibuja 2 anillos y el tramo de ajuste');
@@ -972,7 +972,7 @@ const ok = (cond, msg) => {
     await abrirTodo();
     ok((await p.locator('.arm-resumen').first().innerText()) === '3 yardas y ajuste de 258 mm', 'el desglose se actualiza: «3 yardas y ajuste de 258 mm»');
     await p.reload();
-    await p.waitForSelector('#lista-partidas .partida');
+    await p.waitForSelector('#lista-partidas .partida:not(.partida-auto)');
     ok(await p.locator('#c_yarda_mm').inputValue() === '914', 'al recargar, la cotización recuerda el ancho elegido');
 
     // la partida: «Según la cotización», o su propio ancho
@@ -1093,7 +1093,7 @@ const ok = (cond, msg) => {
     ok(await maxY.inputValue() === '3' && /mayor que 0/.test(await p.locator('.toast').last().innerText()), 'un máximo de 0 yardas por pieza se rechaza');
     await maxY.fill('2'); await maxY.dispatchEvent('change');
     await p.click('#tab-cotizacion');
-    await p.locator('#lista-partidas .partida').first().click();
+    await p.locator('#lista-partidas .partida:not(.partida-auto)').first().click();
     await abrirTodo();
     ok((await p.locator('.arm-resumen').first().innerText()) === '2 yardas y 1 yarda', `con 2 yardas por pieza, 3 yardas de 1 000 mm se arman en una pieza de 2 y otra de 1 («${await p.locator('.arm-resumen').first().innerText()}»)`);
     await p.click('#tab-maestros');
@@ -1122,7 +1122,7 @@ const ok = (cond, msg) => {
     // a) la muestra: acero al carbón y, por omisión de las tablas, instalación interior: sólo pintura
     ok((await p.locator('#c_ubicacion option').allInnerTexts()).join('|') === 'Interior · bajo techo|Exterior · a la intemperie', 'el encabezado ofrece la instalación: interior o exterior');
     ok(await p.locator('#c_ubicacion').inputValue() === 'INTERIOR', 'la cotización va con instalación interior (la de las tablas)');
-    await p.locator('#lista-partidas .partida').first().click();
+    await p.locator('#lista-partidas .partida:not(.partida-auto)').first().click();
     await abrirTodo();
     ok(/Pintura Interior · ducto: sólo pintura \(esmalte\) · bridas: sólo pintura \(esmalte\)/.test(await textoDet()), 'el desglose dice qué se pinta: en interior, el ducto y las bridas con sólo pintura');
     const f0 = await det();
@@ -1138,7 +1138,7 @@ const ok = (cond, msg) => {
     await abrirTodo();
     ok(/Pintura Exterior · ducto: primario \+ pintura \(esmalte\) · bridas: primario \+ pintura \(esmalte\)/.test(await textoDet()), 'el desglose dice «Exterior · … primario + pintura»');
     await p.reload();
-    await p.waitForSelector('#lista-partidas .partida');
+    await p.waitForSelector('#lista-partidas .partida:not(.partida-auto)');
     ok(await p.locator('#c_ubicacion').inputValue() === 'EXTERIOR', 'al recargar, la cotización recuerda la instalación');
 
     // c) lámina galvanizada: no se pinta más que las bridas
@@ -1152,7 +1152,7 @@ const ok = (cond, msg) => {
     ok(f2.qto.pint.sistema === 'NINGUNA' && f2.qto.pint.sistema_bridas === 'PRIMARIO_ESMALTE', 'galvanizado en exterior: el ducto sin pintura y las bridas con primario y pintura');
     ok(f2.qto.pint.A_pint_m2 === f2.qto.her.A_pintura_aros_m2 && f2.qto.pint.A_pint_m2 < 0.5, `sólo se pintan los aros (${f2.qto.pint.A_pint_m2.toFixed(3)} m²), no los ~3 m² del ducto`);
     ok(f2.costos.consumibles.pintura < 0.1 * f1.costos.consumibles.pintura, 'y la pintura cuesta una fracción de la del acero al carbón');
-    await p.locator('#lista-partidas .partida').first().click();
+    await p.locator('#lista-partidas .partida:not(.partida-auto)').first().click();
     await abrirTodo();
     ok(/Pintura Exterior · ducto: sin pintura · bridas: primario \+ pintura \(esmalte\)/.test(await textoDet()), 'el desglose dice «ducto: sin pintura · bridas: primario + pintura»');
     await p.selectOption('#c_ubicacion', 'INTERIOR');
@@ -1175,7 +1175,7 @@ const ok = (cond, msg) => {
     await p.waitForTimeout(100);
     const f4 = await det();
     ok(f4.entrada.pintura === 'ESMALTE' && f4.qto.pint.sistema === 'ESMALTE' && f4.qto.pint.A_pint_m2 > 2.9, 'un sistema elegido en la partida pinta todo (también el ducto galvanizado)');
-    await p.locator('#lista-partidas .partida').first().click();
+    await p.locator('#lista-partidas .partida:not(.partida-auto)').first().click();
     await abrirTodo();
     ok(/Pintura Elegida en la partida · ducto: sólo pintura \(esmalte\) · bridas: sólo pintura \(esmalte\)/.test(await textoDet()), 'y el desglose dice que lo eligió la partida');
     await editar(p, 0);
@@ -1394,7 +1394,7 @@ const ok = (cond, msg) => {
     ok(await W(() => window.COTIZAP.web.estadoApp.M.proceso.costuras.A_TOPE.soldada) === false && await W(() => window.COTIZAP.web.estadoApp.M.proceso.costuras.A_TOPE.cordon) === 'TOPE', 'se guarda como verdadero booleano (no como el texto «false»)');
     await p.waitForTimeout(150);
     await p.reload();
-    await p.waitForSelector('#lista-partidas .partida');
+    await p.waitForSelector('#lista-partidas .partida:not(.partida-auto)');
     await p.click('#tab-maestros');
     await p.fill('#maestros-buscar', 'soldada');
     ok(await p.locator('select#m_proceso__costuras__A_TOPE__soldada').inputValue() === 'false', 'y sobrevive a recargar la página');
@@ -1546,8 +1546,8 @@ const ok = (cond, msg) => {
     await p.waitForTimeout(100);
     const abr = await R(() => { const f = window.COTIZAP.web.estadoApp.res.partidas[1]; return { CD: f.costos.CD, cat: f.compra.categoria }; });
     ok(Math.abs(abr.CD - (18 * 55) / 1.16) < 1e-6 && abr.cat === 'PROVEEDOR', 'el catálogo dice que $55 trae IVA: se cuesta sin IVA');
-    ok(/Abrazadera ajustable para manguera/.test(await p.locator('#lista-partidas .partida').nth(1).innerText()), 'sin descripción propia, la partida se llama como el artículo');
-    await p.locator('#lista-partidas .partida').nth(1).click();
+    ok(/Abrazadera ajustable para manguera/.test(await p.locator('#lista-partidas .partida:not(.partida-auto)').nth(1).innerText()), 'sin descripción propia, la partida se llama como el artículo');
+    await p.locator('#lista-partidas .partida:not(.partida-auto)').nth(1).click();
     ok(/Del catálogo de compras/.test(await p.locator('#detalle').innerText()) && /Compras y trabajos de terceros/.test(await p.locator('#detalle').innerText()), 'el desglose dice de dónde sale el precio y su renglón del control de gastos');
 
     // c) instalación con viáticos: horas reales a $62.50, casetas y gasolina sin el IVA que se acredita
@@ -1565,7 +1565,7 @@ const ok = (cond, msg) => {
     await p.waitForTimeout(100);
     const ins = await R(() => window.COTIZAP.web.estadoApp.res.partidas[2].costos);
     ok(Math.abs(ins.h_MOD - 80) < 1e-9 && Math.abs(ins.CD - (80 * HORA * 1.03 + (806 + 1500) / 1.16)) < 1e-6, 'instalación: 2 personas × 5 días × 8 h a $62.50 + casetas y gasolina sin IVA');
-    await p.locator('#lista-partidas .partida').nth(2).click();
+    await p.locator('#lista-partidas .partida:not(.partida-auto)').nth(2).click();
     ok(/Cuadrilla y viáticos/.test(await p.locator('#detalle').innerText()) && /sin IVA \(con factura\)/.test(await p.locator('#detalle').innerText()), 'el desglose muestra la cuadrilla y la base de cada viático');
     ok(/\$62\.50\s*salario por día ÷ 8 h/.test(await p.locator('#detalle').innerText()), 'y el costo por hora: el salario por día ÷ 8 h = $62.50');
 
@@ -1578,7 +1578,7 @@ const ok = (cond, msg) => {
     await p.fill('#f_cantidad', '7');
     await p.click('#dlg-guardar');
     await p.waitForTimeout(100);
-    await p.locator('#lista-partidas .partida').nth(3).click();
+    await p.locator('#lista-partidas .partida:not(.partida-auto)').nth(3).click();
     ok(/Pieza, barra y anclajes/.test(await p.locator('#detalle').innerText()) && /28 × Taquete/.test(await p.locator('#detalle').innerText()), 'el desglose de la soportería dice barra, metros y anclajes');
     ok(/min reales por pieza/.test(await p.locator('#detalle').innerText()), 'y que los minutos de taller son reales (sin eficiencia)');
     // una abrazadera se pide por el diámetro del ducto: su largo sale solo
@@ -1593,8 +1593,8 @@ const ok = (cond, msg) => {
     await p.waitForTimeout(100);
     const abz = await R(() => window.COTIZAP.web.estadoApp.res.partidas[4].soporte);
     ok(Math.abs(abz.largo_pieza_mm - ((Math.PI * (279.4 + 3.175)) / 2 + 100)) < 1e-9 && abz.largo_calculado === true, `el largo de cada abrazadera sale de π × (D + t) ÷ 2 + 2 orejas: ${abz.largo_pieza_mm.toFixed(1)} mm`);
-    ok(/abrazadera para ducto Ø11/.test(await p.locator('#lista-partidas .partida').nth(4).innerText()), 'la lista de partidas dice «abrazadera para ducto Ø11″»');
-    await p.locator('#lista-partidas .partida').nth(4).click();
+    ok(/abrazadera para ducto Ø11/.test(await p.locator('#lista-partidas .partida:not(.partida-auto)').nth(4).innerText()), 'la lista de partidas dice «abrazadera para ducto Ø11″»');
+    await p.locator('#lista-partidas .partida:not(.partida-auto)').nth(4).click();
     ok(/abrazadera de media vuelta/.test(await p.locator('#detalle').innerText()), 'el desglose lo explica');
 
     // e) lista de compras en piezas enteras y el sobrante como partida automática
@@ -1604,18 +1604,14 @@ const ok = (cond, msg) => {
     const sol = await R(() => window.COTIZAP.web.estadoApp.res.compras.barras.find((b) => b.clave === 'SOL_1_1_2X3_16'));
     ok(sol.piezas === 30 && sol.compra >= Math.ceil(sol.necesario) && new RegExp(`Solera 1½" × 3/16"[\\s\\S]*?${sol.compra} barras`).test(lista), `los 30 aros se acomodan en ${sol.compra} barras de solera de 6 m`);
     ok(/Ángulo 1¼" × 1\/8"/.test(lista) && /28 pzas/.test(lista), 'y la lista trae el ángulo de las ménsulas y los 28 taquetes');
-    const subSin = await R(() => window.COTIZAP.web.estadoApp.res.totales.subtotal);
-    await p.check('#cg_piezas_enteras');
-    ok(await esperar(() => window.COTIZAP.web.estadoApp.res.automaticas.length === 1), 'cobrar el sobrante agrega una partida automática');
-    const auto = await R(() => { const r = window.COTIZAP.web.estadoApp.res; return { imp: r.automaticas[0].precio.importe, sub: r.totales.subtotal, n: r.totales.n_partidas_ok }; });
-    ok(Math.abs(auto.sub - subSin - auto.imp) < 0.011 && auto.n === 5, 'el subtotal sube lo de esa partida y no cuenta como partida del usuario');
+    ok(await p.locator('#cg_piezas_enteras').count() === 0 && /siempre se cobra/.test(await p.locator('#cg_sobrante_nota').innerText()), 'ya no hay casilla: el sobrante siempre se cobra (y la pestaña lo dice)');
+    const auto = await R(() => { const r = window.COTIZAP.web.estadoApp.res; return { n_auto: r.automaticas.length, imp: r.automaticas[0].precio.importe, sub: r.totales.subtotal, suma: r.partidas.filter((f) => f.ok).reduce((s, f) => s + f.precio.importe, 0), n: r.totales.n_partidas_ok, n_usuario: r.partidas.filter((f) => f.ok).length, sobrante: r.compras.sobrante, cd: r.automaticas[0].costos.CD }; });
+    ok(auto.n_auto === 1 && Math.abs(auto.cd - auto.sobrante) < 0.01 && Math.abs(auto.sub - auto.suma - auto.imp) < 0.011 && auto.n === auto.n_usuario, 'el sobrante va como partida automática: el subtotal la suma y no cuenta como partida del usuario');
     await p.click('#tab-cotizacion');
-    ok(await p.locator('#lista-partidas .partida-auto').count() === 1 && /Automática/.test(await p.locator('#lista-partidas .partida-auto').innerText()), 'en la cotización se ve la partida automática');
+    ok(await p.locator('#lista-partidas .partida-auto').count() === 1 && /Automática/.test(await p.locator('#lista-partidas .partida-auto').innerText()) && /siempre se cobra/.test(await p.locator('#lista-partidas .partida-auto').innerText()), 'en la cotización se ve la partida automática');
     ok(/material sobrante/i.test(await p.locator('#totales').innerText()), 'y los totales dicen que incluyen el sobrante');
     await p.click('#lista-partidas .partida-auto button');
     ok(await p.locator('#panel-compras').isVisible(), '«Ver la lista de compras» lleva a la pestaña');
-    await p.uncheck('#cg_piezas_enteras');
-    ok(await esperar(() => window.COTIZAP.web.estadoApp.res.automaticas.length === 0), 'y se quita');
 
     // f) venta pactada: el resultado contra el costo y el precio mínimo
     await p.fill('#cg_venta_pactada', '-5');
@@ -1702,7 +1698,7 @@ const ok = (cond, msg) => {
     if (await p.locator('#dlg-io[open]').count()) await p.click('#io-cerrar');
     const antes = await R(() => ({ g: window.COTIZAP.web.estadoApp.cot.gastos.length, v: window.COTIZAP.web.estadoApp.cot.venta_pactada }));
     await p.reload();
-    await p.waitForSelector('#lista-partidas .partida');
+    await p.waitForSelector('#lista-partidas .partida:not(.partida-auto)');
     const despues = await R(() => ({ g: window.COTIZAP.web.estadoApp.cot.gastos.length, v: window.COTIZAP.web.estadoApp.cot.venta_pactada }));
     ok(despues.g === antes.g && despues.v === antes.v, 'los gastos y la venta pactada se conservan al recargar');
 
@@ -1793,7 +1789,7 @@ const ok = (cond, msg) => {
     await p.click('#dlg-cancelar');
 
     // c) el desglose de la partida trae su plano
-    await p.locator('#lista-partidas .partida').nth(4).click();
+    await p.locator('#lista-partidas .partida:not(.partida-auto)').nth(4).click();
     await p.waitForTimeout(100);
     ok(await p.locator('#detalle .det-plano svg.plano').count() === 1 && /Plano de la pieza/.test(await p.locator('#detalle').innerText()), 'el desglose trae «Plano de la pieza»');
 
@@ -1982,7 +1978,7 @@ const ok = (cond, msg) => {
     await p.fill('#r_diam', '279.4');
     ok(await p.locator('#r_diam_unidad').innerText() === 'mm' && /3 yardas de 279\.4 mm/.test(await desglose()), 'con la cotización en mm, el diámetro se captura en mm');
     await p.reload();
-    await p.waitForSelector('#lista-partidas .partida');
+    await p.waitForSelector('#lista-partidas .partida:not(.partida-auto)');
     await p.click('#tab-rapida');
     ok(await p.inputValue('#r_diam') === '279.4' && await p.inputValue('#r_metros') === '40' && await p.inputValue('#r_dias_fab') === '5' && await p.locator('#r_yarda input[value="1220"]').isChecked(), 'lo capturado (también la yarda y los días) se recuerda al volver a abrir');
     await p.click('#rapida-limpiar');

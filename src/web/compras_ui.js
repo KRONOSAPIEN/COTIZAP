@@ -4,7 +4,7 @@
  *   Venta y precio mínimo — la venta pactada con el cliente (sin IVA) contra el costo directo, el precio mínimo (no perder) y el
  *                           precio calculado, en una regla de tres zonas: pierde · no cubre indirectos · gana.
  *   Lista de compras      — lo que hay que comprar en piezas enteras (hojas, barras, tornillos por decena, cartuchos, envases),
- *                           lo que ya cobran las partidas y el sobrante, que la cotización puede cobrar.
+ *                           lo que ya cobran las partidas y el sobrante, que la cotización siempre cobra.
  *   Control de gastos     — cada ticket o factura real (con o sin IVA, con o sin factura) y su comparación con lo cotizado,
  *                           por categoría, hasta la utilidad real del proyecto.
  *
@@ -119,8 +119,6 @@
     if (!cont) return;
     const R = E().res;
     const L = R.compras;
-    const chk = $('#cg_piezas_enteras');
-    if (chk && document.activeElement !== chk) chk.checked = E().cot.piezas_enteras === true;
     if (!L.renglones.length) {
       W.reemplazar(cont, h('p', { class: 'nota' }, W.icono('info'), 'Sin compras todavía: la lista sale de las partidas de la cotización.'));
       return;
@@ -459,11 +457,6 @@
     $('#cg_venta_pactada').addEventListener('blur', sincronizarVenta);
     $('#cg_venta_con_iva').addEventListener('change', (ev) => {
       if (ev.target.checked) E().cot.venta_pactada_con_iva = true; else delete E().cot.venta_pactada_con_iva;
-      W.persistir();
-      W.render();
-    });
-    $('#cg_piezas_enteras').addEventListener('change', (ev) => {
-      if (ev.target.checked) E().cot.piezas_enteras = true; else delete E().cot.piezas_enteras;
       W.persistir();
       W.render();
     });

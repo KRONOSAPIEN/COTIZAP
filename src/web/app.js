@@ -97,7 +97,7 @@
       const guardada = estado.cot;
       estado.cot = cotizacionValida({
         ...cotizacionEjemplo(),
-        ...Object.fromEntries(['unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'ubicacion', 'fecha', 'vigencia_dias', 'parametros', 'yarda_mm', 'venta_pactada', 'venta_pactada_con_iva', 'piezas_enteras', 'gastos'].filter((k) => guardada[k] !== undefined).map((k) => [k, guardada[k]])),
+        ...Object.fromEntries(['unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'ubicacion', 'fecha', 'vigencia_dias', 'parametros', 'yarda_mm', 'venta_pactada', 'venta_pactada_con_iva', 'gastos'].filter((k) => guardada[k] !== undefined).map((k) => [k, guardada[k]])),
       }, estado.M);
     }
     estado.sel = estado.cot.partidas.length ? estado.cot.partidas[0].id : null;
@@ -159,12 +159,12 @@
     // Ancho de la yarda de la cotización: sólo vale uno dentro de los límites de las tablas (vacío o inválido = el de las tablas)
     const yarda = C.cotizador.yardaDeCotizacion(cot, M).yarda_mm;
     if (yarda === undefined) delete cot.yarda_mm; else cot.yarda_mm = yarda;
-    // Venta pactada con el cliente, como se capturó (con IVA sólo si se marcó): sólo un importe válido (vacío o inválido = no hay);
-    // cobrar el sobrante, sólo sí/no
+    // Venta pactada con el cliente, como se capturó (con IVA sólo si se marcó): sólo un importe válido (vacío o inválido = no hay).
+    // El sobrante de material siempre se cobra: el sí/no de versiones anteriores se descarta
     const venta = C.cotizador.ventaPactada(cot).capturada;
     if (venta === undefined) delete cot.venta_pactada; else cot.venta_pactada = venta;
     if (venta === undefined || cot.venta_pactada_con_iva !== true) delete cot.venta_pactada_con_iva;
-    if (cot.piezas_enteras !== true) delete cot.piezas_enteras;
+    delete cot.piezas_enteras;
     const vistosG = new Set();
     cot.gastos = (Array.isArray(c.gastos) ? c.gastos : []).filter(esObjeto).slice(0, 5000).map((g) => {
       const q = gastoValido(g);
@@ -219,7 +219,7 @@
     const cot = estado.cot;
     return {
       riesgo: cot.riesgo, servicio: cot.servicio, ubicacion: cot.ubicacion, parametros: cot.parametros, yarda_mm: cot.yarda_mm,
-      venta_pactada: cot.venta_pactada, venta_pactada_con_iva: cot.venta_pactada_con_iva === true, piezas_enteras: cot.piezas_enteras === true, partidas: cot.partidas,
+      venta_pactada: cot.venta_pactada, venta_pactada_con_iva: cot.venta_pactada_con_iva === true, partidas: cot.partidas,
     };
   };
 
@@ -573,7 +573,7 @@
         W.iconoFamilia(f.familia),
         h('div', { class: 'partida-txt' },
           h('div', { class: 'partida-titulo' }, f.descripcion),
-          h('div', { class: 'partida-meta' }, `Costo ${W.mxn(f.costos.CD)} sin IVA · partida automática: se cobra porque la cotización pide piezas enteras`),
+          h('div', { class: 'partida-meta' }, `Costo ${W.mxn(f.costos.CD)} sin IVA · partida automática: el material sobrante de comprar piezas enteras siempre se cobra`),
           h('div', { class: 'partida-chips' }, h('span', { class: 'chip chip-auto' }, W.icono('info'), 'Automática')))),
       h('div', { class: 'partida-der' },
         h('div', { class: 'partida-cifras' },

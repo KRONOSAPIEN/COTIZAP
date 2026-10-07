@@ -29,7 +29,7 @@ test('Sin parámetros propios todo sale de las tablas maestras y los totales no 
   assert.deepEqual(BASE.parametros, {});
   assert.deepEqual(BASE.avisos, []);
   const T = BASE.totales;
-  casi(T.subtotal, BASE.partidas.reduce((s, f) => s + f.precio.importe, 0), 1e-12);
+  casi(T.subtotal, [...BASE.partidas, ...BASE.automaticas].reduce((s, f) => s + f.precio.importe, 0), 1e-12);
   assert.equal(T.descuento, 0);
   assert.equal(T.descuento_pct, 0);
   assert.equal(T.subtotal_neto, T.subtotal);
@@ -112,7 +112,7 @@ test('Descuento: se resta del subtotal, el IVA se calcula sobre el precio ya des
 test('Utilidad real con descuento: Σ [importe·(1 − d)·(1 − comisión − otros) − C_base]; si el descuento pasa del piso hay pérdida', () => {
   const calcular = (d) => {
     const r = C.cotizar(cot({ descuento_pct: d }), M);
-    const util = r.partidas.reduce((s, f) => s + f.precio.importe * (1 - d) * (1 - CAPAS.comision_ventas_pct_precio - CAPAS.otros_pct_precio) - f.pila.C_base, 0);
+    const util = [...r.partidas, ...r.automaticas].reduce((s, f) => s + f.precio.importe * (1 - d) * (1 - CAPAS.comision_ventas_pct_precio - CAPAS.otros_pct_precio) - f.pila.C_base, 0);
     return { r, util };
   };
   [0, 0.05, 0.1, 0.2].forEach((d) => {

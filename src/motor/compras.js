@@ -12,7 +12,7 @@
  *   sellador = ⌈ Σ mL ÷ mL del cartucho ⌉;  pintura = ⌈ Σ L ÷ envase ⌉ × envase   (compras.pintura_envase_L)
  *
  * El «sobrante» de cada renglón es lo que cuesta la compra entera menos lo que ya cobran las partidas (nunca negativo). La
- * cotización puede cobrarlo (`piezas_enteras`): cotizador.js lo agrega como una partida automática.
+ * cotización siempre lo cobra: cotizador.js lo agrega como una partida automática.
  * Cada renglón dice en qué categoría del control de gastos cae su compra (`categoria`, las de gastos.js): así la lista se
  * puede pasar a gastos y compararse renglón por renglón.
  */
