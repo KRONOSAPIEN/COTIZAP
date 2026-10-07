@@ -4,7 +4,7 @@
  * Aquí (y sólo aquí) se leen los precios: `M.precios[<variable_referencial>]` y la lista del proveedor (`M.proveedor`,
  * ver proveedor.js). El levantamiento de cantidades (QTO) no conoce ningún precio.
  *
- *   CD = materiales + consumibles + mano de obra + equipo + herramienta menor
+ *   CD = materiales + consumibles + mano de obra + equipo + herramienta menor + subcontratos + viáticos (instalación)
  *   CI = GIF·h_MOD + adm%·CD
  *   IMP = imp%·(CD + CI)                       ← imprevistos por clase de riesgo
  *   C_T = CD + CI + IMP
@@ -137,6 +137,7 @@
       equipo: U.suma(equipo),
       herramienta_menor,
       subcontratos: U.suma(subcontratos),
+      viaticos: 0, // sólo la instalación en obra los tiene
     };
     const CD = U.suma(subtotales);
     return {
@@ -145,8 +146,11 @@
     };
   }
 
-  /** Pila de capas: CI, imprevistos, financiamiento, utilidad, comisión → precio antes de IVA. */
-  function pila(CD, h_MOD, riesgo, M) {
+  /**
+   * Pila de capas: CI, imprevistos, financiamiento, utilidad, comisión → precio antes de IVA.
+   * `opciones.gif_por_hora`: indirectos por hora propios (la instalación en obra no usa la nave: `capas.gif_por_hora_instalacion`).
+   */
+  function pila(CD, h_MOD, riesgo, M, opciones) {
     const C = M.capas;
     const clase = riesgo || 'MEDIO';
     const imp_pct = C.imprevistos_pct[clase];
@@ -155,7 +159,8 @@
     if (divisor <= 0) {
       throw new U.ErrorValidacion(['Utilidad + comisión + otros ≥ 100 % del precio: configuración de capas inválida.']);
     }
-    const CI_fabrica = C.gif_por_hora_mod * h_MOD;
+    const gif_h = opciones && opciones.gif_por_hora !== undefined ? opciones.gif_por_hora : C.gif_por_hora_mod;
+    const CI_fabrica = gif_h * h_MOD;
     const CI_admin = C.administracion_pct_cd * CD;
     const CI = CI_fabrica + CI_admin;
     const imprevistos = imp_pct * (CD + CI);
@@ -165,7 +170,7 @@
     const C_base = C_T + financiamiento;
     const precio = C_base / divisor;
     return {
-      CD, CI_fabrica, CI_admin, CI, riesgo: clase, imp_pct, imprevistos, C_T, f_fin, financiamiento, C_base, divisor,
+      CD, gif_por_hora: gif_h, CI_fabrica, CI_admin, CI, riesgo: clase, imp_pct, imprevistos, C_T, f_fin, financiamiento, C_base, divisor,
       utilidad: precio * C.utilidad_pct_precio, comision: precio * C.comision_ventas_pct_precio, otros: precio * C.otros_pct_precio,
       precio,
     };

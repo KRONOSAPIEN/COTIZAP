@@ -53,7 +53,7 @@ const ok = (cond, msg) => {
 
   console.log('1) Carga inicial');
   let page = await nuevaPagina();
-  ok(await page.locator('#lista-partidas .partida').count() === 7, 'la cotización de ejemplo trae 7 partidas');
+  ok(await page.locator('#lista-partidas .partida').count() === 9, 'la cotización de ejemplo trae 9 partidas (con soportería e instalación)');
   ok((await page.locator('.hero-val').innerText()).startsWith('$'), 'el total se muestra en pesos');
   ok(await page.locator('#aviso-ilustrativo').isVisible(), 'el aviso de valores ilustrativos está visible');
 
@@ -611,26 +611,35 @@ const ok = (cond, msg) => {
     await abrirCostos('Tramo galvanizado cal. 22');
     ok(/\$1,000\.00 con IVA/.test(await p.locator('#detalle').innerText()), 'el desglose de la partida refleja el precio nuevo al instante');
 
-    // mano de obra: $500 por hora, sin salario diario ni jornada
+    // mano de obra: $500 por día; la jornada (7 días pagados por 5 de 8 h) lo convierte en $87.50 por hora trabajada
     await p.click('#tab-maestros');
-    await p.fill('#maestros-buscar', 'salario_hora');
-    ok(await p.locator('input#m_mano_obra__operaciones__corte__salario_hora').inputValue() === '500', 'los trabajadores ganan $500 por hora');
-    ok((await p.locator('.m-fila:has(input#m_mano_obra__operaciones__corte__salario_hora) .sufijo').innerText()) === 'MXN/h', 'con la unidad MXN/h');
-    ok(await p.locator('[id*="salario_diario"], [id*="jornada_h"]').count() === 0, 'ya no hay salario diario ni jornada en las tablas');
+    await p.fill('#maestros-buscar', 'salario_diario');
+    ok(await p.locator('input#m_mano_obra__operaciones__corte__salario_diario').inputValue() === '500', 'los trabajadores ganan $500 por día');
+    ok((await p.locator('.m-fila:has(input#m_mano_obra__operaciones__corte__salario_diario) .sufijo').innerText()) === 'MXN/día', 'con la unidad MXN/día');
+    ok(await p.locator('input#m_mano_obra__operaciones__instalacion__salario_diario').count() === 1, 'también la cuadrilla de instalación');
+    ok(await p.locator('[id*="salario_hora"], [id*="jornada_h"]').count() === 0, 'ya no hay salario por hora ni la jornada de antes');
+    await p.fill('#maestros-buscar', 'jornada');
+    ok(await p.locator('input#m_mano_obra__jornada__dias_pagados_semana').inputValue() === '7' && await p.locator('input#m_mano_obra__jornada__dias_trabajados_semana').inputValue() === '5'
+      && await p.locator('input#m_mano_obra__jornada__horas_dia').inputValue() === '8', 'la jornada: la semana paga 7 días y se trabajan 5 de 8 h');
+    ok(await estadoApp(p, () => window.COTIZAP.manoObra.tarifa(window.COTIZAP.web.estadoApp.M, 'corte').mo_h) === 87.5, 'la hora trabajada cuesta $87.50 ($3,500 ÷ 40 h)');
     await p.context().close();
 
-    // un parche guardado con el salario diario de antes se limpia al abrir y la app calcula con el salario por hora
+    // un parche guardado con la jornada de antes pasa a la jornada nueva; el salario por hora de la versión anterior se descarta
     const pv = await nuevaPagina({}, async (ctx) => {
       await ctx.addInitScript(() => {
         if (!window.localStorage.getItem('__sembrado_mo')) {
-          window.localStorage.setItem('cotizap.maestros.v2', JSON.stringify({ mano_obra: { FSR: 1.6, jornada_h: 9, operaciones: { corte: { salario_diario: 700 } } } }));
+          window.localStorage.setItem('cotizap.maestros.v2', JSON.stringify({ mano_obra: { FSR: 1.6, jornada_h: 9, operaciones: { corte: { salario_diario: 700, salario_hora: 550 } } } }));
           window.localStorage.setItem('cotizap.maestros.migrado_v1', 'true');
           window.localStorage.setItem('__sembrado_mo', '1');
         }
       });
     });
-    const mo = await estadoApp(pv, () => { const M = window.COTIZAP.web.estadoApp.M; return { jornada: M.mano_obra.jornada_h, diario: M.mano_obra.operaciones.corte.salario_diario, hora: M.mano_obra.operaciones.corte.salario_hora, fsr: M.mano_obra.FSR }; });
-    ok(mo.jornada === undefined && mo.diario === undefined && mo.hora === 500 && mo.fsr === 1.6, 'un parche anterior con salario diario y jornada se limpia: queda el salario por hora ($500) y se respeta el FSR editado');
+    const mo = await estadoApp(pv, () => {
+      const M = window.COTIZAP.web.estadoApp.M;
+      return { vieja: M.mano_obra.jornada_h, horas: M.mano_obra.jornada.horas_dia, diario: M.mano_obra.operaciones.corte.salario_diario, hora: M.mano_obra.operaciones.corte.salario_hora, fsr: M.mano_obra.FSR, mo_h: window.COTIZAP.manoObra.tarifa(M, 'corte').mo_h };
+    });
+    ok(mo.vieja === undefined && mo.horas === 9 && mo.diario === 700 && mo.hora === undefined && mo.fsr === 1.6 && Math.abs(mo.mo_h - (700 * 7) / (5 * 9) * 1.6) < 1e-9,
+      'un parche anterior: la jornada de 9 h pasa a «horas por día», se respetan el salario diario y el FSR editados y se descarta el salario por hora');
     await pv.context().close();
   }
 
@@ -763,7 +772,8 @@ const ok = (cond, msg) => {
     const cero = await nuevaPagina({}, conAlmacen({ [LLAVE_MAE]: JSON.stringify({ proceso: { eficiencia_taller: 0 } }) }));
     const aviso = await cero.locator('#aviso-error').innerText();
     ok(/proceso › eficiencia taller: debe ser un número mayor que 0 \(vale 0\)/.test(aviso), `el aviso nombra la tabla y el valor: «${aviso.slice(0, 120)}»`);
-    ok(await cero.locator('#lista-partidas .partida.err').count() === 6 && /Tablas maestras/.test(await cero.locator('.partida.err .chip-err').first().getAttribute('title')), 'las 6 partidas de taller se marcan con error; la comprada sigue calculándose');
+    ok(await cero.locator('#lista-partidas .partida.err').count() === 7 && /Tablas maestras/.test(await cero.locator('.partida.err .chip-err').first().getAttribute('title')),
+      'las 6 partidas de lámina y la soportería (usan la eficiencia del taller) se marcan con error; la comprada y la instalación siguen calculándose');
     ok((await cero.locator('.hero-val').innerText()).startsWith('$'), 'la pantalla sigue viva: el total se muestra');
     await cero.click('#tab-maestros');
     await cero.fill('#maestros-buscar', 'eficiencia_taller');
@@ -875,11 +885,11 @@ const ok = (cond, msg) => {
     // f) sin almacenamiento del navegador la app trabaja igual
     const bloq = await nuevaPagina({}, (ctx) => ctx.addInitScript(() => { Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('bloqueado', 'SecurityError'); } }); }));
     await bloq.click('#btn-agregar'); await bloq.waitForSelector('#dlg-partida[open]'); await bloq.click('#dlg-guardar'); await bloq.waitForTimeout(80);
-    ok(await bloq.locator('#lista-partidas .partida').count() === 8, 'con el almacenamiento bloqueado se puede seguir trabajando');
+    ok(await bloq.locator('#lista-partidas .partida').count() === 10, 'con el almacenamiento bloqueado se puede seguir trabajando');
     await bloq.context().close();
     const lleno = await nuevaPagina({}, (ctx) => ctx.addInitScript(() => { Storage.prototype.setItem = function setItem() { throw new DOMException('lleno', 'QuotaExceededError'); }; }));
     await lleno.click('#btn-agregar'); await lleno.waitForSelector('#dlg-partida[open]'); await lleno.click('#dlg-guardar'); await lleno.waitForTimeout(80);
-    ok(await lleno.locator('#lista-partidas .partida').count() === 8, 'con el almacenamiento lleno también');
+    ok(await lleno.locator('#lista-partidas .partida').count() === 10, 'con el almacenamiento lleno también');
     await lleno.context().close();
 
     // g) pantalla de 320 px: los avisos no aplastan su texto y la página no se desplaza de lado
@@ -1416,19 +1426,19 @@ const ok = (cond, msg) => {
     ok(/Ajustar todos de golpe/i.test(await pop.innerText()) && /¿QUÉ MUEVE MÁS EL PRECIO AQUÍ\?/i.test(await pop.innerText()), 'el grupo de mano de obra ofrece ajustar todos los salarios y ver qué pesa más');
     await pop.locator('.m-pop-cuerpo .m-sim-in').first().fill('10');
     await p.waitForTimeout(150);
-    ok(/10 salarios por hora cambiarían/.test(await pop.locator('.m-sim-res').first().innerText()), 'dice cuántos valores cambiarían');
+    ok(/11 salarios por día cambiarían/.test(await pop.locator('.m-sim-res').first().innerText()), 'dice cuántos valores cambiarían (las 10 operaciones del taller y la instalación)');
     const baseMO = await subtotal();
     await pop.locator('button:has-text("Aplicar a todos")').click();
     await p.waitForTimeout(200);
-    ok(await W(() => Object.values(window.COTIZAP.web.estadoApp.M.mano_obra.operaciones).every((o) => o.salario_hora === 550)) && (await subtotal()) > baseMO, 'un solo clic sube 10 % todos los salarios por hora ($500 → $550) y recalcula');
-    ok(/10 % a todos los salarios por hora/.test(await ultimo.innerText()), 'y la barra lo cuenta como un solo cambio');
+    ok(await W(() => Object.values(window.COTIZAP.web.estadoApp.M.mano_obra.operaciones).every((o) => o.salario_diario === 550)) && (await subtotal()) > baseMO, 'un solo clic sube 10 % todos los salarios por día ($500 → $550) y recalcula');
+    ok(/10 % a todos los salarios por día/.test(await ultimo.innerText()), 'y la barra lo cuenta como un solo cambio');
     await p.click('#maestros-deshacer');
-    ok(await W(() => Object.values(window.COTIZAP.web.estadoApp.M.mano_obra.operaciones).every((o) => o.salario_hora === 500)) && Math.abs((await subtotal()) - baseMO) < 0.006, 'y un solo Deshacer los regresa todos');
+    ok(await W(() => Object.values(window.COTIZAP.web.estadoApp.M.mano_obra.operaciones).every((o) => o.salario_diario === 500)) && Math.abs((await subtotal()) - baseMO) < 0.006, 'y un solo Deshacer los regresa todos');
     await p.locator('.m-grupo[data-grupo="mano_obra"] > summary .m-ayuda').click(); // un clic en «Deshacer» cerró la ventana: se vuelve a abrir
     await p.locator('.m-pop button:has-text("Calcular qué mueve")').click();
     await p.waitForSelector('.m-pop .m-rank-fila');
     const filasRank = await p.locator('.m-pop .m-rank-fila').count();
-    ok(filasRank >= 3 && filasRank <= 8 && /Factor de Salario Real|Salario por hora/.test(await p.locator('.m-pop .m-rank-fila').first().innerText()), 'ordena los datos del grupo por cuánto mueven el precio de la cotización');
+    ok(filasRank >= 3 && filasRank <= 8 && /Factor de Salario Real|Salario por día|Días pagados|Días trabajados|Horas por día/.test(await p.locator('.m-pop .m-rank-fila').first().innerText()), 'ordena los datos del grupo por cuánto mueven el precio de la cotización');
     await p.locator('.m-pop .m-rank-btn').first().click();
     await p.waitForTimeout(400);
     ok(await pop.isHidden() && await p.evaluate(() => /^m_mano_obra__/.test(document.activeElement.id)), 'pulsar uno lleva a ese dato');
@@ -1457,8 +1467,8 @@ const ok = (cond, msg) => {
     await p.waitForTimeout(500);
     ok(await p.locator('#dlg-ranking').count() === 0 && await p.evaluate(() => /^m_/.test(document.activeElement.id)), 'pulsar uno cierra el ranking y lleva al dato');
     await p.click('#maestros-guia');
-    ok(/Así se arma un precio/.test(await p.locator('#dlg-guia').innerText()) && await p.locator('#dlg-guia .guia-flujo li').count() === 7 && await p.locator('#dlg-guia .guia-pasos li').count() === 5, 'la guía rápida explica cómo se arma un precio (7 pasos) y en qué orden llenar (5)');
-    await p.locator('#dlg-guia .guia-pasos li').nth(4).locator('button').click();
+    ok(/Así se arma un precio/.test(await p.locator('#dlg-guia').innerText()) && await p.locator('#dlg-guia .guia-flujo li').count() === 8 && await p.locator('#dlg-guia .guia-pasos li').count() === 6, 'la guía rápida explica cómo se arma un precio (8 pasos) y en qué orden llenar (6)');
+    await p.locator('#dlg-guia .guia-pasos li').nth(5).locator('button').click();
     await p.waitForTimeout(400);
     ok(await p.locator('#dlg-guia').count() === 0 && await p.locator('.m-grupo[data-grupo="capas"]').evaluate((g) => g.open), '«Ir» cierra la guía y abre el grupo');
     await p.keyboard.press('Escape');
@@ -1492,6 +1502,222 @@ const ok = (cond, msg) => {
     await pl.locator('#m-pop button:has-text("Aplicar este valor")').click();
     ok(await pl.evaluate(() => window.COTIZAP.web.estadoApp.M.precios.precio_m3_gas_mezcla_ar_co2) === 145 && /Sólo lectura/.test(await pl.locator('#toasts').innerText()), 'pero aplicar un valor avisa «Sólo lectura» y no cambia nada');
     await pl.context().close();
+  }
+
+  console.log('24) Hoja de control de gastos: familias nuevas, compras en piezas enteras, venta pactada y control de gastos');
+  {
+    const p = await nuevaPagina();
+    const R = (fn, arg) => estadoApp(p, fn, arg);
+    const esperar = async (fn, ms = 4000) => {
+      const fin = Date.now() + ms;
+      while (Date.now() < fin) { if (await R(fn)) return true; await p.waitForTimeout(60); }
+      return false;
+    };
+    const HORA = (500 * 7) / (5 * 8);
+
+    // a) el selector ofrece las familias nuevas y cada una calcula con sus valores de arranque
+    await p.click('#btn-nueva');
+    await p.click('#btn-agregar');
+    await p.waitForSelector('#dlg-partida[open]');
+    const nombres = await p.locator('#dlg-familias .fam span').allInnerTexts();
+    ok(['Bridas sueltas', 'Soportería', 'Comprado', 'Instalación'].every((n) => nombres.includes(n)), 'el selector ofrece bridas sueltas, soportería, comprado e instalación');
+    await p.click('.fam:has(span:text-is("Bridas sueltas"))');
+    ok(await p.locator('#f_tipo_union').count() === 0 && await p.locator('#f_material_id').count() === 1 && /material del ducto/i.test(await p.locator('#dlg-campos').innerText()),
+      'las bridas sueltas no preguntan la unión (siempre bridadas) y su material es el del ducto');
+    ok(/Solera por aro/.test(await p.locator('#dlg-prev').innerText()) && await p.locator('#dlg-prev .errores').count() === 0, 'la vista previa dice cuánta solera lleva cada aro');
+    await p.fill('#f_cantidad', '30');
+    await p.click('#dlg-guardar');
+    await p.waitForTimeout(100);
+
+    // b) artículo comprado del catálogo: toma su precio, su descripción y si trae IVA
+    await p.click('#btn-agregar');
+    await p.click('.fam:has(span:text-is("Comprado"))');
+    await p.selectOption('#f_articulo_id', 'ABRAZADERA_MANGUERA');
+    await p.waitForTimeout(80);
+    ok(await p.inputValue('#f_precio_compra_unitario') === '' && await p.getAttribute('#f_precio_compra_unitario', 'placeholder') === '55', 'al elegir un artículo el precio queda vacío y se sugiere el del catálogo ($55)');
+    await p.fill('#f_cantidad', '18');
+    await p.click('#dlg-guardar');
+    await p.waitForTimeout(100);
+    const abr = await R(() => { const f = window.COTIZAP.web.estadoApp.res.partidas[1]; return { CD: f.costos.CD, cat: f.compra.categoria }; });
+    ok(Math.abs(abr.CD - (18 * 55) / 1.16) < 1e-6 && abr.cat === 'PROVEEDOR', 'el catálogo dice que $55 trae IVA: se cuesta sin IVA');
+    ok(/Abrazadera ajustable para manguera/.test(await p.locator('#lista-partidas .partida').nth(1).innerText()), 'sin descripción propia, la partida se llama como el artículo');
+    await p.locator('#lista-partidas .partida').nth(1).click();
+    ok(/Del catálogo de compras/.test(await p.locator('#detalle').innerText()) && /Compras y trabajos de terceros/.test(await p.locator('#detalle').innerText()), 'el desglose dice de dónde sale el precio y su renglón del control de gastos');
+
+    // c) instalación con viáticos: horas reales a $87.50, casetas y gasolina sin el IVA que se acredita
+    await p.click('#btn-agregar');
+    await p.click('.fam:has(span:text-is("Instalación"))');
+    ok(/Veces/.test(await p.locator('label[for="f_cantidad"]').innerText()) && /con IVA, como en el ticket/i.test(await p.locator('#dlg-campos').innerText()), 'la cantidad son visitas y los viáticos se capturan con IVA');
+    await p.fill('#f_dias', '5');
+    await p.fill('#f_casetas_viaje', '806');
+    await p.fill('#f_gasolina_viaje', '1500');
+    ok(await p.locator('.campo[data-campo="hospedaje_noche"]').isHidden(), 'el hospedaje por noche sólo se pide si hay noches');
+    await p.fill('#f_noches', '4');
+    ok(await p.locator('.campo[data-campo="hospedaje_noche"]').isVisible(), 'con noches aparece el hospedaje');
+    await p.fill('#f_noches', '0');
+    await p.click('#dlg-guardar');
+    await p.waitForTimeout(100);
+    const ins = await R(() => window.COTIZAP.web.estadoApp.res.partidas[2].costos);
+    ok(Math.abs(ins.h_MOD - 80) < 1e-9 && Math.abs(ins.CD - (80 * HORA * 1.03 + (806 + 1500) / 1.16)) < 1e-6, 'instalación: 2 personas × 5 días × 8 h a $87.50 + casetas y gasolina sin IVA');
+    await p.locator('#lista-partidas .partida').nth(2).click();
+    ok(/Cuadrilla y viáticos/.test(await p.locator('#detalle').innerText()) && /sin IVA \(con factura\)/.test(await p.locator('#detalle').innerText()), 'el desglose muestra la cuadrilla y la base de cada viático');
+
+    // d) soportería: piezas de una barra de la lista, anclajes del catálogo
+    await p.click('#btn-agregar');
+    await p.click('.fam:has(span:text-is("Soportería"))');
+    ok(await p.locator('.campo[data-campo="articulo_anclaje"]').isHidden(), 'sin anclajes no se pregunta cuál');
+    await p.fill('#f_anclajes_pieza', '4');
+    ok(await p.locator('.campo[data-campo="articulo_anclaje"]').isVisible(), 'con anclajes se elige el del catálogo');
+    await p.fill('#f_cantidad', '7');
+    await p.click('#dlg-guardar');
+    await p.waitForTimeout(100);
+    await p.locator('#lista-partidas .partida').nth(3).click();
+    ok(/Pieza, barra y anclajes/.test(await p.locator('#detalle').innerText()) && /28 × Taquete/.test(await p.locator('#detalle').innerText()), 'el desglose de la soportería dice barra, metros y anclajes');
+
+    // e) lista de compras en piezas enteras y el sobrante como partida automática
+    await p.click('#tab-compras');
+    ok(await p.locator('#panel-compras').isVisible() && await p.locator('#tab-compras').getAttribute('aria-selected') === 'true', 'la pestaña Compras y gastos se abre');
+    const lista = await p.locator('#cg-lista').innerText();
+    const sol = await R(() => window.COTIZAP.web.estadoApp.res.compras.barras.find((b) => b.clave === 'SOL_1_1_2X3_16'));
+    ok(sol.piezas === 30 && sol.compra >= Math.ceil(sol.necesario) && new RegExp(`Solera 1½" × 3/16"[\\s\\S]*?${sol.compra} barras`).test(lista), `los 30 aros se acomodan en ${sol.compra} barras de solera de 6 m`);
+    ok(/Ángulo 1¼" × 1\/8"/.test(lista) && /28 pzas/.test(lista), 'y la lista trae el ángulo de las ménsulas y los 28 taquetes');
+    const subSin = await R(() => window.COTIZAP.web.estadoApp.res.totales.subtotal);
+    await p.check('#cg_piezas_enteras');
+    ok(await esperar(() => window.COTIZAP.web.estadoApp.res.automaticas.length === 1), 'cobrar el sobrante agrega una partida automática');
+    const auto = await R(() => { const r = window.COTIZAP.web.estadoApp.res; return { imp: r.automaticas[0].precio.importe, sub: r.totales.subtotal, n: r.totales.n_partidas_ok }; });
+    ok(Math.abs(auto.sub - subSin - auto.imp) < 0.011 && auto.n === 4, 'el subtotal sube lo de esa partida y no cuenta como partida del usuario');
+    await p.click('#tab-cotizacion');
+    ok(await p.locator('#lista-partidas .partida-auto').count() === 1 && /Automática/.test(await p.locator('#lista-partidas .partida-auto').innerText()), 'en la cotización se ve la partida automática');
+    ok(/material sobrante/i.test(await p.locator('#totales').innerText()), 'y los totales dicen que incluyen el sobrante');
+    await p.click('#lista-partidas .partida-auto button');
+    ok(await p.locator('#panel-compras').isVisible(), '«Ver la lista de compras» lleva a la pestaña');
+    await p.uncheck('#cg_piezas_enteras');
+    ok(await esperar(() => window.COTIZAP.web.estadoApp.res.automaticas.length === 0), 'y se quita');
+
+    // f) venta pactada: el resultado contra el costo y el precio mínimo
+    await p.fill('#cg_venta_pactada', '-5');
+    await p.waitForTimeout(80);
+    ok(await p.locator('#cg-venta-campo').evaluate((e) => e.classList.contains('invalido')) && await R(() => window.COTIZAP.web.estadoApp.cot.venta_pactada === undefined), 'una venta negativa se marca y no se usa');
+    const T0 = await R(() => window.COTIZAP.web.estadoApp.res.totales);
+    const venta = Math.round(T0.costo_directo * 1.1);
+    await p.fill('#cg_venta_pactada', String(venta));
+    ok(await esperar(() => !!window.COTIZAP.web.estadoApp.res.totales.venta), 'una venta válida se toma');
+    const V = await R(() => window.COTIZAP.web.estadoApp.res.totales.venta);
+    ok(V.pactada === venta && V.cubre_costo_directo === true && V.cubre_precio_minimo === false && V.utilidad < 0, 'vender 10 % arriba del costo directo cubre el costo pero no el precio mínimo');
+    ok(/le faltan/.test(await p.locator('#cg-resultado').innerText()) && await p.locator('#cg-resultado .cg-marca-venta').count() === 1, 'la regla marca la venta y dice cuánto falta para el precio mínimo');
+    await p.click('#tab-cotizacion');
+    ok(await p.locator('#totales .venta-res.venta-adv').count() === 1, 'los totales de la cotización muestran la venta pactada en amarillo (cubre el costo directo, no los indirectos)');
+    await p.click('#tab-compras');
+
+    // g) captura de gastos: agregar, categoría, costo sin IVA, quitar y deshacer
+    ok(/Todavía no hay gastos/.test(await p.locator('#cg-captura').innerText()), 'sin gastos, la captura lo dice');
+    await p.click('#cg-agregar');
+    const fila = p.locator('#cg-captura tr[data-id]').first();
+    ok(await p.evaluate(() => document.activeElement.classList.contains('cg-in-concepto')), 'el renglón nuevo queda listo para escribir el concepto');
+    await fila.locator('[data-campo="concepto"]').fill('6 soleras 1½″ × 3/16″');
+    await fila.locator('[data-campo="cantidad"]').fill('6');
+    await fila.locator('[data-campo="precio_unitario"]').fill('250.0032');
+    await p.waitForTimeout(80);
+    ok(/\$1,293\.12/.test(await fila.locator('[data-campo="costo"]').innerText()), 'con IVA y factura el costo es sin IVA: 6 × $250.00 ÷ 1.16 = $1,293.12');
+    await fila.locator('[data-campo="con_factura"]').uncheck();
+    await p.waitForTimeout(80);
+    ok(/\$1,500\.02/.test(await fila.locator('[data-campo="costo"]').innerText()), 'sin factura el IVA es costo');
+    await fila.locator('[data-campo="categoria"]').selectOption('MANO_OBRA');
+    await p.waitForTimeout(80);
+    ok(!(await fila.locator('[data-campo="iva_incluido"]').isChecked()) && !(await fila.locator('[data-campo="con_factura"]').isChecked()), 'al pasar a mano de obra se quitan IVA y factura (la raya no lleva IVA)');
+    await fila.locator('[data-campo="categoria"]').selectOption('MATERIAL');
+    await fila.locator('[data-campo="iva_incluido"]').check();
+    await p.waitForTimeout(80);
+    ok(await fila.locator('[data-campo="con_factura"]').isChecked(), 'y al volver a material, la factura vuelve');
+    await fila.locator('[data-campo="cantidad"]').fill('-1');
+    await p.waitForTimeout(80);
+    ok(await fila.evaluate((e) => e.classList.contains('cg-mal')) && /Renglón 1/.test(await p.locator('#cg-comparacion').innerText()), 'una cantidad negativa marca el renglón y se avisa');
+    await fila.locator('[data-campo="cantidad"]').fill('6');
+    await p.waitForTimeout(80);
+    const cmp = await p.locator('#cg-comparacion').innerText();
+    ok(/Real contra cotizado/i.test(cmp) && /\$1,293\.12/.test(cmp) && /Utilidad antes de indirectos/.test(cmp), 'la comparación por categoría y el resultado del proyecto se actualizan al teclear');
+    await fila.locator('[data-quitar]').click();
+    ok(await p.locator('#cg-captura tr[data-id]').count() === 0, 'quitar un gasto lo quita');
+    await p.click('.toast button:has-text("Deshacer")');
+    ok(await p.locator('#cg-captura tr[data-id]').count() === 1, 'y deshacer lo regresa');
+
+    // h) la lista de compras como base de los gastos: renglones «estimado» que se vuelven reales al editarlos
+    await p.click('#cg-a-gastos');
+    await p.waitForTimeout(120);
+    const nEst = await p.locator('#cg-captura tr.cg-estimado').count();
+    const conteo = await R(() => window.COTIZAP.web.comprasUI.gastosEsperados().length);
+    ok(nEst === conteo && nEst >= 8 && await p.locator('#cg-captura tr[data-id]').count() === nEst + 1, 'cada compra, la soldadura, la mano de obra y los viáticos llegan como «estimado», y el gasto real se queda');
+    const cats = await R(() => window.COTIZAP.web.estadoApp.cot.gastos.filter((g) => g.estimado).map((g) => g.categoria));
+    ok(['MATERIAL', 'SOPORTERIA', 'PROVEEDOR', 'MANO_OBRA', 'INSTALACION', 'VIATICOS'].every((c) => cats.includes(c)), 'cada renglón cae en su categoría (material, soportería, compras, mano de obra, instalación y viáticos)');
+    const casi = await R(() => { const G = window.COTIZAP.gastos; const r = G.resumen(window.COTIZAP.web.estadoApp.res, window.COTIZAP.web.estadoApp.cot.gastos.filter((g) => g.estimado), 0.16); return Math.abs(r.totales.real - r.totales.cotizado) / r.totales.cotizado; });
+    ok(casi < 0.06, `sin cambiar nada, lo estimado casi iguala lo cotizado (${(casi * 100).toFixed(1)} %: la diferencia es lo que se compra entero)`);
+    const est = p.locator('#cg-captura tr.cg-estimado').first();
+    await est.locator('[data-campo="precio_unitario"]').fill('300');
+    await p.waitForTimeout(80);
+    ok(await p.locator('#cg-captura tr.cg-estimado').count() === nEst - 1, 'al poner el precio del ticket el renglón deja de ser estimado');
+    await p.click('#cg-a-gastos');
+    await p.waitForTimeout(120);
+    ok(await p.locator('#cg-captura tr.cg-estimado').count() === nEst && await p.locator('#cg-captura tr[data-id]').count() === nEst + 2, 'repetirlo renueva los estimados sin tocar lo ya capturado (los dos renglones reales se quedan)');
+
+    // i) CSV y persistencia
+    await p.click('#cg-copiar-lista');
+    await p.waitForTimeout(150);
+    const csvVisto = (await p.locator('#dlg-io[open]').count()) ? await p.inputValue('#io-texto') : await R(() => window.COTIZAP.web.comprasUI.csvLista());
+    ok(/^"Grupo","Concepto"/.test(csvVisto) && /Solera 1½/.test(csvVisto), 'la lista de compras se copia como CSV');
+    if (await p.locator('#dlg-io[open]').count()) await p.click('#io-cerrar');
+    const antes = await R(() => ({ g: window.COTIZAP.web.estadoApp.cot.gastos.length, v: window.COTIZAP.web.estadoApp.cot.venta_pactada }));
+    await p.reload();
+    await p.waitForSelector('#lista-partidas .partida');
+    const despues = await R(() => ({ g: window.COTIZAP.web.estadoApp.cot.gastos.length, v: window.COTIZAP.web.estadoApp.cot.venta_pactada }));
+    ok(despues.g === antes.g && despues.v === antes.v, 'los gastos y la venta pactada se conservan al recargar');
+
+    // j) el ejemplo de la hoja: se abre desde la captura vacía y se puede deshacer
+    await p.click('#tab-compras');
+    await R(() => { window.COTIZAP.web.estadoApp.cot.gastos = []; window.COTIZAP.web.render(); });
+    const previa = await R(() => window.COTIZAP.web.estadoApp.cot.partidas.length);
+    await p.click('#cg-ejemplo');
+    await p.waitForTimeout(200);
+    const ej = await R(() => { const E = window.COTIZAP.web.estadoApp; return { n: E.cot.partidas.length, g: E.cot.gastos.length, v: E.res.totales.venta.pactada, err: E.res.totales.n_partidas_error }; });
+    ok(ej.n === 12 && ej.g === 15 && ej.v === 45710 && ej.err === 0, 'el ejemplo trae las 12 partidas y los 15 gastos de la hoja, vendido en $45,710');
+    const cmpEj = await p.locator('#cg-comparacion').innerText();
+    ok(/\$43,347\.47/.test(cmpEj) && /\$2,362\.53/.test(cmpEj) && /5\.2 %/.test(cmpEj), 'gastos reales $43,347.47 y utilidad antes de indirectos $2,362.53 (5.2 %), como en la hoja con la raya a $87.50');
+    await p.click('.toast:has-text("Ejemplo abierto") button:has-text("Deshacer")');
+    await p.waitForTimeout(150);
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.partidas.length) === previa, 'Deshacer regresa la cotización anterior');
+    await p.context().close();
+
+    // k) tablas maestras: el catálogo de compras, con su IVA y su categoría de gasto como listas
+    const q = await nuevaPagina();
+    await q.click('#tab-maestros');
+    ok(await q.locator('.m-grupo[data-grupo="compras"]').count() === 1, 'las tablas maestras traen el catálogo de compras');
+    await q.fill('#maestros-buscar', 'sikaflex');
+    const iva = q.locator('#m_compras__articulos__SIKAFLEX_BLANCO_600__iva_incluido');
+    const cat = q.locator('#m_compras__articulos__SIKAFLEX_BLANCO_600__categoria');
+    ok(await iva.evaluate((e) => e.tagName) === 'SELECT' && await iva.inputValue() === 'true' && await cat.evaluate((e) => e.tagName) === 'SELECT' && await cat.inputValue() === 'MATERIAL',
+      'si el precio trae IVA y la categoría de gasto se eligen de una lista');
+    await q.click('#tab-cotizacion');
+    await q.evaluate(() => {
+      const E = window.COTIZAP.web.estadoApp;
+      E.cot.partidas.push({ id: 'pSika', familia: 'COMPRADO', cantidad: 2, articulo_id: 'SIKAFLEX_BLANCO_600' });
+      window.COTIZAP.web.recalcular();
+    });
+    const sikaAntes = await q.evaluate(() => window.COTIZAP.web.estadoApp.res.partidas.find((f) => f.entrada.articulo_id === 'SIKAFLEX_BLANCO_600').costos.CD);
+    await q.click('#tab-maestros');
+    await q.fill('#maestros-buscar', 'sikaflex');
+    await q.locator('#m_compras__articulos__SIKAFLEX_BLANCO_600__precio').fill('580');
+    await q.locator('#m_compras__articulos__SIKAFLEX_BLANCO_600__precio').dispatchEvent('change');
+    await q.waitForTimeout(120);
+    const sikaDespues = await q.evaluate(() => window.COTIZAP.web.estadoApp.res.partidas.find((f) => f.entrada.articulo_id === 'SIKAFLEX_BLANCO_600').costos.CD);
+    ok(Math.abs(sikaAntes - (2 * 459) / 1.16) < 1e-6 && Math.abs(sikaDespues - (2 * 580) / 1.16) < 1e-6, 'cambiar el precio del catálogo recalcula la partida que usa el artículo');
+    await q.context().close();
+
+    // l) en el celular nada se sale de la pantalla, ni con el ejemplo abierto
+    const m = await nuevaPagina({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await m.evaluate(() => window.COTIZAP.web.abrirCotizacion(window.COTIZAP.ejemplos.casoControlGastos()));
+    await m.click('#tab-compras');
+    await m.waitForTimeout(150);
+    ok(await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'Compras y gastos en el celular: sin desplazamiento horizontal');
+    await m.context().close();
   }
 
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);

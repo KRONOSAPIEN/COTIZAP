@@ -50,6 +50,7 @@
     [/^precio_kg_/, 'MXN/kg'], [/^precio_m3_/, 'MXN/m³'], [/^precio_m_/, 'MXN/m'], [/^precio_cartucho/, 'MXN/cartucho'], [/^precio_pza/, 'MXN/pza'],
     [/^precio_juego/, 'MXN/juego'], [/^precio_L_/, 'MXN/L'], [/salario_hora/, 'MXN/h'], [/equipo_h$/, 'MXN/h'], [/gif_por_hora/, 'MXN/h'], [/cargo_minimo/, 'MXN'],
     [/_mm$/, 'mm'], [/_mm2$/, 'mm²'], [/_m_min$/, 'm/min'], [/_min_m2$/, 'min/m²'], [/_min_m$/, 'min/m'], [/_min_kg$/, 'min/kg'], [/_min$/, 'min'], [/_deg$/, '°'],
+    [/^salario_diario$/, 'MXN/día'], [/^dias_/, 'días'], [/^horas_dia$/, 'h/día'], [/_envase_L$/, 'L'], [/^tornillos_multiplo$/, 'juegos'],
     [/_kg_m3$/, 'kg/m³'], [/_g_cm3$/, 'g/cm³'], [/_L_min$/, 'L/min'], [/_um$/, 'µm'], [/^sv_pct$/, '%'], [/^dias_cobro$/, 'días'], [/ml_por_m/, 'mL/m'], [/^cartucho_ml$/, 'mL'],
   ];
 
@@ -62,6 +63,7 @@
     const par = UNIDADES.find(([re]) => re.test(k));
     if (par) return par[1];
     if (ruta[0] === 'calibres') return 'in';
+    if (ruta[0] === 'compras' && k === 'precio') return 'MXN';
     return '';
   }
   /** El número tal como se ve en pantalla (los % se muestran por 100). */
@@ -78,8 +80,14 @@
   const OPERACIONES = {
     corte: 'Corte', rolado: 'Rolado y plegado', armado: 'Armado y punteo', aros: 'Fabricación de aros de brida', soldadura: 'Soldadura',
     engargolado: 'Engargolado', barrenado: 'Barrenado', acabado: 'Acabado (esmerilado y limpieza)', pintura: 'Pintura', qc_embalaje: 'Inspección y embalaje',
+    instalacion: 'Instalación en obra',
   };
   const MATERIALES = { ACERO_CARBON: 'acero al carbón', GALVANIZADO: 'galvanizado', INOX_304: 'inox 304', INOX_316: 'inox 316' };
+  const ARTICULOS = {
+    MANGUERA_6: 'manguera de 6″', MANGUERA_5: 'manguera de 5″', MANGUERA_3: 'manguera de 3″', ABRAZADERA_MANGUERA: 'abrazadera de manguera',
+    TAQUETE_3_8: 'taquete de 3/8″', RIEL_1500_C14: 'riel 1500', TEJUELO_2: 'tejuelo de 2″', CARRETILLA_EMBALADA: 'carretilla embalada',
+    SIKAFLEX_BLANCO_600: 'Sikaflex blanco', SIKAFLEX_GRIS_600: 'Sikaflex gris',
+  };
   const SISTEMAS = { NINGUNA: 'sin pintura', ESMALTE: 'esmalte (sólo pintura)', PRIMARIO: 'primario', PRIMARIO_ESMALTE: 'primario + esmalte' };
 
   /* ======================================================================================================== */
@@ -100,11 +108,16 @@
     'Un renglón por variable, en MXN por la unidad que se ve a la derecha. El resto de las tablas sólo apunta a estos nombres: se cambia el precio aquí y se actualiza en todos lados.',
     'Se mueve únicamente lo que usa esa variable. El kg de lámina y de perfil de este grupo sólo se usa si el calibre o perfil falta en la lista del proveedor.',
     { origen: 'mixto', origenTxt: 'Acero, solera y ángulo salen de la lista real del proveedor; los demás precios son ilustrativos.', afecta: ['mat', 'cons'] });
+  E('compras', 'Catálogo de compras',
+    'Los artículos que se compran hechos (mangueras, abrazaderas, taquetes, riel, selladores…): su precio, su unidad y si el precio trae IVA.',
+    'Un renglón por artículo. Capture el precio como lo da la tienda y diga si trae IVA. Abajo: el IVA que se le quita y cómo se compran tornillos y pintura en la lista de compras.',
+    'Las partidas de «Artículo comprado» y los anclajes de la soportería toman el precio de aquí; un precio con IVA se cuesta sin él (el IVA se acredita).',
+    { origen: 'real', origenTxt: 'Precios de la hoja de control de gastos del 6 de octubre de 2026.', afecta: ['mat'], ej: 'Taquete de 3/8″ a $16 con IVA → $13.79 sin IVA por pieza.' });
   E('mano_obra', 'Mano de obra y equipo',
-    'Cuánto cuesta una hora de cada operación del taller: el salario por hora del personal y el costo por hora de la máquina.',
-    'Salario en MXN por hora con prestaciones incluidas (hoy $500) y FSR = 1.00. En equipo ponga depreciación + energía + mantenimiento por hora de máquina.',
-    'Cada hora de taller que calcula el cotizador se cobra con estas tarifas. Subirlas encarece las operaciones que usan esas horas, los indirectos por hora y, con ellos, el precio.',
-    { origen: 'mixto', origenTxt: 'El salario de $500 por hora es real; el costo de equipo por hora es ilustrativo.', afecta: ['mo', 'eq'] });
+    'Cuánto cuesta una hora de cada operación: el salario por DÍA del personal, la jornada que convierte el día en horas trabajadas y el costo por hora de la máquina.',
+    'Salario en MXN por día (hoy $500, ya con prestaciones: FSR = 1.00). La jornada dice cuántos días paga la semana y cuántos se trabajan. En equipo: depreciación + energía + mantenimiento.',
+    'La hora trabajada cuesta salario × días pagados ÷ (días trabajados × horas por día): con $500, 7, 5 y 8 h, $87.50. Subirla encarece las horas de taller y de instalación.',
+    { origen: 'mixto', origenTxt: 'El salario de $500 por día es real (el trabajador gana $3,500 a la semana); el costo de equipo por hora es ilustrativo.', afecta: ['mo', 'eq'], ej: '$500 × 7 días pagados ÷ (5 días × 8 h) = $87.50 por hora trabajada.' });
   E('merma', 'Merma por familia de pieza',
     'La parte de la lámina comprada que no queda en la pieza: recortes, huecos de injertos y cortes. Una merma por familia.',
     'Capture en %. Entre más curvas, cuñas e injertos tenga la familia, más recorte deja. Se obtiene pesando recortes contra lámina usada en obras reales.',
@@ -228,19 +241,19 @@
     'MXN por metro de cinta. Cada brida lleva medio empaque (el otro medio es de la brida de enfrente).',
     'Sube el costo de todas las uniones con brida; más diámetro = más metros de empaque.',
     { afecta: ['mat'], tip: [8, 80] });
-  P('precio_cartucho_sellador_300ml', 'Cartucho de sellador',
-    'Cartucho de sellador de 300 mL para sellar juntas.',
-    'MXN por cartucho. El cálculo lo prorratea por mL usando lo que dice «cartucho mL» en Herrajes.',
-    'Sube el costo de las juntas que llevan sellador (espiga y clases de sellado).',
-    { afecta: ['mat'], tip: [60, 250] });
+  P('precio_cartucho_sellador', 'Cartucho de sellador',
+    'Cartucho de sellador para juntas (hoy Sikaflex blanco de 600 mL).',
+    'MXN por cartucho, sin IVA ($459 con IVA → $395.69). El cálculo lo prorratea por mL con «tamaño del cartucho» de Herrajes.',
+    'Sube el costo de las juntas que llevan sellador (espiga y clases de sellado). El gris de 600 mL cuesta $359 con IVA.',
+    { afecta: ['mat'], tip: [100, 700] });
   P('precio_pza_autotaladrante', 'Tornillo autotaladrante',
     'Tornillo autotaladrante que fija las juntas de espiga.',
     'MXN por pieza.',
     'Sube el costo de las uniones de espiga; no afecta las bridadas.',
     { afecta: ['mat'], tip: [0.3, 4] });
   P('precio_juego_tornillo_5_16_x_1_1_4', 'Tornillo 5/16″ × 1¼″ (brida estándar)',
-    'Un juego de tornillo 5/16″ × 1¼″ con tuerca y dos rondanas planas: el de la brida estándar de solera.',
-    'MXN por juego completo.',
+    'Un juego completo: tornillo hexagonal galvanizado 5/16″ × 1¼″, tuerca, rondana plana y rondana de presión. Es el de la brida estándar.',
+    'MXN por juego, sin IVA: $1.72 + $0.75 + $0.60 + $0.60 = $3.67.',
     'Sube el costo de cada brida estándar en proporción a sus tornillos (uno cada ≈ 150 mm de perímetro, múltiplos de 4).',
     { afecta: ['mat'], tip: [1.5, 15] });
   P('precio_juego_tornillo_m8', 'Juego de tornillo M8',
@@ -316,13 +329,33 @@
 
   /* ---------------------------------------- Mano de obra ---------------------------------------- */
   E('mano_obra.FSR', 'Factor de Salario Real (FSR)',
-    'Multiplicador del salario por hora para cubrir prestaciones y cargas del trabajador (seguro, aguinaldo, vacaciones…).',
-    'Déjelo en 1.00: el salario de $500/h del taller YA incluye prestaciones. Use 1.3 a 1.6 sólo si captura salarios sin prestaciones.',
+    'Multiplicador del salario para cubrir prestaciones y cargas del trabajador (IMSS, INFONAVIT, aguinaldo, vacaciones…).',
+    'Déjelo en 1.00 si el salario de $500 por día YA incluye las prestaciones. Use 1.3 a 1.6 si captura el salario sin ellas.',
     'Multiplica TODA la mano de obra. Con 1.30 cada hora cuesta 30 % más: suben mano de obra, herramienta menor y el precio.',
-    { afecta: ['mo'], tip: [1, 2], ej: 'Salario base $400/h × FSR 1.35 = $540/h de costo real.', ojo: 'No lo use para «meter utilidad»: la utilidad va en la Pila de precio.' });
+    { afecta: ['mo'], tip: [1, 2], ej: 'Hora de $87.50 × FSR 1.35 = $118.13 de costo real.', ojo: 'No lo use para «meter utilidad»: la utilidad va en la Pila de precio.' });
+  E('mano_obra.jornada', 'Jornada',
+    'Cómo se convierte el salario por día en costo por hora trabajada: días que paga la semana, días que se trabajan y horas por día.',
+    'La semana paga 7 días (el séptimo incluido) aunque se trabajen 5 de 8 h: así el trabajador gana $3,500 por 40 h trabajadas.',
+    'Hora = salario × días pagados ÷ (días trabajados × horas por día). Más días pagados o menos horas trabajadas = hora más cara.',
+    { afecta: ['mo'] });
+  E('mano_obra.jornada.dias_pagados_semana', 'Días pagados por semana',
+    'Cuántos días de salario se pagan en una semana, incluido el séptimo día de descanso.',
+    'Número de 1 a 7. Con salario semanal de $3,500 a $500 por día son 7.',
+    'Más días pagados por las mismas horas trabajadas = hora más cara: con 5 en vez de 7 la hora baja de $87.50 a $62.50.',
+    { afecta: ['mo'], tip: [5, 7] });
+  E('mano_obra.jornada.dias_trabajados_semana', 'Días trabajados por semana',
+    'Cuántos días se trabaja de verdad en una semana.',
+    'Número de 1 a 7 (hoy 5, de lunes a viernes).',
+    'Más días trabajados por el mismo pago = hora más barata: con 6 la hora baja de $87.50 a $72.92.',
+    { afecta: ['mo'], tip: [4, 7] });
+  E('mano_obra.jornada.horas_dia', 'Horas por día',
+    'Las horas que se trabajan en un día de jornada.',
+    'En horas (hoy 8). También es el día de la cuadrilla de instalación si la partida no dice otro.',
+    'Más horas por día = hora más barata y días de instalación más largos: con 9 h la hora baja a $77.78.',
+    { afecta: ['mo'], tip: [6, 12] });
   E('mano_obra.operaciones', 'Tarifas por operación',
-    'Una tarifa por hora para cada operación del taller: corte, rolado, armado, aros, soldadura, engargolado, barrenado, acabado, pintura, inspección.',
-    'Cada operación lleva salario por hora y costo de equipo por hora. Hoy el salario es de $500 en todas.',
+    'Una tarifa para cada operación del taller (corte, rolado, armado, aros, soldadura, engargolado, barrenado, acabado, pintura, inspección) y para la instalación en obra.',
+    'Cada operación lleva salario por día y costo de equipo por hora. Hoy el salario es de $500 por día en todas.',
     'Cada hora de una operación se cobra con su tarifa; las operaciones con muchas horas (soldadura, armado) pesan más en el precio.',
     { afecta: ['mo', 'eq'] });
   E('mano_obra.operaciones.*', 'Tarifa de {0}',
@@ -330,15 +363,15 @@
     'Un renglón por operación del taller. Si dos operaciones comparten personal y equipo, repita la misma tarifa.',
     'Cambia sólo el costo de las horas de esta operación.',
     { afecta: ['mo', 'eq'], nom: OPERACIONES });
-  E('mano_obra.operaciones.*.salario_hora', 'Salario por hora · {0}',
-    'Lo que se paga por hora de trabajo en esta operación, con prestaciones incluidas.',
-    'MXN por hora. Hoy $500 en todas (incluye prestaciones). Capture otra tarifa si esta operación la hace personal de otro nivel.',
-    'Sube o baja en la misma proporción el costo de mano de obra de esta operación (× FSR). No cambia las horas.',
-    { afecta: ['mo'], tip: [150, 1500], nom: OPERACIONES, ej: '1 h de soldadura a $500 con FSR 1.00 cuesta $500 de mano de obra.' });
+  E('mano_obra.operaciones.*.salario_diario', 'Salario por día · {0}',
+    'Lo que gana por día el personal de esta operación, sin utilidad y con prestaciones incluidas.',
+    'MXN por día. Hoy $500 en todas. Capture otro si esta operación la hace personal de otro nivel (un soldador, un ayudante).',
+    'Sube o baja en la misma proporción el costo de mano de obra de esta operación: la hora es este salario × 7 ÷ 40 (con la jornada de arranque).',
+    { afecta: ['mo'], tip: [250, 2000], nom: OPERACIONES, ej: '$500 por día = $87.50 por hora trabajada; 1 h de soldadura cuesta $87.50 de mano de obra más su equipo.' });
   E('mano_obra.operaciones.*.equipo_h', 'Costo del equipo por hora · {0}',
     'Lo que cuesta cada hora de usar la máquina de esta operación: depreciación, energía y mantenimiento.',
     'MXN por hora de máquina = (inversión ÷ horas útiles al año) + energía + mantenimiento. ILUSTRATIVO. Use 0 si no hay máquina.',
-    'Sube el costo de esta operación en proporción a sus horas. En «qc_embalaje» está en 0 porque no usa máquina.',
+    'Sube el costo de esta operación en proporción a sus horas. En inspección y en instalación está en 0 (sin máquina propia).',
     { afecta: ['eq'], tip: [0, 400], nom: OPERACIONES });
 
   /* ---------------------------------------- Merma ---------------------------------------- */
@@ -376,6 +409,11 @@
     'En %. Use 0 si el recorte no se vende o se usa en otra obra. Si lo vende, ponga el % que realmente recupera.',
     'Resta del material el valor de la chatarra recuperada (precio de chatarra × kg de merma × este %). Baja el precio; con 0 no hace nada.',
     { afecta: ['mat'], tip: [0, 100] });
+  C('gif_por_hora_instalacion', 'Indirectos por hora de instalación',
+    'Gastos indirectos que se reparten por cada hora de la cuadrilla en obra (supervisión, vehículo, herramienta mayor). La nave no se usa.',
+    'MXN por hora-hombre en obra. Hoy 0: la instalación sólo carga administración, imprevistos, financiamiento y utilidad.',
+    'Suma este monto por cada hora de la cuadrilla. Con $40/h, 2 personas × 5 días × 8 h suman $3,200 de indirectos.',
+    { afecta: ['ci'], tip: [0, 300] });
   C('gif_por_hora_mod', 'Indirectos de fábrica por hora de taller',
     'Gastos indirectos de fabricación (renta, luz, supervisión, depreciación general) que se reparten por cada hora de mano de obra directa.',
     'MXN por hora de trabajo directo. Cálculo: indirectos mensuales de la nave ÷ horas directas trabajadas al mes. ILUSTRATIVO.',
@@ -891,6 +929,11 @@
     'En min por metro de aro. Cronometre rolar un aro de Ø300 mm (≈ 1 m de largo).',
     'Aros de mayor diámetro llevan más metros: este valor pesa más en bridas grandes.',
     { afecta: ['mo', 'eq'], tip: [0.5, 8] });
+  E('proceso.aros.puntas_rolado_mm', 'Puntas que no se rolan',
+    'El tramo recto que la roladora no alcanza a curvar en las dos puntas de la solera: se corta y se pierde.',
+    'En mm por aro (las dos puntas juntas). Con 126 mm la solera de un aro redondo es la de la regla del taller, π × (D + 81 mm). No aplica a marcos rectangulares.',
+    'Alarga la solera de cada aro redondo: con 126 mm una brida de 11″ lleva 1 132 mm en vez de 1 006 mm (+12.5 % de solera).',
+    { afecta: ['mat', 'peso'], tip: [0, 250] });
   E('proceso.aros.holgura_corte_mm', 'Holgura de corte del aro',
     'Longitud extra que se corta de más en cada aro por el corte y el cierre de la soldadura.',
     'En mm por aro.',
@@ -1073,11 +1116,95 @@
     'En min por pieza.',
     'Suma estos minutos a cada pieza: pesa en piezas livianas.',
     { afecta: ['mo'], tip: [0, 15] });
+  E('proceso.soportes', 'Soportería',
+    'Los datos de arranque de las piezas de soportería (ménsulas, abrazaderas, postes): minutos de taller, anclaje y tornillo.',
+    'Cada partida de soportería puede traer los suyos; éstos rigen si no.',
+    'Cambian las horas y el material de las partidas de soportería que no dicen los suyos.',
+    { afecta: ['mo', 'mat'] });
+  E('proceso.soportes.t_fab_pieza_min', 'Minutos de taller por pieza',
+    'Lo que tarda el taller en cortar, doblar, barrenar y puntear una pieza de soportería.',
+    'En min por pieza (estándar: se divide entre la eficiencia del taller). ILUSTRATIVO.',
+    'Sube las horas de armado de la soportería: 15 piezas a 15 min son ≈ 4.7 h reales.',
+    { afecta: ['mo', 'eq'], tip: [0, 120] });
+  E('proceso.soportes.anclaje_defecto', 'Anclaje por omisión',
+    'El artículo del catálogo de compras con que se fija cada pieza (hoy el taquete de 3/8″).',
+    'Se elige de la lista del catálogo de compras.',
+    'Cambia el precio de los anclajes de las partidas que no eligen otro.',
+    { afecta: ['mat'] });
+  E('proceso.soportes.tornillo', 'Tornillo de la soportería',
+    'El juego de tornillo con que se unen las piezas (abrazadera con ménsula).',
+    'Se elige de la lista de tornillos con precio (Herrajes).',
+    'Cambia el precio de los tornillos de la soportería.',
+    { afecta: ['mat'] });
   E('proceso.qc.k_manejo_min_kg', 'Manejo por kilo',
     'Minutos de cargar, envolver y embalar por cada kg de pieza.',
     'En min por kg.',
     'Multiplica el peso de la pieza (incluye aros y bridas sueltas): pesa en piezas pesadas.',
     { afecta: ['mo'], tip: [0.01, 0.3] });
+
+  /* ---------------------------------------- Catálogo de compras ---------------------------------------- */
+  E('compras.iva_pct', 'IVA de las compras',
+    'El IVA que se le quita a un precio del catálogo (o a un artículo comprado, un viático o un gasto) que lo trae incluido.',
+    'En %. En México 16 %.',
+    'Un precio con IVA se cuesta sin él: con 16 %, $116 con IVA son $100 de costo (el IVA se acredita).',
+    { afecta: ['mat'], tip: [0, 16] });
+  E('compras.articulos', 'Artículos',
+    'Lo que se compra hecho: un bloque por artículo con su descripción, unidad, precio, si el precio trae IVA y su categoría en el control de gastos.',
+    'Cada campo se explica con su botón ⓘ.',
+    'Las partidas de «Artículo comprado» que eligen un artículo y los anclajes de la soportería toman de aquí su precio.',
+    { afecta: ['mat'] });
+  E('compras.articulos.*', 'Artículo {0}',
+    'Un artículo del catálogo de compras.',
+    'Descripción, unidad (pza, tramo…), precio, si el precio trae IVA y en qué categoría del control de gastos cae.',
+    'Cambia el costo de las partidas que usan este artículo.',
+    { nom: ARTICULOS, afecta: ['mat'] });
+  E('compras.articulos.*.descripcion', 'Descripción · {0}',
+    'Cómo se llama el artículo en la cotización y en la lista de compras.',
+    'Texto libre, p. ej. Manguera azul de 6″ (tramo de 5 m).',
+    'Sólo cambia el texto que se muestra.',
+    { nom: ARTICULOS, afecta: ['info'] });
+  E('compras.articulos.*.unidad', 'Unidad · {0}',
+    'En qué se compra el artículo: pieza, tramo o rollo.',
+    'Texto corto, p. ej. pza o tramo.',
+    'Sólo cambia el texto que se muestra.',
+    { nom: ARTICULOS, afecta: ['info'] });
+  E('compras.articulos.*.precio', 'Precio · {0}',
+    'Lo que cuesta una unidad del artículo, como lo da la tienda o el proveedor.',
+    'MXN por unidad. Diga abajo si trae IVA.',
+    'Sube el costo de las partidas que usan este artículo en la misma proporción.',
+    { nom: ARTICULOS, afecta: ['mat'], tip: [0.5, 50000] });
+  E('compras.articulos.*.iva_incluido', 'El precio trae IVA · {0}',
+    'Si el precio capturado ya incluye el IVA.',
+    'Elija Sí si el precio es con IVA (como en el ticket), No si es antes de IVA.',
+    'Con Sí el costo es el precio ÷ (1 + IVA de las compras): un 13.8 % menos.',
+    { nom: ARTICULOS, afecta: ['mat'], opc: { true: 'Sí: el precio ya trae IVA; se le quita.', false: 'No: el precio es antes de IVA.' } });
+  E('compras.articulos.*.categoria', 'Categoría en el control de gastos · {0}',
+    'En qué renglón del control de gastos cae lo que se cotizó de este artículo, para compararlo con lo que de verdad se gastó.',
+    'Elija la misma categoría con la que va a capturar el gasto real del artículo (el ticket o la factura).',
+    'No cambia ningún precio: sólo mueve el costo cotizado del artículo de un renglón a otro del control de gastos. Sin categoría, cae en compras a terceros.',
+    {
+      nom: ARTICULOS, afecta: ['info'],
+      opc: {
+        MATERIAL: 'Material: lámina, perfiles, tornillería, empaque y sellador.',
+        CONSUMIBLE: 'Consumibles: soldadura, gas, corte y pintura.',
+        PROVEEDOR: 'Compras y trabajos de terceros (ducto hecho por un proveedor, mangueras, abrazaderas).',
+        SOPORTERIA: 'Soportería y anclajes (taquetes, riel, tejuelos).',
+        MANO_OBRA: 'Mano de obra y equipo del taller.',
+        INSTALACION: 'Mano de obra de instalación.',
+        VIATICOS: 'Viáticos y traslados.',
+        OTROS: 'Otros.',
+      },
+    });
+  E('compras.tornillos_multiplo', 'Tornillos: se compran de a',
+    'En la lista de compras, la tornillería se redondea hacia arriba a un múltiplo de esto.',
+    'Número entero de juegos (hoy 10: 208 exactos con 5 % de reserva son 218.4 → se compran 220).',
+    'Sólo cambia la lista de compras y, si se cobra el sobrante, lo que cuesta.',
+    { afecta: ['mat'], tip: [1, 100] });
+  E('compras.pintura_envase_L', 'Pintura: tamaño del envase',
+    'En la lista de compras, la pintura se compra en envases completos de este tamaño.',
+    'En litros (1 L, un galón ≈ 4 L o una cubeta de 19 L).',
+    'Un envase más grande deja más sobrante en trabajos chicos; sólo cambia la lista de compras y el sobrante.',
+    { afecta: ['cons'], tip: [0.25, 20] });
 
   /* ---------------------------------------- Herrajes ---------------------------------------- */
   E('herrajes.perfiles', 'Perfiles para aros de brida',
@@ -1251,7 +1378,7 @@
     { afecta: ['mat'], tip: [0, 0.5] });
   E('herrajes.sellador.cartucho_ml', 'Tamaño del cartucho',
     'Cuántos mililitros trae un cartucho de sellador.',
-    'En mL (el cartucho estándar es de 300 mL). Debe ser mayor que 0.',
+    'En mL (el Sikaflex que compra el taller es de 600 mL). Debe ser mayor que 0.',
     'Cambia el costo por mL: un cartucho más grande al mismo precio abarata el sellador.',
     { afecta: ['mat'], tip: [100, 1000] });
   E('herrajes.sellador.precio_cartucho_ref', 'Precio del cartucho',
@@ -1310,7 +1437,7 @@
   }
 
   /* ---------- Recorrido de las tablas tal como las dibuja el editor ---------- */
-  const GRUPOS = ['proveedor', 'precios', 'mano_obra', 'merma', 'capas', 'proceso', 'herrajes', 'materiales', 'calibres', 'servicios'];
+  const GRUPOS = ['proveedor', 'precios', 'compras', 'mano_obra', 'merma', 'capas', 'proceso', 'herrajes', 'materiales', 'calibres', 'servicios'];
   const esObj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
   const esTablaPares = (v) => Array.isArray(v) && v.length > 0 && v.every((x) => Array.isArray(x) && x.length === 2 && x.every((y) => typeof y === 'number'));
   const esTablaObjetos = (v) => Array.isArray(v) && v.length > 0 && v.every((x) => esObj(x));
@@ -1360,7 +1487,7 @@
   }
 
   return {
-    AFECTA, ORIGENES, UNIDADES, FAMILIAS, OPERACIONES, MATERIALES, SISTEMAS, CATALOGO: CAT, GRUPOS,
+    AFECTA, ORIGENES, UNIDADES, FAMILIAS, OPERACIONES, MATERIALES, SISTEMAS, ARTICULOS, CATALOGO: CAT, GRUPOS,
     esPct, etiqueta, unidadDe, mostrado, buscar, coincide, recorrer, fueraDeRango,
   };
 }));

@@ -19,7 +19,7 @@ const clave = (ruta) => ruta.join('.');
 
 test('recorrer: ve los mismos datos que dibuja el editor (grupos, secciones, datos y tablas)', () => {
   const porTipo = (t) => unidades.filter((u) => u.tipo === t).length;
-  assert.equal(porTipo('grupo'), 10);
+  assert.equal(porTipo('grupo'), 11);
   assert.equal(porTipo('tabla'), 12, 'tablas: servicios 3, proveedor 2, velocidades de corte 3, rolado, engargolado, soldadura y selección de perfil');
   assert.ok(unidades.some((u) => u.tipo === 'sub' && clave(u.ruta) === 'proceso.soldadura.procesos.GMAW'));
   assert.ok(unidades.some((u) => u.tipo === 'fila' && clave(u.ruta) === 'herrajes.perfiles.SOL38x4.8.ancho_mm'), 'las claves con punto (SOL38x4.8) son una sola clave');
@@ -130,7 +130,7 @@ test('renglón específico: las familias, operaciones y límites traen su propia
   assert.deepEqual(Object.keys(M.merma).filter((k) => !A.buscar(['merma', k]).esp), [], 'merma por familia');
   assert.deepEqual(Object.keys(M.proceso.armado.k_dif).filter((k) => !A.buscar(['proceso', 'armado', 'k_dif', k]).esp), [], 'dificultad de armado por familia');
   assert.deepEqual(Object.keys(M.proceso.limites).filter((k) => !A.buscar(['proceso', 'limites', k]).esp), [], 'límites de captura');
-  assert.equal(A.buscar(['mano_obra', 'operaciones', 'corte', 'salario_hora']).esp, null, 'las operaciones usan el nombre en el título, no una línea aparte');
+  assert.equal(A.buscar(['mano_obra', 'operaciones', 'corte', 'salario_diario']).esp, null, 'las operaciones usan el nombre en el título, no una línea aparte');
   assert.equal(A.buscar(['merma', 'CODO']).t, 'Merma · Codo');
   assert.equal(A.buscar(['mano_obra', 'operaciones', 'qc_embalaje', 'equipo_h']).t, 'Costo del equipo por hora · Inspección y embalaje');
   assert.equal(A.buscar(['materiales', 'GALVANIZADO', 'pintura_bridas', 'EXTERIOR']).t, 'Pintura de las bridas · galvanizado · en exterior');

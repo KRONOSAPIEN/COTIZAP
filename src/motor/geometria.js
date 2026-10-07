@@ -721,6 +721,24 @@
     return PF;
   }
 
+  /**
+   * Bridas sueltas (sólo los aros): para un ducto que se compra hecho o que ya existe. Cada unidad es un aro terminado
+   * —rolado, con el cierre soldado, barrenado y pintado— de la medida del extremo (diámetro o a × b del ducto, con su
+   * espesor), con su media junta de tornillería y empaque; no hay lámina ni armado al ducto (se monta en obra).
+   */
+  function bridas(p, e) {
+    const PF = nuevoPF('BRIDA');
+    const ext = p.forma === 'RECTANGULAR'
+      ? extremoRect(dimensionesRect(p.a_mm, p.b_mm, e, p.ref_diametro))
+      : extremoRedondo(dimensionesRedondas(p.D_mm, e, p.ref_diametro));
+    PF.n_piezas = 0;
+    PF.n_virolas = 0;
+    PF.extremos_sueltos = [ext];
+    PF.D_ref_mm = ext.forma === 'REDONDA' ? ext.D_ext_mm : Math.max(ext.a_ext_mm, ext.b_ext_mm);
+    PF.detalle = { origen: 'Sólo el aro de brida: el ducto no está en esta partida' };
+    return PF;
+  }
+
   /** Despachador por familia. */
   function perfilFabricacion(p, e, M) {
     let PF;
@@ -733,6 +751,7 @@
       case 'REDUCCION_INJERTO': PF = reduccionInjerto(p, e, M); break;
       case 'PANTALON': PF = pantalon(p, e, M); break; // retirada: sólo para abrir cotizaciones anteriores
       case 'PERSONALIZADO': PF = personalizado(p, e); break;
+      case 'BRIDA': PF = bridas(p, e); break;
       default: throw new U.ErrorValidacion([`Familia desconocida: ${p.familia}`]);
     }
     // Superficie exterior (pintura): exacta en recto y codo; en el resto A_ext ≈ A_neta · (D_ref + e)/D_ref
@@ -752,6 +771,6 @@
     factorOrificio,
     silletaInjertoCono,
     cruceInjertoCono,
-    familias: { recto, codoRedondo, codoRect, reduccion, transicion, ramal, reduccionInjerto, pantalon, personalizado },
+    familias: { recto, codoRedondo, codoRect, reduccion, transicion, ramal, reduccionInjerto, pantalon, personalizado, bridas },
   };
 }));

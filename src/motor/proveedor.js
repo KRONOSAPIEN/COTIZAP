@@ -125,7 +125,23 @@
     return { hojas, barras };
   }
 
+  /**
+   * Una barra de la lista por su id, con lo que hace falta para costear piezas cortadas de ella (soportería):
+   * { id, descripcion, largo_mm, kg_m, kg, precio, sin_iva, precio_kg, precio_m } — precio_m = precio sin IVA por metro.
+   * null si no existe o no tiene precio o largo válidos (un precio en 0 no se usa).
+   */
+  function barra(M, id) {
+    const b = M.proveedor && M.proveedor.barras && M.proveedor.barras[id];
+    if (!b || !positivo(b.precio) || !positivo(b.largo_mm)) return null;
+    const kg_m = pesoLinealBarra(M, b);
+    const neto = sinIva(M, Number(b.precio));
+    return {
+      id, descripcion: b.descripcion || id, largo_mm: Number(b.largo_mm), kg_m, kg: kg_m === null ? null : (kg_m * b.largo_mm) / 1000,
+      precio: Number(b.precio), sin_iva: neto, precio_kg: kg_m === null ? null : neto / ((kg_m * b.largo_mm) / 1000), precio_m: neto / (b.largo_mm / 1000),
+    };
+  }
+
   return {
-    ivaIncluido, sinIva, espesorHoja, kgHoja, pesoLinealBarra, kgBarra, convertir, laminaDe, perfilDe, tablas,
+    ivaIncluido, sinIva, espesorHoja, kgHoja, pesoLinealBarra, kgBarra, convertir, laminaDe, perfilDe, tablas, barra,
   };
 }));

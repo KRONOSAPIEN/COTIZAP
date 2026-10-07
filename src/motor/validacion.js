@@ -16,12 +16,12 @@
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('./util'), require('./mano_obra'), require('./precios'), require('./geometria'), require('./material'));
+    module.exports = factory(require('./util'), require('./mano_obra'), require('./precios'), require('./geometria'), require('./material'), require('./gastos'));
   } else {
     root.COTIZAP = root.COTIZAP || {};
-    root.COTIZAP.validacion = factory(root.COTIZAP.util, root.COTIZAP.manoObra, root.COTIZAP.precios, root.COTIZAP.geometria, root.COTIZAP.material);
+    root.COTIZAP.validacion = factory(root.COTIZAP.util, root.COTIZAP.manoObra, root.COTIZAP.precios, root.COTIZAP.geometria, root.COTIZAP.material, root.COTIZAP.gastos);
   }
-}(typeof self !== 'undefined' ? self : this, function (U, MO, PRE, GEO, MAT) {
+}(typeof self !== 'undefined' ? self : this, function (U, MO, PRE, GEO, MAT, GAS) {
   'use strict';
 
   const esObjeto = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
@@ -116,6 +116,35 @@
       precio_compra_unitario: real('Costo de compra unitario', 0, 1e8, 'MXN'),
       peso_kg: real('Peso unitario', 0, 1e6, 'kg'),
     }),
+    BRIDA: (p) => ({ ...medidas(p) }),
+    INSTALACION: () => ({
+      personas: entero('Personas en la cuadrilla', 1, 100),
+      dias: real('Días en obra', 0.1, 1000, 'días'),
+      horas_dia: real('Horas por día', 0.5, 24, 'h', { cero: true }),
+      viajes: entero('Viajes redondos', 0, 1000),
+      casetas_viaje: real('Casetas por viaje', 0, 1e6, 'MXN'),
+      gasolina_viaje: real('Gasolina por viaje', 0, 1e6, 'MXN'),
+      noches: entero('Noches de hospedaje', 0, 1000),
+      hospedaje_noche: real('Hospedaje por persona y noche', 0, 1e6, 'MXN'),
+      comida_dia: real('Comidas por persona y día', 0, 1e6, 'MXN'),
+      otros_gastos: real('Otros gastos de obra', 0, 1e8, 'MXN'),
+    }),
+    SOPORTE: () => ({
+      largo_pieza_mm: largo('Largo de barra por pieza'),
+      anclajes_pieza: entero('Anclajes por pieza', 0, 100),
+      tornillos_pieza: entero('Tornillos por pieza', 0, 100),
+      min_pieza: real('Minutos de taller por pieza', 0.1, 10000, 'min', { cero: true }),
+    }),
+  };
+
+  /** Familias que no se fabrican de lámina (no llevan material, calibre, unión, pintura…): lo comprado, la instalación y la soportería. */
+  const NO_LAMINA = ['COMPRADO', 'INSTALACION', 'SOPORTE'];
+  const esDeLamina = (fam) => !NO_LAMINA.includes(fam);
+
+  /** Campos sí/no de las familias que no son de lámina. */
+  const BOOLEANOS_FAMILIA = {
+    COMPRADO: { iva_incluido: 'El precio incluye IVA' },
+    INSTALACION: { gastos_con_factura: 'Viáticos con factura', comidas_con_factura: 'Comidas con factura' },
   };
 
   /** Campos sí/no de una partida que se fabrica. */
@@ -159,7 +188,11 @@
     const sub = (o, k) => (esObjeto(o) ? o[k] : undefined);
     const fam = p.familia;
     const lista = [];
-    if (fam !== 'COMPRADO') {
+    if (fam === 'COMPRADO') lista.push(['articulo_id', claves(sub(M.compras, 'articulos')), 'Artículo del catálogo']);
+    if (fam === 'SOPORTE') {
+      lista.push(['barra_id', claves(sub(M.proveedor, 'barras')), 'Barra de la lista del proveedor'], ['articulo_anclaje', claves(sub(M.compras, 'articulos')), 'Anclaje']);
+    }
+    if (esDeLamina(fam)) {
       lista.push(['ref_diametro', ['INTERIOR', 'EXTERIOR'], 'Dimensión nominal'],
         ['tipo_union', claves(sub(M.herrajes, 'uniones')), 'Tipo de unión'],
         ['clase_sellado', ['NINGUNA', 'A', 'B', 'C'], 'Clase de sellado'],
@@ -168,7 +201,7 @@
         ['servicio', claves(M.servicios), 'Servicio'],
         ['proceso_corte', claves(sub(sub(M.proceso, 'corte'), 'v_m_min')), 'Proceso de corte'],
         ['perfil_id', claves(sub(M.herrajes, 'perfiles')), 'Perfil de aros']);
-      if (fam === 'RECTO' || fam === 'CODO') lista.push(['forma', ['REDONDA', 'RECTANGULAR'], 'Sección']);
+      if (fam === 'RECTO' || fam === 'CODO' || fam === 'BRIDA') lista.push(['forma', ['REDONDA', 'RECTANGULAR'], 'Sección']);
       if (fam === 'RECTO') lista.push(['tipo_costura', claves(sub(M.proceso, 'costuras')), 'Tipo de costura'], ['extremo_ajuste', GEO.EXTREMOS_AJUSTE, 'Extremo del tramo de ajuste']);
       if (fam === 'REDUCCION') lista.push(['excentrica', ['NO', 'CARA_PLANA'], 'Tipo de reducción']);
     }
@@ -240,11 +273,11 @@
     } catch (e) {
       errores.push('Las tablas maestras no tienen la forma esperada: restablézcalas.');
     }
-    if (fam !== 'COMPRADO' && !(typeof p.material_id === 'string' && tiene(M && M.materiales, p.material_id))) errores.push(`Material desconocido: ${texto(p.material_id)}`);
+    if (esDeLamina(fam) && !(typeof p.material_id === 'string' && tiene(M && M.materiales, p.material_id))) errores.push(`Material desconocido: ${texto(p.material_id)}`);
 
     // Números
     const L = limitesDe(M);
-    const campos = { cantidad: entero('Cantidad', 1, 'cantidad_max'), ...CAMPOS_FAMILIA[fam](p), ...(fam === 'COMPRADO' ? {} : CAMPOS_FABRICADA) };
+    const campos = { cantidad: entero('Cantidad', 1, 'cantidad_max'), ...CAMPOS_FAMILIA[fam](p), ...(esDeLamina(fam) ? CAMPOS_FABRICADA : {}) };
     Object.keys(campos).forEach((k) => {
       if (k === 'cantidad' && vacio(p.cantidad)) { errores.push('La cantidad debe ser un entero mayor que 0.'); return; }
       const n = revisarNumero(p[k], campos[k], L, errores);
@@ -252,7 +285,12 @@
       else if (n !== null) p[k] = n;
     });
 
-    if (fam !== 'COMPRADO') {
+    Object.keys(BOOLEANOS_FAMILIA[fam] || {}).forEach((k) => {
+      if (vacio(p[k])) delete p[k];
+      else if (typeof p[k] !== 'boolean') errores.push(`${BOOLEANOS_FAMILIA[fam][k]}: «${texto(p[k])}» no es sí/no.`);
+    });
+
+    if (esDeLamina(fam)) {
       // Calibre: sólo cuenta si no hay espesor propio (placa)
       if (!(p.espesor_mm > 0)) {
         if (vacio(p.calibre)) delete p.calibre;
@@ -279,7 +317,7 @@
   /* Tablas maestras                                                    */
   /* ------------------------------------------------------------------ */
 
-  const SECCIONES = ['precios', 'proveedor', 'mano_obra', 'merma', 'capas', 'proceso', 'herrajes', 'materiales', 'calibres', 'servicios'];
+  const SECCIONES = ['precios', 'proveedor', 'mano_obra', 'merma', 'capas', 'proceso', 'herrajes', 'materiales', 'calibres', 'servicios', 'compras'];
 
   // Números que deben ser MAYORES que 0: entran como divisor (velocidad, eficiencia, rendimiento…) o dan forma a algo (paso
   // de tornillos, tamaño de hoja, densidad). Un cero aquí produce NaN o un precio infinito. `*` = cualquier clave.
@@ -294,6 +332,8 @@
     'herrajes.uniones.BRIDADO.paso_tornillo_mm', 'herrajes.uniones.BRIDADO.multiplo_tornillos', 'herrajes.uniones.ESPIGA.paso_fijacion_mm',
     'herrajes.sellador.cartucho_ml', 'herrajes.perfiles.*.ancho_mm', 'herrajes.perfiles.*.esp_mm',
     'materiales.*.densidad_kg_m3', 'mano_obra.FSR',
+    'mano_obra.jornada.dias_pagados_semana', 'mano_obra.jornada.dias_trabajados_semana', 'mano_obra.jornada.horas_dia',
+    'compras.tornillos_multiplo', 'compras.pintura_envase_L',
   ];
   // Tablas espesor → velocidad ([[espesor, m/min], …]) y espesores por calibre: cada celda > 0 (se revisan con su propio mensaje).
   const TABLAS_VELOCIDAD = ['proceso.corte.v_m_min.*', 'proceso.rolado.v_m_min', 'proceso.engargolado.v_m_min', 'proceso.soldadura.v_m_min'];
@@ -428,6 +468,40 @@
       }
     }
 
+    // La jornada: días de la semana (1 a 7) y horas de un día (hasta 24)
+    if (quiere('mano_obra')) {
+      const J = M.mano_obra.jornada;
+      if (!esObjeto(J)) agregar(['mano_obra', 'jornada'], 'falta la jornada (días pagados y trabajados por semana, horas por día)');
+      else {
+        ['dias_pagados_semana', 'dias_trabajados_semana'].forEach((k) => { if (typeof J[k] === 'number' && J[k] > 7) agregar(['mano_obra', 'jornada', k], `una semana tiene 7 días (vale ${J[k]})`); });
+        if (typeof J.horas_dia === 'number' && J.horas_dia > 24) agregar(['mano_obra', 'jornada', 'horas_dia'], `un día tiene 24 horas (vale ${J.horas_dia})`);
+      }
+    }
+    // Soportería: el anclaje por omisión es un artículo del catálogo y el tornillo uno con precio
+    if (quiere('proceso') && !esObjeto(M.proceso.soportes)) agregar(['proceso', 'soportes'], 'falta la tabla de la soportería');
+    else if (quiere('proceso')) {
+      const S = M.proceso.soportes;
+      if (!tiene(M.compras && M.compras.articulos, S.anclaje_defecto)) agregar(['proceso', 'soportes', 'anclaje_defecto'], `debe ser un artículo del catálogo de compras; vale ${texto(S.anclaje_defecto)}`);
+      if (!tiene(M.herrajes && M.herrajes.tornillo_precio_ref, S.tornillo)) agregar(['proceso', 'soportes', 'tornillo'], `debe ser un tornillo de «herrajes › tornillo precio ref» (${claves(M.herrajes && M.herrajes.tornillo_precio_ref).join(', ')}); vale ${texto(S.tornillo)}`);
+    }
+    // Catálogo de compras: el IVA de las compras es menor que 100 %; los múltiplos de compra de tornillos son enteros
+    if (quiere('compras')) {
+      const K = M.compras;
+      if (typeof K.iva_pct !== 'number' || !(K.iva_pct >= 0 && K.iva_pct < 1)) agregar(['compras', 'iva_pct'], `debe ser de 0 % a menos de 100 % (vale ${texto(K.iva_pct)})`);
+      if (typeof K.tornillos_multiplo === 'number' && !Number.isInteger(K.tornillos_multiplo)) agregar(['compras', 'tornillos_multiplo'], `debe ser un número entero (vale ${texto(K.tornillos_multiplo)})`);
+      if (!esObjeto(K.articulos)) agregar(['compras', 'articulos'], 'falta el catálogo de artículos');
+      else {
+        Object.keys(K.articulos).forEach((id) => {
+          const a = K.articulos[id];
+          if (!esObjeto(a) || typeof a.precio !== 'number') agregar(['compras', 'articulos', id], 'cada artículo lleva descripción, unidad, precio y si el precio trae IVA');
+          else if (typeof a.iva_incluido !== 'boolean') agregar(['compras', 'articulos', id, 'iva_incluido'], 'debe ser sí o no');
+          else if (a.categoria !== undefined && !tiene(GAS.CATEGORIAS, a.categoria)) {
+            agregar(['compras', 'articulos', id, 'categoria'], `debe ser una categoría del control de gastos (${Object.keys(GAS.CATEGORIAS).join(', ')}); vale ${texto(a.categoria)}`);
+          }
+        });
+      }
+    }
+
     if (quiere('merma')) {
       Object.keys(M.merma).forEach((k) => {
         const v = M.merma[k];
@@ -463,6 +537,6 @@
   }
 
   return {
-    aNumero, migrarPartida, normalizarPartida, problemasMaestros, textoProblema, exigePositivo, noFinitos, limitesDe,
+    aNumero, migrarPartida, normalizarPartida, problemasMaestros, textoProblema, exigePositivo, noFinitos, limitesDe, esDeLamina, NO_LAMINA,
   };
 }));

@@ -95,12 +95,38 @@ function generador(semilla) {
         n_piezas: Math.ceil(u(0, 6)) || 1, n_extremos: Math.floor(u(0, 6)), D_ref_mm: r1(u(100, 1500)),
       };
     },
-    COMPRADO() { return { familia: 'COMPRADO', precio_compra_unitario: r1(u(10, 20000), 2), peso_kg: r1(u(0, 200), 1) }; },
+    COMPRADO() {
+      if (rnd() < 0.3) return { familia: 'COMPRADO', articulo_id: pick(Object.keys(M.compras.articulos)), ...(rnd() < 0.3 ? { iva_incluido: rnd() < 0.5 } : {}) };
+      return { familia: 'COMPRADO', precio_compra_unitario: r1(u(10, 20000), 2), peso_kg: r1(u(0, 200), 1), ...(rnd() < 0.4 ? { iva_incluido: rnd() < 0.5 } : {}) };
+    },
+    BRIDA() {
+      const rect = rnd() < 0.25;
+      const p = { familia: 'BRIDA', forma: rect ? 'RECTANGULAR' : 'REDONDA', tipo_union: 'BRIDADO' };
+      if (rect) { p.a_mm = r1(u(100, 1500)); p.b_mm = r1(u(100, 1500)); } else p.D_mm = r1(u(80, 1500));
+      return p;
+    },
+    INSTALACION() {
+      const p = {
+        familia: 'INSTALACION', personas: Math.ceil(u(0, 6)) || 1, dias: r1(u(0.5, 20), 1), viajes: Math.floor(u(0, 6)), casetas_viaje: r1(u(0, 1500), 2),
+        gasolina_viaje: r1(u(0, 3000), 2), noches: Math.floor(u(0, 10)), hospedaje_noche: r1(u(0, 1200), 2), comida_dia: r1(u(0, 400), 2), otros_gastos: r1(u(0, 5000), 2),
+      };
+      const hd = maybe(0.3, () => r1(u(4, 12), 1)); if (hd) p.horas_dia = hd;
+      if (rnd() < 0.3) p.gastos_con_factura = rnd() < 0.5;
+      if (rnd() < 0.3) p.comidas_con_factura = rnd() < 0.5;
+      return p;
+    },
+    SOPORTE() {
+      const barra_id = pick(['SOL_1_1_2X3_16', 'ANG_1_1_2X3_16', 'ANG_2X3_16', 'ANG_1_1_4X1_8', 'ANG_3_4X1_8', 'SOL_1_1_4X1_8', 'CANAL_U_6', 'PTR_2X2_C14']);
+      const p = { familia: 'SOPORTE', barra_id, largo_pieza_mm: r1(u(100, 6000)), anclajes_pieza: Math.floor(u(0, 6)), tornillos_pieza: Math.floor(u(0, 4)) };
+      const mp = maybe(0.3, () => r1(u(1, 90), 1)); if (mp) p.min_pieza = mp;
+      if (rnd() < 0.2) p.articulo_anclaje = pick(Object.keys(M.compras.articulos));
+      return p;
+    },
   };
   const FAMILIAS = Object.keys(GEN);
   return (i) => {
     const f = FAMILIAS[i % FAMILIAS.length];
-    const base = f === 'COMPRADO' ? { cantidad: Math.ceil(u(0, 5)), riesgo: pick(['BAJO', 'MEDIO', 'ALTO']) } : comunes();
+    const base = V.NO_LAMINA.includes(f) ? { cantidad: Math.ceil(u(0, 5)) || 1, riesgo: pick(['BAJO', 'MEDIO', 'ALTO']) } : comunes();
     return { ...base, ...GEN[f]() };
   };
 }
@@ -127,8 +153,8 @@ test('Partidas válidas al azar (todas las familias): sin excepciones, sin NaN y
     const pl = r.pila;
     assert.ok(Math.abs(pl.C_base + pl.utilidad + pl.comision + pl.otros - pl.precio) <= 1e-6 * Math.max(1, pl.precio), `pila ${JSON.stringify(p)}`);
     const s = r.costos.subtotales;
-    assert.ok(Math.abs(s.materiales + s.consumibles + s.mano_obra + s.equipo + s.herramienta_menor + s.subcontratos - r.costos.CD) <= 1e-6 * Math.max(1, r.costos.CD), `CD ${JSON.stringify(p)}`);
-    if (p.familia !== 'COMPRADO') {
+    assert.ok(Math.abs(s.materiales + s.consumibles + s.mano_obra + s.equipo + s.herramienta_menor + s.subcontratos + s.viaticos - r.costos.CD) <= 1e-6 * Math.max(1, r.costos.CD), `CD ${JSON.stringify(p)}`);
+    if (p.familia !== 'COMPRADO' && p.familia !== 'INSTALACION') {
       assert.ok(r.peso.neto_unitario_kg > 0, JSON.stringify(p));
       // cantidades ≠ precios: con todos los precios ×2.5 el levantamiento de cantidades es idéntico
       const r2 = C.cotizarPartida(p, M2);
@@ -137,7 +163,7 @@ test('Partidas válidas al azar (todas las familias): sin excepciones, sin NaN y
     // el viaje por JSON (así se guarda y se importa) no cambia el resultado
     assert.equal(C.cotizarPartida(JSON.parse(JSON.stringify(p)), M).precio.unitario, r.precio.unitario);
   }
-  assert.ok(calculadas > 480, `se calcularon ${calculadas} de 640`);
+  assert.ok(calculadas > 520, `se calcularon ${calculadas} de 640`);
 });
 
 test('cotizar() da lo mismo que cotizarPartida() partida por partida y nunca lanza', () => {
@@ -176,6 +202,12 @@ const PLANTILLAS = {
   REDUCCION_INJERTO: { ...COMUN, familia: 'REDUCCION_INJERTO', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 45 },
   PERSONALIZADO: { ...COMUN, familia: 'PERSONALIZADO', A_neta_m2: 1.2, L_corte_m: 9, L_sold_tope_m: 4, L_sold_filete_m: 1, n_piezas: 2, n_extremos: 2, D_ref_mm: 300 },
   COMPRADO: { familia: 'COMPRADO', cantidad: 2, riesgo: 'MEDIO', precio_compra_unitario: 1800, peso_kg: 9 },
+  BRIDA: { ...COMUN, familia: 'BRIDA', D_mm: 279.4 },
+  BRIDA_RECT: { ...COMUN, familia: 'BRIDA', forma: 'RECTANGULAR', a_mm: 400, b_mm: 300 },
+  INSTALACION: {
+    familia: 'INSTALACION', cantidad: 1, riesgo: 'MEDIO', personas: 2, dias: 5, horas_dia: 8, viajes: 1, casetas_viaje: 806, gasolina_viaje: 1500, noches: 4, hospedaje_noche: 650, comida_dia: 250, otros_gastos: 1200,
+  },
+  SOPORTE: { familia: 'SOPORTE', cantidad: 7, riesgo: 'MEDIO', barra_id: 'ANG_1_1_4X1_8', largo_pieza_mm: 1500, anclajes_pieza: 4, tornillos_pieza: 2, min_pieza: 20 },
 };
 const NUMERICOS = (p) => Object.keys(p).filter((k) => typeof p[k] === 'number');
 
@@ -205,6 +237,7 @@ test('Medidas obligatorias: cero, negativas, «casi cero» y descomunales (1e12)
   const OBLIGATORIAS = {
     RECTO: ['D_mm', 'L_mm'], RECTO_RECT: ['a_mm', 'b_mm', 'L_mm'], CODO: ['D_mm', 'k_R'], CODO_RECT: ['a_mm', 'b_mm'], REDUCCION: ['D1_mm', 'D2_mm'], TRANSICION: ['D_mm', 'a_mm', 'b_mm'],
     RAMAL: ['D_mm', 'd_mm', 'L_cuerpo_mm', 'L_ramal_mm'], REDUCCION_INJERTO: ['D1_mm', 'D2_mm', 'd_mm'], PERSONALIZADO: ['A_neta_m2', 'n_piezas'], COMPRADO: ['cantidad'],
+    BRIDA: ['D_mm'], BRIDA_RECT: ['a_mm', 'b_mm'], INSTALACION: ['personas', 'dias'], SOPORTE: ['largo_pieza_mm'],
   };
   Object.entries(OBLIGATORIAS).forEach(([nombre, campos]) => campos.forEach((campo) => {
     const raros = [0, -1, -304.8, 1e-9, 1e7, 1e12, 1e300, ...(campo.endsWith('_mm') ? [0.5, 5] : [])]; // en mm, menos de 10 también es «casi cero»
@@ -217,7 +250,9 @@ test('Medidas obligatorias: cero, negativas, «casi cero» y descomunales (1e12)
 });
 
 test('Campos opcionales: vacío («», null, undefined) significa «automático»; cero y valores raros no se cuelan', () => {
-  const OPCIONALES = { RECTO: ['yarda_mm'], CODO: ['n_gajos', 'L_tangente_mm'], REDUCCION: ['L_mm'], TRANSICION: ['H_mm', 'n_costuras_long'], COMPRADO: ['peso_kg'] };
+  const OPCIONALES = {
+    RECTO: ['yarda_mm'], CODO: ['n_gajos', 'L_tangente_mm'], REDUCCION: ['L_mm'], TRANSICION: ['H_mm', 'n_costuras_long'], COMPRADO: ['peso_kg'], INSTALACION: ['horas_dia'], SOPORTE: ['min_pieza'],
+  };
   Object.entries(OPCIONALES).forEach(([nombre, campos]) => campos.forEach((campo) => {
     const base = { ...PLANTILLAS[nombre] };
     delete base[campo];
@@ -418,7 +453,7 @@ test('Maestros con un divisor en cero o un valor negativo: error que nombra la r
     [['herrajes', 'uniones', 'BRIDADO', 'paso_tornillo_mm'], 0], [['herrajes', 'uniones', 'BRIDADO', 'multiplo_tornillos'], 0], [['herrajes', 'uniones', 'ESPIGA', 'paso_fijacion_mm'], 0],
     [['herrajes', 'sellador', 'cartucho_ml'], 0], [['materiales', 'ACERO_CARBON', 'densidad_kg_m3'], 0], [['mano_obra', 'FSR'], 0],
     [['proceso', 'limites', 'piezas_max'], 0], [['calibres', 'MSG', '16'], 0],
-    [['precios', 'precio_kg_acero_carbon'], -1], [['capas', 'iva_pct'], -0.16], [['proceso', 'armado', 't_junta_base_min'], -3], [['mano_obra', 'operaciones', 'corte', 'salario_hora'], -500],
+    [['precios', 'precio_kg_acero_carbon'], -1], [['capas', 'iva_pct'], -0.16], [['proceso', 'armado', 't_junta_base_min'], -3], [['mano_obra', 'operaciones', 'corte', 'salario_diario'], -500],
     [['merma', 'RECTO'], 1], [['merma', 'PERFIL'], 1.5], [['merma', 'CODO'], -0.1],
   ];
   rutas.forEach(([ruta, valor]) => {
@@ -541,7 +576,7 @@ test('sanearParche: conserva lo que tiene la forma de las tablas y descarta (ano
       corte: { v_m_min: { PLASMA: [[1, 2], [3, 'x']] } },
     },
     capas: { financiamiento: { tasa_anual: 0.1, dias_cobro: Infinity }, imprevistos_pct: 7 },
-    mano_obra: { operaciones: { corte: { salario_hora: '500', equipo_h: 40 } } },
+    mano_obra: { operaciones: { corte: { salario_diario: '500', equipo_h: 40 } } },
     herrajes: 'nada', materiales: [], desconocida: { a: 1 },
   };
   const copia = structuredClone(sucio);
@@ -555,7 +590,7 @@ test('sanearParche: conserva lo que tiene la forma de las tablas y descarta (ano
     desconocida: { a: 1 },
   });
   assert.deepEqual(descartados.sort(), [
-    'capas.financiamiento.dias_cobro', 'capas.imprevistos_pct', 'herrajes', 'mano_obra.operaciones.corte.salario_hora', 'materiales', 'precios.otro', 'precios.precio_kg_acero_carbon',
+    'capas.financiamiento.dias_cobro', 'capas.imprevistos_pct', 'herrajes', 'mano_obra.operaciones.corte.salario_diario', 'materiales', 'precios.otro', 'precios.precio_kg_acero_carbon',
     'proceso.angulos_codo_deg', 'proceso.angulos_injerto_deg', 'proceso.corte.v_m_min.PLASMA', 'proceso.hoja', 'proceso.limites.largo_max_mm',
   ].sort());
 });
@@ -578,7 +613,8 @@ test('crearMaestros(parche) siempre da maestros con la forma de las tablas, aunq
   assert.deepEqual(Mx.proceso.hoja, M.proceso.hoja);
   assert.deepEqual(Mx.capas.imprevistos_pct, M.capas.imprevistos_pct);
   assert.doesNotThrow(() => C.cotizarPartida(PLANTILLAS.RECTO, Mx));
-  assert.deepEqual(leerParche({ mano_obra: { jornada_h: 8 }, precios: { precio_kg_solera: 31 } }).parche, { precios: { precio_kg_solera: 31 } }, 'también quita lo obsoleto de versiones anteriores');
+  assert.deepEqual(leerParche({ mano_obra: { jornada_h: 9, operaciones: { corte: { salario_hora: 500 } } }, precios: { precio_kg_solera: 31 } }).parche,
+    { mano_obra: { jornada: { horas_dia: 9 } }, precios: { precio_kg_solera: 31 } }, 'también pone al día lo de versiones anteriores (la jornada pasa a horas por día; el salario por hora se descarta)');
 });
 
 test('Valores no válidos escritos a mano en los maestros (a diferencia de un parche) los detecta problemasMaestros', () => {

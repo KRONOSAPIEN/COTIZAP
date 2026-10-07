@@ -65,7 +65,7 @@
     const A = PF.A_neta_m2 + A_extra_m2;
     const kg_m2 = (mat.densidad_kg_m3 * e) / 1000;
     const hayOverride = p.merma_pct !== undefined && p.merma_pct !== null && p.merma_pct !== '';
-    const phi = hayOverride ? Number(p.merma_pct) : M.merma[PF.familia];
+    const phi = hayOverride ? Number(p.merma_pct) : (A > 0 ? M.merma[PF.familia] : 0); // sin lámina (bridas sueltas) no hay merma de lámina
     exigir(phi >= 0 && phi < 1, 'La merma debe estar en el intervalo [0, 1).');
     const m_neta = A * kg_m2;
     const m_bruta = m_neta / (1 - phi);
@@ -75,7 +75,7 @@
   }
 
   /** Geometría del aro de brida y del patrón de tornillos para un extremo. */
-  function geometriaAro(ext, perfil, holgura_mm) {
+  function geometriaAro(ext, perfil, holgura_mm, puntas_mm) {
     const c = perfil.c_centroide_mm;
     const g = perfil.gramil_mm;
     const b = perfil.ancho_mm;
@@ -86,7 +86,7 @@
       const D = ext.D_ext_mm;
       const Dre = D + 2 * b;
       return {
-        L_aro_mm: PI * (D + 2 * c) + holgura_mm,
+        L_aro_mm: PI * (D + 2 * c) + holgura_mm + (puntas_mm || 0), // + las puntas que la roladora no curva (se cortan)
         P_perno_mm: PI * (D + 2 * g),
         L_cierre_mm: seccion_cierre,
         A_pintura_m2: ((PI / 2) * (Dre * Dre - D * D) + PI * Dre * t) / 1e6,
@@ -154,7 +154,7 @@
       const brida = (ext, suelta) => {
         const dim_mayor = ext.forma === 'REDONDA' ? ext.D_ext_mm : Math.max(ext.a_ext_mm, ext.b_ext_mm);
         const perfil = seleccionarPerfil(M, dim_mayor, p.perfil_id);
-        const g = geometriaAro(ext, perfil, holgura);
+        const g = geometriaAro(ext, perfil, holgura, M.proceso.aros.puntas_rolado_mm);
         const n_raw = Math.ceil(g.P_perno_mm / U_.paso_tornillo_mm - 1e-9);
         const n_tornillos = U.techoMultiplo(Math.max(U_.n_min_tornillos, n_raw), U_.multiplo_tornillos);
         const L_aro_m = g.L_aro_mm / 1000;

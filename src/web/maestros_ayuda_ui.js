@@ -191,7 +191,8 @@
     if (k === 'proveedor.hojas') return { rutas: hojas(ruta), que: 'precios de las hojas', todos: 'todos los precios de las hojas', ejemplo: 'El proveedor subió 6 % la lámina → escriba 6.' };
     if (k === 'proveedor.barras') return { rutas: hojas(ruta), que: 'precios de las barras', todos: 'todos los precios de las barras', ejemplo: 'El proveedor subió 6 % los perfiles → escriba 6.' };
     if (k === 'precios') return { rutas: Object.keys(M.precios).map((c) => ['precios', c]), que: 'precios', todos: 'todos los precios de esta lista', ejemplo: 'Todo subió 5 % → escriba 5.' };
-    if (k === 'mano_obra') return { rutas: Object.keys(M.mano_obra.operaciones).map((o) => ['mano_obra', 'operaciones', o, 'salario_hora']), que: 'salarios por hora', todos: 'todos los salarios por hora', ejemplo: 'Aumento de salario de 4 % → escriba 4.' };
+    if (k === 'mano_obra') return { rutas: Object.keys(M.mano_obra.operaciones).map((o) => ['mano_obra', 'operaciones', o, 'salario_diario']), que: 'salarios por día', todos: 'todos los salarios por día', ejemplo: 'Aumento de salario de 4 % → escriba 4.' };
+    if (k === 'compras.articulos') return { rutas: Object.keys(M.compras.articulos).map((a) => ['compras', 'articulos', a, 'precio']), que: 'precios del catálogo', todos: 'todos los precios del catálogo de compras', ejemplo: 'La tienda subió 5 % → escriba 5.' };
     const t = leer(M, ruta);
     if (Array.isArray(t) && t.length && t.every((p) => Array.isArray(p) && p.length === 2) && /v_m_min/.test(k)) {
       return { rutas: t.map((_, i) => [...ruta, i, 1]), que: 'velocidades', todos: 'todas las velocidades de esta tabla', ejemplo: 'La máquina rinde 10 % más → escriba 10.' };
@@ -543,14 +544,16 @@
 
   const PASOS_GUIA = [
     ['proveedor', 'Lista de precios del proveedor', 'Lo primero, porque pesa más: el precio de cada hoja y barra, y cuánto IVA traen.'],
-    ['mano_obra', 'Mano de obra y equipo', 'Salario por hora (ya con prestaciones: FSR 1.00) y costo por hora de cada máquina.'],
+    ['mano_obra', 'Mano de obra y equipo', 'Salario por día (ya con prestaciones: FSR 1.00), la jornada que lo convierte en horas y el costo por hora de cada máquina.'],
+    ['compras', 'Catálogo de compras', 'Lo que se compra hecho (mangueras, abrazaderas, anclajes, selladores): su precio, si trae IVA y su categoría de gasto.'],
     ['precios', 'Precios', 'Gas, alambre, pintura, tornillería: los consumibles que se gastan al fabricar.'],
     ['proceso', 'Proceso de fabricación', 'Tiempos y velocidades del taller. Lo ideal es cronometrarlos; son ilustrativos hasta entonces.'],
     ['capas', 'Pila de precio', 'Indirectos, financiamiento, utilidad y comisión: lo que convierte el costo en precio.'],
   ];
   const FLUJO = [
     ['Material', 'Lámina y aros: precio del proveedor ÷ kg × kg con merma', ['proveedor', 'precios', 'merma', 'calibres', 'materiales']],
-    ['Mano de obra y equipo', 'Horas por operación ÷ eficiencia × tarifa', ['proceso', 'mano_obra', 'herrajes']],
+    ['Mano de obra y equipo', 'Horas por operación ÷ eficiencia × tarifa (salario por día ÷ horas pagadas)', ['proceso', 'mano_obra', 'herrajes']],
+    ['Compras e instalación', 'Artículos del catálogo sin IVA, soportería, cuadrilla en obra y viáticos', ['compras', 'mano_obra', 'proveedor']],
     ['Consumibles', 'Soldadura, gas, corte y pintura', ['precios', 'proceso']],
     ['Costo directo', 'Se suma todo lo anterior', []],
     ['Indirectos e imprevistos', 'Indirectos por hora, administración, imprevistos, financiamiento', ['capas']],

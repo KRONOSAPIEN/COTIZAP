@@ -32,11 +32,13 @@
   --s3: #1baf7a;
   --s4: #eda100;
   --s5: #e87ba4;
+  --s6: #8a63d2;
   --on-s1: #ffffff;
   --on-s2: #101820;
   --on-s3: #101820;
   --on-s4: #101820;
   --on-s5: #101820;
+  --on-s6: #ffffff;
   --sombra: 0 1px 2px rgba(20, 32, 48, 0.06), 0 6px 18px rgba(20, 32, 48, 0.05);
   --radio: 8px;
   --font-ui: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -71,11 +73,13 @@
     --s3: #199e70;
     --s4: #c98500;
     --s5: #d55181;
+    --s6: #9b7be0;
     --on-s1: #0b1218;
     --on-s2: #0b1218;
     --on-s3: #0b1218;
     --on-s4: #0b1218;
     --on-s5: #0b1218;
+    --on-s6: #0b1218;
     --sombra: none;
     color-scheme: dark;
   }
@@ -107,11 +111,13 @@
   --s3: #199e70;
   --s4: #c98500;
   --s5: #d55181;
+  --s6: #9b7be0;
   --on-s1: #0b1218;
   --on-s2: #0b1218;
   --on-s3: #0b1218;
   --on-s4: #0b1218;
   --on-s5: #0b1218;
+  --on-s6: #0b1218;
   --sombra: none;
   color-scheme: dark;
 }
@@ -272,6 +278,9 @@ main { padding: 16px 24px 48px; max-width: 1540px; margin-inline: auto; }
 .chip .ico { width: 14px; height: 14px; }
 .chip-adv { background: var(--warn-soft); color: var(--warn); }
 .chip-err { background: var(--crit-soft); color: var(--crit); }
+.chip-auto { background: var(--info-soft); color: var(--accent); }
+.partida-auto { cursor: default; border-style: dashed; }
+.partida-auto:hover { border-color: var(--line); }
 .vacio {
   list-style: none; text-align: center; border: 1.5px dashed var(--line-strong); border-radius: 12px; padding: 32px 20px; color: var(--fg-2);
   display: flex; flex-direction: column; gap: 10px; align-items: center;
@@ -287,7 +296,7 @@ main { padding: 16px 24px 48px; max-width: 1540px; margin-inline: auto; }
   .barra { position: static; padding: 10px 16px; gap: 8px 12px; }
   .marca-sub { display: none; }
   .tabs { flex: 1 1 100%; margin: 0; }
-  .tabs [role="tab"] { flex: 1; text-align: center; }
+  .tabs [role="tab"] { flex: 1 1 0; min-width: 0; text-align: center; padding-inline: 6px; line-height: 1.15; } /* tres pestañas caben aun en 320 px: el texto se parte en dos renglones */
   .acciones { flex: 1 1 100%; }
   .acciones .btn { flex: 1; padding: 6px 8px; min-height: 36px; font-size: 13px; }
   .datos { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; gap: 10px 12px; }
@@ -370,7 +379,7 @@ main { padding: 16px 24px 48px; max-width: 1540px; margin-inline: auto; }
 .errores-tit { display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--crit); margin-bottom: 6px; }
 .errores ul { padding-left: 18px; list-style: disc; display: flex; flex-direction: column; gap: 3px; }
 
-.tabla-env { overflow-x: auto; max-width: 100%; }
+.tabla-env { overflow-x: auto; max-width: 100%; position: relative; } /* relative: lo que va oculto para lectores de pantalla no se sale del recuadro */
 .tabla { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tabla th { text-align: left; font-size: 12px; font-weight: 600; color: var(--fg-2); padding: 6px 8px; border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
 .tabla td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -420,7 +429,7 @@ dialog::backdrop { background: rgba(8, 14, 22, 0.6); }
 .dlg-prev h3 { font-size: 12px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fg-2); }
 .prev-val { font: 600 34px/1.1 var(--font-ui); letter-spacing: -0.01em; overflow-wrap: anywhere; }
 .dlg-pie { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 18px; border-top: 1px solid var(--line); background: var(--surface); }
-.familias { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+.familias { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
 @media (max-width: 1019px) { .familias { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .fam {
   display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 4px; padding: 8px 1px 7px; overflow-wrap: break-word; hyphens: manual; border-radius: 10px; cursor: pointer;
@@ -670,4 +679,74 @@ kbd { font: 500 11.5px var(--font-mono); padding: 1px 6px; border: 1px solid var
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; scroll-behavior: auto !important; }
+}
+
+/* -------------------------------------------------------------------------- compras y gastos */
+.solo-lector { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.cg-cab { margin-bottom: 14px; }
+.cg-cab p { color: var(--fg-2); max-width: 80ch; margin-top: 4px; }
+.cg-bloque { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.cg-bloque-cab { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.cg-bloque-cab h3 { font: 600 17px var(--font-ui); }
+.cg-acc { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.cg-bloque-cab .cg-acc { justify-content: flex-end; }
+.cg-venta-campo { max-width: 360px; }
+.cg-venta-campo.invalido input { border-color: var(--crit); background: var(--crit-soft); }
+.cg-check { font-size: 14px; font-weight: 500; color: var(--fg); }
+.cg-medida { color: var(--fg-3); font-size: 12px; }
+.tabla tr.cg-con-sobrante td:last-child { color: var(--warn); font-weight: 600; }
+.cg-sub { font: 600 12px var(--font-ui); letter-spacing: 0.07em; text-transform: uppercase; color: var(--fg-2); margin-top: 8px; }
+/* la regla de la venta: pierde · no cubre indirectos · gana */
+.cg-regla { margin: 0; }
+.cg-regla-barra { position: relative; height: 16px; border-radius: 8px; background: var(--surface-3); margin: 26px 0 30px; }
+.cg-regla:not(.cg-regla-venta) .cg-regla-barra { margin-bottom: 12px; }
+.cg-zona { position: absolute; top: 0; bottom: 0; }
+.cg-zona:nth-child(1) { border-radius: 8px 0 0 8px; }
+.cg-zona:nth-child(3) { border-radius: 0 8px 8px 0; }
+.cg-pierde { background: var(--crit); }
+.cg-justo { background: var(--warn); }
+.cg-gana { background: var(--good); }
+.cg-marca { position: absolute; top: -6px; bottom: -6px; width: 0; border-left: 2px solid var(--fg); }
+.cg-marca-et { position: absolute; left: 0; transform: translateX(-50%); white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--fg); font-variant-numeric: tabular-nums; }
+.cg-marca-calc .cg-marca-et { bottom: calc(100% + 3px); }
+.cg-marca-venta { border-left: 3px solid var(--accent); }
+.cg-marca-venta .cg-marca-et { top: calc(100% + 3px); color: var(--accent); }
+.cg-marca-der .cg-marca-et { transform: translateX(-100%); }
+.cg-marca-izq .cg-marca-et { transform: none; }
+.cg-regla-ley { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--fg-2); }
+.cg-regla-ley span { display: inline-flex; align-items: center; gap: 6px; }
+.cg-regla-ley .sw { display: inline-block; }
+/* captura de gastos */
+.cg-tabla-gastos td { vertical-align: middle; padding: 4px 6px; }
+.cg-tabla-gastos input[type="text"], .cg-tabla-gastos input[type="number"], .cg-tabla-gastos input[type="date"], .cg-tabla-gastos select { min-height: 32px; padding: 4px 6px; font-size: 13px; }
+.cg-in-concepto { min-width: 220px; }
+.cg-in-num { width: 100px; text-align: right; }
+.cg-in-fecha { width: 142px; }
+.cg-td-concepto { white-space: nowrap; }
+.cg-td-concepto .chip { margin-left: 6px; }
+.cg-c { text-align: center; }
+.cg-c input { width: 18px; height: 18px; }
+.cg-costo { font-weight: 600; }
+.tabla tr.cg-estimado td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+.tabla tr.cg-mal td { background: var(--crit-soft); }
+.cg-mas { color: var(--crit); font-weight: 600; }
+.cg-menos { color: var(--good); font-weight: 600; }
+.cg-avance-celda { display: flex; align-items: center; gap: 8px; min-width: 150px; }
+.cg-avance { flex: 1; height: 8px; border-radius: 4px; background: var(--surface-3); overflow: hidden; }
+.cg-avance span { display: block; height: 100%; background: var(--accent); }
+.cg-avance-pasa span { background: var(--crit); }
+.cg-vacio { padding: 24px 16px; }
+#cg-lista .tabla { min-width: 720px; } /* en pantalla angosta se desliza dentro de su recuadro en vez de apretar las columnas */
+#cg-comparacion .tabla { min-width: 560px; }
+/* la venta pactada en los totales de la cotización */
+.venta-res { margin-top: 10px; border-radius: 10px; padding: 10px 12px; background: var(--surface-2); font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.venta-res-cab { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.venta-res-et { font-size: 12px; color: var(--fg-2); }
+.venta-res-cab .btn-texto { margin-left: auto; }
+.venta-ok { background: var(--good-soft); }
+.venta-adv { background: var(--warn-soft); }
+.venta-mal { background: var(--crit-soft); }
+@media (max-width: 719px) {
+  .cg-bloque-cab .cg-acc { justify-content: flex-start; }
+  .cg-marca-et { font-size: 11px; }
 }

@@ -59,6 +59,8 @@
         P({ familia: 'REDUCCION_INJERTO', descripcion: 'Reducción con injerto 45° Ø12″ → Ø10″ + Ø6″', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 45 }),
         P({ familia: 'TRANSICION', descripcion: 'Transición Ø12″ → 400 × 300 mm', D_mm: 304.8, a_mm: 400, b_mm: 300 }),
         { id: idNuevo(), familia: 'COMPRADO', descripcion: 'Compuerta de guillotina Ø12″ (compra)', precio_compra_unitario: 1850, peso_kg: 9, cantidad: 1 },
+        { id: idNuevo(), familia: 'SOPORTE', descripcion: 'Ménsulas de ángulo 1¼″ para el ducto', barra_id: 'ANG_1_1_4X1_8', largo_pieza_mm: 1500, anclajes_pieza: 4, cantidad: 6 },
+        { id: idNuevo(), familia: 'INSTALACION', descripcion: 'Instalación en obra (2 personas, 2 días)', personas: 2, dias: 2, viajes: 1, gasolina_viaje: 600, comida_dia: 200, cantidad: 1 },
       ],
     };
   }
@@ -71,7 +73,7 @@
 
   function cotizacionVacia() {
     return {
-      cliente: '', proyecto: '', fecha: hoy(), vigencia_dias: 15, unidad_diam: 'in', unidad_long: 'mm', riesgo: 'MEDIO', servicio: 'POLVO', ubicacion: ubicacionPorOmision(), ejemplo: false, partidas: [],
+      cliente: '', proyecto: '', fecha: hoy(), vigencia_dias: 15, unidad_diam: 'in', unidad_long: 'mm', riesgo: 'MEDIO', servicio: 'POLVO', ubicacion: ubicacionPorOmision(), ejemplo: false, partidas: [], gastos: [],
     };
   }
 
@@ -93,7 +95,10 @@
       // La cotización de muestra que nadie ha tocado se renueva con la versión actual de la muestra (nombres de taller,
       // partidas nuevas); se respetan los ajustes generales que ya hubiera cambiado.
       const guardada = estado.cot;
-      estado.cot = { ...cotizacionEjemplo(), ...Object.fromEntries(['unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'ubicacion', 'fecha', 'vigencia_dias', 'parametros', 'yarda_mm'].filter((k) => guardada[k] !== undefined).map((k) => [k, guardada[k]])) };
+      estado.cot = cotizacionValida({
+        ...cotizacionEjemplo(),
+        ...Object.fromEntries(['unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'ubicacion', 'fecha', 'vigencia_dias', 'parametros', 'yarda_mm', 'venta_pactada', 'piezas_enteras', 'gastos'].filter((k) => guardada[k] !== undefined).map((k) => [k, guardada[k]])),
+      }, estado.M);
     }
     estado.sel = estado.cot.partidas.length ? estado.cot.partidas[0].id : null;
   }
@@ -107,6 +112,30 @@
   }
 
   const esObjeto = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+
+  /**
+   * Un gasto real capturado, con la forma que espera la pantalla: lo que no sirve se repone y un número que no es número
+   * queda vacío (el control de gastos lo marca). `estimado`: vino de la lista de compras y todavía no se cambia por lo real.
+   */
+  function gastoValido(g) {
+    const G = C.gastos;
+    const num = (v) => {
+      if (typeof v === 'number') return Number.isFinite(v) ? v : '';
+      return typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : '';
+    };
+    const categoria = Object.prototype.hasOwnProperty.call(G.CATEGORIAS, g.categoria) ? g.categoria : 'OTROS';
+    return {
+      id: typeof g.id === 'string' && g.id ? g.id : idNuevo(),
+      fecha: typeof g.fecha === 'string' ? g.fecha.slice(0, 10) : '',
+      concepto: typeof g.concepto === 'string' ? g.concepto.slice(0, 200) : '',
+      categoria,
+      cantidad: num(g.cantidad),
+      precio_unitario: num(g.precio_unitario),
+      iva_incluido: g.iva_incluido === true,
+      con_factura: typeof g.con_factura === 'boolean' ? g.con_factura : !G.SIN_FACTURA_POR_DEFECTO.includes(categoria),
+      ...(g.estimado === true ? { estimado: true } : {}),
+    };
+  }
 
   /**
    * Una cotización que viene de fuera (navegador o archivo): conserva lo que tiene la forma esperada y repone el resto
@@ -130,6 +159,17 @@
     // Ancho de la yarda de la cotización: sólo vale uno dentro de los límites de las tablas (vacío o inválido = el de las tablas)
     const yarda = C.cotizador.yardaDeCotizacion(cot, M).yarda_mm;
     if (yarda === undefined) delete cot.yarda_mm; else cot.yarda_mm = yarda;
+    // Venta pactada con el cliente (MXN sin IVA): sólo un importe válido (vacío o inválido = no hay); cobrar el sobrante, sólo sí/no
+    const venta = C.cotizador.ventaPactada(cot).venta;
+    if (venta === undefined) delete cot.venta_pactada; else cot.venta_pactada = venta;
+    if (cot.piezas_enteras !== true) delete cot.piezas_enteras;
+    const vistosG = new Set();
+    cot.gastos = (Array.isArray(c.gastos) ? c.gastos : []).filter(esObjeto).slice(0, 5000).map((g) => {
+      const q = gastoValido(g);
+      while (vistosG.has(q.id)) q.id = idNuevo();
+      vistosG.add(q.id);
+      return q;
+    });
     cot.ejemplo = cot.ejemplo === true;
     const vistos = new Set();
     cot.partidas = c.partidas.filter(esObjeto).map((p) => {
@@ -175,7 +215,10 @@
   /** Lo que se cotiza: la cotización abierta tal como la calcula la pantalla. */
   const entradaCotizacion = () => {
     const cot = estado.cot;
-    return { riesgo: cot.riesgo, servicio: cot.servicio, ubicacion: cot.ubicacion, parametros: cot.parametros, yarda_mm: cot.yarda_mm, partidas: cot.partidas };
+    return {
+      riesgo: cot.riesgo, servicio: cot.servicio, ubicacion: cot.ubicacion, parametros: cot.parametros, yarda_mm: cot.yarda_mm,
+      venta_pactada: cot.venta_pactada, piezas_enteras: cot.piezas_enteras === true, partidas: cot.partidas,
+    };
   };
 
   function calcular() {
@@ -196,12 +239,22 @@
   /* Utilidades de presentación                                         */
   /* ================================================================== */
   const NOMBRE_FAM = Object.assign(Object.create(null), Object.fromEntries([...W.FAMILIAS, ...W.FAMILIAS_RETIRADAS]));
-  const ETQ_OP = Object.assign(Object.create(null), Object.fromEntries(W.OPERACIONES));
+  const ETQ_OP = Object.assign(Object.create(null), Object.fromEntries([...W.OPERACIONES, ...W.OPERACIONES_EXTRA]));
+  const esLamina = (fam) => W.esDeLamina(fam);
   const nombreMaterial = (p) => {
     const m = estado.M.materiales[p.material_id];
     return m ? m.nombre.split(' (')[0] : p.material_id;
   };
-  const resumenMaterial = (p) => (p.familia === 'COMPRADO' ? '' : `${nombreMaterial(p)} · ${p.espesor_mm > 0 ? `${p.espesor_mm} mm` : `cal. ${p.calibre}`}`);
+  const resumenMaterial = (p) => (!esLamina(p.familia) ? '' : `${nombreMaterial(p)} · ${p.espesor_mm > 0 ? `${p.espesor_mm} mm` : `cal. ${p.calibre}`}`);
+  /** Título de una partida: su descripción; sin ella, la del artículo del catálogo (lo comprado) o el nombre de la familia. */
+  const tituloPartida = (p) => {
+    if (p.descripcion) return p.descripcion;
+    const art = p.familia === 'COMPRADO' && p.articulo_id && estado.M.compras.articulos[p.articulo_id];
+    return art && art.descripcion ? art.descripcion : NOMBRE_FAM[p.familia];
+  };
+  const dims = (p) => W.resumenDims(p, unidades(), estado.M);
+  /** Las partidas que suman al total: las del usuario que se calcularon y las automáticas (el sobrante de comprar piezas enteras). */
+  const filasOk = (R) => [...R.partidas.filter((f) => f.ok), ...(R.automaticas || [])];
 
   function toast(msg, accion) {
     const cont = $('#toasts');
@@ -254,14 +307,16 @@
     { clave: 'ci', etiqueta: 'Indirectos de fábrica y administración', css: 'var(--s3)', on: 'var(--on-s3)' },
     { clave: 'imp', etiqueta: 'Imprevistos y financiamiento', css: 'var(--s4)', on: 'var(--on-s4)' },
     { clave: 'util', etiqueta: 'Utilidad y comisión', css: 'var(--s5)', on: 'var(--on-s5)' },
+    { clave: 'via', etiqueta: 'Viáticos y gastos de obra', css: 'var(--s6)', on: 'var(--on-s6)' },
   ];
 
   function composicion(filas) {
-    const v = { mat: 0, mo: 0, ci: 0, imp: 0, util: 0 };
+    const v = { mat: 0, mo: 0, ci: 0, imp: 0, util: 0, via: 0 };
     filas.forEach((f) => {
       const s = f.costos.subtotales;
       v.mat += s.materiales + s.consumibles;
       v.mo += s.mano_obra + s.equipo + s.herramienta_menor + s.subcontratos;
+      v.via += s.viaticos || 0;
       v.ci += f.pila.CI;
       v.imp += f.pila.imprevistos + f.pila.financiamiento;
       v.util += f.pila.utilidad + f.pila.comision + f.pila.otros + (f.precio.total_sin_redondeo - f.pila.precio);
@@ -411,7 +466,7 @@
   function sincronizarParametros(abrirMas) {
     if (!ctlParam.utilidad) return;
     const R = estado.res;
-    const ok = R ? R.partidas.filter((f) => f.ok) : [];
+    const ok = R ? filasOk(R) : [];
     const piso = ok.reduce((t, f) => t + f.indicadores.precio_piso, 0);
     const sub = R ? R.totales.subtotal : 0;
     PARAMS.forEach((d) => {
@@ -468,15 +523,15 @@
       },
       W.iconoFamilia(p.familia),
       h('div', { class: 'partida-txt' },
-        h('div', { class: 'partida-titulo' }, p.descripcion || NOMBRE_FAM[p.familia]),
-        h('div', { class: 'partida-meta' }, [W.resumenDims(p, unidades()), resumenMaterial(p)].filter(Boolean).join(' · ')),
+        h('div', { class: 'partida-titulo' }, tituloPartida(p)),
+        h('div', { class: 'partida-meta' }, [dims(p), resumenMaterial(p)].filter(Boolean).join(' · ')),
         chips.length ? h('div', { class: 'partida-chips' }, chips) : null)),
       h('div', { class: 'partida-der' },
         h('div', { class: 'partida-cifras' },
           h('div', { class: 'partida-cant' }, `${p.cantidad} × ${f && f.ok ? W.mxn(f.precio.unitario) : '—'}`),
           h('div', { class: 'partida-importe' }, f && f.ok ? W.mxn(f.precio.importe) : '—')),
         h('div', { class: 'partida-acc' },
-          h('button', { type: 'button', class: 'btn-icono', 'aria-label': `Editar ${p.descripcion || NOMBRE_FAM[p.familia]}`, title: 'Editar', onclick: () => abrirDialogo(p.id) }, W.icono('editar')),
+          h('button', { type: 'button', class: 'btn-icono', 'aria-label': `Editar ${tituloPartida(p)}`, title: 'Editar', onclick: () => abrirDialogo(p.id) }, W.icono('editar')),
           h('button', { type: 'button', class: 'btn-icono', 'aria-label': 'Duplicar', title: 'Duplicar', onclick: () => duplicar(p.id) }, W.icono('copiar')),
           h('button', { type: 'button', class: 'btn-icono', 'aria-label': 'Eliminar', title: 'Eliminar', onclick: () => eliminar(p.id) }, W.icono('basura')))));
     li.addEventListener('click', (e) => { if (!e.target.closest('.partida-acc')) activar(); });
@@ -493,7 +548,24 @@
         h('button', { type: 'button', class: 'btn btn-primario', onclick: () => abrirDialogo(null) }, W.icono('mas'), 'Agregar la primera partida')));
       return;
     }
-    reemplazar(ul, ps.map(filaPartida));
+    reemplazar(ul, ps.map(filaPartida), (estado.res.automaticas || []).map(filaAutomatica));
+  }
+
+  /** La partida que agrega el cálculo (el sobrante de comprar piezas enteras): se ve en la lista pero no se edita aquí. */
+  function filaAutomatica(f) {
+    return h('li', { class: 'partida partida-auto', dataset: { auto: f.familia } },
+      h('div', { class: 'partida-main' },
+        W.iconoFamilia(f.familia),
+        h('div', { class: 'partida-txt' },
+          h('div', { class: 'partida-titulo' }, f.descripcion),
+          h('div', { class: 'partida-meta' }, `Costo ${W.mxn(f.costos.CD)} sin IVA · partida automática: se cobra porque la cotización pide piezas enteras`),
+          h('div', { class: 'partida-chips' }, h('span', { class: 'chip chip-auto' }, W.icono('info'), 'Automática')))),
+      h('div', { class: 'partida-der' },
+        h('div', { class: 'partida-cifras' },
+          h('div', { class: 'partida-cant' }, `1 × ${W.mxn(f.precio.unitario)}`),
+          h('div', { class: 'partida-importe' }, W.mxn(f.precio.importe))),
+        h('div', { class: 'partida-acc' },
+          h('button', { type: 'button', class: 'btn-texto', onclick: () => irPestana('compras', '#cg-lista') }, 'Ver la lista de compras'))));
   }
 
   function duplicar(id) {
@@ -501,7 +573,7 @@
     if (i < 0) return;
     const copia = U.clonar(estado.cot.partidas[i]);
     copia.id = idNuevo();
-    copia.descripcion = `${copia.descripcion || NOMBRE_FAM[copia.familia]} (copia)`;
+    copia.descripcion = `${tituloPartida(copia)} (copia)`;
     estado.cot.partidas.splice(i + 1, 0, copia);
     estado.sel = copia.id;
     persistir();
@@ -535,11 +607,13 @@
   function renderTotales() {
     const R = estado.res;
     const T = R.totales;
-    const ok = R.partidas.filter((f) => f.ok);
+    const ok = filasOk(R);
     const piso = ok.reduce((s, f) => s + f.indicadores.precio_piso, 0);
     const margenMax = T.subtotal > 0 ? 1 - piso / T.subtotal : 0; // cuánto se puede descontar del precio de lista antes de perder la utilidad
     const bajoPiso = ok.length > 0 && T.subtotal_neto < piso - 0.005;
-    const hMOD = ok.reduce((s, f) => s + f.costos.h_MOD, 0);
+    const hMOD = ok.filter((f) => f.familia !== 'INSTALACION').reduce((s, f) => s + f.costos.h_MOD, 0);
+    const hObra = ok.filter((f) => f.familia === 'INSTALACION').reduce((s, f) => s + f.costos.h_MOD, 0);
+    const auto = (R.automaticas || []).reduce((s, f) => s + f.precio.importe, 0);
     const cont = $('#totales');
     const resumen = [`Subtotal ${W.mxn(T.subtotal)}`];
     if (T.descuento > 0) resumen.push(`Descuento ${pctCorto(T.descuento_pct)} −${W.mxn(T.descuento)}`);
@@ -550,13 +624,30 @@
         h('div', { class: 'hero-val' }, W.mxn(T.total)),
         h('div', { class: 'hero-sub' }, resumen.join(' · '))),
       h('div', { class: 'tiles' },
-        tile('Peso neto', `${W.num(T.peso_neto_kg, 1)} kg`, `${T.n_partidas_ok} ${T.n_partidas_ok === 1 ? 'partida' : 'partidas'}${T.n_partidas_error ? ` · ${T.n_partidas_error} con error` : ''}`),
+        tile('Peso neto', `${W.num(T.peso_neto_kg, 1)} kg`, `${T.n_partidas_ok} ${T.n_partidas_ok === 1 ? 'partida' : 'partidas'}${auto > 0 ? ' + sobrante' : ''}${T.n_partidas_error ? ` · ${T.n_partidas_error} con error` : ''}`),
         tile('Precio por kg neto', T.precio_por_kg_neto ? `${W.mxn(T.precio_por_kg_neto)}` : '—', 'antes de IVA'),
-        tile('Mano de obra directa', `${W.num(hMOD, 1)} h`, 'horas reales de taller'),
+        tile('Mano de obra directa', `${W.num(hMOD, 1)} h`, hObra > 0 ? `de taller · más ${W.num(hObra, 1)} h en obra` : 'horas reales de taller'),
         tile('Piso de negociación', W.mxn(piso), bajoPiso ? 'El descuento deja el precio por debajo del piso' : ok.length ? `hasta −${W.num(margenMax * 100, 1)} % con utilidad cero` : '', bajoPiso ? 'tile-adv' : ''),
         tile('Utilidad', W.mxn(T.utilidad), ok.length ? `${W.num(T.margen_real_pct * 100, 1)} % del precio${T.descuento > 0 ? ' con el descuento' : ''}` : '', T.utilidad < 0 ? 'tile-adv' : ''),
         tile('Costo total', W.mxn(T.costo_total), 'directo + indirectos + imprevistos')),
+      auto > 0 ? h('p', { class: 'nota' }, W.icono('info'), `Incluye ${W.mxn(auto)} por el material sobrante de comprar piezas enteras (hojas, barras, tornillos y envases completos).`) : null,
+      T.venta ? ventaResumen(T) : null,
       ok.length ? barraComposicion(composicion(ok), 'De qué se compone el precio') : null);
+  }
+
+  /** La venta pactada contra lo calculado: lo que se gana (o pierde) y si cubre el precio mínimo. */
+  function ventaResumen(T) {
+    const V = T.venta;
+    const clase = V.utilidad < 0 ? (V.cubre_costo_directo ? 'venta-res venta-adv' : 'venta-res venta-mal') : 'venta-res venta-ok';
+    const juicio = V.utilidad >= 0 ? 'cubre todo el costo y deja utilidad'
+      : V.cubre_costo_directo ? `cubre el costo directo pero no los indirectos: el precio mínimo es ${W.mxn(T.precio_minimo)}`
+        : 'ni siquiera cubre el costo directo';
+    return h('div', { class: clase, role: 'note' },
+      h('div', { class: 'venta-res-cab' },
+        h('span', { class: 'venta-res-et' }, 'Venta pactada'),
+        h('strong', null, `${W.mxn(V.pactada)} + IVA`),
+        h('button', { type: 'button', class: 'btn-texto', onclick: () => irPestana('compras') }, 'Compras y gastos')),
+      h('p', null, `Utilidad ${W.mxn(V.utilidad)} (${W.num(V.margen_pct * 100, 1)} %): ${juicio}. Precio calculado ${W.mxn(V.precio_calculado)} (${V.diferencia >= 0 ? '+' : '−'}${W.mxn(Math.abs(V.diferencia))}).`));
   }
 
   /* ================================================================== */
@@ -846,19 +937,22 @@
   function detalleCostos(f) {
     const c = f.costos;
     const filas = [];
-    const bases = basesMaterial(f);
+    const bases = { Materiales: f.qto ? basesMaterial(f) : basesSoporte(f), 'Viáticos': basesViaticos(f) };
     const ETQ = {
       lamina: 'Lámina', credito_chatarra: 'Crédito por chatarra', perfiles: 'Perfil de aros', tornilleria: 'Tornillería', fijaciones: 'Fijaciones de espiga', empaque: 'Empaque',
       sellador: 'Sellador', flete: 'Flete de entrada', compra: 'Compra', alambre: 'Alambre / varilla', gas: 'Gas de protección', corte: 'Consumibles de corte', pintura: 'Pintura y diluyente',
+      perfil: 'Perfil (fracción de barra, con merma)', anclajes: 'Anclajes', sobrante: 'Material sobrante',
+      casetas: 'Casetas', gasolina: 'Gasolina', hospedaje: 'Hospedaje', comidas: 'Comidas', otros: 'Otros gastos de obra',
     };
     const grupo = (tit, obj) => {
-      const ks = Object.keys(obj).filter((k) => Math.abs(obj[k]) > 0);
+      const ks = Object.keys(obj || {}).filter((k) => Math.abs(obj[k]) > 0);
       if (!ks.length) return;
       filas.push({ clase: 'grupo', celdas: [tit, '', ''] });
-      ks.forEach((k) => filas.push([`  ${ETQ[k] || k}`, tit === 'Materiales' ? bases[k] || '' : '', W.mxn(obj[k])]));
+      ks.forEach((k) => filas.push([`  ${ETQ[k] || k}`, (bases[tit] || {})[k] || '', W.mxn(obj[k])]));
     };
     grupo('Materiales', c.materiales);
     grupo('Consumibles', c.consumibles);
+    grupo('Viáticos', c.viaticos);
     filas.push({ clase: 'grupo', celdas: ['Mano de obra, equipo y terceros', '', ''] });
     filas.push(['  Mano de obra directa', c.h_MOD > 0 ? `${W.num(c.h_MOD, 3)} h reales` : '', W.mxn(c.subtotales.mano_obra)]);
     filas.push(['  Equipo (hora-máquina)', '', W.mxn(c.subtotales.equipo)]);
@@ -868,12 +962,100 @@
     return tabla([{ t: 'Concepto' }, { t: 'Base' }, { t: 'MXN', num: true }], filas);
   }
 
+  const NOMBRE_CAT = (k) => (C.gastos.CATEGORIAS[k] || k).split(':')[0];
+
+  /** Lo comprado: de dónde sale el precio, si traía IVA y en qué renglón del control de gastos cae. */
+  function detalleCompra(f) {
+    const k = f.compra;
+    const art = k.articulo_id ? estado.res.maestros.compras.articulos[k.articulo_id] : null;
+    const n = f.entrada.cantidad;
+    return [
+      h('dl', { class: 'kvs' },
+        kv('Artículo', art ? `${art.descripcion} (${k.articulo_id})` : 'Capturado en la partida (fuera del catálogo)'),
+        kv('Precio de compra', `${W.mxn(k.precio)} ${k.iva_incluido ? 'con IVA' : 'antes de IVA'}`, `por ${k.unidad}`),
+        kv('Origen del precio', f.entrada.precio_compra_unitario !== undefined ? 'Capturado en la partida' : 'Del catálogo de compras'),
+        kv('Costo sin IVA', W.mxn(k.unitario_sin_iva), `por ${k.unidad}`),
+        kv(`Costo de ${W.num(n, 0)} × ${k.unidad}`, W.mxn(f.costos.CD)),
+        kv('Renglón del control de gastos', NOMBRE_CAT(k.categoria))),
+      k.iva_incluido ? h('p', { class: 'nota' }, `Al precio se le quita el IVA (${W.pct(estado.res.maestros.compras.iva_pct, 0)}): se acredita, no es costo.`) : null,
+    ];
+  }
+
+  /** Bases de los viáticos: con factura el monto se toma sin IVA (se acredita); sin factura, completo. */
+  function basesViaticos(f) {
+    const I = f.instalacion;
+    if (!I) return {};
+    const e = f.entrada;
+    const t = (fact) => (fact ? 'sin IVA (con factura)' : 'con IVA (sin factura)');
+    const vez = e.cantidad > 1 ? ` × ${e.cantidad} veces` : '';
+    return {
+      casetas: `${e.viajes || 0} viajes × ${W.mxn(e.casetas_viaje || 0)}${vez} · ${t(I.gastos_con_factura)}`,
+      gasolina: `${e.viajes || 0} viajes × ${W.mxn(e.gasolina_viaje || 0)}${vez} · ${t(I.gastos_con_factura)}`,
+      hospedaje: `${e.personas} × ${e.noches || 0} noches × ${W.mxn(e.hospedaje_noche || 0)}${vez} · ${t(I.gastos_con_factura)}`,
+      comidas: `${e.personas} × ${W.num(e.dias, 1)} días × ${W.mxn(e.comida_dia || 0)}${vez} · ${t(I.comidas_con_factura)}`,
+      otros: `${W.mxn(e.otros_gastos || 0)}${vez} · ${t(I.gastos_con_factura)}`,
+    };
+  }
+
+  /** Bases del material de la soportería: la fracción de barra, los anclajes del catálogo y la tornillería. */
+  function basesSoporte(f) {
+    const s = f.soporte;
+    if (!s) return {};
+    return {
+      perfil: `${W.num(s.L_total_m, 3)} m × ${W.mxn(s.barra.precio_m)}/m ÷ (1 − merma ${W.pct(estado.res.maestros.merma.PERFIL, 0)})`,
+      anclajes: `${s.anclajes} × ${W.mxn(s.anclaje.unitario_sin_iva)} (${s.anclaje.descripcion})`,
+      tornilleria: `${s.tornillos} juegos ${s.tornillo} × ${W.mxn(s.precio_tornillo)}`,
+    };
+  }
+
+  /** Instalación en obra: la cuadrilla (horas reales, sin la eficiencia del taller) y cada viático. */
+  function detalleInstalacion(f) {
+    const I = f.instalacion;
+    const e = f.entrada;
+    const v = f.costos.viaticos;
+    const bases = basesViaticos(f);
+    const ETQ_V = { casetas: 'Casetas', gasolina: 'Gasolina', hospedaje: 'Hospedaje', comidas: 'Comidas', otros: 'Otros gastos de obra' };
+    const J = estado.res.maestros.mano_obra.jornada;
+    return [
+      h('dl', { class: 'kvs' },
+        kv('Cuadrilla', `${e.personas} ${e.personas === 1 ? 'persona' : 'personas'} × ${W.num(e.dias, 1)} ${e.dias === 1 ? 'día' : 'días'} × ${W.num(I.horas_dia, 1)} h${e.cantidad > 1 ? ` × ${e.cantidad} veces` : ''}`),
+        kv('Horas en obra', W.num(I.horas, 2), 'h'),
+        kv('Costo por hora', W.mxn(I.tarifa.mo_h), `salario por día × ${J.dias_pagados_semana} ÷ ${W.num(J.dias_trabajados_semana * J.horas_dia, 0)} h`),
+        kv('Mano de obra de instalación', W.mxn(f.costos.subtotales.mano_obra)),
+        kv('Viáticos', W.mxn(f.costos.subtotales.viaticos))),
+      tabla([{ t: 'Viático' }, { t: 'Base' }, { t: 'Costo', num: true }],
+        [...Object.keys(ETQ_V).filter((k) => v[k] > 0).map((k) => [ETQ_V[k], bases[k], W.mxn(v[k])]),
+          { clase: 'total', celdas: ['Total de viáticos', '', W.mxn(f.costos.subtotales.viaticos)] }]),
+      h('p', { class: 'nota' }, 'Los montos se capturan con IVA, como en el ticket. Lo que se paga con factura se cuesta sin IVA (se acredita); lo que no, completo. En obra se pagan horas reales: no se aplica la eficiencia del taller.'),
+    ];
+  }
+
+  /** Soportería: la barra de la que se cortan las piezas, los anclajes, la tornillería y el tiempo de taller. */
+  function detalleSoporte(f) {
+    const s = f.soporte;
+    const e = f.entrada;
+    const b = s.barra;
+    return [
+      h('dl', { class: 'kvs' },
+        kv('Barra', `${b.descripcion} · ${W.num(b.largo_mm / 1000, 2)} m`, `${W.mxn(b.precio)} → ${W.mxn(b.sin_iva)} sin IVA`),
+        kv('Precio por metro', W.mxn(b.precio_m), 'sin IVA'),
+        kv('Largo por pieza', W.num(e.largo_pieza_mm, 0), 'mm'),
+        kv('Barra que usan las piezas', W.num(s.L_total_m, 3), 'm'),
+        kv('Anclajes', s.anclajes ? `${s.anclajes} × ${s.anclaje.descripcion}` : 'Ninguno'),
+        kv('Tornillería', s.tornillos ? `${s.tornillos} juegos ${s.tornillo}` : 'Ninguna'),
+        kv('Tiempo de taller', `${W.num(s.minutos_pieza, 1)} min por pieza → ${W.num(s.horas, 2)} h reales`),
+        kv('Peso', W.num(f.peso.neto_total_kg, 2), 'kg')),
+      h('p', { class: 'nota' }, 'Cada pieza paga la fracción de barra que usa, con la merma de perfil. Cuántas barras completas hay que comprar lo dice la lista de compras (pestaña Compras y gastos).'),
+    ];
+  }
+
   function detallePila(f) {
     const p = f.pila;
     const C = estado.res.capas; // las de esta cotización: las de maestros con los parámetros propios encima
+    const obra = f.familia === 'INSTALACION'; // la cuadrilla en obra no usa la nave: sus indirectos por hora son otros
     const filas = [
       ['Costo directo (CD)', '', W.mxn(p.CD)],
-      ['CI de fábrica', `GIF ${W.mxn(C.gif_por_hora_mod)}/h × ${W.num(f.costos.h_MOD, 3)} h`, W.mxn(p.CI_fabrica)],
+      [obra ? 'CI de la instalación' : 'CI de fábrica', `GIF ${W.mxn(p.gif_por_hora)}/h × ${W.num(f.costos.h_MOD, 3)} h`, W.mxn(p.CI_fabrica)],
       ['CI de administración', `${W.pct(C.administracion_pct_cd, 1)} del CD`, W.mxn(p.CI_admin)],
       ['Imprevistos', `riesgo ${p.riesgo} · ${W.pct(p.imp_pct, 1)} de CD + CI`, W.mxn(p.imprevistos)],
       { clase: 'total', celdas: ['Costo total', '', W.mxn(p.C_T)] },
@@ -901,14 +1083,32 @@
     const f = estado.res.partidas[i];
     const cab = h('div', { class: 'det-cab' },
       W.iconoFamilia(p.familia),
-      h('div', null, h('h3', null, p.descripcion || NOMBRE_FAM[p.familia]), h('p', { class: 'det-sub' }, [W.resumenDims(p, unidades()), resumenMaterial(p)].filter(Boolean).join(' · '))),
+      h('div', null, h('h3', null, tituloPartida(p)), h('p', { class: 'det-sub' }, [dims(p), resumenMaterial(p)].filter(Boolean).join(' · '))),
       h('button', { type: 'button', class: 'btn', onclick: () => abrirDialogo(p.id) }, W.icono('editar'), 'Editar'));
     if (!f.ok) {
       reemplazar(cont, cab, h('div', { class: 'errores' }, h('p', { class: 'errores-tit' }, W.icono('error'), 'No se puede calcular esta partida'), h('ul', null, f.errores.map((e) => h('li', null, e)))));
       return;
     }
     if (p.familia === 'COMPRADO') {
-      reemplazar(cont, cab, detalleResumen(f), seccion('Pila de precio', detallePila(f), true));
+      reemplazar(cont, cab, detalleResumen(f), seccion('Compra', detalleCompra(f), true, W.mxn(f.costos.CD)), seccion('Pila de precio', detallePila(f), true));
+      return;
+    }
+    if (p.familia === 'INSTALACION' || p.familia === 'SOPORTE') {
+      const obra = p.familia === 'INSTALACION';
+      reemplazar(cont, cab, detalleResumen(f),
+        obra ? seccion('Cuadrilla y viáticos', detalleInstalacion(f), true, `${W.num(f.instalacion.horas, 1)} h · ${W.mxn(f.costos.subtotales.viaticos)} de viáticos`)
+          : seccion('Pieza, barra y anclajes', detalleSoporte(f), true, `${W.num(f.soporte.L_total_m, 2)} m de barra`),
+        seccion('Pila de precio', detallePila(f), true, W.mxn(f.precio.total_sin_redondeo)),
+        seccion('Costo directo por concepto', detalleCostos(f), false, W.mxn(f.costos.CD)));
+      return;
+    }
+    if (p.familia === 'BRIDA') { // sólo aros: no hay lámina; lo que importa son los aros, su tornillería y su empaque
+      const a = f.qto.her.aros_sueltos[0];
+      reemplazar(cont, cab, detalleResumen(f),
+        seccion('Aros, tornillería y empaque', detalleHerrajes(f), true, a ? `${W.num(a.L_aro_mm, 0)} mm de solera por aro` : ''),
+        seccion('Pila de precio', detallePila(f), true, W.mxn(f.precio.total_sin_redondeo)),
+        seccion('Tiempos de fabricación', detalleTiempos(f), false, `${W.num(f.costos.h_MOD, 2)} h`),
+        seccion('Costo directo por concepto', detalleCostos(f), false, W.mxn(f.costos.CD)));
       return;
     }
     reemplazar(cont, cab, detalleResumen(f),
@@ -946,7 +1146,29 @@
       return [['', `Predeterminado · ${nombre[M.proceso.armado_yardas.extremo_ajuste_defecto] || '—'}`], ...W.OPC.ajuste];
     }
     if (clave === 'perfiles') return [['', 'Estándar del taller'], ...Object.keys(M.herrajes.perfiles).map((k) => [k, `${k} · ${M.herrajes.perfiles[k].descripcion}`])];
+    const art = (k) => {
+      const a = M.compras.articulos[k];
+      return [k, `${a.descripcion || k} · ${W.mxn(a.precio)}${a.iva_incluido ? ' con IVA' : ' + IVA'} por ${a.unidad || 'pza'}`];
+    };
+    if (clave === 'articulos') return [['', 'Ninguno: capturo el precio'], ...Object.keys(M.compras.articulos).map(art)];
+    if (clave === 'anclajes') {
+      const d = M.proceso.soportes.anclaje_defecto;
+      const a = M.compras.articulos[d];
+      return [['', `Predeterminado · ${a ? a.descripcion : d}`], ...Object.keys(M.compras.articulos).map(art)];
+    }
+    if (clave === 'barras') {
+      return Object.keys(M.proveedor.barras).map((k) => {
+        const b = M.proveedor.barras[k];
+        return [k, `${b.descripcion || k} · ${W.num((b.largo_mm || 0) / 1000, 2)} m · ${W.mxn(b.precio || 0)}`];
+      });
+    }
     return W.OPC[clave];
+  }
+
+  /** Los campos de una familia: los propios y, si es de lámina, los de material y los avanzados que le tocan. */
+  function camposDe(fam) {
+    const deFam = (lista) => lista.filter((c) => !c.familias || c.familias.includes(fam));
+    return [...W.CAMPOS[fam], ...(esLamina(fam) ? [...deFam(W.CAMPOS_MATERIAL), ...deFam(W.CAMPOS_AVANZADOS)] : [])];
   }
 
   function opcionesCalibre(materialId) {
@@ -956,8 +1178,11 @@
     return [...Object.keys(tabla_).map(Number).sort((a, b) => a - b).map((c) => [String(c), `${c} · ${W.num(tabla_[c] * W.MM_IN, 3)} mm`]), ['PROPIO', 'Espesor propio (placa)']];
   }
 
-  function crearControl(c, valor) {
+  function crearControl(c, valorDado) {
     const id = `f_${c.id}`;
+    // una lista sin valor guardado muestra el que usa el cálculo (su `defecto`), no la primera opción: así editar y guardar sin
+    // tocar nada no cambia la partida (p. ej. «comidas con factura», que el motor toma como «no» si no se dice)
+    const valor = valorDado === undefined && c.tipo === 'select' && c.defecto !== undefined ? c.defecto : valorDado;
     let ctl;
     if (c.tipo === 'select' || c.tipo === 'calibre') {
       let ops = c.tipo === 'calibre' ? opcionesCalibre(dlg.valores.material_id) : opcionesDe(c.opciones);
@@ -987,7 +1212,7 @@
   function leerDialogo() {
     const p = { familia: dlg.familia };
     if (dlg.id) p.id = dlg.id;
-    const campos = [...W.CAMPOS[dlg.familia], ...(dlg.familia === 'COMPRADO' ? [] : [...W.CAMPOS_MATERIAL, ...W.CAMPOS_AVANZADOS])];
+    const campos = camposDe(dlg.familia);
     const crudo = {};
     $$('#dlg-campos [name]').forEach((el) => { crudo[el.name] = el.value; });
     dlg.invalidos = []; // lo que se escribió y no es un número: no se deja pasar como «automático» en silencio
@@ -999,7 +1224,7 @@
       if (el.validity && el.validity.badInput) dlg.invalidos.push(`${c.etiqueta}: lo escrito no es un número.`);
       if (c.tipo === 'select') {
         if (v === '') return;
-        p[c.id] = c.id === 'caras_pintadas' || c.numerico ? Number(v) : v;
+        p[c.id] = c.id === 'caras_pintadas' || c.numerico ? Number(v) : c.booleano ? v === 'true' : v;
         return;
       }
       if (c.tipo === 'calibre') {
@@ -1021,7 +1246,7 @@
     });
     p.descripcion = ($('#f_descripcion') || { value: '' }).value.trim();
     p.cantidad = Number(($('#f_cantidad') || { value: 1 }).value);
-    if (dlg.familia !== 'COMPRADO') {
+    if (esLamina(dlg.familia)) {
       $$('.sub-fila', $('#dlg-campos')).forEach((fila, i) => {
         const el = $('.sc-precio', fila);
         if ((el.validity && el.validity.badInput) || Number(el.value || 0) < 0) dlg.invalidos.push(`Subcontrato ${i + 1}: el precio debe ser un número, 0 o mayor.`);
@@ -1040,8 +1265,7 @@
   function actualizarVisibilidad() {
     const crudo = {};
     $$('#dlg-campos [name]').forEach((el) => { crudo[el.name] = el.value; });
-    const campos = [...W.CAMPOS[dlg.familia], ...(dlg.familia === 'COMPRADO' ? [] : [...W.CAMPOS_MATERIAL, ...W.CAMPOS_AVANZADOS])];
-    campos.forEach((c) => {
+    camposDe(dlg.familia).forEach((c) => {
       const w = $(`.campo[data-campo="${c.id}"]`);
       if (w) w.hidden = c.visible ? !c.visible(crudo) : false;
     });
@@ -1060,23 +1284,26 @@
     const v = dlg.valores;
     const cont = $('#dlg-campos');
     const fam = dlg.familia;
-    const grid = (campos) => h('div', { class: 'grid-campos' }, campos.map((c) => crearControl(c, v[c.id])));
+    const grid = (campos, clase) => h('div', { class: `grid-campos${clase ? ` ${clase}` : ''}` }, campos.map((c) => crearControl(c, v[c.id])));
+    const deFam = (lista) => lista.filter((c) => !c.familias || c.familias.includes(fam));
     const partes = [
       h('fieldset', null, h('legend', null, 'Descripción y cantidad'),
         h('div', { class: 'grid-campos' },
           crearControl({ id: 'descripcion', etiqueta: 'Descripción', tipo: 'text' }, v.descripcion),
-          crearControl({ id: 'cantidad', etiqueta: 'Cantidad', tipo: 'int', min: 1, paso: 1 }, v.cantidad))),
-      h('fieldset', null, h('legend', null, fam === 'COMPRADO' ? 'Artículo comprado' : 'Dimensiones'), grid(W.CAMPOS[fam].filter((c) => c.grupo !== 'armado'))),
+          crearControl({ id: 'cantidad', etiqueta: W.ETIQUETA_CANTIDAD[fam] || 'Cantidad', tipo: 'int', min: 1, paso: 1 }, v.cantidad))),
+      h('fieldset', null, h('legend', null, W.TITULO_CAMPOS[fam] || 'Dimensiones'), grid(W.CAMPOS[fam].filter((c) => !c.grupo))),
     ];
-    const armado = W.CAMPOS[fam].filter((c) => c.grupo === 'armado');
-    if (armado.length) partes.push(h('fieldset', null, h('legend', null, 'Armado por yardas'), h('div', { class: 'grid-campos grid-armado' }, armado.map((c) => crearControl(c, v[c.id])))));
-    if (fam !== 'COMPRADO') {
-      partes.push(h('fieldset', null, h('legend', null, 'Material y proceso'), grid(W.CAMPOS_MATERIAL.filter((c) => !c.familias || c.familias.includes(fam)))));
+    // Los cuadros propios (armado por yardas, viáticos), en el orden en que aparecen sus campos
+    [...new Set(W.CAMPOS[fam].filter((c) => c.grupo).map((c) => c.grupo))].forEach((g) => {
+      partes.push(h('fieldset', null, h('legend', null, W.GRUPOS_CAMPOS[g] || g), grid(W.CAMPOS[fam].filter((c) => c.grupo === g), `grid-${g}`)));
+    });
+    if (esLamina(fam)) {
+      partes.push(h('fieldset', null, h('legend', null, fam === 'BRIDA' ? 'Material del ducto y proceso' : 'Material y proceso'), grid(deFam(W.CAMPOS_MATERIAL))));
       const subs = (v.subcontratos || []).map(filaSub);
       const contSubs = h('div', { class: 'subs' }, subs);
       partes.push(h('details', { class: 'avanzado', open: !!(v.subcontratos || v.omitir_operaciones || v.merma_pct !== undefined || v.perfil_id) },
         h('summary', null, 'Opciones avanzadas'),
-        grid(W.CAMPOS_AVANZADOS),
+        grid(deFam(W.CAMPOS_AVANZADOS)),
         h('div', { class: 'bloque-adv' },
           h('div', { class: 'etq' }, 'Operaciones subcontratadas (se omiten del taller)'),
           h('div', { class: 'omitir' }, W.OPERACIONES.map(([k, t]) => h('label', { class: 'check' }, h('input', { type: 'checkbox', value: k, checked: (v.omitir_operaciones || []).includes(k) }), t)))),
@@ -1087,6 +1314,27 @@
     }
     cont.replaceChildren(...partes);
     actualizarVisibilidad();
+    if (fam === 'COMPRADO') sincronizarArticulo(false);
+  }
+
+  /**
+   * Artículo comprado: con un artículo del catálogo, el precio vacío es el del catálogo (se ve como sugerencia en el campo) y
+   * la descripción vacía, la del artículo. `limpiar`: al elegir otro artículo se borra el precio y la regla del IVA, para que
+   * manden los del catálogo.
+   */
+  function sincronizarArticulo(limpiar) {
+    const sel = $('#f_articulo_id');
+    const precio = $('#f_precio_compra_unitario');
+    if (!sel || !precio) return;
+    const a = sel.value ? estado.M.compras.articulos[sel.value] : null;
+    if (limpiar && a) {
+      precio.value = '';
+      const iva = $('#f_iva_incluido');
+      if (iva) iva.value = '';
+    }
+    precio.placeholder = a ? String(a.precio) : '';
+    const desc = $('#f_descripcion');
+    if (desc) desc.placeholder = a ? a.descripcion : '';
   }
 
   function renderFamilias() {
@@ -1103,9 +1351,11 @@
     if (k === dlg.familia) return;
     const previo = leerDialogo();
     const nuevo = W.partidaNueva(k);
+    // De una familia de lámina a otra se conservan el material y el proceso; a una que no es de lámina, sólo descripción y cantidad
     ['descripcion', 'cantidad', 'material_id', 'calibre', 'espesor_mm', 'ref_diametro', 'tipo_union', 'clase_sellado', 'pintura', 'ubicacion', 'servicio', 'riesgo', 'caras_pintadas', 'proceso_corte', 'merma_pct', 'subcontratos', 'omitir_operaciones'].forEach((c) => {
-      if (previo[c] !== undefined && !(k === 'COMPRADO' && !['descripcion', 'cantidad'].includes(c))) nuevo[c] = previo[c];
+      if (previo[c] !== undefined && (['descripcion', 'cantidad'].includes(c) || (esLamina(k) && esLamina(dlg.familia)))) nuevo[c] = previo[c];
     });
+    if (k === 'BRIDA') delete nuevo.tipo_union; // las bridas sueltas siempre son bridadas
     if (nuevo.espesor_mm > 0) nuevo.calibre = 'PROPIO';
     if (nuevo.calibre !== undefined) nuevo.calibre = String(nuevo.calibre);
     dlg.familia = k;
@@ -1136,9 +1386,13 @@
           kv('Peso neto', W.num(f.peso.neto_total_kg, 2), 'kg'),
           kv('Precio por kg', ind.precio_por_kg_neto ? W.mxn(ind.precio_por_kg_neto) : '—'),
           kv('Mano de obra', W.num(ind.horas_mod_reales, 2), 'h'),
-          f.geometria ? kv('Área de lámina', W.num(f.geometria.A_neta_m2, 3), 'm²') : null,
+          f.geometria && f.geometria.A_neta_m2 > 0 ? kv('Área de lámina', W.num(f.geometria.A_neta_m2, 3), 'm²') : null,
           f.familia === 'RECTO' ? kv('Armado', armadoTexto(f.geometria.detalle.armado)) : null,
-          f.qto ? kv('Lámina bruta', W.num(f.qto.lam.m_bruta_kg, 2), 'kg') : null),
+          f.qto && f.qto.lam.m_bruta_kg > 0 ? kv('Lámina bruta', W.num(f.qto.lam.m_bruta_kg, 2), 'kg') : null,
+          f.familia === 'BRIDA' && f.qto.her.aros_sueltos[0] ? kv('Solera por aro', W.num(f.qto.her.aros_sueltos[0].L_aro_mm, 0), 'mm') : null,
+          f.compra ? kv('Costo sin IVA', W.mxn(f.compra.unitario_sin_iva), `por ${f.compra.unidad}`) : null,
+          f.soporte ? kv('Barra', `${W.num(f.soporte.L_total_m, 2)} m de ${f.soporte.barra.descripcion}`) : null,
+          f.costos.subtotales.viaticos > 0 ? kv('Viáticos (costo)', W.mxn(f.costos.subtotales.viaticos)) : null),
         f.advertencias.length ? h('ul', { class: 'avisos' }, f.advertencias.map((a) => h('li', null, W.icono('aviso'), h('span', null, a)))) : h('p', { class: 'nota ok' }, W.icono('check'), 'Datos consistentes'));
       dlg.error = null;
     } catch (err) {
@@ -1189,6 +1443,7 @@
     const delegar = () => { actualizarVisibilidad(); actualizarPreview(); };
     form.addEventListener('input', delegar);
     form.addEventListener('change', (e) => {
+      if (e.target && e.target.id === 'f_articulo_id') sincronizarArticulo(true);
       if (e.target && e.target.id === 'f_material_id') {
         dlg.valores.material_id = e.target.value;
         const sel = $('#f_calibre');
@@ -1239,18 +1494,22 @@
   /* ================================================================== */
   /* Intercambio (guardar / cargar / CSV) y propuesta impresa           */
   /* ================================================================== */
+  const esc = (s) => `"${String(s === undefined || s === null ? '' : s).replace(/"/g, '""')}"`;
+  // Un texto que empieza con = + - @ se tomaría por fórmula al abrirlo en Excel: se le antepone una comilla.
+  const txt = (s) => esc(/^[=+\-@\t\r]/.test(String(s === undefined || s === null ? '' : s)) ? `'${s}` : s);
+  /** CSV de una tabla [[celda…]…]: los números tal cual, los textos protegidos contra fórmulas. */
+  W.csv = (filas) => filas.map((f) => f.map((c) => (typeof c === 'number' ? esc(String(c)) : txt(c))).join(',')).join('\n');
+
   function csvPartidas() {
-    const esc = (s) => `"${String(s === undefined || s === null ? '' : s).replace(/"/g, '""')}"`;
-    // Un texto que empieza con = + - @ se tomaría por fórmula al abrirlo en Excel: se le antepone una comilla.
-    const txt = (s) => esc(/^[=+\-@\t\r]/.test(String(s === undefined || s === null ? '' : s)) ? `'${s}` : s);
     const fila = (c) => [txt(c[0]), txt(c[1]), txt(c[2]), esc(c[3]), esc(c[4]), esc(c[5]), esc(c[6]), esc(c[7])].join(',');
     const filas = [fila(['Descripción', 'Familia', 'Material', 'Calibre', 'Cantidad', 'Precio unitario', 'Importe', 'Peso neto total kg'])];
     estado.res.partidas.forEach((f, i) => {
       const p = estado.cot.partidas[i];
-      if (!f.ok) { filas.push(fila([p.descripcion || NOMBRE_FAM[p.familia], p.familia, '', '', p.cantidad, 'ERROR', '', ''])); return; }
-      filas.push(fila([p.descripcion || NOMBRE_FAM[p.familia], p.familia, p.familia === 'COMPRADO' ? '' : nombreMaterial(p), p.calibre || p.espesor_mm || '', p.cantidad,
+      if (!f.ok) { filas.push(fila([tituloPartida(p), p.familia, '', '', p.cantidad, 'ERROR', '', ''])); return; }
+      filas.push(fila([tituloPartida(p), p.familia, esLamina(p.familia) ? nombreMaterial(p) : '', esLamina(p.familia) ? p.calibre || p.espesor_mm || '' : '', p.cantidad,
         f.precio.unitario.toFixed(2), f.precio.importe.toFixed(2), f.peso.neto_total_kg.toFixed(3)]));
     });
+    (estado.res.automaticas || []).forEach((f) => filas.push(fila([f.descripcion, f.familia, '', '', 1, f.precio.unitario.toFixed(2), f.precio.importe.toFixed(2), '0.000'])));
     return filas.join('\n');
   }
 
@@ -1341,7 +1600,8 @@
         h('dl', null,
           kv('Cliente', c.cliente || '—'), kv('Proyecto', c.proyecto || '—'), kv('Fecha', fechaLarga(c.fecha)), kv('Vigencia', vigencia ? `${vigencia} días naturales` : '—'))),
       tabla([{ t: 'Partida' }, { t: 'Material' }, { t: 'Cant.', num: true }, { t: 'P. unitario', num: true }, { t: 'Importe', num: true }],
-        filas.map(({ f, p }) => [h('div', null, h('strong', null, p.descripcion || NOMBRE_FAM[p.familia]), h('div', { class: 'prop-dim' }, W.resumenDims(p, { diam: c.unidad_diam, long: c.unidad_long }))), resumenMaterial(p) || 'Compra', String(p.cantidad), W.mxn(f.precio.unitario), W.mxn(f.precio.importe)])),
+        [...filas.map(({ f, p }) => [h('div', null, h('strong', null, tituloPartida(p)), h('div', { class: 'prop-dim' }, W.resumenDims(p, { diam: c.unidad_diam, long: c.unidad_long }, estado.M))), resumenMaterial(p) || (p.familia === 'INSTALACION' ? 'Servicio' : 'Compra'), String(p.cantidad), W.mxn(f.precio.unitario), W.mxn(f.precio.importe)]),
+          ...(estado.res.automaticas || []).map((f) => [h('div', null, h('strong', null, f.descripcion)), 'Material', '1', W.mxn(f.precio.unitario), W.mxn(f.precio.importe)])]),
       h('dl', { class: 'prop-tot' },
         kv('Subtotal', W.mxn(T.subtotal)),
         T.descuento > 0 ? kv(`Descuento ${pctCorto(T.descuento_pct)}`, `−${W.mxn(T.descuento)}`) : null,
@@ -1353,11 +1613,13 @@
   /* ================================================================== */
   /* Pestañas, avisos y arranque                                        */
   /* ================================================================== */
-  function irPestana(t) {
+  function irPestana(t, destino) {
     estado.tab = t;
     $$('[role="tab"]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === t)));
     $$('.panel').forEach((p) => { p.hidden = p.id !== `panel-${t}`; });
     if (t === 'maestros' && W.maestrosUI) W.maestrosUI.render();
+    const el = destino ? $(destino) : null;
+    if (el) el.scrollIntoView({ block: 'start', behavior: root.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   }
 
   function renderAvisos() {
@@ -1382,6 +1644,7 @@
     sincronizarParametros();
     renderDetalle();
     renderPropuesta();
+    if (W.comprasUI) W.comprasUI.render();
   }
   W.render = render;
   W.persistir = persistir;
@@ -1439,6 +1702,48 @@
   W.cotizarCon = (M) => C.cotizador.cotizar(entradaCotizacion(), M);
   W.recalcular = () => { persistir(); render(); };
   W.toast = toast;
+  W.tile = tile;
+  W.tabla = tabla;
+  W.reemplazar = reemplazar;
+
+  /** Copia un texto al portapapeles; si el navegador no deja, lo muestra seleccionado en «Guardar y cargar» para copiarlo a mano. */
+  W.copiarTexto = async (texto, mensaje) => {
+    try {
+      await root.navigator.clipboard.writeText(texto);
+      toast(mensaje || 'Copiado al portapapeles');
+    } catch (e) {
+      const dialogo = $('#dlg-io');
+      const area = $('#io-texto');
+      area.value = texto;
+      if (!dialogo.open) { if (typeof dialogo.showModal === 'function') dialogo.showModal(); else dialogo.setAttribute('open', ''); }
+      area.focus();
+      area.select();
+      toast('Texto seleccionado: cópielo con Ctrl+C');
+    }
+  };
+
+  /** Abre otra cotización en lugar de la actual (p. ej. un ejemplo); con «Deshacer» vuelve la anterior. */
+  W.abrirCotizacion = (otra, mensaje) => {
+    const cot = cotizacionValida(otra, estado.M);
+    if (!cot) return false;
+    const previa = { cot: estado.cot, sel: estado.sel };
+    estado.cot = cot;
+    estado.sel = cot.partidas[0] ? cot.partidas[0].id : null;
+    persistir();
+    sincronizarEncabezado();
+    render();
+    toast(mensaje || 'Cotización abierta', {
+      texto: 'Deshacer',
+      fn: () => {
+        estado.cot = previa.cot;
+        estado.sel = previa.sel;
+        persistir();
+        sincronizarEncabezado();
+        render();
+      },
+    });
+    return true;
+  };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
 }(typeof self !== 'undefined' ? self : this));

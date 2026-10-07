@@ -11,7 +11,8 @@
  *
  * El oráculo recalcula TODO paso a paso con aritmética directa (sin llamar a las funciones del motor)
  * y compara contra la salida del motor. Los valores monetarios dependen de las tablas maestras
- * (mano de obra a $500/h, lista del proveedor, valores ilustrativos): si se cambian, este vector debe regenerarse.
+ * (mano de obra a $500 por día = $87.50 por hora trabajada, lista del proveedor, valores ilustrativos): si se cambian, este
+ * vector debe regenerarse.
  */
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -88,7 +89,7 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   const ancho = 38.1; const esp = 4.763; const gramil = ancho / 2;
   const w = (ancho * esp * 7.85) / 1000;
   const c = ancho / 2;
-  const L_aro = PI * (D_ext + 2 * c) + 3.0;
+  const L_aro = PI * (D_ext + 2 * c) + 3.0 + 126; // + holgura de corte + las puntas que la roladora no curva (regla del taller π(D + 81 mm))
   const m_aro = (L_aro * w) / 1000;
   const m_aros_neta = n_bridas * m_aro;          // los aros que se fabrican en taller
   const m_aros_bruta = m_aros_neta / (1 - 0.05);
@@ -120,7 +121,7 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   const L_sel = (n_bridas * 0.5 * PI * D_ext) / 1000 + L_eng_circ;
   casi(r.qto.her.L_sellado_m, L_sel);
   const V_sel = L_sel * 20 * 1.15;
-  const costo_sellador = V_sel * (P.precio_cartucho_sellador_300ml / 300);
+  const costo_sellador = V_sel * (P.precio_cartucho_sellador / 600); // cartucho de 600 mL
 
   /* Paso 10 · flete de entrada sobre lámina y perfil (también el del aro suelto) */
   const costo_flete = 0.02 * (costo_lamina + costo_perfiles);
@@ -177,13 +178,16 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   const costo_pintura = litros * P.precio_L_primario + litros * 0.1 * P.precio_L_diluyente;
 
   /* Paso 14 · mano de obra y equipo (η = 0.80) */
-  // los trabajadores ganan $500 por hora y esa cifra ya incluye las prestaciones: FSR = 1.00
+  // los trabajadores ganan $500 por día (ya con prestaciones: FSR = 1.00); la semana paga 7 días y se trabajan 5 de 8 h:
+  // la hora trabajada cuesta 500 × 7 ÷ 40 = $87.50
   const FSR = 1.0;
-  const tar = (s_, eq) => ({ mo: s_ * FSR, eq });
+  const hora = (500 * 7) / (5 * 8);
+  assert.equal(hora, 87.5);
+  const tar = (eq) => ({ mo: hora * FSR, eq });
   const ops = {
-    corte: [t_corte, tar(500, 45)], rolado: [t_rolado, tar(500, 55)], armado: [t_armado, tar(500, 25)], aros: [t_aros, tar(500, 40)],
-    soldadura: [t_sold, tar(500, 45)], engargolado: [t_eng, tar(500, 35)], barrenado: [t_barren, tar(500, 25)], acabado: [t_acab, tar(500, 20)],
-    pintura: [t_pint, tar(500, 40)], qc_embalaje: [t_qc, tar(500, 0)],
+    corte: [t_corte, tar(45)], rolado: [t_rolado, tar(55)], armado: [t_armado, tar(25)], aros: [t_aros, tar(40)],
+    soldadura: [t_sold, tar(45)], engargolado: [t_eng, tar(35)], barrenado: [t_barren, tar(25)], acabado: [t_acab, tar(20)],
+    pintura: [t_pint, tar(40)], qc_embalaje: [t_qc, tar(0)],
   };
   let MO = 0; let EQ = 0; let hMOD = 0;
   Object.values(ops).forEach(([t, tr]) => {
@@ -219,9 +223,9 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
 
 /* Los tres modos del extremo del ajuste: el vector de cada uno (CD, C_T y precio con el mismo método del documento). */
 const MODOS = {
-  SIN_BRIDA: { n_aros: 1, n_sueltos: 0, horas: 1.878, CD: 2119.08, C_T: 2546.2, precio: 3320.71 },
-  SUELTA: { n_aros: 1, n_sueltos: 1, horas: 2.102, CD: 2322.96, C_T: 2794.94, precio: 3645.1 },
-  CON_BRIDA: { n_aros: 2, n_sueltos: 0, horas: 2.312, CD: 2448.54, C_T: 2954.56, precio: 3853.28 },
+  SIN_BRIDA: { n_aros: 1, n_sueltos: 0, horas: 1.885, CD: 1337.6, C_T: 1669.05, precio: 2176.74 },
+  SUELTA: { n_aros: 1, n_sueltos: 1, horas: 2.115, CD: 1448.85, C_T: 1814.34, precio: 2366.22 },
+  CON_BRIDA: { n_aros: 2, n_sueltos: 0, horas: 2.325, CD: 1488.09, C_T: 1876.97, precio: 2447.91 },
 };
 
 test('Ejemplo A — el extremo del ajuste: sin brida, brida suelta (por omisión) o brida de taller', () => {
@@ -279,12 +283,12 @@ const GOLDEN = {
   n_piezas: 1,
   n_aros: 1,
   n_aros_sueltos: 1,
-  L_aro_mm: 1089.8,
+  L_aro_mm: 1215.8,
   n_tornillos: 8,
-  horas_mod_reales: 2.102,
-  CD: 2322.96,
-  C_T: 2794.94,
-  precio_unitario: 3645.1,
+  horas_mod_reales: 2.115,
+  CD: 1448.85,
+  C_T: 1814.34,
+  precio_unitario: 2366.22,
 };
 
 test('Ejemplo A — vector de referencia (valores redondeados que cita el documento)', () => {

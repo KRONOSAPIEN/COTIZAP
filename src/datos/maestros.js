@@ -25,7 +25,7 @@
 
   const base = {
     meta: {
-      version: '1.5.0',
+      version: '1.6.0',
       moneda: 'MXN',
       aviso: 'Mano de obra y lámina/perfiles del proveedor son reales; el resto son valores ilustrativos. Revisar antes de cotizar.',
     },
@@ -55,9 +55,9 @@
       precio_m_corte_plasma: 3.5,
       precio_m_corte_laser: 2.0,
       precio_m_empaque_neopreno: 28.0, // cinta de neopreno 1½" × 1/8" (38 × 3 mm) para la cara de la brida
-      precio_cartucho_sellador_300ml: 120.0,
+      precio_cartucho_sellador: 395.69, // Sikaflex blanco de 600 mL: $459 con IVA (hoja de control de gastos del 6-oct-2026)
       precio_pza_autotaladrante: 0.85,
-      precio_juego_tornillo_5_16_x_1_1_4: 4.5, // tornillo 5/16" × 1¼" + tuerca + 2 rondanas planas
+      precio_juego_tornillo_5_16_x_1_1_4: 3.67, // juego completo: tornillo hex. galv. 5/16" × 1¼" $1.72 + tuerca $0.75 + rondana plana $0.60 + rondana de presión $0.60 (sin IVA)
       precio_juego_tornillo_m8: 5.0,
       precio_juego_tornillo_m10: 6.5,
       precio_juego_tornillo_m12: 9.5,
@@ -86,7 +86,7 @@
         NEGRA_C12_3X10: { descripcion: 'Lámina negra 3 × 10 ft · cal. 12', material: 'ACERO_CARBON', calibre: 12, esp_mm: 0, ancho_mm: 914, largo_mm: 3048, precio: 1515 },
         NEGRA_C12_3X8: { descripcion: 'Lámina negra 3 × 8 ft · cal. 12', material: 'ACERO_CARBON', calibre: 12, esp_mm: 0, ancho_mm: 914, largo_mm: 2438, precio: 1210 },
         PLACA_3_16_4X8: { descripcion: 'Placa lisa 4 × 8 ft · 3/16"', material: 'ACERO_CARBON', calibre: 0, esp_mm: 4.7625, ancho_mm: 1219, largo_mm: 2438, precio: 2820 },
-        PLACA_3_16_3X8: { descripcion: 'Placa lisa 3 × 8 ft · 3/16" (precio como viene en la factura)', material: 'ACERO_CARBON', calibre: 0, esp_mm: 4.7625, ancho_mm: 914, largo_mm: 2438, precio: 2820 },
+        PLACA_3_16_3X8: { descripcion: 'Placa lisa 3 × 8 ft · 3/16" (prorrateada de la 4 × 8)', material: 'ACERO_CARBON', calibre: 0, esp_mm: 4.7625, ancho_mm: 914, largo_mm: 2438, precio: 2114.42 },
       },
       barras: {
         SOL_1_1_2X3_16: { descripcion: 'Solera 1½" × 3/16" (brida estándar)', perfil: 'SOL38x4.8', largo_mm: 6000, precio: 250 },
@@ -96,6 +96,7 @@
         ANG_3_4X1_8: { descripcion: 'Ángulo ¾" × 1/8"', tipo: 'ANGULO', ancho_mm: 19.05, esp_mm: 3.175, largo_mm: 6000, precio: 160 },
         SOL_1_1_4X1_8: { descripcion: 'Solera 1¼" × 1/8"', tipo: 'SOLERA', ancho_mm: 31.75, esp_mm: 3.175, largo_mm: 6000, precio: 150 },
         CANAL_U_6: { descripcion: 'Canal U 6" × 6 m (12.2 kg/m)', kg_m: 12.2, largo_mm: 6000, precio: 2177.18 },
+        PTR_2X2_C14: { descripcion: 'PTR 2" × 2" cal. 14 (6 m)', kg_m: 2.91, largo_mm: 6000, precio: 490 }, // kg/m calculado de la sección (4 × (50.8 − 1.9) × 1.9 mm²); el proveedor no lo da
       },
     },
 
@@ -305,7 +306,9 @@
         k_dif: { RECTO: 1.0, CODO: 1.35, REDUCCION: 1.2, TRANSICION: 1.5, RAMAL: 1.6, REDUCCION_INJERTO: 1.9, PANTALON: 1.9, PERSONALIZADO: 1.0 },
       },
 
-      aros: { t_fijo_aro_min: 4.0, t_roll_aro_min_m: 2.5, holgura_corte_mm: 3.0 },
+      // puntas_rolado_mm: tramo recto que la roladora no curva en las dos puntas de la solera y se corta; con la holgura de corte
+      // reproduce la regla del taller para cortar la solera de un aro redondo, π × (D + 81 mm) (no aplica a marcos rectangulares)
+      aros: { t_fijo_aro_min: 4.0, t_roll_aro_min_m: 2.5, holgura_corte_mm: 3.0, puntas_rolado_mm: 126 },
       barrenado: { t_barreno_min: 0.35 },
       engargolado: { t_fijo_pieza_min: 2.0, v_m_min: [[0.5, 3.0], [1.0, 2.5], [1.5, 1.8], [2.0, 1.2]] },
 
@@ -337,6 +340,10 @@
       },
 
       qc: { t_fijo_min: 3.0, k_manejo_min_kg: 0.05 },
+
+      // Soportería (ménsulas, abrazaderas, postes): minutos de taller por pieza (corte, doblez, barreno y punteo) si la partida no los dice
+      // anclaje_defecto: artículo del catálogo de compras que fija cada pieza; tornillo: el juego que la une (de herrajes.tornillo_precio_ref)
+      soportes: { t_fab_pieza_min: 15.0, anclaje_defecto: 'TAQUETE_3_8', tornillo: '5/16x1-1/4' },
     },
 
     /* ------------------------------------------------------------------ */
@@ -395,30 +402,62 @@
         LISO: { nombre: 'Extremo liso (sin herraje)' },
       },
       empaque: { precio_ref: 'precio_m_empaque_neopreno' },
-      sellador: { ml_por_m: 20, f_merma: 0.15, cartucho_ml: 300, precio_cartucho_ref: 'precio_cartucho_sellador_300ml' },
+      sellador: { ml_por_m: 20, f_merma: 0.15, cartucho_ml: 600, precio_cartucho_ref: 'precio_cartucho_sellador' },
       precio_fijacion_ref: 'precio_pza_autotaladrante',
     },
 
     /* ------------------------------------------------------------------ */
     /* TARIFAS DE OPERACIÓN                                               */
-    /* mo_h = salario_hora × FSR   (FSR = Factor de Salario Real)         */
-    /* Los trabajadores ganan $500 por hora y esa cifra YA INCLUYE las    */
-    /* prestaciones (dato del taller): por eso FSR = 1.00.                */
+    /* El taller paga por DÍA: $500 (dato del taller, sin utilidad; ya    */
+    /* trae las prestaciones: FSR = 1.00). La semana paga 7 días          */
+    /* ($3,500) y se trabajan 5 de 8 h, así que la hora trabajada cuesta  */
+    /*   salario_hora = salario_diario × días pagados ÷ (días trabajados × horas por día) = 500 × 7 ÷ 40 = $87.50
+    /*   mo_h         = salario_hora × FSR                                */
+    /* `instalacion` es la cuadrilla que monta en obra (familia INSTALACION). */
     /* ------------------------------------------------------------------ */
     mano_obra: {
       FSR: 1.0,
+      jornada: { dias_pagados_semana: 7, dias_trabajados_semana: 5, horas_dia: 8 },
       operaciones: {
-        corte: { salario_hora: 500, equipo_h: 45 },
-        rolado: { salario_hora: 500, equipo_h: 55 },
-        armado: { salario_hora: 500, equipo_h: 25 },
-        aros: { salario_hora: 500, equipo_h: 40 },
-        soldadura: { salario_hora: 500, equipo_h: 45 },
-        engargolado: { salario_hora: 500, equipo_h: 35 },
-        barrenado: { salario_hora: 500, equipo_h: 25 },
-        acabado: { salario_hora: 500, equipo_h: 20 },
-        pintura: { salario_hora: 500, equipo_h: 40 },
-        qc_embalaje: { salario_hora: 500, equipo_h: 0 },
+        corte: { salario_diario: 500, equipo_h: 45 },
+        rolado: { salario_diario: 500, equipo_h: 55 },
+        armado: { salario_diario: 500, equipo_h: 25 },
+        aros: { salario_diario: 500, equipo_h: 40 },
+        soldadura: { salario_diario: 500, equipo_h: 45 },
+        engargolado: { salario_diario: 500, equipo_h: 35 },
+        barrenado: { salario_diario: 500, equipo_h: 25 },
+        acabado: { salario_diario: 500, equipo_h: 20 },
+        pintura: { salario_diario: 500, equipo_h: 40 },
+        qc_embalaje: { salario_diario: 500, equipo_h: 0 },
+        instalacion: { salario_diario: 500, equipo_h: 0 },
       },
+    },
+
+    /* ------------------------------------------------------------------ */
+    /* CATÁLOGO DE COMPRAS — artículos que se compran hechos (mangueras,  */
+    /* abrazaderas, anclajes, accesorios de soportería). Hoja de control  */
+    /* de gastos del 6-oct-2026. `iva_incluido`: el precio ya trae IVA    */
+    /* (se le quita con `iva_pct`); sin él, el precio es antes de IVA.    */
+    /* `categoria`: en qué renglón del control de gastos cae su costo.    */
+    /* ------------------------------------------------------------------ */
+    compras: {
+      iva_pct: 0.16, // IVA de las compras: lo que se le quita a un precio con IVA (es acreditable)
+      articulos: {
+        MANGUERA_6: { descripcion: 'Manguera azul de 6″ (tramo de 5 m)', unidad: 'tramo', precio: 1807.49, iva_incluido: false, categoria: 'PROVEEDOR' },
+        MANGUERA_5: { descripcion: 'Manguera azul de 5″ (tramo)', unidad: 'tramo', precio: 1427.03, iva_incluido: false, categoria: 'PROVEEDOR' },
+        MANGUERA_3: { descripcion: 'Manguera azul de 3″ (tramo)', unidad: 'tramo', precio: 1176.94, iva_incluido: false, categoria: 'PROVEEDOR' },
+        ABRAZADERA_MANGUERA: { descripcion: 'Abrazadera ajustable para manguera', unidad: 'pza', precio: 55, iva_incluido: true, categoria: 'PROVEEDOR' },
+        TAQUETE_3_8: { descripcion: 'Taquete de 3/8″', unidad: 'pza', precio: 16, iva_incluido: true, categoria: 'SOPORTERIA' },
+        RIEL_1500_C14: { descripcion: 'Riel 1500 cal. 14', unidad: 'pza', precio: 560.34, iva_incluido: false, categoria: 'SOPORTERIA' },
+        TEJUELO_2: { descripcion: 'Tejuelo de 2″', unidad: 'pza', precio: 103.48, iva_incluido: false, categoria: 'SOPORTERIA' },
+        CARRETILLA_EMBALADA: { descripcion: 'Carretilla embalada', unidad: 'pza', precio: 172.41, iva_incluido: false, categoria: 'SOPORTERIA' },
+        SIKAFLEX_BLANCO_600: { descripcion: 'Sellador Sikaflex blanco 600 mL', unidad: 'pza', precio: 459, iva_incluido: true, categoria: 'MATERIAL' },
+        SIKAFLEX_GRIS_600: { descripcion: 'Sellador Sikaflex gris 600 mL', unidad: 'pza', precio: 359, iva_incluido: true, categoria: 'MATERIAL' },
+      },
+      // Al comprar piezas enteras (lista de compras): la tornillería se compra en múltiplos de esto, la pintura en envases de
+      // este tamaño; las hojas y las barras completas
+      tornillos_multiplo: 10,
+      pintura_envase_L: 1,
     },
 
     /* ------------------------------------------------------------------ */
@@ -429,6 +468,7 @@
       flete_material_pct: 0.02,
       recuperacion_chatarra_pct: 0.0,
       gif_por_hora_mod: 85.0,
+      gif_por_hora_instalacion: 0.0, // indirectos por hora de la cuadrilla en obra (la nave no se usa); 0 = sólo administración, imprevistos y utilidad
       administracion_pct_cd: 0.08,
       imprevistos_pct: { BAJO: 0.02, MEDIO: 0.04, ALTO: 0.08 },
       financiamiento: { tasa_anual: 0.14, dias_cobro: 45 },
@@ -499,44 +539,61 @@
   }
 
   /**
-   * Quita de un parche guardado lo que ya no existe en las tablas, para que no quede como un campo suelto y sin efecto:
-   * el salario diario y la jornada (ahora el salario se captura por hora), la longitud máxima por pieza (ahora el tramo
-   * recto se arma por yardas) y la pintura por defecto de cada material (ahora hay un sistema para el ducto y otro para las
-   * bridas, según la ubicación). No muta el parche recibido.
+   * Pone al día un parche guardado por una versión anterior, para que nada quede como un campo suelto y sin efecto:
+   *   · mano de obra: el salario es por DÍA (salario_diario) con una jornada (días pagados, días trabajados, horas por día).
+   *     El «salario por hora» de la versión 1.5 se capturó con el valor del día ($500 por hora): se descarta y rige el
+   *     salario diario. El salario diario y las horas por día de las versiones anteriores a la 1.5 se conservan;
+   *   · la longitud máxima por pieza (ahora el tramo recto se arma por yardas);
+   *   · la pintura por defecto de cada material (ahora un sistema para el ducto y otro para las bridas, según la ubicación);
+   *   · el cartucho de sellador de 300 mL (ahora el de 600 mL, con otro nombre de precio).
+   * No muta el parche recibido.
    */
   function migrarParche(parche) {
     if (parche === null || typeof parche !== 'object' || Array.isArray(parche)) return parche;
+    const esObj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+    const vaciar = (o, k) => { if (esObj(o[k]) && !Object.keys(o[k]).length) delete o[k]; };
     const p = U.clonar(parche);
     // La longitud máxima por pieza (3 000 mm) la sustituyó el armado por yardas (proceso.armado_yardas)
-    if (p.proceso && typeof p.proceso === 'object' && !Array.isArray(p.proceso)) {
+    if (esObj(p.proceso)) {
       delete p.proceso.L_max_pieza_mm;
-      if (!Object.keys(p.proceso).length) delete p.proceso;
+      vaciar(p, 'proceso');
     }
     // La pintura por defecto de cada material la sustituyeron pintura_cuerpo y pintura_bridas (por ubicación)
     const mats = p.materiales;
-    if (mats && typeof mats === 'object' && !Array.isArray(mats)) {
+    if (esObj(mats)) {
       Object.keys(mats).forEach((k) => {
-        if (mats[k] && typeof mats[k] === 'object' && !Array.isArray(mats[k])) {
+        if (esObj(mats[k])) {
           delete mats[k].pintura_defecto;
-          if (!Object.keys(mats[k]).length) delete mats[k];
+          vaciar(mats, k);
         }
       });
-      if (!Object.keys(mats).length) delete p.materiales;
+      vaciar(p, 'materiales');
     }
     const mo = p.mano_obra;
-    if (mo && typeof mo === 'object' && !Array.isArray(mo)) {
+    if (esObj(mo)) {
+      if (typeof mo.jornada_h === 'number' && !(esObj(mo.jornada) && 'horas_dia' in mo.jornada)) mo.jornada = { ...(esObj(mo.jornada) ? mo.jornada : {}), horas_dia: mo.jornada_h };
       delete mo.jornada_h;
       const ops = mo.operaciones;
-      if (ops && typeof ops === 'object' && !Array.isArray(ops)) {
+      if (esObj(ops)) {
         Object.keys(ops).forEach((k) => {
-          if (ops[k] && typeof ops[k] === 'object' && !Array.isArray(ops[k])) {
-            delete ops[k].salario_diario;
-            if (!Object.keys(ops[k]).length) delete ops[k];
+          if (esObj(ops[k])) {
+            delete ops[k].salario_hora;
+            vaciar(ops, k);
           }
         });
-        if (!Object.keys(ops).length) delete mo.operaciones;
+        vaciar(mo, 'operaciones');
       }
-      if (!Object.keys(mo).length) delete p.mano_obra;
+      vaciar(p, 'mano_obra');
+    }
+    // El cartucho de sellador de 300 mL a $120 lo sustituyó el de 600 mL (precio_cartucho_sellador)
+    if (esObj(p.precios)) {
+      delete p.precios.precio_cartucho_sellador_300ml;
+      vaciar(p, 'precios');
+    }
+    if (esObj(p.herrajes) && esObj(p.herrajes.sellador) && p.herrajes.sellador.precio_cartucho_ref === 'precio_cartucho_sellador_300ml') {
+      delete p.herrajes.sellador.precio_cartucho_ref;
+      vaciar(p.herrajes, 'sellador');
+      vaciar(p, 'herrajes');
     }
     return p;
   }

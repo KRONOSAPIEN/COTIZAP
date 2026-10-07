@@ -2,12 +2,15 @@
  * COTIZAP · web/esquemas.js — Definición declarativa de los formularios de partida.
  * Cada campo: { id, etiqueta, tipo, ... }.  tipos: dim (mm ⇄ in) · num · int · pct · select · text · calibre
  * `opcional` = vacío significa "automático" (el motor usa su valor por defecto).
- * `grupo: 'armado'` = el campo va en su propio cuadro («Armado por yardas»), no con las dimensiones.
+ * `grupo` = el campo va en su propio cuadro (W.GRUPOS_CAMPOS: «Armado por yardas», «Viáticos»), no con las dimensiones.
+ * `booleano` (en un select) = sus opciones son 'true' / 'false' y la partida guarda sí/no.
+ * `eje` (en un dim) = 'long' o 'diam'; sin él se deduce del nombre (L…, H… son longitudes).
  */
 (function (root) {
   'use strict';
 
   const W = root.COTIZAP.web;
+  const VAL = root.COTIZAP.validacion;
   const redonda = (v) => (v.forma || 'REDONDA') === 'REDONDA';
   const rect = (v) => v.forma === 'RECTANGULAR';
 
@@ -18,9 +21,25 @@
     ['TRANSICION', 'Transición'],
     ['RAMAL', 'Injerto simple'],
     ['REDUCCION_INJERTO', 'Reducción con injerto'],
+    ['BRIDA', 'Bridas sueltas'],
     ['PERSONALIZADO', 'Personalizada'],
+    ['SOPORTE', 'Soportería'],
     ['COMPRADO', 'Comprado'],
+    ['INSTALACION', 'Instalación'],
   ];
+  /** Familias que se fabrican de lámina (llevan material, calibre, unión, pintura…); las demás no. */
+  W.esDeLamina = (fam) => VAL.esDeLamina(fam);
+  /** Cuadros propios del formulario (los campos con `grupo`) y su título. */
+  W.GRUPOS_CAMPOS = {
+    armado: 'Armado por yardas',
+    viaticos: 'Viáticos (capture los montos con IVA, como en el ticket)',
+  };
+  /** Título del cuadro principal de cada familia. */
+  W.TITULO_CAMPOS = {
+    COMPRADO: 'Artículo comprado', BRIDA: 'Ducto en que van las bridas', SOPORTE: 'Pieza de soportería', INSTALACION: 'Cuadrilla en obra',
+  };
+  /** Cómo se llama la cantidad de cada familia. */
+  W.ETIQUETA_CANTIDAD = { BRIDA: 'Bridas (aros)', SOPORTE: 'Piezas', INSTALACION: 'Veces (visitas iguales)' };
   /** Familias que ya no se ofrecen para partidas nuevas, pero que se siguen calculando para abrir cotizaciones anteriores. */
   W.FAMILIAS_RETIRADAS = [['PANTALON', 'Pantalón (retirado)']];
 
@@ -41,12 +60,16 @@
     // Extremo libre del tramo de ajuste (el de las tablas maestras se ofrece aparte, como «Predeterminado»)
     ajuste: [['SUELTA', 'Brida suelta (aro terminado, tornillos y empaque)'], ['SIN_BRIDA', 'Sin brida (fuera de este precio)'], ['CON_BRIDA', 'Brida de taller en ambos extremos']],
     driver: [['PIEZA', 'Por pieza'], ['KG_NETO', 'Por kg neto'], ['KG_BRUTO', 'Por kg bruto'], ['M2_NETO', 'Por m² de lámina'], ['M_CORTE', 'Por m de corte'], ['M_SOLDADURA', 'Por m de soldadura']],
+    iva_compra: [['', 'Automático: el del catálogo (un precio capturado, antes de IVA)'], ['true', 'Sí: el precio trae IVA (se le quita)'], ['false', 'No: el precio es antes de IVA']],
+    factura: [['true', 'Con factura'], ['false', 'Sin factura']],
   };
 
   W.OPERACIONES = [
     ['corte', 'Corte'], ['rolado', 'Rolado'], ['armado', 'Armado'], ['aros', 'Aros de brida'], ['soldadura', 'Soldadura'],
     ['engargolado', 'Engargolado'], ['barrenado', 'Barrenado'], ['acabado', 'Acabado'], ['pintura', 'Pintura'], ['qc_embalaje', 'Inspección y embalaje'],
   ];
+  /** Operaciones que no son del taller (no se pueden omitir ni subcontratar desde la partida), con su nombre. */
+  W.OPERACIONES_EXTRA = [['instalacion', 'Instalación en obra']];
 
   /** Campos geométricos por familia. */
   W.CAMPOS = {
@@ -122,18 +145,60 @@
       { id: 'D_ref_mm', etiqueta: 'Diámetro de los extremos', tipo: 'dim', defecto: 300 },
     ],
     COMPRADO: [
-      { id: 'precio_compra_unitario', etiqueta: 'Costo de compra unitario', tipo: 'num', unidad: 'MXN', defecto: 1000, min: 0, paso: 1 },
+      { id: 'articulo_id', etiqueta: 'Artículo del catálogo', tipo: 'select', opciones: 'articulos', defecto: '' },
+      {
+        id: 'precio_compra_unitario', etiqueta: 'Costo de compra unitario', tipo: 'num', unidad: 'MXN', defecto: 1000, min: 0, paso: 1, opcional: true,
+        ayuda: 'Con un artículo del catálogo, vacío = su precio',
+      },
+      { id: 'iva_incluido', etiqueta: 'El precio trae IVA', tipo: 'select', opciones: 'iva_compra', booleano: true, defecto: '' },
       { id: 'peso_kg', etiqueta: 'Peso unitario', tipo: 'num', unidad: 'kg', defecto: 0, min: 0, opcional: true },
+    ],
+    BRIDA: [ // aros terminados (rolados, cerrados, barrenados y pintados) que se mandan sueltos: la medida es la del ducto en que van
+      { id: 'forma', etiqueta: 'Sección del ducto', tipo: 'select', opciones: 'forma', defecto: 'REDONDA' },
+      { id: 'D_mm', etiqueta: 'Diámetro del ducto', tipo: 'dim', visible: redonda, defecto: 304.8, ayuda: 'La solera se corta de π × (D + 2 × su ancho) más las puntas que no se rolan' },
+      { id: 'a_mm', etiqueta: 'Ancho a del ducto', tipo: 'dim', visible: rect, defecto: 500 },
+      { id: 'b_mm', etiqueta: 'Alto b del ducto', tipo: 'dim', visible: rect, defecto: 300 },
+    ],
+    SOPORTE: [ // ménsulas, abrazaderas y postes cortados de una barra de la lista del proveedor
+      { id: 'barra_id', etiqueta: 'Barra de la que se cortan', tipo: 'select', opciones: 'barras', defecto: 'ANG_1_1_4X1_8' },
+      { id: 'largo_pieza_mm', etiqueta: 'Largo de barra por pieza', tipo: 'dim', eje: 'long', defecto: 1500, ayuda: 'Lo que se corta de la barra para una pieza (una ménsula, una abrazadera, un poste)' },
+      { id: 'anclajes_pieza', etiqueta: 'Anclajes por pieza', tipo: 'int', defecto: 0, min: 0, paso: 1 },
+      { id: 'articulo_anclaje', etiqueta: 'Anclaje', tipo: 'select', opciones: 'anclajes', defecto: '', visible: (v) => Number(v.anclajes_pieza) > 0 },
+      { id: 'tornillos_pieza', etiqueta: 'Tornillos por pieza', tipo: 'int', defecto: 0, min: 0, paso: 1 },
+      {
+        id: 'min_pieza', etiqueta: 'Minutos de taller por pieza', tipo: 'num', unidad: 'min', opcional: true, min: 0.1, paso: 1,
+        ayuda: 'Corte, doblez, barreno y punteo. Vacío = el de las tablas maestras',
+      },
+    ],
+    INSTALACION: [ // la cuadrilla en obra (horas reales a la tarifa de «instalación») y sus viáticos
+      { id: 'personas', etiqueta: 'Personas en la cuadrilla', tipo: 'int', defecto: 2, min: 1, paso: 1 },
+      { id: 'dias', etiqueta: 'Días en obra', tipo: 'num', unidad: 'días', defecto: 1, min: 0.1, paso: 0.5 },
+      { id: 'horas_dia', etiqueta: 'Horas por día', tipo: 'num', unidad: 'h', opcional: true, min: 0.5, max: 24, paso: 0.5, ayuda: 'Vacío = la jornada de las tablas maestras' },
+      { id: 'viajes', grupo: 'viaticos', etiqueta: 'Viajes redondos', tipo: 'int', defecto: 1, min: 0, paso: 1 },
+      { id: 'casetas_viaje', grupo: 'viaticos', etiqueta: 'Casetas por viaje', tipo: 'num', unidad: 'MXN', defecto: 0, min: 0, paso: 1 },
+      { id: 'gasolina_viaje', grupo: 'viaticos', etiqueta: 'Gasolina por viaje', tipo: 'num', unidad: 'MXN', defecto: 0, min: 0, paso: 1 },
+      { id: 'noches', grupo: 'viaticos', etiqueta: 'Noches de hospedaje', tipo: 'int', defecto: 0, min: 0, paso: 1 },
+      { id: 'hospedaje_noche', grupo: 'viaticos', etiqueta: 'Hospedaje por persona y noche', tipo: 'num', unidad: 'MXN', defecto: 0, min: 0, paso: 1, visible: (v) => Number(v.noches) > 0 },
+      { id: 'comida_dia', grupo: 'viaticos', etiqueta: 'Comidas por persona y día', tipo: 'num', unidad: 'MXN', defecto: 0, min: 0, paso: 1 },
+      { id: 'otros_gastos', grupo: 'viaticos', etiqueta: 'Otros gastos de obra', tipo: 'num', unidad: 'MXN', defecto: 0, min: 0, paso: 1, ayuda: 'Renta de andamio, maniobras, permisos…' },
+      {
+        id: 'gastos_con_factura', grupo: 'viaticos', etiqueta: 'Casetas, gasolina, hospedaje y otros', tipo: 'select', opciones: 'factura', booleano: true, defecto: true,
+        ayuda: 'Con factura el IVA se acredita: se cuesta sin IVA',
+      },
+      { id: 'comidas_con_factura', grupo: 'viaticos', etiqueta: 'Comidas', tipo: 'select', opciones: 'factura', booleano: true, defecto: false, ayuda: 'Sin factura el IVA es costo' },
     ],
   };
 
-  /** Campos de material y proceso (no aplican a COMPRADO). */
+  // Familias de lámina que forman un ducto (la de bridas sueltas sólo hace los aros: siempre bridada, sin lámina que cortar)
+  const DUCTOS = ['RECTO', 'CODO', 'REDUCCION', 'TRANSICION', 'RAMAL', 'REDUCCION_INJERTO', 'PANTALON', 'PERSONALIZADO'];
+
+  /** Campos de material y proceso (sólo las familias de lámina; `familias` = las únicas en que aparece el campo). */
   W.CAMPOS_MATERIAL = [
     { id: 'material_id', etiqueta: 'Material', tipo: 'select', opciones: 'materiales' },
     { id: 'calibre', etiqueta: 'Calibre', tipo: 'calibre' },
     { id: 'espesor_mm', etiqueta: 'Espesor', tipo: 'num', unidad: 'mm', min: 0.2, paso: 0.01, visible: (v) => v.calibre === 'PROPIO' },
-    { id: 'ref_diametro', etiqueta: 'Dimensión nominal', tipo: 'select', opciones: 'ref_diametro', defecto: 'INTERIOR', familias: ['RECTO', 'CODO', 'REDUCCION', 'TRANSICION', 'RAMAL', 'REDUCCION_INJERTO', 'PANTALON', 'PERSONALIZADO'] },
-    { id: 'tipo_union', etiqueta: 'Unión', tipo: 'select', opciones: 'tipo_union', defecto: 'BRIDADO' },
+    { id: 'ref_diametro', etiqueta: 'Dimensión nominal', tipo: 'select', opciones: 'ref_diametro', defecto: 'INTERIOR', familias: [...DUCTOS, 'BRIDA'] },
+    { id: 'tipo_union', etiqueta: 'Unión', tipo: 'select', opciones: 'tipo_union', defecto: 'BRIDADO', familias: DUCTOS },
     { id: 'clase_sellado', etiqueta: 'Sellado', tipo: 'select', opciones: 'clase_sellado', defecto: 'C' },
     { id: 'ubicacion', etiqueta: 'Instalación', tipo: 'select', opciones: 'ubicacion', defecto: '' },
     {
@@ -144,12 +209,12 @@
     { id: 'riesgo', etiqueta: 'Riesgo (imprevistos)', tipo: 'select', opciones: 'riesgo', defecto: '' },
   ];
 
-  /** Campos avanzados. */
+  /** Campos avanzados (de las familias de lámina). */
   W.CAMPOS_AVANZADOS = [
-    { id: 'caras_pintadas', etiqueta: 'Caras pintadas', tipo: 'select', opciones: 'caras_pintadas', defecto: '1' },
-    { id: 'proceso_corte', etiqueta: 'Proceso de corte', tipo: 'select', opciones: 'proceso_corte', defecto: '' },
+    { id: 'caras_pintadas', etiqueta: 'Caras pintadas', tipo: 'select', opciones: 'caras_pintadas', defecto: '1', familias: DUCTOS },
+    { id: 'proceso_corte', etiqueta: 'Proceso de corte', tipo: 'select', opciones: 'proceso_corte', defecto: '', familias: DUCTOS },
     { id: 'perfil_id', etiqueta: 'Perfil de aros', tipo: 'select', opciones: 'perfiles', defecto: '' },
-    { id: 'merma_pct', etiqueta: 'Merma (sustituye a la de maestros)', tipo: 'pct', opcional: true, unidad: '%', min: 0, max: 60, paso: 0.5 },
+    { id: 'merma_pct', etiqueta: 'Merma (sustituye a la de maestros)', tipo: 'pct', opcional: true, unidad: '%', min: 0, max: 60, paso: 0.5, familias: DUCTOS },
     { id: 'n_espigas', etiqueta: 'Extremos con espiga', tipo: 'int', opcional: true, min: 0, ayuda: 'Vacío = por familia', visible: (v) => v.tipo_union === 'ESPIGA' },
     { id: 'L_penetraciones_m', etiqueta: 'Penetraciones a sellar', tipo: 'num', unidad: 'm', opcional: true, min: 0, paso: 0.1, visible: (v) => v.clase_sellado === 'A' },
   ];
@@ -157,7 +222,7 @@
   /** Valores por defecto de una partida nueva. */
   W.partidaNueva = function partidaNueva(familia) {
     const p = { familia, cantidad: 1, descripcion: '' };
-    if (familia !== 'COMPRADO') {
+    if (W.esDeLamina(familia)) {
       Object.assign(p, { material_id: 'ACERO_CARBON', calibre: '16', ref_diametro: 'INTERIOR', tipo_union: 'BRIDADO', clase_sellado: 'C' });
     }
     W.CAMPOS[familia].forEach((c) => { if (c.defecto !== undefined) p[c.id] = c.defecto; });
@@ -191,7 +256,7 @@
 
   /* ---------------- Unidades por eje: diámetros/secciones y longitudes ---------------- */
   Object.keys(W.CAMPOS).forEach((fam) => W.CAMPOS[fam].forEach((c) => {
-    if (c.tipo === 'dim') c.eje = /^(L|H)/.test(c.id) ? 'long' : 'diam';
+    if (c.tipo === 'dim' && !c.eje) c.eje = /^(L|H)/.test(c.id) ? 'long' : 'diam';
   }));
 
   const sinCeros = (x, d) => W.num(x, d).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
@@ -203,11 +268,17 @@
   W.fmtDiam = fDiam;
   W.fmtLong = fLong;
 
-  /** Resumen legible de las dimensiones; u = { diam: 'in'|'mm', long: 'mm'|'m'|'in' }. */
-  W.resumenDims = function resumenDims(p, u) {
+  const plural = (n, uno, varios) => `${W.num(n, Number.isInteger(Number(n)) ? 0 : 1)} ${Number(n) === 1 ? uno : varios}`;
+
+  /**
+   * Resumen legible de las dimensiones; u = { diam: 'in'|'mm', long: 'mm'|'m'|'in' }. `M` (las tablas maestras) da el nombre
+   * de la barra de la soportería y del artículo del catálogo; sin él se muestra su clave.
+   */
+  W.resumenDims = function resumenDims(p, u, M) {
     const d = (x) => `Ø${fDiam(x, u.diam)}`;
     const s = (x) => fDiam(x, u.diam);
     const l = (x) => fLong(x, u.long);
+    const de = (tabla, id) => (M && tabla(M) && tabla(M)[id] && tabla(M)[id].descripcion) || id;
     switch (p.familia) {
       case 'RECTO':
         return `${p.forma === 'RECTANGULAR' ? `${s(p.a_mm)} × ${s(p.b_mm)}` : d(p.D_mm)} × ${l(p.L_mm)}`;
@@ -225,8 +296,18 @@
         return `${d(p.D_mm)} → ${d(p.d1_mm)} + ${d(p.d2_mm)}`;
       case 'PERSONALIZADO':
         return `A = ${W.num(p.A_neta_m2, 2)} m²`;
-      case 'COMPRADO':
-        return `${W.mxn(p.precio_compra_unitario || 0)} de compra`;
+      case 'COMPRADO': {
+        const art = p.articulo_id && M && M.compras.articulos[p.articulo_id];
+        const precio = p.precio_compra_unitario !== undefined && p.precio_compra_unitario !== '' ? Number(p.precio_compra_unitario) : (art ? art.precio : 0);
+        const iva = p.iva_incluido !== undefined && p.iva_incluido !== '' ? p.iva_incluido === true || p.iva_incluido === 'true' : !!(art && p.precio_compra_unitario === undefined && art.iva_incluido);
+        return `${W.mxn(precio || 0)} de compra${iva ? ' con IVA' : ''}${art ? ` por ${art.unidad}` : ''}`;
+      }
+      case 'BRIDA':
+        return p.forma === 'RECTANGULAR' ? `marco para ducto ${s(p.a_mm)} × ${s(p.b_mm)}` : `aro para ducto ${d(p.D_mm)}`;
+      case 'SOPORTE':
+        return `${de((m) => m.proveedor.barras, p.barra_id)} · ${l(p.largo_pieza_mm)} por pieza${Number(p.anclajes_pieza) > 0 ? ` · ${plural(p.anclajes_pieza, 'anclaje', 'anclajes')}` : ''}`;
+      case 'INSTALACION':
+        return `${plural(p.personas, 'persona', 'personas')} × ${plural(p.dias, 'día', 'días')}${Number(p.viajes) > 0 ? ` · ${plural(p.viajes, 'viaje', 'viajes')}` : ''}`;
       default:
         return '';
     }

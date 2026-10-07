@@ -10,13 +10,13 @@
   if (typeof module === 'object' && module.exports) {
     module.exports = factory(
       require('./util'), require('./geometria'), require('./material'),
-      require('./mano_obra'), require('./consumibles'), require('./precios'), require('./validacion'),
+      require('./mano_obra'), require('./consumibles'), require('./precios'), require('./validacion'), require('./proveedor'), require('./compras'),
     );
   } else {
     const C = root.COTIZAP;
-    root.COTIZAP.cotizador = factory(C.util, C.geometria, C.material, C.manoObra, C.consumibles, C.precios, C.validacion);
+    root.COTIZAP.cotizador = factory(C.util, C.geometria, C.material, C.manoObra, C.consumibles, C.precios, C.validacion, C.proveedor, C.compras);
   }
-}(typeof self !== 'undefined' ? self : this, function (U, GEO, MAT, MO, CON, PRE, VAL) {
+}(typeof self !== 'undefined' ? self : this, function (U, GEO, MAT, MO, CON, PRE, VAL, PROV, COMP) {
   'use strict';
 
   const FAMILIAS = {
@@ -29,6 +29,9 @@
     PANTALON: 'Pantalón (familia retirada)',
     PERSONALIZADO: 'Pieza personalizada (CAD)',
     COMPRADO: 'Artículo comprado',
+    BRIDA: 'Bridas sueltas (sólo aros)',
+    INSTALACION: 'Instalación en obra',
+    SOPORTE: 'Soportería',
   };
 
   /** «30° o 45°» · «30°, 45°, 60° o 90°» */
@@ -122,9 +125,23 @@
     if (errores.length) return { p, errores, advertencias };
     validarAngulos(p, M, errores);
     if (p.familia === 'COMPRADO') {
-      if (!(p.precio_compra_unitario >= 0)) errores.push('Capturar el costo de compra unitario.');
+      if (!(p.precio_compra_unitario >= 0) && !p.articulo_id) errores.push('Capturar el costo de compra unitario (o elegir un artículo del catálogo).');
       return { p, errores, advertencias };
     }
+    if (p.familia === 'INSTALACION') {
+      if (p.personas === undefined) errores.push('Falta cuántas personas forman la cuadrilla.');
+      if (p.dias === undefined) errores.push('Faltan los días en obra.');
+      return { p, errores, advertencias };
+    }
+    if (p.familia === 'SOPORTE') {
+      if (!p.barra_id) errores.push('Falta la barra de la que se cortan las piezas (de la lista del proveedor).');
+      if (p.largo_pieza_mm === undefined) errores.push('Falta el largo de barra que lleva cada pieza.');
+      const b = p.barra_id ? PROV.barra(M, p.barra_id) : null;
+      if (p.barra_id && !b) errores.push(`La barra «${p.barra_id}» no tiene precio o largo válidos en la lista del proveedor.`);
+      if (b && p.largo_pieza_mm > b.largo_mm) errores.push(`Cada pieza lleva ${p.largo_pieza_mm} mm y la barra mide ${b.largo_mm} mm: una pieza no sale de una sola barra.`);
+      return { p, errores, advertencias };
+    }
+    if (p.familia === 'BRIDA' && p.tipo_union !== undefined && p.tipo_union !== 'BRIDADO') errores.push('Una partida de bridas sueltas sólo lleva unión bridada.');
     const mat = M.materiales[p.material_id];
     if (!(p.espesor_mm > 0)) {
       const tabla = M.calibres[mat.tabla_calibre];
@@ -181,26 +198,135 @@
     };
   }
 
-  function cotizarComprado(p, M) {
-    const costo = p.precio_compra_unitario * p.cantidad;
+  /** Precio sin IVA de un precio que puede traerlo (el IVA de las compras se acredita: no es costo). */
+  const sinIvaCompras = (M, precio, conIva) => (conIva ? precio / (1 + M.compras.iva_pct) : precio);
+
+  /** Costos de una partida que no se fabrica de lámina: { materiales, mano_obra, … } con sus subtotales y el costo directo. */
+  function armarCostos(partes, h_MOD) {
     const costos = {
-      materiales: { compra: costo }, consumibles: {}, mano_obra: {}, equipo: {}, herramienta_menor: 0, subcontratos: {},
-      subtotales: { materiales: costo, consumibles: 0, mano_obra: 0, equipo: 0, herramienta_menor: 0, subcontratos: 0 },
-      CD: costo, h_MOD: 0, horas_std: {}, horas_reales: {},
+      materiales: partes.materiales || {}, consumibles: {}, mano_obra: partes.mano_obra || {}, equipo: partes.equipo || {},
+      herramienta_menor: partes.herramienta_menor || 0, subcontratos: {}, viaticos: partes.viaticos || {},
+      horas_std: partes.horas || {}, horas_reales: partes.horas || {}, h_MOD: h_MOD || 0,
     };
-    const capas = PRE.pila(costo, 0, p.riesgo, M);
+    costos.subtotales = {
+      materiales: U.suma(costos.materiales), consumibles: 0, mano_obra: U.suma(costos.mano_obra), equipo: U.suma(costos.equipo),
+      herramienta_menor: costos.herramienta_menor, subcontratos: 0, viaticos: U.suma(costos.viaticos),
+    };
+    costos.CD = U.suma(costos.subtotales);
+    return costos;
+  }
+
+  /**
+   * Artículo comprado: su precio (el capturado, o el del catálogo de compras si se eligió un artículo) por la cantidad.
+   * Si el precio trae IVA se le quita (`compras.iva_pct`): el costo es sin IVA, como todo lo demás.
+   */
+  function cotizarComprado(p, M) {
+    const art = p.articulo_id ? M.compras.articulos[p.articulo_id] : null;
+    const capturado = p.precio_compra_unitario !== undefined;
+    const precio = capturado ? p.precio_compra_unitario : art.precio;
+    const iva_incluido = p.iva_incluido !== undefined ? p.iva_incluido : (!capturado && art ? art.iva_incluido : false);
+    const unitario_sin_iva = sinIvaCompras(M, precio, iva_incluido);
+    const costos = armarCostos({ materiales: { compra: unitario_sin_iva * p.cantidad } }, 0);
+    const capas = PRE.pila(costos.CD, 0, p.riesgo, M);
     const cierre = cerrarPrecio(p, costos, capas, M, {});
     return {
-      ok: true, entrada: p, familia: 'COMPRADO', descripcion: p.descripcion || FAMILIAS.COMPRADO, advertencias: [],
+      ok: true, entrada: p, familia: 'COMPRADO', descripcion: p.descripcion || (art && art.descripcion) || FAMILIAS.COMPRADO, advertencias: [],
+      // categoria: el renglón del control de gastos donde cae (la del artículo; lo que no es del catálogo, compra a terceros)
+      compra: { articulo_id: p.articulo_id, unidad: art ? art.unidad : 'pza', precio, iva_incluido, unitario_sin_iva, categoria: (art && art.categoria) || 'PROVEEDOR' },
       peso: { neto_unitario_kg: p.peso_kg || 0, neto_total_kg: (p.peso_kg || 0) * p.cantidad },
       ...cierre,
     };
   }
 
-  /** Las tablas maestras deben estar sanas para calcular: un cero en un divisor o un valor negativo no dan un precio, dan basura. */
+  /**
+   * Instalación en obra: la cuadrilla (personas × días × horas por día, a la tarifa de `instalacion`: horas reales, sin la
+   * eficiencia del taller) y los viáticos (viajes con casetas y gasolina, hospedaje por persona y noche, comidas por persona
+   * y día, otros gastos). Lo que se paga con factura se toma sin IVA (se acredita); sin factura, el IVA es costo.
+   * Los indirectos por hora son los de la instalación (`capas.gif_por_hora_instalacion`), no los de la nave.
+   */
+  function cotizarInstalacion(p, M) {
+    const n = p.cantidad;
+    const horas_dia = p.horas_dia > 0 ? p.horas_dia : M.mano_obra.jornada.horas_dia;
+    const horas = n * p.personas * p.dias * horas_dia;
+    const tar = MO.tarifa(M, 'instalacion');
+    const mo = horas * tar.mo_h;
+    const factura = p.gastos_con_factura !== false;
+    const comidas_factura = p.comidas_con_factura === true;
+    const v = (x, conFactura) => sinIvaCompras(M, n * x, conFactura);
+    const viaticos = {
+      casetas: v((p.viajes || 0) * (p.casetas_viaje || 0), factura),
+      gasolina: v((p.viajes || 0) * (p.gasolina_viaje || 0), factura),
+      hospedaje: v(p.personas * (p.noches || 0) * (p.hospedaje_noche || 0), factura),
+      comidas: v(p.personas * p.dias * (p.comida_dia || 0), comidas_factura),
+      otros: v(p.otros_gastos || 0, factura),
+    };
+    const costos = armarCostos({
+      mano_obra: { instalacion: mo }, equipo: { instalacion: horas * tar.equipo_h }, herramienta_menor: M.capas.herramienta_menor_pct_mo * mo,
+      viaticos, horas: { instalacion: horas },
+    }, horas);
+    const capas = PRE.pila(costos.CD, horas, p.riesgo, M, { gif_por_hora: M.capas.gif_por_hora_instalacion });
+    const cierre = cerrarPrecio(p, costos, capas, M, {});
+    return {
+      ok: true, entrada: p, familia: 'INSTALACION', descripcion: p.descripcion || FAMILIAS.INSTALACION, advertencias: [],
+      instalacion: { horas_dia, horas, horas_por_vez: horas / n, tarifa: tar, gastos_con_factura: factura, comidas_con_factura: comidas_factura },
+      peso: { neto_unitario_kg: 0, neto_total_kg: 0 },
+      ...cierre,
+    };
+  }
+
+  /**
+   * Soportería (ménsulas, abrazaderas, postes): piezas cortadas de una barra de la lista del proveedor, con sus anclajes y su
+   * tornillería, y los minutos de taller de cada pieza (corte, doblez, barreno y punteo, a la tarifa de armado y con la
+   * eficiencia del taller). El perfil se paga por la fracción de barra que usa cada pieza, con la merma de perfil; la lista
+   * de compras dice cuántas barras completas hay que comprar.
+   */
+  function cotizarSoporte(p, M) {
+    const n = p.cantidad;
+    const S = M.proceso.soportes;
+    const b = PROV.barra(M, p.barra_id);
+    const art_id = p.articulo_anclaje || S.anclaje_defecto;
+    const art = M.compras.articulos[art_id];
+    const anclaje_unit = sinIvaCompras(M, art.precio, art.iva_incluido);
+    const tornillo = S.tornillo;
+    const precio_tornillo = PRE.precioDe(M, M.herrajes.tornillo_precio_ref[tornillo]);
+    const L_m = (n * p.largo_pieza_mm) / 1000;
+    const minutos = p.min_pieza > 0 ? p.min_pieza : S.t_fab_pieza_min;
+    const horas = (n * minutos) / 60 / M.proceso.eficiencia_taller;
+    const tar = MO.tarifa(M, 'armado');
+    const mo = horas * tar.mo_h;
+    const costos = armarCostos({
+      materiales: {
+        perfil: (L_m * b.precio_m) / (1 - M.merma.PERFIL),
+        anclajes: n * (p.anclajes_pieza || 0) * anclaje_unit,
+        tornilleria: n * (p.tornillos_pieza || 0) * precio_tornillo,
+      },
+      mano_obra: { armado: mo }, equipo: { armado: horas * tar.equipo_h }, herramienta_menor: M.capas.herramienta_menor_pct_mo * mo,
+      horas: { armado: horas },
+    }, horas);
+    const capas = PRE.pila(costos.CD, horas, p.riesgo, M);
+    const cierre = cerrarPrecio(p, costos, capas, M, {});
+    const kg_pieza = b.kg_m === null ? 0 : (b.kg_m * p.largo_pieza_mm) / 1000;
+    return {
+      ok: true, entrada: p, familia: 'SOPORTE', descripcion: p.descripcion || FAMILIAS.SOPORTE, advertencias: [],
+      soporte: {
+        barra: b, L_total_m: L_m, minutos_pieza: minutos, horas, articulo_anclaje: art_id, anclaje: { ...art, unitario_sin_iva: anclaje_unit },
+        anclajes: n * (p.anclajes_pieza || 0), tornillo, tornillos: n * (p.tornillos_pieza || 0), precio_tornillo,
+      },
+      peso: { neto_unitario_kg: kg_pieza, neto_total_kg: kg_pieza * n },
+      ...cierre,
+    };
+  }
+
+  // Las secciones de las tablas de las que depende cada familia que no es de lámina (las de lámina dependen de todas)
+  const SECCIONES_FAMILIA = {
+    COMPRADO: ['capas', 'compras'],
+    INSTALACION: ['capas', 'compras', 'mano_obra'],
+    SOPORTE: ['capas', 'compras', 'mano_obra', 'proveedor', 'merma', 'precios', 'herrajes', 'proceso'],
+  };
   function exigirMaestrosSanos(M, familia, previos) {
     const todos = previos || VAL.problemasMaestros(M);
-    const propios = familia === 'COMPRADO' ? todos.filter((x) => x.ruta[0] === 'capas') : todos; // lo comprado sólo usa la pila de precio
+    const secciones = SECCIONES_FAMILIA[familia];
+    const propios = secciones ? todos.filter((x) => secciones.includes(x.ruta[0])) : todos; // lo comprado sólo usa la pila de precio y el catálogo
     if (propios.length) {
       const lista = propios.slice(0, 6).map((x) => `Tablas maestras · ${VAL.textoProblema(x)}`);
       if (propios.length > lista.length) lista.push(`…y ${propios.length - lista.length} valores más en las tablas maestras.`);
@@ -224,6 +350,8 @@
     if (val.errores.length) throw new U.ErrorValidacion(val.errores);
     const p = val.p;
     if (p.familia === 'COMPRADO') return exigirResultadoNumerico(cotizarComprado(p, M));
+    if (p.familia === 'INSTALACION') return exigirResultadoNumerico(cotizarInstalacion(p, M));
+    if (p.familia === 'SOPORTE') return exigirResultadoNumerico(cotizarSoporte(p, M));
 
     const q = levantarCantidades(p, M);
     const costos = PRE.valorizar(q, M);
@@ -276,6 +404,34 @@
   }
 
   /**
+   * Venta pactada de la cotización (MXN sin IVA, lo que se acordó con el cliente): con ella se mide el margen real. Vacío = no
+   * hay. Un valor inválido se ignora y se avisa. Devuelve { venta, aviso }.
+   */
+  function ventaPactada(cot) {
+    if (sinValor(cot.venta_pactada)) return {};
+    const v = typeof cot.venta_pactada === 'number' || typeof cot.venta_pactada === 'string' ? VAL.aNumero(cot.venta_pactada) : NaN;
+    if (Number.isFinite(v) && v >= 0 && v <= 1e10) return { venta: v };
+    return { aviso: `Venta pactada: «${String(cot.venta_pactada)}» no es un importe válido; se ignora.` };
+  }
+
+  /**
+   * Partida automática que cobra el material sobrante de comprar piezas enteras (hojas, barras, tornillos, cartuchos y
+   * envases completos): sólo la pila de precio, sin cargo mínimo (no es una partida que se fabrique).
+   */
+  function partidaSobrante(sobrante, riesgo, M) {
+    const costos = armarCostos({ materiales: { sobrante } }, 0);
+    const capas = PRE.pila(costos.CD, 0, riesgo, M);
+    const importe = U.redondear(capas.precio, 2);
+    return {
+      ok: true, automatica: true, familia: 'AJUSTE_COMPRA', entrada: { familia: 'AJUSTE_COMPRA', cantidad: 1 },
+      descripcion: 'Material sobrante al comprar piezas enteras (hojas, barras, tornillos y envases completos)', advertencias: [],
+      costos, pila: capas, precio: { total_sin_redondeo: capas.precio, unitario: importe, importe, aplico_cargo_minimo: false },
+      indicadores: { costo_total: capas.C_T, precio_piso: capas.C_base / (1 - M.capas.comision_ventas_pct_precio - M.capas.otros_pct_precio) },
+      peso: { neto_unitario_kg: 0, neto_total_kg: 0 },
+    };
+  }
+
+  /**
    * Cotización completa: lista de partidas + totales con IVA. Nunca lanza por una partida: la que no se puede calcular
    * queda como { ok: false, errores } (y `interno: true` si fue una falla inesperada del cálculo, no de los datos).
    * Una cotización o una lista de partidas mal formada se toma como vacía.
@@ -308,7 +464,10 @@
         };
       }
     });
-    const ok = filas.filter((f) => f.ok);
+    // Lista de compras (siempre) y, si la cotización lo pide, el sobrante de comprar piezas enteras como partida automática
+    const compras = COMP.listaCompras(filas, M);
+    const automaticas = c.piezas_enteras === true && compras.sobrante > 0.005 ? [partidaSobrante(compras.sobrante, defs.riesgo || 'MEDIO', M)] : [];
+    const ok = [...filas.filter((f) => f.ok), ...automaticas];
     const C = M.capas;
     const subtotal = U.redondear(ok.reduce((s, f) => s + f.precio.importe, 0), 2);
     const descuento = U.redondear(subtotal * ef.descuento_pct, 2);
@@ -319,13 +478,19 @@
     const C_T_total = ok.reduce((s, f) => s + f.pila.C_T, 0);
     // Utilidad real = lo que queda del precio descontado después de la comisión y de todo el costo (C_base, con financiamiento)
     const utilidad = ok.reduce((s, f) => s + f.precio.importe * (1 - ef.descuento_pct) * (1 - C.comision_ventas_pct_precio - C.otros_pct_precio) - f.pila.C_base, 0);
+    const C_base_total = ok.reduce((s, f) => s + f.pila.C_base, 0);
+    const neto_ventas = 1 - C.comision_ventas_pct_precio - C.otros_pct_precio;
+    const vp = ventaPactada(c);
     const avisos = [...ef.avisos];
     if (yarda.aviso) avisos.push(yarda.aviso);
+    if (vp.aviso) avisos.push(vp.aviso);
     if (problemas.length) {
       avisos.push(`Tablas maestras con ${problemas.length === 1 ? 'un valor no válido' : `${problemas.length} valores no válidos`}: ${VAL.textoProblema(problemas[0])}${problemas.length > 1 ? ' (y otros)' : ''}.`);
     }
     return {
       partidas: filas,
+      automaticas, // partidas que agrega el cálculo (el sobrante de comprar piezas enteras): no son de la lista del usuario
+      compras,
       maestros: M, // las tablas con las capas de esta cotización: lo que usó cada partida
       capas: C,
       parametros: ef.aplicados,
@@ -340,13 +505,27 @@
         costo_total: C_T_total,
         utilidad,
         margen_real_pct: subtotal_neto > 0 ? utilidad / subtotal_neto : 0,
-        n_partidas_ok: ok.length,
-        n_partidas_error: filas.length - ok.length,
+        C_base_total,
+        precio_minimo: C_base_total / neto_ventas, // vender por debajo de esto (sin IVA) es perder: no cubre costo, indirectos ni comisión
+        venta: vp.venta === undefined ? null : {
+          pactada: vp.venta,
+          precio_calculado: subtotal_neto,
+          diferencia: vp.venta - subtotal_neto,
+          utilidad: vp.venta * neto_ventas - C_base_total,
+          margen_pct: vp.venta > 0 ? (vp.venta * neto_ventas - C_base_total) / vp.venta : 0,
+          cubre_costo_directo: vp.venta >= CD_total,
+          cubre_precio_minimo: vp.venta >= C_base_total / neto_ventas - 0.005,
+          iva: U.redondear(vp.venta * C.iva_pct, 2),
+          total: U.redondear(vp.venta * (1 + C.iva_pct), 2),
+        },
+        n_partidas_ok: filas.filter((f) => f.ok).length, // sólo las del usuario: la automática del sobrante no cuenta
+        n_partidas_error: filas.filter((f) => !f.ok).length,
+        n_partidas_automaticas: automaticas.length,
       },
     };
   }
 
   return {
-    FAMILIAS, PARAMETROS_COTIZACION, parametroDeMaestros, maestrosEfectivos, yardaDeCotizacion, validarPartida, levantarCantidades, cotizarPartida, cotizar,
+    FAMILIAS, PARAMETROS_COTIZACION, parametroDeMaestros, maestrosEfectivos, yardaDeCotizacion, ventaPactada, validarPartida, levantarCantidades, cotizarPartida, cotizar,
   };
 }));

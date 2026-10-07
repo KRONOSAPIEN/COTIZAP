@@ -17,13 +17,20 @@
 
   const OPERACIONES = ['corte', 'rolado', 'armado', 'aros', 'soldadura', 'engargolado', 'barrenado', 'acabado', 'pintura', 'qc_embalaje'];
 
-  /** Tarifa horaria cargada: mo_h = salario_hora · FSR (el factor de salario real suma las prestaciones; con FSR = 1 el salario ya es el costo). */
+  /**
+   * Costo de una hora trabajada de la operación. El taller paga por día y la semana paga más días de los que se trabajan
+   * (el séptimo día): salario_hora = salario_diario × días pagados ÷ (días trabajados × horas por día); con $500 por día,
+   * 7 días pagados y 5 de 8 h trabajados, $87.50. mo_h = salario_hora · FSR (el factor de salario real suma las prestaciones;
+   * con FSR = 1 el salario ya es el costo).
+   */
   function tarifa(M, op) {
     const o = M.mano_obra.operaciones[op];
     if (!o) throw new U.ErrorValidacion([`Operación sin tarifa: ${op}`]);
-    if (!(Number(o.salario_hora) >= 0)) throw new U.ErrorValidacion([`Falta el salario por hora de la operación «${op}» en las tablas maestras.`]);
-    const mo_h = o.salario_hora * M.mano_obra.FSR;
-    return { mo_h, equipo_h: o.equipo_h, total_h: mo_h + o.equipo_h };
+    if (!(Number(o.salario_diario) >= 0)) throw new U.ErrorValidacion([`Falta el salario por día de la operación «${op}» en las tablas maestras.`]);
+    const J = M.mano_obra.jornada;
+    const salario_hora = (o.salario_diario * J.dias_pagados_semana) / (J.dias_trabajados_semana * J.horas_dia);
+    const mo_h = salario_hora * M.mano_obra.FSR;
+    return { salario_hora, mo_h, equipo_h: o.equipo_h, total_h: mo_h + o.equipo_h };
   }
 
   /**
@@ -43,7 +50,7 @@
     const A_hoja_m2 = ((PF.ancho_hoja_mm || P.hoja.ancho_mm) * P.hoja.largo_mm) / 1e6; // en el tramo recto la hoja es del ancho de la yarda
     const n_hojas_eq = lam.A_bruta_m2 / A_hoja_m2;
     const t_corte = n_hojas_eq * P.corte.t_manejo_hoja_min + L_corte_m / v_corte;
-    const setup_corte = procCorte === 'GUILLOTINA' ? 0 : P.corte.t_prog_cnc_min;
+    const setup_corte = procCorte === 'GUILLOTINA' || !(L_corte_m > 0) ? 0 : P.corte.t_prog_cnc_min; // sin lámina que cortar no hay programa
 
     /* --- Rolado / plegado --- */
     const v_rol = U.interpolar(P.rolado.v_m_min, e);

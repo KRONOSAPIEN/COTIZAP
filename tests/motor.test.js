@@ -104,7 +104,7 @@ test('Cantidades múltiples: sin setup el precio unitario no cambia; con corte C
   // Ahorro exacto: P(10) = 10·P(1) − 9·ΔP_setup, con ΔP_setup = K·[(1+adm)·CD_setup + GIF·h_setup]
   const K = ((1 + 0.04) * (1 + (0.14 * 45) / 365)) / (1 - 0.2 - 0.02);
   const h_setup = M.proceso.corte.t_prog_cnc_min / M.proceso.eficiencia_taller / 60;
-  const mo_h = 500 * 1.0; // $500 por hora, ya con prestaciones (FSR = 1.00)
+  const mo_h = ((500 * 7) / (5 * 8)) * 1.0; // $500 por día, 7 días pagados por 5 de 8 h trabajados: $87.50 la hora (FSR = 1.00)
   const CD_setup = h_setup * (mo_h + 45) + 0.03 * h_setup * mo_h;
   const dP_setup = K * ((1 + 0.08) * CD_setup + 85 * h_setup);
   casi(c10.pila.precio, c1.pila.precio * 10 - 9 * dP_setup, 1e-9);
@@ -631,13 +631,26 @@ test('El taller usa la misma brida en todos los diámetros: solera 1½"×3/16", 
   });
 });
 
-test('Aro de solera: L = π·(D_ext + ancho) + holgura; el círculo de barrenos coincide con la fibra neutra', () => {
+test('Aro de solera: L = π·(D_ext + ancho) + holgura + puntas de rolado; el círculo de barrenos coincide con la fibra neutra', () => {
   const r = C.cotizarPartida({ ...recto }, M);
   const D_ext = 304.8 + 2 * (0.0598 * 25.4);
   const a = r.qto.her.aros[0];
-  casi(a.L_aro_mm, Math.PI * (D_ext + 38.1) + 3.0, 1e-12);
+  casi(a.L_aro_mm, Math.PI * (D_ext + 38.1) + 3.0 + 126, 1e-12);
   casi(a.P_perno_mm, Math.PI * (D_ext + 38.1), 1e-12, 'D_bc = D_ext + 2·g con g = ancho/2');
   assert.equal(a.n_tornillos, 8);
+});
+
+test('Puntas de rolado: el aro redondo reproduce la regla del taller π × (D + 81 mm) (cal. 22, ±1 mm); el marco rectangular no las lleva', () => {
+  // La hoja de control de gastos del 6-oct-2026 corta la solera de cada brida de 11″, 10″ y 9″ con π × (D nominal + 81 mm)
+  [11, 10, 9].forEach((pulg) => {
+    const r = C.cotizarPartida({ familia: 'BRIDA', material_id: 'GALVANIZADO', calibre: 22, D_mm: pulg * 25.4, cantidad: 1 }, M);
+    const regla = Math.PI * (pulg * 25.4 + 81);
+    assert.ok(Math.abs(r.qto.her.aros_sueltos[0].L_aro_mm - regla) < 1, `${pulg}″: ${r.qto.her.aros_sueltos[0].L_aro_mm} contra ${regla}`);
+  });
+  const sin = crearMaestros({ proceso: { aros: { puntas_rolado_mm: 0 } } });
+  casi(C.cotizarPartida({ ...recto }, M).qto.her.aros[0].L_aro_mm - C.cotizarPartida({ ...recto }, sin).qto.her.aros[0].L_aro_mm, 126, 1e-9);
+  const rect = { ...recto, forma: 'RECTANGULAR', a_mm: 400, b_mm: 300 };
+  casi(C.cotizarPartida(rect, M).qto.her.aros[0].L_aro_mm, C.cotizarPartida(rect, sin).qto.her.aros[0].L_aro_mm, 1e-12, 'un marco no se rola');
 });
 
 test('Paso entre barrenos: n = múltiplo de 4 ≥ máx(4, ⌈π·D_bc / paso⌉)', () => {
