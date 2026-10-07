@@ -896,7 +896,7 @@ test('Brida suelta: sigue las demás opciones de la unión (sin empaque, perfil 
   Mmal.proceso.armado_yardas.extremo_ajuste_defecto = 'suelta';
   assert.throws(() => C.cotizarPartida(rectoYardas, Mmal), /extremo ajuste defecto: debe ser SUELTA, SIN_BRIDA, CON_BRIDA; vale suelta/);
   // La partida con un valor que no existe también se rechaza
-  assert.throws(() => C.cotizarPartida({ ...rectoYardas, extremo_ajuste: 'NINGUNO' }, M), /Extremo del tramo de ajuste: «NINGUNO» no existe \(use SUELTA, SIN_BRIDA, CON_BRIDA\)/);
+  assert.throws(() => C.cotizarPartida({ ...rectoYardas, extremo_ajuste: 'NINGUNO' }, M), /Extremo final del tramo: «NINGUNO» no existe \(use SUELTA, SIN_BRIDA, CON_BRIDA\)/);
 });
 
 test('Partidas guardadas con la versión anterior (ajuste_sin_brida sí/no) conservan lo que significaban', () => {
@@ -1042,7 +1042,7 @@ test('migrarPartida: el sí/no de la versión anterior pasa a extremo_ajuste sin
   const V = require('../src/motor/validacion');
   const vieja = { familia: 'RECTO', ajuste_sin_brida: true };
   const nueva = V.migrarPartida(vieja);
-  assert.deepEqual(nueva, { familia: 'RECTO', extremo_ajuste: 'SIN_BRIDA' });
+  assert.deepEqual(nueva, { familia: 'RECTO', extremo_ajuste: 'SIN_BRIDA', extremo_solo_ajuste: true }, 'el sí/no era sólo del tramo de ajuste');
   assert.deepEqual(vieja, { familia: 'RECTO', ajuste_sin_brida: true }, 'no muta la recibida');
   assert.equal(V.migrarPartida({ ajuste_sin_brida: false }).extremo_ajuste, 'CON_BRIDA');
   assert.equal(V.migrarPartida({ ajuste_sin_brida: false, extremo_ajuste: 'SUELTA' }).extremo_ajuste, 'SUELTA', 'lo nuevo manda');

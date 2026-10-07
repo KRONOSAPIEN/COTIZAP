@@ -33,7 +33,7 @@
     const exterior = ref === 'EXTERIOR';
     const D_int = exterior ? D_nom_mm - 2 * e_mm : D_nom_mm;
     exigir(D_int > 0, `El diámetro exterior (${D_nom_mm} mm) debe ser mayor que el doble del espesor (${2 * e_mm} mm): con esa medida no existe el diámetro interior.`);
-    return { D_int, D_med: D_int + e_mm, D_ext: D_int + 2 * e_mm };
+    return { D_nom: D_nom_mm, D_int, D_med: D_int + e_mm, D_ext: D_int + 2 * e_mm };
   }
 
   function dimensionesRect(a_nom_mm, b_nom_mm, e_mm, ref) {
@@ -42,18 +42,33 @@
     const b_int = exterior ? b_nom_mm - 2 * e_mm : b_nom_mm;
     exigir(a_int > 0 && b_int > 0, `Los lados exteriores a × b deben ser mayores que el doble del espesor (${2 * e_mm} mm): con esa medida no existe el interior.`);
     return {
-      a_int, b_int, a_med: a_int + e_mm, b_med: b_int + e_mm, a_ext: a_int + 2 * e_mm, b_ext: b_int + 2 * e_mm,
+      a_nom: a_nom_mm, b_nom: b_nom_mm, a_int, b_int, a_med: a_int + e_mm, b_med: b_int + e_mm, a_ext: a_int + 2 * e_mm, b_ext: b_int + 2 * e_mm,
     };
   }
 
-  const extremoRedondo = (d) => ({
-    forma: 'REDONDA', D_ext_mm: d.D_ext, P_ext_mm: PI * d.D_ext, P_med_mm: PI * d.D_med,
+  // Un extremo de la pieza: su nombre (`id`, el que usa `extremos_sin_brida`), su medida nominal (la capturada: con ella se
+  // cuadran las bridas por diámetro) y la exterior y media (con ellas se hacen el aro y la junta).
+  const extremoRedondo = (d, id) => ({
+    id, forma: 'REDONDA', D_nom_mm: d.D_nom, D_ext_mm: d.D_ext, P_ext_mm: PI * d.D_ext, P_med_mm: PI * d.D_med,
   });
 
-  const extremoRect = (d) => ({
-    forma: 'RECTANGULAR', a_ext_mm: d.a_ext, b_ext_mm: d.b_ext,
+  const extremoRect = (d, id) => ({
+    id, forma: 'RECTANGULAR', a_nom_mm: d.a_nom, b_nom_mm: d.b_nom, a_ext_mm: d.a_ext, b_ext_mm: d.b_ext,
     P_ext_mm: 2 * (d.a_ext + d.b_ext), P_med_mm: 2 * (d.a_med + d.b_med),
   });
+
+  /**
+   * Los extremos de cada familia que pueden ir SIN BRIDA porque se unen a otra pieza (el «armado de piezas» de los planos de
+   * pedido) o a una manguera: `extremos_sin_brida` de la partida es una lista de estos nombres. El tramo recto lo dice con el
+   * extremo final (`extremo_ajuste`): «brida en un extremo».
+   */
+  const EXTREMOS_FAMILIA = {
+    CODO: ['A', 'B'],
+    REDUCCION: ['D1', 'D2'],
+    TRANSICION: ['redondo', 'rectangular'],
+    RAMAL: ['tronco_1', 'tronco_2', 'injerto'],
+    REDUCCION_INJERTO: ['D1', 'D2', 'injerto'],
+  };
 
   /** Protección del motor, aunque los maestros no traigan límites: ningún arreglo de extremos o piezas pasa de esto. */
   const TOPE_PIEZAS = 100000;
@@ -78,6 +93,7 @@
       n_juntas_internas: 0,
       extremos: [], // extremos con brida (o espiga) fabricada en taller
       extremos_sueltos: [], // extremos cuya brida se manda suelta (aro terminado, tornillos y empaque), sin unirla al ducto: se suelda en obra
+      extremos_sin_brida: [], // los que la partida pide sin brida (se unen a otra pieza o a una manguera)
       espigas_defecto: 0,
       D_ref_mm: 0,
       A_ext_m2: 0,
@@ -174,11 +190,13 @@
   }
 
   /**
-   * Qué se cotiza en el extremo libre del tramo de ajuste:
+   * Qué se cotiza en el extremo final del tramo (el libre del tramo de ajuste o, sin ajuste, el último):
    *   SUELTA    — el taller manda el aro terminado (rolado, con el cierre soldado, barrenado y pintado), los tornillos y el
    *               empaque, sin soldarlo al ducto: se suelda en obra donde se corta el tramo;
-   *   SIN_BRIDA — nada: la brida de ese extremo no está en el precio;
-   *   CON_BRIDA — brida fabricada y soldada en taller, como en los demás extremos.
+   *   SIN_BRIDA — nada: la brida de ese extremo no está en el precio, o no hay brida («brida en un extremo» de los planos de
+   *               pedido: el otro va liso, para unirlo a otra pieza o a una manguera);
+   *   CON_BRIDA — brida fabricada y soldada en taller, como en los demás extremos («bridas en ambos extremos»).
+   * Sin elegirlo, el tramo de ajuste toma el de las tablas maestras y un tramo sin ajuste lleva brida en ambos extremos.
    */
   const EXTREMOS_AJUSTE = ['SUELTA', 'SIN_BRIDA', 'CON_BRIDA'];
 
@@ -191,11 +209,13 @@
    *     taller, para cortarlo y ponerlo en campo ajustando la distancia. `modo` (EXTREMOS_AJUSTE) dice qué se cotiza allí: la
    *     brida suelta (el aro terminado y su herraje, sin unirlo al ducto), nada, o la brida de taller como en los demás extremos.
    * `tol` (mm): un sobrante menor que esto no es tramo de ajuste (a ±tol de un múltiplo de la yarda se cuentan yardas completas).
+   * `final`: el extremo final se eligió en la partida, así que vale aunque no haya tramo de ajuste: la última pieza lleva en su
+   * extremo final lo que diga `modo` (sin elegirlo, sin ajuste, todas las piezas llevan brida en ambos extremos).
    * Devuelve { modo, yarda_mm, largo_mm, n_completas, ajuste_mm, L_capa_mm, anillos: [mm…], piezas: [{ yardas, ajuste_mm,
    * n_anillos, largo_mm, bridas (de taller), sueltas (aros sueltos), juntas }], n_anillos, n_piezas, n_bridas, n_sueltas,
    * n_juntas, extremo_libre }.
    */
-  function distribuirYardas(L, Y, maxY, tol, modo) {
+  function distribuirYardas(L, Y, maxY, tol, modo, final) {
     exigir(EXTREMOS_AJUSTE.includes(modo), `El extremo del tramo de ajuste «${modo}» no existe (use ${EXTREMOS_AJUSTE.join(', ')}).`);
     const libre = modo !== 'CON_BRIDA'; // el extremo del ajuste queda sin brida de taller
     const tope = Math.max(1, Math.floor(maxY));
@@ -205,18 +225,19 @@
     const sobran = n_completas % tope;
     if (sobran > 0 || ajuste > 0) grupos.push({ yardas: sobran, ajuste_mm: ajuste });
     const anillos = [];
-    const piezas = grupos.map((g) => {
+    const piezas = grupos.map((g, i) => {
       const n_anillos = g.yardas + (g.ajuste_mm > 0 ? 1 : 0);
       for (let j = 0; j < g.yardas; j += 1) anillos.push(Y);
       if (g.ajuste_mm > 0) anillos.push(g.ajuste_mm);
-      const conAjuste = g.ajuste_mm > 0;
+      // el extremo final: el del tramo de ajuste (siempre es la última pieza) o, si se eligió, el de la última pieza
+      const conFinal = g.ajuste_mm > 0 || (Boolean(final) && i === grupos.length - 1);
       return {
         yardas: g.yardas,
         ajuste_mm: g.ajuste_mm,
         n_anillos,
         largo_mm: g.yardas * Y + g.ajuste_mm,
-        bridas: conAjuste && libre ? 1 : 2,
-        sueltas: conAjuste && modo === 'SUELTA' ? 1 : 0,
+        bridas: conFinal && libre ? 1 : 2,
+        sueltas: conFinal && modo === 'SUELTA' ? 1 : 0,
         juntas: n_anillos - 1,
       };
     });
@@ -235,7 +256,8 @@
       n_bridas: suma('bridas'),
       n_sueltas: suma('sueltas'),
       n_juntas: suma('juntas'),
-      extremo_libre: ajuste > 0 && libre,
+      extremo_libre: (ajuste > 0 || Boolean(final)) && libre,
+      final_elegido: Boolean(final),
     };
   }
 
@@ -259,7 +281,9 @@
     const n_cuenta = cuenta.n_completas + (cuenta.ajuste > 0 ? 1 : 0);
     exigir(n_cuenta <= tope, `Un tramo de ${L_total} mm en yardas de ${Y} mm serían ${n_cuenta} anillos (el máximo es ${tope}): revise la longitud total y el ancho de la yarda.`);
     const modo = p.extremo_ajuste || AY.extremo_ajuste_defecto || 'SUELTA';
-    const arm = distribuirYardas(L_total, Y, AY.yardas_por_pieza_max, AY.ajuste_tolerancia_mm, modo);
+    // elegido en la partida, el extremo final vale aunque no haya ajuste (salvo el sí/no de una versión anterior, que era sólo del ajuste)
+    const final = Boolean(p.extremo_ajuste) && !p.extremo_solo_ajuste;
+    const arm = distribuirYardas(L_total, Y, AY.yardas_por_pieza_max, AY.ajuste_tolerancia_mm, modo, final);
     const L_capa = arm.L_capa_mm; // lo que realmente se corta: las yardas completas y el ajuste
     const n_cost = forma === 'REDONDA' ? 1 : (p.n_costuras_long || 1);
 
@@ -268,14 +292,14 @@
       exigir(p.D_mm > 0, 'El diámetro debe ser mayor que 0.');
       const d = dimensionesRedondas(p.D_mm, e, p.ref_diametro);
       P_med = PI * d.D_med;
-      extremo = extremoRedondo(d);
+      extremo = extremoRedondo(d, 'tramo');
       PF.D_ref_mm = d.D_med;
       PF.detalle = { D_int_mm: d.D_int, D_med_mm: d.D_med, D_ext_mm: d.D_ext };
     } else {
       exigir(p.a_mm > 0 && p.b_mm > 0, 'Las dimensiones a × b deben ser mayores que 0.');
       const d = dimensionesRect(p.a_mm, p.b_mm, e, p.ref_diametro);
       P_med = 2 * (d.a_med + d.b_med);
-      extremo = extremoRect(d);
+      extremo = extremoRect(d, 'tramo');
       PF.D_ref_mm = P_med / PI;
       PF.detalle = { a_med_mm: d.a_med, b_med_mm: d.b_med, P_med_mm: P_med };
     }
@@ -354,7 +378,7 @@
     PF.L_corte_m = (PI * d.D_med * (2 * j * kappa + 2) + 2 * L_tot) / 1000;
     PF.sold.tope_m = (j * P_j + L_tot) / 1000;
     PF.n_juntas_internas = j;
-    PF.extremos = [extremoRedondo(d), extremoRedondo(d)];
+    PF.extremos = [extremoRedondo(d, 'A'), extremoRedondo(d, 'B')];
     PF.espigas_defecto = 2;
     PF.D_ref_mm = d.D_med;
     PF.A_ext_m2 = (PI * d.D_ext * L_tot) / 1e6;
@@ -385,7 +409,7 @@
     PF.L_corte_m = (8 * theta * R + 4 * (H + W)) / 1000;
     PF.sold.tope_m = (4 * theta * R) / 1000;
     PF.n_juntas_internas = 4;
-    PF.extremos = [extremoRect(d), extremoRect(d)];
+    PF.extremos = [extremoRect(d, 'A'), extremoRect(d, 'B')];
     PF.espigas_defecto = 2;
     PF.D_ref_mm = P_med / PI;
     PF.A_ext_m2 = (2 * (d.a_ext + d.b_ext) * theta * R) / 1e6;
@@ -424,7 +448,7 @@
     PF.k_rolado = M.proceso.rolado.k_conico;
     PF.L_corte_m = (PI * (grande.D_med + chico.D_med) + 2 * s_max) / 1000;
     PF.sold.tope_m = s_max / 1000;
-    PF.extremos = [extremoRedondo(grande), extremoRedondo(chico)];
+    PF.extremos = [extremoRedondo(grande, 'D1'), extremoRedondo(chico, 'D2')];
     PF.espigas_defecto = 2;
     PF.D_ref_mm = (grande.D_med + chico.D_med) / 2;
     PF.detalle = {
@@ -466,7 +490,7 @@
     PF.k_rolado = M.proceso.rolado.k_conico;
     PF.L_corte_m = (P1 + P2 + 2 * n_cost * s_ref) / 1000;
     PF.sold.tope_m = (n_cost * s_ref) / 1000;
-    PF.extremos = [extremoRedondo(dr), extremoRect(dm)];
+    PF.extremos = [extremoRedondo(dr, 'redondo'), extremoRect(dm, 'rectangular')];
     PF.espigas_defecto = 2;
     PF.D_ref_mm = (dr.D_med + P1 / PI) / 2;
     PF.detalle = {
@@ -520,7 +544,7 @@
     PF.sold.tope_m = (L_c + (L_r - t_med)) / 1000;
     PF.sold.filete_m = P_h / 1000;
     PF.n_juntas_internas = 1;
-    PF.extremos = [extremoRedondo(dm), extremoRedondo(dm), extremoRedondo(db)];
+    PF.extremos = [extremoRedondo(dm, 'tronco_1'), extremoRedondo(dm, 'tronco_2'), extremoRedondo(db, 'injerto')];
     PF.espigas_defecto = 3;
     PF.D_ref_mm = dm.D_med;
     PF.detalle = {
@@ -687,7 +711,7 @@
     PF.sold.tope_m = (s_cono + (L_r - g.t_med)) / 1000; // costura del cono + costura del injerto
     PF.sold.filete_m = g.P_h / 1000; // silleta
     PF.n_juntas_internas = 1;
-    PF.extremos = [extremoRedondo(dT), extremoRedondo(dS), extremoRedondo(db)];
+    PF.extremos = [extremoRedondo(dT, 'D1'), extremoRedondo(dS, 'D2'), extremoRedondo(db, 'injerto')];
     PF.espigas_defecto = 3;
     PF.D_ref_mm = (dT.D_med + dS.D_med) / 2;
     PF.advertencias.push(...C.advertencias);
@@ -726,7 +750,7 @@
     PF.sold.tope_m = (p.L_tronco_mm + p.L1_mm + p.L2_mm) / 1000;
     PF.sold.filete_m = (PI * (d1.D_med + d2.D_med)) / 1000;
     PF.n_juntas_internas = 2;
-    PF.extremos = [extremoRedondo(dT), extremoRedondo(d1), extremoRedondo(d2)];
+    PF.extremos = [extremoRedondo(dT, 'tronco'), extremoRedondo(d1, 'ramal_1'), extremoRedondo(d2, 'ramal_2')];
     PF.espigas_defecto = 3;
     PF.D_ref_mm = dT.D_med;
     PF.detalle = { k_entrepierna: k_ent, razon_areas_ramales_tronco: razon, A_tronco_m2: A_tronco / 1e6, A_ramales_m2: (A_r1 + A_r2) / 1e6 };
@@ -749,7 +773,7 @@
     PF.L_corte_m = p.L_corte_m || 0;
     PF.sold.tope_m = p.L_sold_tope_m || 0;
     PF.sold.filete_m = p.L_sold_filete_m || 0;
-    PF.extremos = Array.from({ length: n_ext }, () => extremoRedondo(dRef));
+    PF.extremos = Array.from({ length: n_ext }, (_, i) => extremoRedondo(dRef, `e${i + 1}`));
     PF.espigas_defecto = n_ext;
     PF.D_ref_mm = dRef ? dRef.D_med : 0;
     PF.detalle = { origen: 'Cantidades capturadas manualmente (p. ej. desarrollo CAD)' };
@@ -764,14 +788,46 @@
   function bridas(p, e) {
     const PF = nuevoPF('BRIDA');
     const ext = p.forma === 'RECTANGULAR'
-      ? extremoRect(dimensionesRect(p.a_mm, p.b_mm, e, p.ref_diametro))
-      : extremoRedondo(dimensionesRedondas(p.D_mm, e, p.ref_diametro));
+      ? extremoRect(dimensionesRect(p.a_mm, p.b_mm, e, p.ref_diametro), 'brida')
+      : extremoRedondo(dimensionesRedondas(p.D_mm, e, p.ref_diametro), 'brida');
     PF.n_piezas = 0;
     PF.n_virolas = 0;
     PF.extremos_sueltos = [ext];
     PF.D_ref_mm = ext.forma === 'REDONDA' ? ext.D_ext_mm : Math.max(ext.a_ext_mm, ext.b_ext_mm);
     PF.detalle = { origen: 'Sólo el aro de brida: el ducto no está en esta partida' };
     return PF;
+  }
+
+  /**
+   * Armado de piezas: la unión soldada entre dos piezas de otras partidas («unir injerto de 11″ con codo de 60° para obtener
+   * 90°», como en los planos de pedido). Sin lámina: el ajuste de las dos bocas (una junta de armado por unión) y un cordón
+   * de filete continuo al perímetro exterior. Los extremos que se unen van sin brida en sus partidas (`extremos_sin_brida`, o
+   * «brida en un extremo» en el tramo recto).
+   */
+  function union(p, e) {
+    const PF = nuevoPF('UNION');
+    exigir(p.D_mm > 0, 'El diámetro de la unión debe ser mayor que 0.');
+    const n = p.n_uniones === undefined ? 1 : p.n_uniones;
+    exigir(Number.isInteger(n) && n >= 1 && n <= 50, 'Las uniones por pieza deben ser un entero de 1 a 50.');
+    const d = dimensionesRedondas(p.D_mm, e, p.ref_diametro);
+    PF.n_piezas = 0;
+    PF.n_virolas = 0;
+    PF.n_juntas_internas = n;
+    PF.sold.filete_m = (n * PI * d.D_ext) / 1000;
+    PF.D_ref_mm = d.D_med;
+    PF.detalle = { D_ext_mm: d.D_ext, n_uniones: n, origen: 'Sólo la unión: las piezas que se unen están en otras partidas' };
+    return PF;
+  }
+
+  /** Quita la brida de los extremos que la partida pide sin brida (`extremos_sin_brida`: se unen a otra pieza o a una manguera). */
+  function quitarBridas(PF, p) {
+    const lista = p.extremos_sin_brida;
+    if (lista === undefined || lista === null || (Array.isArray(lista) && !lista.length)) return;
+    const ids = EXTREMOS_FAMILIA[p.familia];
+    exigir(ids && Array.isArray(lista), `Extremos sin brida: no aplica a esta familia${ids ? '' : ` (sólo a ${Object.keys(EXTREMOS_FAMILIA).join(', ')})`}.`);
+    lista.forEach((id) => exigir(ids.includes(id), `Extremos sin brida: «${id}» no es un extremo de la pieza (use ${ids.join(', ')}).`));
+    PF.extremos_sin_brida = ids.filter((id) => lista.includes(id));
+    PF.extremos = PF.extremos.filter((x) => !PF.extremos_sin_brida.includes(x.id));
   }
 
   /** Despachador por familia. */
@@ -787,8 +843,10 @@
       case 'PANTALON': PF = pantalon(p, e, M); break; // retirada: sólo para abrir cotizaciones anteriores
       case 'PERSONALIZADO': PF = personalizado(p, e); break;
       case 'BRIDA': PF = bridas(p, e); break;
+      case 'UNION': PF = union(p, e); break;
       default: throw new U.ErrorValidacion([`Familia desconocida: ${p.familia}`]);
     }
+    quitarBridas(PF, p);
     // Superficie exterior (pintura): exacta en recto y codo; en el resto A_ext ≈ A_neta · (D_ref + e)/D_ref
     if (!(PF.A_ext_m2 > 0)) PF.A_ext_m2 = PF.D_ref_mm > 0 ? PF.A_neta_m2 * (1 + e / PF.D_ref_mm) : PF.A_neta_m2;
     return PF;
@@ -798,6 +856,7 @@
     perfilFabricacion,
     distribuirYardas,
     EXTREMOS_AJUSTE,
+    EXTREMOS_FAMILIA,
     dimensionesRedondas,
     dimensionesRect,
     areaTroncoOblicuo,
@@ -807,6 +866,6 @@
     silletaInjertoCono,
     perimetroSilletaCilindro,
     cruceInjertoCono,
-    familias: { recto, codoRedondo, codoRect, reduccion, transicion, ramal, reduccionInjerto, pantalon, personalizado, bridas },
+    familias: { recto, codoRedondo, codoRect, reduccion, transicion, ramal, reduccionInjerto, pantalon, personalizado, bridas, union },
   };
 }));

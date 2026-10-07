@@ -760,7 +760,7 @@
     const escala = (ANCHO - 2 * MARGEN - huecos * SEP) / largoDibujado;
     const svg = el('svg', {
       viewBox: `0 0 ${ANCHO} ${Y0 + ALTO_ANILLO + 46}`, class: 'arm', role: 'img',
-      'aria-label': `Armado: ${armadoTexto(arm)}. ${arm.n_piezas} ${arm.n_piezas === 1 ? 'pieza' : 'piezas'}, ${arm.n_bridas} ${arm.n_bridas === 1 ? 'brida' : 'bridas'} de taller${arm.extremo_libre ? `, el extremo del ajuste ${libreTexto(arm)}` : ''}.`,
+      'aria-label': `Armado: ${armadoTexto(arm)}. ${arm.n_piezas} ${arm.n_piezas === 1 ? 'pieza' : 'piezas'}, ${arm.n_bridas} ${arm.n_bridas === 1 ? 'brida' : 'bridas'} de taller${arm.extremo_libre ? `, el extremo final ${libreTexto(arm)}` : ''}.`,
     });
     let x = MARGEN;
     piezas.forEach((q, i) => {
@@ -796,14 +796,19 @@
   function detalleArmado(f) {
     const arm = f.geometria.detalle.armado;
     const filas = arm.piezas.length > 12 ? arm.piezas.slice(0, 11) : arm.piezas;
-    const bridas = (q) => (q.bridas === 1 ? (q.sueltas > 0 ? '1 + 1 suelta' : '1 (extremo libre sin brida)') : String(q.bridas));
+    const bridas = (q) => (q.bridas === 1 ? (q.sueltas > 0 ? '1 + 1 suelta' : '1 (un extremo sin brida)') : String(q.bridas));
     const tabla_ = tabla([{ t: 'Pieza' }, { t: 'Yardas', num: true }, { t: 'Largo', num: true }, { t: 'Juntas engargoladas', num: true }, { t: 'Bridas', num: true }],
       [...filas.map((q, i) => [`#${i + 1}`, q.ajuste_mm > 0 ? `${q.yardas ? `${q.yardas} + ` : ''}ajuste` : String(q.yardas), `${W.num(q.largo_mm, 0)} mm`, String(q.juntas), bridas(q)]),
         ...(arm.piezas.length > filas.length ? [['…', '', '', '', '']] : []),
         { clase: 'total', celdas: ['Total', `${arm.n_completas}${arm.ajuste_mm > 0 ? ' + ajuste' : ''}`, `${W.num(arm.L_capa_mm, 0)} mm`, String(arm.n_juntas), `${arm.n_bridas}${arm.n_sueltas ? ` + ${arm.n_sueltas} ${arm.n_sueltas === 1 ? 'suelta' : 'sueltas'}` : ''}`] }]);
     const notas = [];
-    notas.push(`Yardas de ${W.num(arm.yarda_mm, 0)} mm (el ancho de la hoja): cada una se rola por separado y se engargolan hasta ${estado.M.proceso.armado_yardas.yardas_por_pieza_max} por pieza; las piezas llevan brida de taller en ambos extremos.`);
-    if (arm.extremo_libre && arm.modo === 'SUELTA') {
+    const sinAjuste = arm.ajuste_mm === 0;
+    notas.push(`Yardas de ${W.num(arm.yarda_mm, 0)} mm (el ancho de la hoja): cada una se rola por separado y se engargolan hasta ${estado.M.proceso.armado_yardas.yardas_por_pieza_max} por pieza; las piezas llevan brida de taller en ambos extremos${arm.extremo_libre ? ', menos el extremo final del tramo' : ''}.`);
+    if (sinAjuste && arm.extremo_libre && arm.modo === 'SUELTA') {
+      notas.push('Se pidió brida suelta en el extremo final del tramo: ahí el taller no suelda la brida al ducto, manda suelto el aro terminado con sus tornillos y el material de su junta, para soldarlo en obra.');
+    } else if (sinAjuste && arm.extremo_libre) {
+      notas.push('Brida en un extremo: el extremo final del tramo va liso, para unirlo a otra pieza (armado de piezas) o a una manguera; ahí no se cotiza brida.');
+    } else if (arm.extremo_libre && arm.modo === 'SUELTA') {
       notas.push(`El tramo de ajuste (${W.num(arm.ajuste_mm, 0)} mm, menos de una yarda) lleva brida de taller sólo en el extremo de las yardas. El otro extremo se corta y se ajusta en campo: ahí el taller no suelda la brida al ducto, manda suelto el aro terminado (rolado, con el cierre soldado, barrenado y pintado) con sus tornillos y el material de su junta, para soldarlo en obra.`);
     } else if (arm.extremo_libre) {
       notas.push(`El tramo de ajuste (${W.num(arm.ajuste_mm, 0)} mm, menos de una yarda) va sin brida en su extremo libre para cortarlo y ponerlo en campo: la brida y la junta de ese extremo no están en este precio.`);
@@ -1106,7 +1111,8 @@
     if (!d) return null;
     return seccion('Plano de la pieza', h('figure', { class: 'det-plano' },
       W.svgArbol(C.planos.arbol(d, { px: 520, alto_max: 360 })),
-      h('figcaption', null, h('strong', null, d.titulo), h('ul', { class: 'plano-datos' }, d.datos.filter(Boolean).map((x) => h('li', null, x))))), true, 'medidas en mm');
+      h('figcaption', null, h('strong', null, d.titulo), h('ul', { class: 'plano-datos' },
+        d.datos.filter(Boolean).map((x) => h('li', null, x)), d.notas.map((x) => h('li', { class: 'plano-nota' }, x))))), true, 'medidas en mm');
   }
 
   function renderDetalle() {
@@ -1181,8 +1187,11 @@
     }
     if (clave === 'ajuste') {
       const nombre = Object.fromEntries(W.OPC.ajuste);
-      return [['', `Predeterminado · ${nombre[M.proceso.armado_yardas.extremo_ajuste_defecto] || '—'}`], ...W.OPC.ajuste];
+      // sin elegirlo: el tramo de ajuste toma el de las tablas y un tramo sin ajuste lleva brida de taller en ambos extremos
+      const tablas = nombre[M.proceso.armado_yardas.extremo_ajuste_defecto] || '—';
+      return [['', `Predeterminado · con ajuste, ${tablas.split(' (')[0].toLowerCase()}; sin ajuste, bridas en ambos extremos`], ...W.OPC.ajuste];
     }
+    if (clave === 'extremos') return W.EXTREMOS[dlg.familia] || [];
     if (clave === 'perfiles') return [['', 'Estándar del taller'], ...Object.keys(M.herrajes.perfiles).map((k) => [k, `${k} · ${M.herrajes.perfiles[k].descripcion}`])];
     const art = (k) => {
       const a = M.compras.articulos[k];
@@ -1233,6 +1242,11 @@
       if (valor !== undefined && valor !== '') { ctl.dataset.mm = String(valor); ctl.dataset.texto = ctl.value; }
     } else if (c.tipo === 'text') {
       ctl = h('input', { id, name: c.id, type: 'text', autocomplete: 'off', value: valor || '' });
+    } else if (c.tipo === 'marcas') {
+      // casillas: la partida guarda la lista de lo marcado (sin `name`, para no confundirse con los campos de un solo valor)
+      const marcadas = Array.isArray(valor) ? valor : [];
+      ctl = h('div', { id, class: 'marcas', role: 'group', 'aria-labelledby': `${id}_et` },
+        opcionesDe(c.opciones).map(([v, t]) => h('label', { class: 'check' }, h('input', { type: 'checkbox', value: v, checked: marcadas.includes(v) }), t)));
     } else {
       const v = c.tipo === 'pct' && valor !== undefined && valor !== '' ? Number((valor * 100).toFixed(3)) : valor;
       ctl = h('input', {
@@ -1240,8 +1254,8 @@
       });
     }
     const sufijo = c.tipo === 'dim' ? W.sufijoUnidad(unidadEje(c.eje)) : c.unidad;
-    return h('div', { class: 'campo', dataset: { campo: c.id } },
-      h('label', { for: id }, c.etiqueta),
+    return h('div', { class: `campo${c.tipo === 'marcas' ? ' campo-marcas' : ''}`, dataset: { campo: c.id } },
+      c.tipo === 'marcas' ? h('span', { class: 'etq-campo', id: `${id}_et` }, c.etiqueta) : h('label', { for: id }, c.etiqueta),
       h('div', { class: 'ctl' }, ctl, sufijo ? h('span', { class: 'sufijo' }, sufijo) : null),
       c.ayuda ? h('div', { class: 'ayuda' }, c.ayuda) : null);
   }
@@ -1258,6 +1272,11 @@
       const el = $(`#f_${c.id}`);
       if (!el) return;
       if (c.visible && !c.visible(crudo)) return;
+      if (c.tipo === 'marcas') {
+        const marcadas = $$('input:checked', el).map((x) => x.value);
+        if (marcadas.length) p[c.id] = marcadas;
+        return;
+      }
       let v = el.value;
       if (el.validity && el.validity.badInput) dlg.invalidos.push(`${c.etiqueta}: lo escrito no es un número.`);
       if (c.tipo === 'select') {
@@ -1398,10 +1417,11 @@
     const previo = leerDialogo();
     const nuevo = W.partidaNueva(k);
     // De una familia de lámina a otra se conservan el material y el proceso; a una que no es de lámina, sólo descripción y cantidad
-    ['descripcion', 'cantidad', 'material_id', 'calibre', 'espesor_mm', 'ref_diametro', 'tipo_union', 'clase_sellado', 'pintura', 'ubicacion', 'servicio', 'riesgo', 'caras_pintadas', 'proceso_corte', 'merma_pct', 'subcontratos', 'omitir_operaciones'].forEach((c) => {
+    ['descripcion', 'cantidad', 'material_id', 'calibre', 'espesor_mm', 'ref_diametro', 'tipo_union', 'bridas_aparte', 'clase_sellado', 'pintura', 'ubicacion', 'servicio', 'riesgo', 'caras_pintadas', 'proceso_corte', 'merma_pct', 'subcontratos', 'omitir_operaciones'].forEach((c) => {
       if (previo[c] !== undefined && (['descripcion', 'cantidad'].includes(c) || (esLamina(k) && esLamina(dlg.familia)))) nuevo[c] = previo[c];
     });
     if (k === 'BRIDA') delete nuevo.tipo_union; // las bridas sueltas siempre son bridadas
+    if (k === 'UNION') { nuevo.tipo_union = 'LISO'; delete nuevo.bridas_aparte; } // la unión no lleva bridas
     if (nuevo.espesor_mm > 0) nuevo.calibre = 'PROPIO';
     if (nuevo.calibre !== undefined) nuevo.calibre = String(nuevo.calibre);
     dlg.familia = k;

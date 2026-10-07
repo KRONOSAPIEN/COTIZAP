@@ -53,7 +53,9 @@
   const polar = (c, r, phi) => [c[0] + r * Math.cos(rad(phi)), c[1] - r * Math.sin(rad(phi))];
 
   function nuevo(familia) {
-    return { familia, titulo: '', datos: [], trazos: [], cotas: [] };
+    // caras: los extremos de la pieza en el dibujo ({ c, dir hacia afuera, R }), por el nombre que les da el motor; ahí van las bridas
+    // datos: lo que lleva el plano de pedido; notas: lo que sólo importa al cotizar (no va en la hoja para el proveedor)
+    return { familia, titulo: '', titulo_corto: '', datos: [], notas: [], trazos: [], cotas: [], caras: {} };
   }
   const ruta = (d, clase, cerrada) => ({ t: 'ruta', d, clase: clase || 'pieza', cerrada: !!cerrada });
   const circulo = (c, r, clase) => ({ t: 'circulo', c, r, clase: clase || 'pieza' });
@@ -112,6 +114,10 @@
       d.trazos.push(ruta([a, suma(a, por(t, Lt)), suma(b, por(t, Lt)), b], 'pieza'));
       d.datos.push(`Tangentes de ${mm(Lt)} mm`);
     }
+    // las dos bocas: la de 0° (sale hacia abajo) y la de θ (sigue el giro), al final de su tangente
+    const tB = P(-Math.sin(rad(th)), -Math.cos(rad(th)));
+    d.caras.A = { c: P(R, Lt), dir: P(0, 1), R: D / 2 };
+    d.caras.B = { c: suma(polar(O, R, th), por(tB, Lt)), dir: tB, R: D / 2 };
     // cotas: R y R + D/2 desde el centro (como en los planos), D en la cara de salida y el ángulo
     d.cotas.push(cota(O, P(R, 0), mm(R), 'k_R', 1, -1));
     d.cotas.push(cota(O, P(ro, 0), mm(ro), null, 2, -1));
@@ -153,7 +159,7 @@
     return { J, E, u, nrm, rb, ladoA, ladoB, xA: ladoA[0][0], xB: ladoB[0][0], campoL };
   }
 
-  function cuerpoConInjerto(f, d, { D1, D2, L, db, beta, Lr, campos }) {
+  function cuerpoConInjerto(f, d, { D1, D2, L, db, beta, Lr, campos, ids }) {
     const c = cono(d, D1, D2, L, false);
     const m = (c.R1 - c.R2) / L;
     const inj = injerto(d, c.R1, m, L, db, beta, Lr);
@@ -178,6 +184,9 @@
     d.cotas.push(cota(inj.ladoA[1], inj.ladoB[1], diam(db), 'd_mm', 1, 1));
     d.cotas.push(cota(inj.J, inj.E, mm(Lr), campos.Lr, 1, 1, inj.rb));
     d.cotas.push(cotaAng(inj.J, Math.max(inj.rb * 1.6, Lr * 0.28), 0, beta, grados(beta), 'beta_deg'));
+    d.caras[ids[0]] = { c: P(0, 0), dir: P(-1, 0), R: c.R1 };
+    d.caras[ids[1]] = { c: P(L, 0), dir: P(1, 0), R: c.R2 };
+    d.caras[ids[2]] = { c: inj.E, dir: inj.u, R: inj.rb };
   }
 
   function reduccionInjerto(f, d) {
@@ -187,7 +196,7 @@
     const Lr = det.L_ramal_mm || p.L_ramal_mm;
     d.titulo = `Reducción de ${nominal(p.D1_mm)} a ${nominal(p.D2_mm)} con injerto de ${nominal(p.d_mm)} a ${grados(p.beta_deg)}`;
     d.datos = [`De ${diam(p.D1_mm)} a ${diam(p.D2_mm)}`, `L = ${mm(L)} mm`, `Injerto ${diam(p.d_mm)} a ${grados(p.beta_deg)}, ${mm(Lr)} mm sobre su eje`];
-    cuerpoConInjerto(f, d, { D1: p.D1_mm, D2: p.D2_mm, L, db: p.d_mm, beta: p.beta_deg, Lr, campos: { D1: 'D1_mm', D2: 'D2_mm', L: 'L_reduccion_mm', Lr: 'L_ramal_mm' } });
+    cuerpoConInjerto(f, d, { D1: p.D1_mm, D2: p.D2_mm, L, db: p.d_mm, beta: p.beta_deg, Lr, campos: { D1: 'D1_mm', D2: 'D2_mm', L: 'L_reduccion_mm', Lr: 'L_ramal_mm' }, ids: ['D1', 'D2', 'injerto'] });
   }
 
   function ramal(f, d) {
@@ -195,7 +204,7 @@
     const beta = f.geometria.detalle.beta_deg || p.beta_deg;
     d.titulo = `Ducto de ${nominal(p.D_mm)} con injerto de ${nominal(p.d_mm)} a ${grados(beta)}`;
     d.datos = [`Tronco ${diam(p.D_mm)}, L = ${mm(p.L_cuerpo_mm)} mm`, `Injerto ${diam(p.d_mm)} a ${grados(beta)}, ${mm(p.L_ramal_mm)} mm sobre su eje`];
-    cuerpoConInjerto(f, d, { D1: p.D_mm, D2: p.D_mm, L: p.L_cuerpo_mm, db: p.d_mm, beta, Lr: p.L_ramal_mm, campos: { D1: 'D_mm', D2: 'D_mm', L: 'L_cuerpo_mm', Lr: 'L_ramal_mm' } });
+    cuerpoConInjerto(f, d, { D1: p.D_mm, D2: p.D_mm, L: p.L_cuerpo_mm, db: p.d_mm, beta, Lr: p.L_ramal_mm, campos: { D1: 'D_mm', D2: 'D_mm', L: 'L_cuerpo_mm', Lr: 'L_ramal_mm' }, ids: ['tronco_1', 'tronco_2', 'injerto'] });
   }
 
   function reduccion(f, d) {
@@ -211,22 +220,50 @@
     d.cotas.push(cota(c.inf[0], c.sup[0], diam(p.D1_mm), 'D1_mm', 1, 1));
     d.cotas.push(cota(c.sup[1], c.inf[1], diam(p.D2_mm), 'D2_mm', 1, 1));
     d.cotas.push(cota(P(0, yb), P(L, yb), mm(L), 'L_mm', 1, -1));
+    d.caras.D1 = { c: P(0, c.ejeY[0]), dir: P(-1, 0), R: c.R1 };
+    d.caras.D2 = { c: P(L, c.ejeY[1]), dir: P(1, 0), R: c.R2 };
   }
 
-  /** Tramo recto: si es muy largo se dibuja con un corte (la cota dice el largo real); las juntas entre yardas, punteadas. */
+  /** «3 yardas unidas», «2 yardas unidas + 600 mm de ajuste», «1 yarda», «600 mm de ajuste»: como en los planos de yardas. */
+  function composicion(q, Y) {
+    const y = q.yardas === 1 ? '1 yarda' : q.yardas > 1 ? `${q.yardas} yardas unidas` : '';
+    const a = q.ajuste_mm > 0 ? `${mm(q.ajuste_mm)} mm de ajuste` : '';
+    return y && a ? `${y} + ${a}` : y || a || `${mm(Y)} mm`;
+  }
+
+  /** «Bridas en ambos extremos», «Brida en un extremo», «Brida en un extremo y una suelta» (la de la pieza `q` del tramo). */
+  function bridasPieza(q) {
+    if (q.bridas >= 2) return 'Bridas en ambos extremos';
+    return q.sueltas ? 'Brida en un extremo y una suelta' : 'Brida en un extremo';
+  }
+
+  /**
+   * Tramo recto como en los planos de yardas: cada yarda acotada arriba y el largo total abajo, las juntas entre yardas y las
+   * bridas en los extremos que las llevan. Si es muy largo se dibuja con un corte (la cota dice el largo real).
+   */
   function recto(f, d) {
     const p = f.entrada;
     const rect = p.forma === 'RECTANGULAR';
     const H = rect ? p.b_mm : p.D_mm;
     const L = p.L_mm;
-    const maxL = 10 * H; // más largo que 10 diámetros se dibuja con un corte
+    const maxL = 24 * H; // más largo que 24 diámetros se dibuja con un corte (3 yardas de 5″ caben enteras)
     const corto = L > maxL;
     const Ld = corto ? maxL : L;
     const esc = Ld / L;
+    const arm = f.geometria.detalle && f.geometria.detalle.armado;
+    const bridado = f.qto && f.qto.her && f.qto.her.tipo_union === 'BRIDADO';
     d.titulo = rect ? `Tramo recto ${mm(p.a_mm)} × ${mm(p.b_mm)} × ${mm(L)} mm` : `Tramo recto ${diam(H)} × ${mm(L)} mm`;
     d.datos = [rect ? `${mm(p.a_mm)} × ${mm(p.b_mm)} mm` : `D = ${nominal(H)}`, `L = ${mm(L)} mm`];
+    if (arm && arm.piezas && arm.piezas.length === 1) {
+      d.titulo_corto = composicion(arm.piezas[0], arm.yarda_mm);
+      d.datos.push(d.titulo_corto);
+      if (bridado) d.datos.push(bridasPieza(arm.piezas[0]));
+    } else if (arm && arm.piezas) {
+      d.datos.push(`${arm.piezas.length} piezas: ${arm.piezas.map((q) => composicion(q, arm.yarda_mm)).join(' · ')}`);
+    }
     const y0 = -H / 2;
     const y1 = H / 2;
+    const caraEn = (x, dir) => ({ c: P(x, 0), dir: P(dir, 0), R: H / 2 });
     if (corto) {
       const xa = Ld * 0.46;
       const xb = Ld * 0.54;
@@ -237,24 +274,42 @@
       d.trazos.push(ruta([P(xb, y0 - z), P(xb + z * 0.6, -H / 4), P(xb - z * 0.6, H / 4), P(xb, y1 + z)], 'corte'));
       d.trazos.push({ t: 'relleno', d: [P(0, y0), P(xa, y0), P(xa, y1), P(0, y1)] });
       d.trazos.push({ t: 'relleno', d: [P(xb, y0), P(Ld, y0), P(Ld, y1), P(xb, y1)] });
+      // sólo se ven los dos extremos del tramo
+      if (bridado && arm && arm.piezas.length) {
+        const ult = arm.piezas[arm.piezas.length - 1];
+        d.bridasLado = [{ cara: caraEn(0, -1), suelta: false }];
+        if (ult.bridas >= 2) d.bridasLado.push({ cara: caraEn(Ld, 1), suelta: false });
+        else if (ult.sueltas) d.bridasLado.push({ cara: caraEn(Ld, 1), suelta: true });
+      }
     } else {
+      d.trazos.push({ t: 'relleno', d: [P(0, y0), P(Ld, y0), P(Ld, y1), P(0, y1)] });
       d.trazos.push(ruta([P(0, y0), P(Ld, y0), P(Ld, y1), P(0, y1)], 'pieza', true));
-      // juntas entre yardas (sólo si el tramo se dibuja completo)
-      const arm = f.geometria.detalle && f.geometria.detalle.armado;
+      // juntas entre yardas, la cota de cada yarda y las bridas de cada pieza
       if (arm && arm.piezas) {
         let x = 0;
-        arm.piezas.forEach((q) => {
-          const anillos = [...Array(q.yardas).fill(arm.yarda_mm), ...(q.ajuste_mm > 0 ? [q.ajuste_mm] : [])];
-          anillos.forEach((a, i) => {
+        const anillos = [];
+        d.bridasLado = [];
+        arm.piezas.forEach((q, k) => {
+          const x0 = x;
+          const lista = [...Array(q.yardas).fill(arm.yarda_mm), ...(q.ajuste_mm > 0 ? [q.ajuste_mm] : [])];
+          lista.forEach((a, i) => {
+            anillos.push([x, x + a]);
             x += a;
-            if (i < anillos.length - 1) d.trazos.push(ruta([P(x * esc, y0), P(x * esc, y1)], 'junta'));
+            if (i < lista.length - 1) d.trazos.push(ruta([P(x * esc, y0), P(x * esc, y1)], 'junta'));
           });
+          if (k < arm.piezas.length - 1) d.trazos.push(ruta([P(x * esc, y0), P(x * esc, y1)], 'pieza')); // se separan las piezas
+          if (bridado) {
+            d.bridasLado.push({ cara: caraEn(x0 * esc, -1), suelta: false });
+            if (q.bridas >= 2) d.bridasLado.push({ cara: caraEn(x * esc, 1), suelta: false });
+            else if (q.sueltas) d.bridasLado.push({ cara: caraEn(x * esc, 1), suelta: true });
+          }
         });
-        if (arm.n_completas) d.datos.push(`${arm.n_completas} ${arm.n_completas === 1 ? 'yarda' : 'yardas'} de ${mm(arm.yarda_mm)}${arm.ajuste_mm > 0 ? ` + ajuste de ${mm(arm.ajuste_mm)}` : ''}`);
+        if (anillos.length > 1 && anillos.length <= 8) anillos.forEach(([a, b]) => d.cotas.push(cota(P(a * esc, y0), P(b * esc, y0), mm(b - a), null, 1, 1)));
+        if (arm.n_completas && arm.piezas.length > 1) d.datos.push(`${arm.n_completas} ${arm.n_completas === 1 ? 'yarda' : 'yardas'} de ${mm(arm.yarda_mm)}${arm.ajuste_mm > 0 ? ` + ajuste de ${mm(arm.ajuste_mm)}` : ''}`);
       }
     }
     d.trazos.push(ruta([P(-H * 0.15, 0), P(Ld + H * 0.15, 0)], 'eje'));
-    d.cotas.push(cota(P(0, y1), P(0, y0), rect ? mm(p.b_mm) : diam(H), rect ? 'b_mm' : 'D_mm', 1, 1));
+    d.cotas.push(cota(P(0, y1), P(0, y0), rect ? mm(p.b_mm) : diam(H), rect ? 'b_mm' : 'D_mm', 1, 1, bridado ? 38 : 0));
     d.cotas.push(cota(P(0, y1), P(Ld, y1), mm(L), 'L_mm', 1, -1));
   }
 
@@ -272,6 +327,8 @@
     d.cotas.push(cota(P(0, A / 2), P(0, -A / 2), `${mm(p.a_mm)} × ${mm(p.b_mm)}`, 'a_mm', 1, 1));
     d.cotas.push(cota(P(H, -D / 2), P(H, D / 2), diam(D), 'D_mm', 1, 1));
     d.cotas.push(cota(P(0, yb), P(H, yb), mm(H), 'H_mm', 1, -1));
+    d.caras.rectangular = { c: P(0, 0), dir: P(-1, 0), R: A / 2 };
+    d.caras.redondo = { c: P(H, 0), dir: P(1, 0), R: D / 2 };
   }
 
   /** Vista de frente de un aro de brida: interior, exterior, círculo de barrenos y los barrenos. */
@@ -374,6 +431,54 @@
     return true;
   }
 
+  /** Armado de piezas: las dos bocas que se unen (cortadas: las piezas siguen en sus partidas) y el cordón de la unión. */
+  function union(f, d) {
+    const p = f.entrada;
+    const D = p.D_mm;
+    const n = f.geometria.detalle.n_uniones || 1;
+    const R = D / 2;
+    const Lb = 1.3 * D;
+    const z = D * 0.08;
+    d.titulo = `${n > 1 ? `${n} uniones` : 'Unión'} de piezas ${diam(D)}`;
+    d.titulo_corto = d.titulo;
+    d.datos = [`D = ${nominal(D)}`, n > 1 ? `${n} uniones soldadas por pieza` : 'Unión soldada (filete continuo)', 'Los extremos que se unen van sin brida'];
+    [[-Lb, 0], [0, Lb]].forEach(([a, b]) => {
+      d.trazos.push({ t: 'relleno', d: [P(a, -R), P(b, -R), P(b, R), P(a, R)] });
+      d.trazos.push(ruta([P(a, -R), P(b, -R)], 'pieza'));
+      d.trazos.push(ruta([P(a, R), P(b, R)], 'pieza'));
+    });
+    // las piezas siguen: corte en cada lado
+    [-Lb, Lb].forEach((x) => d.trazos.push(ruta([P(x, -R - z), P(x + z * 0.6, -R / 2), P(x - z * 0.6, R / 2), P(x, R + z)], 'corte')));
+    d.trazos.push(ruta([P(0, -R - z * 0.5), P(0, R + z * 0.5)], 'soldadura'));
+    d.trazos.push(ruta([P(-Lb * 1.08, 0), P(Lb * 1.08, 0)], 'eje'));
+    d.cotas.push(cota(P(-Lb * 0.6, R), P(-Lb * 0.6, -R), diam(D), 'D_mm', 1, 1));
+    d.cotas.push(nota(P(0, -R), 60, n > 1 ? `${n} uniones soldadas` : 'Unión soldada', 'n_uniones'));
+  }
+
+  /** Brida vista de lado en la boca `cara`: sobresale del ducto el ancho de la solera; la suelta va punteada y separada. */
+  function bridaLado(d, cara, ancho, suelta) {
+    const n = P(-cara.dir[1], cara.dir[0]);
+    const c = suelta ? suma(cara.c, por(cara.dir, Math.max(ancho * 0.7, cara.R * 0.15))) : cara.c;
+    d.trazos.push(ruta([suma(c, por(n, cara.R + ancho)), suma(c, por(n, -(cara.R + ancho)))], suelta ? 'brida-suelta' : 'brida'));
+  }
+
+  /** Las bridas de la pieza en sus bocas y lo que dicen los planos: extremos sin brida y bridas de otra partida. */
+  function bridasDeLaPieza(f, d) {
+    const her = f.qto && f.qto.her;
+    if (!her || her.tipo_union !== 'BRIDADO') return;
+    const ancho = (her.bridas[0] && her.bridas[0].ancho_mm) || 38.1;
+    if (d.bridasLado) d.bridasLado.forEach((b) => bridaLado(d, b.cara, ancho, b.suelta));
+    else her.bridas.forEach((b) => { if (d.caras[b.extremo]) bridaLado(d, d.caras[b.extremo], ancho, b.suelta); });
+    const sin = f.geometria.extremos_sin_brida || [];
+    const nombres = { A: 'un extremo', B: 'el otro extremo', D1: 'el extremo mayor', D2: 'el extremo menor', injerto: 'el injerto', tronco_1: 'un extremo del tronco', tronco_2: 'el otro extremo del tronco', redondo: 'el extremo redondo', rectangular: 'el extremo rectangular' };
+    if (sin.length) {
+      const lista = sin.map((x) => nombres[x] || x);
+      const t = sin.length === 2 && sin.includes('tronco_1') && sin.includes('tronco_2') ? ['los dos extremos del tronco'] : f.familia === 'CODO' && sin.length === 2 ? ['los dos extremos'] : lista;
+      d.datos.push(`Sin brida: ${t.join(' y ')} (se une${sin.length > 1 ? 'n' : ''} a otra pieza)`);
+    }
+    if (her.bridas_aparte) d.notas.push('Bridas de otra partida (aquí sólo se unen al ducto)');
+  }
+
   /**
    * El dibujo de una partida calculada (f.ok). Devuelve null si su familia no se dibuja (instalación, pieza personalizada,
    * artículo comprado sin círculo de barrenos) o si la partida no se calculó.
@@ -392,8 +497,11 @@
       case 'BRIDA': ok = brida(f, d); break;
       case 'COMPRADO': ok = comprada(f, d, M); break;
       case 'SOPORTE': ok = soporte(f, d, M); break;
+      case 'UNION': union(f, d); break;
       default: ok = false;
     }
+    if (ok && !['BRIDA', 'COMPRADO', 'SOPORTE', 'UNION'].includes(f.familia)) bridasDeLaPieza(f, d);
+    delete d.bridasLado;
     return ok ? d : null;
   }
 
@@ -423,6 +531,8 @@
         return n(p.D_mm) ? `Brida de ${nominal(Number(p.D_mm))}` : '';
       case 'SOPORTE':
         return n(p.abrazadera_D_mm) && !n(p.largo_pieza_mm) ? `Abrazadera para ducto de ${nominal(Number(p.abrazadera_D_mm))}` : '';
+      case 'UNION':
+        return n(p.D_mm) ? `${Number(p.n_uniones) > 1 ? `${Number(p.n_uniones)} uniones` : 'Unión'} de piezas ${diam(Number(p.D_mm))}` : '';
       default:
         return '';
     }

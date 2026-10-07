@@ -469,9 +469,9 @@
         // de pedido del 30-sep-2026 les ponen 6 barrenos). circulo_barrenos_mm: con él se calcula el cordón de Sikaflex de su media
         // junta, igual que en las bridas de solera. diam_ext_mm y diam_int_mm: sus diámetros exterior e interior, para dibujarla en el
         // plano de pedido (no cambian el costo)
-        BRIDA_PLACA_5: { descripcion: 'Brida de placa 3/16″ para ducto de 5″ (Ø 194/130 mm, barrenos en Ø 170 mm)', unidad: 'pza', precio: 110, iva_incluido: false, categoria: 'PROVEEDOR', tornillos_pieza: 3, circulo_barrenos_mm: 170, diam_ext_mm: 194, diam_int_mm: 130 },
-        BRIDA_PLACA_6: { descripcion: 'Brida de placa 3/16″ para ducto de 6″ (Ø 221/157 mm, barrenos en Ø 193 mm)', unidad: 'pza', precio: 120, iva_incluido: false, categoria: 'PROVEEDOR', tornillos_pieza: 3, circulo_barrenos_mm: 193, diam_ext_mm: 221, diam_int_mm: 157 },
-        BRIDA_PLACA_7: { descripcion: 'Brida de placa 3/16″ para ducto de 7″ (Ø 258/182 mm, barrenos en Ø 230 mm)', unidad: 'pza', precio: 140, iva_incluido: false, categoria: 'PROVEEDOR', tornillos_pieza: 3, circulo_barrenos_mm: 230, diam_ext_mm: 258, diam_int_mm: 182 },
+        BRIDA_PLACA_5: { descripcion: 'Brida de placa 3/16″ para ducto de 5″ (Ø 194/130 mm, barrenos en Ø 170 mm)', unidad: 'pza', precio: 110, iva_incluido: false, categoria: 'PROVEEDOR', tornillos_pieza: 3, circulo_barrenos_mm: 170, diam_ext_mm: 194, diam_int_mm: 130, ducto_D_mm: 127 },
+        BRIDA_PLACA_6: { descripcion: 'Brida de placa 3/16″ para ducto de 6″ (Ø 221/157 mm, barrenos en Ø 193 mm)', unidad: 'pza', precio: 120, iva_incluido: false, categoria: 'PROVEEDOR', tornillos_pieza: 3, circulo_barrenos_mm: 193, diam_ext_mm: 221, diam_int_mm: 157, ducto_D_mm: 152.4 },
+        BRIDA_PLACA_7: { descripcion: 'Brida de placa 3/16″ para ducto de 7″ (Ø 258/182 mm, barrenos en Ø 230 mm)', unidad: 'pza', precio: 140, iva_incluido: false, categoria: 'PROVEEDOR', tornillos_pieza: 3, circulo_barrenos_mm: 230, diam_ext_mm: 258, diam_int_mm: 182, ducto_D_mm: 177.8 },
       },
       // Al comprar piezas enteras (lista de compras): la tornillería se compra en múltiplos de esto, la pintura en envases de
       // este tamaño; las hojas y las barras completas

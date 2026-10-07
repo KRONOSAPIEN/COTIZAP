@@ -126,13 +126,15 @@
 
 | Variable | Tipo / unidad | Valores | Defecto | Descripción |
 | --- | --- | --- | --- | --- |
-| `familia` | enum | `RECTO` `CODO` `REDUCCION` `TRANSICION` `RAMAL` `REDUCCION_INJERTO` `BRIDA` `PERSONALIZADO` · sin lámina: `SOPORTE` `COMPRADO` `INSTALACION` | — | Define la función geométrica. `RAMAL` es el *injerto simple*; `BRIDA`, las *bridas sueltas* (sólo aros, §3.6.1). Las familias sin lámina no llevan material, calibre, unión ni pintura (§3.6 y §4.5). `PANTALON` (retirada) se acepta sólo para abrir cotizaciones anteriores. |
+| `familia` | enum | `RECTO` `CODO` `REDUCCION` `TRANSICION` `RAMAL` `REDUCCION_INJERTO` `BRIDA` `UNION` `PERSONALIZADO` · sin lámina: `SOPORTE` `COMPRADO` `INSTALACION` | — | Define la función geométrica. `RAMAL` es el *injerto simple*; `BRIDA`, las *bridas sueltas* (sólo aros, §3.6.1); `UNION`, el *armado de piezas* (la unión soldada entre dos piezas, §3.6.4). Las familias sin lámina no llevan material, calibre, unión ni pintura (§3.6 y §4.5). `PANTALON` (retirada) se acepta sólo para abrir cotizaciones anteriores. |
 | `cantidad` | entero ≥ 1 | pzas | 1 | Los *setups* se cargan una vez por partida. |
 | `material_id` | enum | `ACERO_CARBON` `GALVANIZADO` `INOX_304` `INOX_316` | — | Determina tabla de calibre, densidad, proceso de soldadura y consumibles. |
 | `calibre` | entero | 10 – 28 | — | Se resuelve en la tabla del material. |
 | `espesor_mm` | mm | > 0 | — | Opcional: sustituye al calibre (placa, espesores especiales). |
 | `ref_diametro` | enum | `INTERIOR` `EXTERIOR` | `INTERIOR` | A qué superficie se refiere la dimensión nominal. |
 | `tipo_union` | enum | `BRIDADO` `ESPIGA` `LISO` | `BRIDADO` | Define herrajes y mano de obra de unión. |
+| `bridas_aparte` | sí/no | — | no | Sólo con `BRIDADO`: los aros —con su tornillería y su junta— son de **otra partida** (Bridas sueltas o bridas de placa compradas); aquí sólo se arman y se sueldan al ducto (§3.5.8). Sin efecto en `BRIDA`. |
+| `extremos_sin_brida` | lista | por familia (§3.5.8) | vacía | Los extremos que van **sin brida** porque se unen a otra pieza (armado de piezas) o a una manguera: `A` y `B` en el codo; `D1` y `D2` en la reducción; `redondo` y `rectangular` en la transición; `tronco_1`, `tronco_2` e `injerto` en el injerto simple; `D1`, `D2` e `injerto` en la reducción con injerto. El tramo recto lo dice con su extremo final. |
 | `clase_sellado` | enum | `NINGUNA` `C` `B` `A` | `C` | Clases de sellado SMACNA (ver §3.5.5). |
 | `ubicacion` | enum | `INTERIOR` `EXTERIOR` | la de la cotización | Dónde va instalado el ducto (bajo techo o a la intemperie): decide el sistema de pintura (T7d). |
 | `pintura` | enum | `NINGUNA` `ESMALTE` `PRIMARIO` `PRIMARIO_ESMALTE` | la regla del taller | Vacío: la regla de T7d según el material y la `ubicacion` (acero al carbón: interior `ESMALTE`, exterior `PRIMARIO_ESMALTE`; galvanizado: sólo las bridas; inoxidable: ninguna). Un sistema elegido vale para el ducto **y** las bridas. |
@@ -149,13 +151,14 @@
 
 | Familia | Entradas | Notas |
 | --- | --- | --- |
-| `RECTO` | redondo: `D_mm` · rectangular: `a_mm`, `b_mm` · `L_mm`, `tipo_costura` (`A_TOPE` `TRASLAPE` `PITTSBURGH`), `yarda_mm` (914 ó 1 220; por omisión la de la cotización y, si no, la de T7c), `extremo_ajuste` (`SUELTA` `SIN_BRIDA` `CON_BRIDA`; por omisión el de T7c: `SUELTA`), `n_costuras_long` | Se arma por **yardas** (§3.2): piezas de hasta 3 yardas engargoladas y un tramo de ajuste cuyo extremo libre no lleva brida de taller (§3.5.7). |
+| `RECTO` | redondo: `D_mm` · rectangular: `a_mm`, `b_mm` · `L_mm`, `tipo_costura` (`A_TOPE` `TRASLAPE` `PITTSBURGH`), `yarda_mm` (914 ó 1 220; por omisión la de la cotización y, si no, la de T7c), `extremo_ajuste` —el **extremo final** del tramo— (`SUELTA` `SIN_BRIDA` `CON_BRIDA`; sin elegirlo, con tramo de ajuste el de T7c, `SUELTA`, y sin ajuste brida de taller), `n_costuras_long` | Se arma por **yardas** (§3.2): piezas de hasta 3 yardas engargoladas y un tramo de ajuste cuyo extremo libre no lleva brida de taller (§3.5.7). «Brida en un extremo» de los planos de yardas = `SIN_BRIDA`; «bridas en ambos extremos» = sin elegir (o `CON_BRIDA`). |
 | `CODO` | redondo: `D_mm`, `theta_deg` (**30, 45, 60 ó 90**; 90), `n_gajos` (auto), `k_R` (1.5), `L_tangente_mm` (0) · rectangular: `a_mm`, `b_mm`, `theta_deg`, `k_R` | `n_gajos` automático con α ≤ 22.5° por junta: 3, 3, 4 y 5 gajos para 30°, 45°, 60° y 90°. |
 | `REDUCCION` | `D1_mm`, `D2_mm`, `L_mm` (auto con semiángulo 15°), `excentrica` (`NO` `CARA_PLANA`) | |
 | `TRANSICION` | `D_mm` (extremo redondo), `a_mm`, `b_mm` (extremo rectangular), `H_mm` (auto) | Centrada. |
 | `RAMAL` (injerto simple) | `D_mm` (tronco), `d_mm` (injerto), `L_cuerpo_mm`, `L_ramal_mm`, `beta_deg` (**30 ó 45**; 45) | `L_ramal` se mide sobre el eje del injerto desde el eje del tronco. |
 | `REDUCCION_INJERTO` | `D1_mm`, `D2_mm` (< D1), `d_mm`, `beta_deg` (**30** ó **45**; 45), `L_reduccion_mm`, `L_ramal_mm` | El injerto va **sobre el cono** y siempre de extremo mayor a menor (inclinado hacia D2): es un dato de maestros (`proceso.injerto_inclinado_hacia`), no se captura por partida. Los dos largos son opcionales: vacíos → automáticos (§3.4.5). |
 | `BRIDA` (bridas sueltas) | redondo: `D_mm` · rectangular: `a_mm`, `b_mm` (la medida **del ducto** en que van) | Sólo aros terminados, sin lámina; siempre bridada. Material y calibre son los del ducto (§3.6.1). |
+| `UNION` (armado de piezas) | `D_mm` (el de las bocas que se unen), `n_uniones` (1) | La unión soldada entre dos piezas de otras partidas, sin lámina (§3.6.4). Las piezas que se unen van sin brida en esos extremos. |
 | `PERSONALIZADO` | `A_neta_m2`, `L_corte_m`, `L_sold_tope_m`, `L_sold_filete_m`, `n_piezas`, `n_extremos`, `D_ref_mm` | Para campanas y piezas con desarrollo CAD. |
 | `SOPORTE` (soportería) | `barra_id` (de T3b), `largo_pieza_mm` o, en una abrazadera, `abrazadera_D_mm` (el diámetro del ducto que abraza), `anclajes_pieza` (0), `articulo_anclaje` (el de T7e), `tornillos_pieza` (0), `min_pieza` (minutos reales; el de T7e) | Ménsulas, abrazaderas y postes cortados de una barra de la lista (§3.6.2). |
 | `COMPRADO` | `articulo_id` (de T3c, opcional), `precio_compra_unitario` (vacío = el del catálogo), `iva_incluido` (sí/no; vacío = el del catálogo, y un precio capturado es antes de IVA), `peso_kg`, `tornillos_pieza` y `circulo_barrenos_mm` (si se atornilla como brida; vacío = los del artículo) | Compuertas, mangueras, el ducto de un proveedor…: pasa por la pila sin mano de obra; un precio con IVA se cuesta sin IVA (§3.6.3). |
@@ -423,7 +426,7 @@ Con FSR = 1.00 la hora **no recupera** lo que se paga y no se trabaja —la sema
 
 Las tablas maestras son el lugar donde el taller mete sus números, y un número sin explicación se llena mal. Por eso **cada dato, sección, tabla y grupo del editor trae un botón ⓘ** que abre una ventana emergente (con el cursor en un campo, `F1` hace lo mismo; `Esc` la cierra). Los textos viven en un catálogo propio, `src/datos/ayuda_maestros.js` —no en la interfaz—, y no contienen cifras de cálculo: sólo explicaciones, rangos usuales de referencia y ejemplos.
 
-El catálogo tiene **239 entradas** (cada una con un patrón de ruta, donde `*` cubre una clave) que explican los **558 elementos** que dibuja el editor: 11 grupos, 93 secciones, 442 datos y 12 tablas.
+El catálogo tiene **240 entradas** (cada una con un patrón de ruta, donde `*` cubre una clave) que explican los **561 elementos** que dibuja el editor: 11 grupos, 93 secciones, 445 datos y 12 tablas.
 
 Cada entrada responde tres preguntas y dice qué parte del precio mueve:
 
@@ -496,6 +499,7 @@ La prueba `tests/ayuda_maestros.test.js` hace cumplir las reglas del catálogo: 
 | V23 | **Familias sin lámina:** `COMPRADO` trae precio o artículo del catálogo; `iva_incluido` es sí/no; `tornillos_pieza` entero 0–1 000 y `circulo_barrenos_mm` una medida (0 = sin junta); `INSTALACION` trae personas (entero 1–100) y días (0.1–1 000); horas por día 0.5–24 (vacío = la jornada); los sí/no de factura son sí/no; `SOPORTE` trae una barra de T3b con precio y largo válidos y un largo por pieza o, en una abrazadera, el diámetro del ducto (`abrazadera_D_mm`), y la pieza cabe en la barra; el anclaje existe en T3c; minutos por pieza 0.1–10 000 (vacío = T7e). `BRIDA` sólo lleva unión `BRIDADO` | Error con el dato |
 | V24 | **Catálogo y soportería en las tablas:** IVA de las compras en [0, 100 %); cada artículo trae precio numérico, `iva_incluido` sí/no y, si los trae, `tornillos_pieza` entero de 0 a 1 000, `circulo_barrenos_mm` de 0 a 5 000 mm y una `categoria` del control de gastos; `tornillos_multiplo` entero; el anclaje y el tornillo de T7e existen; la junta de la unión bridada es `SELLADOR` o `EMPAQUE`; la jornada no pasa de 24 h | Error «Tablas maestras · ruta: …» |
 | V25 | `cotizacion.venta_pactada`: un importe no numérico o negativo se **ignora** y se avisa (vacío = no hay venta pactada); `venta_pactada_con_iva` y `piezas_enteras` sólo cuentan si son sí | Aviso con el valor |
+| V27 | **Extremos y armado:** `extremos_sin_brida` es una lista de los extremos de la familia (sin repetidos; en otra familia, error); `bridas_aparte` es sí/no; `UNION` trae `D_mm` (una medida de sección) y `n_uniones` entero de 1 a 50 | Error con las opciones válidas |
 | V26 | **Gastos reales:** cantidad y precio numéricos de 0 en adelante (un renglón inválido se marca y no suma); un renglón vacío no cuenta ni es error; una categoría que no existe pasa a «Otros»; sin decir si hay factura, sí, salvo en mano de obra e instalación (la raya no lleva IVA) | Error por renglón |
 
 La validación vive en `src/motor/validacion.js` (V14–V16, V18, V19), `src/motor/geometria.js` (V17) y `sanearParche` en `src/datos/maestros.js` (V20). Una partida que no se puede calcular **no detiene la cotización**: queda como `{ ok: false, errores }` y las demás se calculan; una falla inesperada del cálculo se atrapa por partida (`interno: true`) en vez de romper la pantalla.
@@ -564,6 +568,8 @@ Rectangular:  P_med = 2·(a + b + 2e) ;  B = P_med + n_costuras·a_costura
   - `SUELTA` — el taller manda **suelto** el aro de esa brida **ya terminado** —se rola la solera, se suelda el cierre del aro, se barrena y se pinta— con sus tornillos y el material de su junta (medio cordón de Sikaflex), **sin soldarlo al ducto**: se suelda en obra donde se corta el tramo (§3.5.7). Se cobra el material y esas operaciones; no se cobra el armado del aro al ducto ni el filete aro–ducto.
   - `SIN_BRIDA` — **nada**: la brida y su junta no están en el precio de la partida.
   - `CON_BRIDA` — brida de taller en ambos extremos, como en cualquier otra pieza: se fabrica y se suelda (no queda un extremo libre para ajustar en campo).
+
+  **El extremo final, también sin ajuste** («brida en un extremo»). Los planos de yardas del 30-sep-2026 piden piezas de yardas completas con «bridas en ambos extremos» o con «brida en un extremo» (el otro va liso: se une a otra pieza o a una manguera). Por eso `extremo_ajuste` es el **extremo final del tramo**: si la partida lo elige, vale aunque no haya tramo de ajuste y se aplica al extremo final de la última pieza (`SIN_BRIDA` = brida en un extremo; `SUELTA` = una brida de taller y la otra suelta; `CON_BRIDA` = ambos extremos). Sin elegirlo todo queda como antes: el tramo de ajuste toma el de T7c y un tramo sin ajuste lleva brida en ambos extremos. El sí/no `ajuste_sin_brida` de una versión anterior era sólo del ajuste y así se conserva (`extremo_solo_ajuste`).
 
   Lo que cambia en el Ejemplo A (3 000 mm; el costo directo CD y el precio salen del motor), con yardas de 4 ft y de 3 ft:
 
@@ -877,6 +883,25 @@ NO se le hace (se hace en obra):
 
 El acabado (`f_acabado · t_soldadura`) y los consumibles de soldadura y de pintura siguen a esos metros y esa superficie. El peso que se manda incluye el aro (`peso.aros_sueltos_neto_kg`) y los drivers de subcontrato por kilogramo (`KG_NETO`, `KG_BRUTO`) y por metro de soldadura (`M_SOLDADURA`) lo cuentan, porque es acero fabricado que va en la partida. Con unión `ESPIGA` o `LISO` no hay aros: `SUELTA` y `SIN_BRIDA` cuestan lo mismo.
 
+#### 3.5.8 Extremos sin brida, bridas de otra partida y cuadre de bridas
+
+Los planos de pedido dicen en qué extremos va brida y cuáles **se unen a otra pieza** (el armado de piezas del 2-oct-2026: «unir injerto de 11″ con codo de 60° para obtener 90°») o a una manguera. Y en el proyecto real las bridas no las hace quien hace el ducto: las de solera salen del taller y las de placa las corta un proveedor. El motor lo modela así:
+
+```text
+Cada extremo tiene nombre:   CODO A, B · REDUCCION D1, D2 · TRANSICION redondo, rectangular · RAMAL tronco_1, tronco_2, injerto
+                             REDUCCION_INJERTO D1, D2, injerto · RECTO: el extremo final (§3.2) · BRIDA: brida
+extremos_sin_brida = [ids]   → PF.extremos sin esos (ni aro, ni tornillería, ni junta, ni filete aro–ducto, ni sellador de su junta)
+
+bridas_aparte (BRIDADO): por cada brida de taller de la pieza sólo
+  Armado      t += t_ajuste_aro                                # se arma el aro al ducto (n_aros_aparte)
+  Soldadura   L_filete += f_cont · P_ext                       # se suelda al ducto
+  Sellador    la media junta de la clase, como una brida de taller (con Sikaflex en la junta, nada)
+y nada del aro: ni perfil, ni rolado, ni cierre, ni barrenos, ni pintura, ni tornillería, ni el cordón de la junta (son de la partida de bridas)
+La suelta de otra partida no cuesta nada aquí (se arma en obra).
+```
+
+Cada brida que lleva una pieza queda anotada con su medida nominal (`qto.her.bridas`: extremo, forma, `D_nom_mm`, suelta, de otra partida). Con eso la cotización arma el **cuadre de bridas** (`res.bridas`): por diámetro, las que piden las piezas con `bridas_aparte` (de taller y sueltas) contra las que hay en las partidas de Bridas sueltas y en las bridas compradas cuyo artículo dice para qué ducto son (`ducto_D_mm` de T3c: 127, 152.4 y 177.8 mm en las de placa de 5″, 6″ y 7″). `diferencia = hay − piden`: negativa, faltan; positiva, sobran. La pestaña Planos lo muestra arriba de las hojas (§8.5); en el pedido completo dice qué falta y qué sobra (§7.5).
+
 ### 3.6 Bridas sueltas, soportería y artículos comprados
 
 #### 3.6.1 Bridas sueltas (`BRIDA`: sólo aros)
@@ -924,7 +949,21 @@ junta       = cantidad · 0.5 · π · circulo_barrenos / 1000 · 40 mL/m · 1.1
 CD          = compra + tornillería + junta                                # la tornillería y la junta caen en «Material» del control de gastos
 ```
 
-`tornillos_pieza` y `circulo_barrenos_mm` son del artículo (T3c) o de la partida. Las bridas de placa de 5″, 6″ y 7″ del caso de §7.4 (cotización del proveedor de corte del 2-oct-2026) están en el catálogo con su precio antes de IVA, su círculo de barrenos (170, 193 y 230 mm) y los juegos de su media junta: **3 por brida** (los 6 barrenos de los planos de pedido del 30-sep-2026). También traen sus diámetros exterior e interior (194/130, 221/157 y 258/182 mm), con los que se dibujan (§8.5).
+`tornillos_pieza` y `circulo_barrenos_mm` son del artículo (T3c) o de la partida. Las bridas de placa de 5″, 6″ y 7″ del caso de §7.4 (cotización del proveedor de corte del 2-oct-2026) están en el catálogo con su precio antes de IVA, su círculo de barrenos (170, 193 y 230 mm) y los juegos de su media junta: **3 por brida** (los 6 barrenos de los planos de pedido del 30-sep-2026). También traen sus diámetros exterior e interior (194/130, 221/157 y 258/182 mm), con los que se dibujan (§8.5), y el ducto para el que son (`ducto_D_mm`), con el que entran en el cuadre de bridas (§3.5.8).
+
+#### 3.6.4 Armado de piezas (`UNION`)
+
+La unión soldada entre dos piezas de otras partidas, como las pide el plano de armado del 2-oct-2026 («unir codo de 90° de 5″ con tramo de ducto»). No lleva lámina: sólo el ajuste de las dos bocas y el cordón.
+
+```text
+n            = n_uniones (1)                    # un codo, un injerto y una yarda armados en una pieza son 2 uniones
+D_ext        = D + 2e (o D, si la medida es exterior)
+Armado       t = k_dif · n · t_junta(D_med)      # una junta de armado por unión (T7; k_dif de T6, 1 si no lo trae)
+Soldadura    L_filete = n · π · D_ext            # filete continuo al perímetro exterior
+Acabado, consumibles de soldadura, inspección: como cualquier pieza; sin corte, rolado, aros ni pintura (no hay superficie)
+```
+
+Las piezas que se unen van en sus partidas **sin brida** en esos extremos (`extremos_sin_brida`, o «brida en un extremo» en el tramo recto): así la unión no se cobra dos veces y el cuadre de bridas no las pide. Como toda partida, una unión cobra al menos el cargo mínimo de partida (`cargo_minimo_partida`, T9).
 
 ---
 
@@ -1745,6 +1784,52 @@ Para que la app lo cobre basta poner `FSR` = 1.40 en las tablas maestras (T8); c
 
 La venta no pagó ni el costo directo: le faltaron $5,318.23. Para el precio mínimo, con los indirectos ilustrativos de las tablas, faltaron **$17,315.26 (44 % de la venta)**, y con 20 % de utilidad sobre el precio la app calcula **$71,264.31 más IVA ($82,666.60)**. La hoja proponía $58,173.83 antes de impuestos (25 % sobre su costo con IVA) y $67,481.64 con IVA. Cuánto de esa diferencia es real depende de los indirectos del taller, que hoy son ilustrativos (§10.1).
 
+### 7.5 Caso real — el pedido de ductería completo: ¿fabricar o comprar?
+
+**El pedido.** Los planos con que el taller pidió la ductería: la hoja de bridas (60), la de codos (7), tres de reducciones con injerto (9) y tres de yardas (ductos de 11″, 10″, 6″ y 5″ en yardas de 914 mm) del 30-sep-2026, y dos de armado de piezas (6 uniones) del 2-oct-2026. Todo de galvanizado cal. 24; cada pieza lleva sus bridas «de otra partida» (las hacen el taller y el proveedor de corte, §3.5.8) y van sin brida los extremos que se unen a otra pieza o a una manguera. Viene en la app como ejemplo (pestaña Planos → «Ver el ejemplo: pedido del 30-sep-2026»; `src/datos/ejemplos.js`) y es el caso de referencia de `tests/planos.test.js` y de la sección 25 de `tests/e2e/ui.e2e.js`.
+
+**Las yardas, como en los planos:**
+
+| Ducto | Piezas | Cada pieza | Largo (mm) | Bridas (de otra partida) |
+| --- | --- | --- | --- | --- |
+| 11″ | 4 | 3 yardas unidas | 2,742 | en ambos extremos |
+| 11″ | 1 | 2 yardas unidas + 600 mm de ajuste | 2,428 | en un extremo + una suelta (el ajuste) |
+| 11″ | 1 | 2 yardas unidas | 1,828 | en un extremo |
+| 11″ | 2 | 1 yarda | 914 | en un extremo |
+| 10″ | 1 | 3 yardas unidas | 2,742 | en ambos extremos |
+| 6″ | 1 | 1 yarda | 914 | en un extremo |
+| 5″ | 1 | 1 yarda | 914 | en un extremo |
+| 5″ | 1 | 3 yardas unidas | 2,742 | en ambos extremos |
+| 5″ | 1 | 2 yardas unidas + 500 mm de ajuste | 2,328 | en un extremo + una suelta (el ajuste) |
+| 5″ | 3 | 2 yardas unidas | 1,828 | en un extremo |
+| 5″ | 4 | 1 yarda + 700 mm de ajuste | 1,614 | en un extremo |
+
+Los planos cuentan «18 yardas» de 11″ (el ajuste de 600 mm aparte) y «20 yardas» de 5″; la app cuenta 16 yardas completas de 5″ y 5 tramos de ajuste: el de 500 mm y los cuatro de 700 mm, que el plano llama «2 yardas unidas».
+
+**Las bridas cuadran con la hoja de bridas en cuatro diámetros.** Con los extremos que van sin brida, las piezas piden:
+
+| Ducto | Piden las piezas | Hoja de bridas (partidas) | Resultado |
+| --- | --- | --- | --- |
+| 11″ | 22 | 22 | cuadran |
+| 10″ | 6 | 6 | cuadran |
+| 9″ | 2 | 2 | cuadran |
+| 7″ | 4 | 4 | cuadran |
+| 6″ | 3 | 2 | **faltan 1** |
+| 5″ | 21 | 24 | **sobran 3** |
+
+La de 6″ que falta es la de uno de tres extremos —el libre del codo de 90°, el de la yarda o el menor de la reducción de 10″ a 6″— que el plano no dice si va sin brida. Las 3 de 5″ que sobran pueden ser reserva, o la boca del codo de 60° de 5″ que pide el armado de la reducción de 11″ a 10″ y que no viene en la hoja de codos (§10.13).
+
+**¿Fabricar o comprar?** El proveedor cobró la ductería del proyecto en **$22,000 con IVA ($18,965.52 antes de IVA)** (§7.4; si es este mismo pedido). La app costea la misma ductería —las 30 partidas de lámina y las 6 uniones, sin las bridas, que en los dos casos son del taller—:
+
+| Escenario (30 partidas de ductería) | Costo directo | Material | Mano de obra | kg | Precio mínimo | Precio calculado | Costo directo / proveedor |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Cal. 24, uniendo las bridas al ducto | 11,433.61 | 6,342.93 | 46.5 h · 2,908.44 | 179 | 17,600.60 | 23,313.78 | 60 % |
+| Cal. 24, sin unir las bridas | 10,341.98 | 6,342.93 | 36.5 h · 2,278.13 | 179 | 15,402.46 | 20,621.50 | 55 % |
+| Cal. 22, uniendo las bridas al ducto | 13,462.11 | 8,267.26 | 47.4 h · 2,959.79 | 218 | 20,041.04 | 26,330.77 | 71 % |
+| Cal. 22, sin unir las bridas | 12,322.69 | 8,267.26 | 36.9 h · 2,306.76 | 218 | 17,753.82 | 23,491.92 | 65 % |
+
+Hecha en el taller, la ductería costaría (costo directo) entre el 55 % y el 71 % de lo que cobró el proveedor, según el calibre y si su precio incluía soldar las bridas al ducto. Con los indirectos ilustrativos de las tablas, el precio mínimo en cal. 24 queda por debajo del precio del proveedor. Dos salvedades: los tiempos de taller de la ductería no están calibrados (sólo los de las bridas, §7.4), y el precio calculado incluye el cargo mínimo de las 6 uniones ($250 cada una, con un costo directo de unos $21). Para decidir conviene capturar las horas reales de una yarda y de un codo (§10.1).
+
 ---
 
 ## 8. Arquitectura de datos, módulos y plataformas
@@ -1823,7 +1908,8 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 - **Persistencia de maestros** (`tests/util.test.js`): `mezclar(base, diferencia(base, actual))` reconstruye lo editado y los valores de arranque nuevos no quedan enmascarados.
 - **Guardado automático** (`tests/almacen.test.js` con un almacén de mentira, y las secciones 11–14 de `tests/e2e/ui.e2e.js` con un `window.claude` simulado cuyo almacén vive fuera del navegador): qué manda al abrir, una ráfaga de cambios = una escritura, una escritura a la vez, pendientes y reintentos, sólo lectura, cambios hechos durante la carga, y recuperación única de los precios de la versión 1.
 - **Ayuda de las tablas maestras** (`tests/ayuda_maestros.test.js`, sección 23 de `tests/e2e/ui.e2e.js`): cobertura exhaustiva del catálogo contra lo que dibuja el editor (grupos, secciones, datos y tablas, incluidas las claves con punto como el perfil `SOL38x4.8`), sin entradas muertas ni tapadas; calidad de los textos (completos, con tope de longitud, sin marcas ni nombres técnicos); rangos usuales que contienen a los valores de arranque; columnas de tabla y opciones que coinciden con las reales. En el navegador: un ⓘ por cada elemento; la ventana (qué es, cómo se llena, qué esperar; Esc, clic fuera y F1); la sensibilidad «si sube 10 %» comparada con una cotización independiente; probar, aplicar y deshacer (el precio vuelve al centavo); marcas de modificado y de fuera de rango; la comparación de opciones; las listas de precios, calibres y procesos; los booleanos y el cordón vacío que sobreviven a recargar; el ajuste de golpe de salarios y precios del proveedor como un solo cambio; el ranking ordenado; la guía; la hoja del celular sin desbordamiento; y sólo lectura.
-- **Dibujos acotados** (`tests/planos.test.js`, sección 25 de `tests/e2e/ui.e2e.js`): cada familia se dibuja sin valores inválidos y su marco contiene todo; las cotas son las de los planos de pedido (codo de 5″: 191 y 254 mm; Dint/Dperf/Dext y barrenos de las bridas; los de las bridas de placa, del catálogo) y llevan el campo que miden; los títulos («Reducción de 11″ a 10″ con injerto de 5″ a 30°»); las miniaturas sin cotas; y el pedido del 30-sep-2026 completo (18 partidas, todas con plano, con los barrenos de los planos). En el navegador: el dibujo vivo del diálogo, la cota resaltada con el cursor en su campo y el clic en una cota que lleva al campo, el nombre automático, las miniaturas de la lista, el plano del desglose, la pestaña Planos (hojas, marcas, títulos, datos, cajetín, «Ver en la cotización», Deshacer), la impresión de sólo las hojas, el estado vacío y el celular.
+- **Extremos, bridas de otra partida, armado de piezas y cuadre de bridas** (`tests/armado_piezas.test.js`): el extremo final del tramo con y sin ajuste en sus tres modos (y el sí/no de la versión anterior, que sigue siendo sólo del ajuste); los extremos con nombre de cada familia y lo que se quita con cada uno (aro, media junta, barrenos, filete aro–ducto); las bridas de otra partida, que sólo se arman y se sueldan al ducto (el mismo filete y el mismo ajuste que con aros propios, ningún aro, tornillo, barreno, cierre ni pintura); la unión soldada recalculada a mano (π · D_ext por unión y una junta de armado); y el cuadre por diámetro, con bridas de solera, de placa y piezas con bridas propias que no cuentan. `tests/robustez.test.js` los lleva también al azar y con valores hostiles.
+- **Dibujos acotados** (`tests/planos.test.js`, sección 25 de `tests/e2e/ui.e2e.js`): cada familia se dibuja sin valores inválidos y su marco contiene todo; las cotas son las de los planos de pedido (codo de 5″: 191 y 254 mm; Dint/Dperf/Dext y barrenos de las bridas; los de las bridas de placa, del catálogo) y llevan el campo que miden; los títulos («Reducción de 11″ a 10″ con injerto de 5″ a 30°»); las miniaturas sin cotas; los tramos rectos como en los planos de yardas (cada yarda acotada, «3 yardas unidas», «brida en un extremo y una suelta», las bridas dibujadas donde van); y el pedido completo (36 partidas, todas con plano: sus yardas por diámetro, los barrenos de los planos y el cuadre de bridas contra la hoja de bridas). En el navegador: el dibujo vivo del diálogo, la cota resaltada con el cursor en su campo y el clic en una cota que lleva al campo, el nombre automático, las miniaturas de la lista, el plano del desglose, la pestaña Planos (las ocho hojas del pedido, marcas, títulos, datos, cajetín, el cuadre de bridas, «Ver en la cotización», Deshacer), las casillas de extremos sin brida y el selector de bridas de otra partida (quitar una casilla devuelve la brida y el cuadre la pide), la impresión de sólo las hojas, el estado vacío y el celular.
 - **Interfaz de extremo a extremo (opcional, Playwright):** `tests/e2e/ui.e2e.js` da de alta cada familia, edita y guarda cada partida **sin cambios** en tres combinaciones de unidades y exige que el precio no se mueva (el formulario no pierde datos), y recorre validaciones, subcontratos, tablas maestras, persistencia, guardar/cargar y pantalla móvil.
 
 ### 8.5 Dibujos acotados y planos de pedido
@@ -1835,7 +1921,7 @@ El taller manda a fabricar con planos de AutoCAD: una hoja por tipo de pieza (br
 | Diálogo de la partida | El dibujo se rehace mientras se captura. La cota del campo donde está el cursor se resalta; pulsar una cota lleva al campo que la mide. Sin descripción, la partida toma el nombre de los planos. |
 | Lista de partidas | Una miniatura de la pieza (sin cotas) en lugar del ícono de la familia. |
 | Desglose | «Plano de la pieza»: el dibujo grande y sus datos (D, R, gajos, Dint/Dperf/Dext, barrenos…). |
-| Pestaña **Planos** | Las hojas de pedido: una por tipo de pieza y, en las de lámina, por material y calibre; cada pieza con su marca (B1, C1, I1…), su número de piezas, su dibujo y sus datos, y un cajetín con proyecto, fecha y número de hoja. «Ver en la cotización» lleva a la partida. «Imprimir planos» imprime sólo las hojas, una por página carta horizontal, en negro sobre blanco. |
+| Pestaña **Planos** | Las hojas de pedido: una por tipo de pieza y, en las de lámina, por material y calibre; los ductos rectos, además, por diámetro («Ductos de 11″», con sus yardas), y al final el armado de piezas. Cada pieza con su marca (B1, C1, I1, D1, A1…), su número de piezas, su dibujo y sus datos, y un cajetín con proyecto, fecha y número de hoja. Arriba, el **cuadre de bridas** (§3.5.8). «Ver en la cotización» lleva a la partida. «Imprimir planos» imprime sólo las hojas (sin el cuadre), una por página carta horizontal, en negro sobre blanco. |
 
 Qué se dibuja de cada familia:
 
@@ -1844,14 +1930,17 @@ Qué se dibuja de cada familia:
 | Codo | Lateral, con los gajos y sus juntas | R al eje, R + D/2, D y el ángulo; nota con los gajos |
 | Reducción | Lateral del cono (la excéntrica, con la cara plana arriba) | D1, D2, L |
 | Reducción con injerto e Injerto simple | Lateral, con el injerto sobre el cono o el tronco, centrado en su largo | D1 y D2 (o D), L, d, largo del injerto sobre su eje, β |
-| Tramo recto | Lateral (cortado si es muy largo), con las juntas de las yardas | D, L; las yardas en los datos |
+| Tramo recto | Lateral (cortado si pasa de 24 diámetros), con las juntas de las yardas y sus bridas (la suelta, punteada y separada) | Cada yarda arriba, el largo total abajo y D, como en los planos de yardas; «3 yardas unidas», «bridas en ambos extremos» o «brida en un extremo» en los datos |
 | Transición | Lateral | D, a × b, L |
 | Brida de solera y brida de placa comprada | De frente: el aro, el círculo de barrenos y los barrenos | Dext, Dint; nota con Dperf y los barrenos |
 | Soportería | La abrazadera de media vuelta con sus orejas, o la pieza de barra | D del ducto y oreja, o el largo |
+| Armado de piezas | Las dos bocas que se unen (cortadas: las piezas siguen en sus partidas) y el cordón | D; nota con las uniones; en la hoja se llama como lo escribió quien lo pide («Unir injerto de 11″ con codo de 60° para obtener 90°») |
+
+En las piezas bridadas se dibuja la brida en cada boca que la lleva (vista de lado, saliendo del ducto el ancho de la solera) y los datos dicen qué extremos van sin brida. Lo que sólo importa al cotizar —«bridas de otra partida»— aparece en el desglose pero no en las hojas para el proveedor.
 
 El dibujo es una función pura (`src/web/planos.js`): de la partida calculada sale una lista de trazos y cotas en milímetros y de ahí un árbol SVG a escala, que la interfaz arma elemento por elemento (sin `innerHTML`). Las cotas que miden un dato de la partida llevan su nombre (`data-campo`). Un diámetro se escribe en pulgadas si es un cuarto de pulgada exacto (Ø11″) y si no en mm (Ø300).
 
-**El pedido del 30-sep-2026 como ejemplo.** La pestaña Planos (y la lista vacía) abren el pedido de los planos: 7 codos de galvanizado cal. 24 con R = 1.5D (5″, 6″ y 11″ a 90°; 7″ y 11″ a 60°), 9 reducciones con injerto e injertos a 30° con los largos de los planos («de 11″ a 11″» y «de 6″ a 6″» son Injertos simples) y las 60 bridas (22, 6, 2 y 4 de solera de 11″, 10″, 9″ y 7″; 2 y 24 de placa de 6″ y 5″). Las piezas de lámina van sin brida, porque las bridas tienen sus partidas. Las cotas de la app son las de los planos (codo de 5″: 191 y 254 mm) y los barrenos también; lo que difiere se lista en §10.13.
+**El pedido como ejemplo.** La pestaña Planos (y la lista vacía) abren el pedido completo de §7.5 (36 partidas): 7 codos de galvanizado cal. 24 con R = 1.5D (5″, 6″ y 11″ a 90°; 7″ y 11″ a 60°), 9 reducciones con injerto e injertos a 30° con los largos de los planos («de 11″ a 11″» y «de 6″ a 6″» son Injertos simples), 20 ductos rectos en yardas de 914 mm, 6 armados y las 60 bridas (22, 6, 2 y 4 de solera de 11″, 10″, 9″ y 7″; 2 y 24 de placa de 6″ y 5″). Salen las ocho hojas: bridas, codos, reducciones con injerto, ductos de 11″, 10″, 6″ y 5″ y armado de piezas. Las cotas de la app son las de los planos (codo de 5″: 191 y 254 mm; yardas de 914) y los barrenos también; lo que difiere se lista en §10.13.
 
 ---
 
@@ -2035,7 +2124,7 @@ Lo que dijo el taller (6 y 7 de octubre de 2026): el trabajador gana **$500 por 
 
 ### 10.13 Diferencias con los planos de pedido por confirmar
 
-Los planos de pedido del 30-sep-2026 confirmaron el gramil (24 mm), los barrenos (par, mínimo 6; 6 en las bridas de placa), el R = 1.5D de los codos y los largos de los injertos. Al dibujarlos con la app quedan estas diferencias:
+Los planos de pedido del 30-sep-2026 confirmaron el gramil (24 mm), los barrenos (par, mínimo 6; 6 en las bridas de placa), el R = 1.5D de los codos, los largos de los injertos, las yardas de 914 mm y en qué extremos va brida; el plano de armado del 2-oct-2026, qué piezas se unen. Al capturarlos y dibujarlos con la app quedan estas diferencias y supuestos:
 
 | Supuesto | Valor usado | Dónde se cambia | Efecto si es distinto |
 | --- | --- | --- | --- |
@@ -2044,3 +2133,10 @@ Los planos de pedido del 30-sep-2026 confirmaron el gramil (24 mm), los barrenos
 | Bridas de 7″ | De solera, como el plano | Las partidas | La cotización del proveedor de corte (§7.4) las trae de placa. |
 | Calibre de la ductería | 24, como los planos | La partida | La hoja de control de gastos dice cal. 22. La tabla de calibres por servicio (ilustrativa) avisa que el cal. 24 es delgado para polvo: poblarla con el servicio real (polvo de madera). |
 | Redondeo de las cotas | Al milímetro más cercano (R + D/2 del codo de 11″: 559 mm) | `src/web/planos.js` | Los planos truncan (558): 1 mm de diferencia en las cotas que suman medidas. |
+| Qué es «unir» | Una unión soldada (filete continuo), sin bridas en los extremos que se unen | Familia Armado de piezas (§3.6.4) | Si se unen con bridas, esos extremos sí llevan brida (y el cuadre de 11″ ya no daría 22). Con «unir» soldado cuadran 11″, 10″, 9″ y 7″. |
+| Bridas de 6″ y 5″ | Las piezas piden 3 de 6″ y 21 de 5″; la hoja de bridas trae 2 y 24 | Las partidas, o los extremos sin brida | Falta 1 de 6″ (uno de tres extremos sin decir) y sobran 3 de 5″ (reserva, o el codo de 60° de 5″ que falta en la hoja de codos). |
+| Codo de 60° de 5″ | No se agregó: lo pide el armado de la reducción de 11″ a 10″ con injerto de 5″, pero no viene en la hoja de codos | Una partida de codo | Si se hizo, suma un codo y una brida de 5″ (sobrarían 2). |
+| «Una yarda de 3″» del armado del codo de 6″ | Es la yarda de 6″ (no hay ducto de 3″ en las hojas de yardas); el injerto de 3″ va a una manguera, sin brida | La partida del injerto y la yarda | Si hay un tramo de 3″, falta en las yardas y lleva una brida de 3″ que no viene en la hoja de bridas. |
+| Ajuste de las yardas con «brida en un extremo» | Los de 2 yardas + 600 y + 500 mm llevan brida de taller en las yardas y la suelta en el ajuste (lo de las tablas); los de 914 + 700 mm, sin brida en el extremo de 700 (se unen a un codo o a una manguera) | El extremo final de cada partida | Con la suelta de los dos ajustes cuadra la hoja de 11″; si no se mandan sueltas, sobra 1 de 11″ y 1 más de 5″. |
+| Quién une las bridas al ducto | La ductería del proveedor las trae unidas (la app cotiza armarlas y soldarlas en cada pieza) | `bridas_aparte` / `tipo_union` | Si las unió el taller en obra, la ductería del proveedor vale la fila «sin unir las bridas» de §7.5. |
+| El pedido de $22,000 | Es la ductería de estos planos | §7.5 | Si el pedido de $22,000 era otro, la comparación no aplica. La hoja de gastos dice cal. 22 y los planos, cal. 24 (§7.5 da las dos). |

@@ -1,9 +1,11 @@
 /**
  * COTIZAP · web/planos_ui.js — Pestaña «Planos»: las piezas de la cotización dibujadas y acotadas como en los planos de pedido.
  *
- * Una hoja por tipo de pieza (bridas, codos, reducciones con injerto…) y, en las de lámina, por material y calibre, como las
- * hojas que el taller manda a fabricar: cada pieza con su dibujo, su nombre, sus datos, cuántas piezas son y una marca (C1, C2…)
- * para hablar de ella con el proveedor. Las hojas se imprimen solas (cada una en su página, horizontal) con «Imprimir planos».
+ * Una hoja por tipo de pieza (bridas, codos, reducciones con injerto…) y, en las de lámina, por material y calibre (los ductos
+ * rectos, además, por diámetro, como los planos de yardas), como las hojas que el taller manda a fabricar: cada pieza con su
+ * dibujo, su nombre, sus datos, cuántas piezas son y una marca (C1, C2…) para hablar de ella con el proveedor; al final, la
+ * hoja de armado de piezas. Arriba, el cuadre de bridas: las que piden las piezas contra las partidas de bridas, por diámetro.
+ * Las hojas se imprimen solas (cada una en su página, horizontal) con «Imprimir planos».
  * Sólo se dibuja mientras la pestaña está abierta. Depende de app.js (W.estadoApp, W.tituloPartida, W.verPartida…).
  */
 (function (root) {
@@ -27,9 +29,27 @@
     },
     { id: 'REDUCCIONES', fams: ['REDUCCION'], marca: 'R', lamina: true, nombre: () => 'Reducciones' },
     { id: 'TRANSICIONES', fams: ['TRANSICION'], marca: 'T', lamina: true, nombre: () => 'Transiciones' },
-    { id: 'RECTOS', fams: ['RECTO'], marca: 'D', lamina: true, nombre: () => 'Tramos rectos' },
+    { id: 'RECTOS', fams: ['RECTO'], marca: 'D', lamina: true, porMedida: true, nombre: (ps) => `Ductos de ${medida(ps[0].p)}` },
     { id: 'SOPORTERIA', fams: ['SOPORTE'], marca: 'S', nombre: () => 'Soportería' },
+    { id: 'ARMADO', fams: ['UNION'], marca: 'A', nombre: () => 'Armado de piezas' },
   ];
+  /** «11″» o «500 × 300 mm»: la medida de un ducto recto (las hojas de yardas van por diámetro). */
+  function medida(p) {
+    const f = C.planos.formato;
+    return p.forma === 'RECTANGULAR' ? `${f.mm(p.a_mm)} × ${f.mm(p.b_mm)} mm` : f.nominal(Number(p.D_mm));
+  }
+  /** Las yardas que lleva una hoja de ductos rectos: «18 yardas y 1 tramo de ajuste». */
+  function yardasDe(items) {
+    let y = 0;
+    let a = 0;
+    items.forEach((x) => {
+      const arm = x.f.geometria && x.f.geometria.detalle && x.f.geometria.detalle.armado;
+      if (!arm) return;
+      y += arm.n_completas * x.p.cantidad;
+      a += (arm.ajuste_mm > 0 ? 1 : 0) * x.p.cantidad;
+    });
+    return y || a ? `${W.num(y, 0)} ${y === 1 ? 'yarda' : 'yardas'}${a ? ` y ${W.num(a, 0)} ${a === 1 ? 'tramo' : 'tramos'} de ajuste` : ''}` : '';
+  }
 
   const piezas = (n) => `${W.num(n, 0)} ${n === 1 ? 'pieza' : 'piezas'}`;
   const sinParentesis = (t) => String(t || '').split(' (')[0];
@@ -61,12 +81,15 @@
       // las de lámina, una hoja por material y calibre (como «CODOS / ACERO GALVANIZADO CAL. 24»)
       const llaves = [];
       const por = new Map();
-      del.forEach((x) => {
-        const k = g.lamina ? (W.resumenMaterial(x.p) || '') : '';
+      // los ductos rectos, además, por medida (de la mayor a la menor), como los planos de yardas
+      const orden = g.porMedida ? del.slice().sort((a, b) => (Number(b.p.D_mm) || Number(b.p.a_mm) || 0) - (Number(a.p.D_mm) || Number(a.p.a_mm) || 0)) : del;
+      orden.forEach((x) => {
+        const mat = g.lamina ? (W.resumenMaterial(x.p) || '') : '';
+        const k = g.porMedida ? `${medida(x.p)}|${mat}` : mat;
         if (!por.has(k)) { por.set(k, []); llaves.push(k); }
         por.get(k).push(x);
       });
-      llaves.forEach((k) => out.push({ g, material: k, items: por.get(k) }));
+      llaves.forEach((k) => out.push({ g, material: g.porMedida ? k.split('|')[1] : k, items: por.get(k) }));
     });
     // marcas por tipo de pieza (B1, B2… C1, C2…), seguidas aunque el material parta la hoja
     const cuenta = {};
@@ -76,7 +99,9 @@
 
   function tarjeta(x) {
     const { p, d } = x;
-    const titulo = C.planos.titulo(p) || sinParentesis(d.titulo || W.tituloPartida(p));
+    // el armado se llama como lo escribió quien lo pide («Unir injerto de 11″ con codo de 60° para obtener 90°»); el ducto
+    // recto, por sus yardas (la hoja ya dice el diámetro)
+    const titulo = (p.familia === 'UNION' && p.descripcion) || d.titulo_corto || C.planos.titulo(p) || sinParentesis(d.titulo || W.tituloPartida(p));
     const propia = p.descripcion && p.descripcion !== titulo ? p.descripcion : '';
     return h('article', { class: 'pieza-plano', dataset: { id: p.id, familia: p.familia } },
       h('div', { class: 'pieza-cab' },
@@ -85,7 +110,7 @@
       h('figure', { class: 'pieza-fig' }, W.svgArbol(C.planos.arbol(d, { px: 300, alto_max: 230 }))),
       h('h4', { class: 'pieza-tit' }, titulo),
       propia ? h('p', { class: 'pieza-desc' }, propia) : null,
-      h('ul', { class: 'plano-datos' }, d.datos.filter(Boolean).map((t) => h('li', null, t))),
+      h('ul', { class: 'plano-datos' }, d.datos.filter((t) => t && t.toLowerCase() !== titulo.toLowerCase()).map((t) => h('li', null, t))),
       h('button', { type: 'button', class: 'btn-texto pieza-ir', onclick: () => W.verPartida(p.id) }, 'Ver en la cotización'));
   }
 
@@ -95,7 +120,7 @@
     return h('section', { class: 'hoja', dataset: { grupo: hj.g.id }, 'aria-label': `${hj.g.nombre(hj.items)}${hj.material ? ` · ${hj.material}` : ''}` },
       h('header', { class: 'hoja-cab' },
         h('h3', null, hj.g.nombre(hj.items), hj.material ? h('span', { class: 'hoja-mat' }, hj.material) : null),
-        h('span', { class: 'hoja-cuenta' }, `${piezas(total)} en ${hj.items.length} ${hj.items.length === 1 ? 'partida' : 'partidas'}`)),
+        h('span', { class: 'hoja-cuenta' }, [`${piezas(total)} en ${hj.items.length} ${hj.items.length === 1 ? 'partida' : 'partidas'}`, hj.g.porMedida ? yardasDe(hj.items) : ''].filter(Boolean).join(' · '))),
       h('div', { class: 'hoja-piezas' }, hj.items.map(tarjeta)),
       h('footer', { class: 'hoja-pie' },
         h('span', null, h('span', { class: 'hoja-et' }, 'Proyecto '), cot.proyecto || '—'),
@@ -125,7 +150,30 @@
         h('button', { type: 'button', class: 'btn btn-primario', onclick: verEjemplo }, 'Ver el ejemplo: pedido del 30-sep-2026')));
       return;
     }
-    W.reemplazar(cont, R.hojas.map((hj, i) => hoja(hj, i, R.hojas.length)));
+    W.reemplazar(cont, cuadre(), R.hojas.map((hj, i) => hoja(hj, i, R.hojas.length)));
+  }
+
+  /**
+   * El cuadre de bridas: por diámetro, las que piden las piezas cuyas bridas son de otra partida contra las que hay en las
+   * partidas de bridas (de solera y de placa). Sólo aparece si alguna pieza pide bridas de otra partida.
+   */
+  function cuadre() {
+    const B = E().res.bridas;
+    if (!B || !B.activo) return null;
+    const f = C.planos.formato;
+    const nombre = (x) => (x.forma === 'REDONDA' ? f.diam(x.D_nom_mm) : `${f.mm(x.a_nom_mm)} × ${f.mm(x.b_nom_mm)} mm`);
+    const estado = (x) => (x.diferencia === 0 ? h('span', { class: 'cuadran' }, 'Cuadran')
+      : x.diferencia < 0 ? h('span', { class: 'faltan' }, `Faltan ${-x.diferencia}`) : h('span', { class: 'sobran' }, `Sobran ${x.diferencia}`));
+    const faltan = B.filas.filter((x) => x.diferencia < 0);
+    const sobran = B.filas.filter((x) => x.diferencia > 0);
+    const resumen = B.cuadra ? `Las ${W.num(B.piden, 0)} bridas que piden las piezas están en las partidas de bridas.`
+      : [faltan.length ? `Faltan ${faltan.map((x) => `${-x.diferencia} de ${nombre(x)}`).join(', ')}` : '', sobran.length ? `sobran ${sobran.map((x) => `${x.diferencia} de ${nombre(x)}`).join(', ')}` : '']
+        .filter(Boolean).join(' y ').replace(/^s/, 'S') + '. Revise las partidas de bridas (o los extremos sin brida de las piezas).';
+    return h('section', { class: 'cuadre', 'aria-labelledby': 'cuadre-tit', dataset: { cuadra: B.cuadra ? 'si' : 'no' } },
+      h('h3', { id: 'cuadre-tit' }, W.icono(B.cuadra ? 'check' : 'aviso'), 'Cuadre de bridas'),
+      h('p', null, `Las piezas con «bridas de otra partida» piden una brida en cada extremo que la lleva (de taller o suelta); aquí se comparan, por diámetro, con las partidas de Bridas sueltas y las bridas de placa compradas. ${resumen}`),
+      W.tabla([{ t: 'Ducto' }, { t: 'Piden las piezas', num: true }, { t: 'En partidas de bridas', num: true }, { t: '' }],
+        B.filas.map((x) => [nombre(x), W.num(x.piden, 0), W.num(x.hay, 0), estado(x)])));
   }
 
   /** Abre el pedido de ductería del 30-sep-2026 (los planos que mandó el taller) en lugar de la cotización actual; se puede deshacer. */

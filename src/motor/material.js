@@ -108,6 +108,8 @@
    *            taller como aro terminado (rolado, con el cierre soldado, barrenado y pintado). Las de taller (`PF.extremos`) además
    *            se arman y se sueldan al ducto; las SUELTAS (`PF.extremos_sueltos`) no se unen al ducto: se mandan con sus tornillos
    *            y el material de su junta para soldarlas en obra donde se corta el tramo.
+   *            Con `bridas_aparte` los aros (y su tornillería y su junta) son de otra partida —bridas de solera de la familia Brida o
+   *            bridas de placa compradas—: aquí sólo se arman y se sueldan al ducto las de taller; las sueltas no cuestan nada aquí.
    *            La junta (`uniones.BRIDADO.junta`) es SELLADOR —el taller pone Sikaflex en lugar del empaque: un cordón de
    *            `ml_sellador_junta_m` mL por metro sobre el círculo de barrenos, que es también el sello de la junta transversal (no
    *            se suma el cordón de la clase C en esa junta)— o EMPAQUE (cinta de neopreno, y aparte el cordón de la clase).
@@ -150,12 +152,19 @@
       L_corte_extra_m: 0,
       sold_aros: { filete_m: 0, cierres: [] }, // cierres: costura a tope del aro, con el espesor del PERFIL (no el de la lámina)
       A_pintura_aros_m2: 0,
+      bridas_aparte: false,
+      n_aros_aparte: 0, // aros de otra partida que aquí se arman y se sueldan al ducto
+      // cada brida que lleva la pieza, de taller o suelta, hecha aquí o en otra partida: con su medida nominal (el cuadre de bridas
+      // por diámetro) y el extremo en que va (el dibujo)
+      bridas: [],
     };
 
     if (tipo === 'BRIDADO') {
       const holgura = M.proceso.aros.holgura_corte_mm;
       const conSellador = (U_.junta || 'EMPAQUE') === 'SELLADOR';
+      const aparte = p.bridas_aparte === true && PF.familia !== 'BRIDA'; // la partida de bridas sueltas es la que las hace
       out.junta = conSellador ? 'SELLADOR' : 'EMPAQUE';
+      out.bridas_aparte = aparte;
       // Una brida del extremo `ext`. Toda brida se fabrica como aro terminado —se rola la solera, se suelda el cierre del aro, se
       // barrena y se pinta— y lleva el material de su media junta: tornillería y cordón de Sikaflex (o empaque). La de taller
       // además se arma y se suelda al ducto y, con empaque, sella su media junta con el cordón de la clase. La SUELTA sale igual
@@ -176,6 +185,18 @@
           m_aro_kg: m_aro, m_aro_bruta_kg: m_aro / (1 - M.merma.PERFIL), c_centroide_mm: perfil.c_centroide_mm, gramil_mm: perfil.gramil_mm, peso_kg_m: perfil.peso_kg_m,
           suelta,
         };
+        out.bridas.push({
+          extremo: ext.id, forma: ext.forma, D_nom_mm: ext.D_nom_mm, a_nom_mm: ext.a_nom_mm, b_nom_mm: ext.b_nom_mm, suelta, aparte, ancho_mm: perfil.ancho_mm,
+        });
+        if (aparte) {
+          // El aro es de otra partida (con su tornillería, su junta, sus barrenos y su pintura). Aquí sólo, si es de taller, el
+          // ajuste del aro, el filete aro–ducto y la media junta de sellador de la clase (la suelta se arma en obra).
+          if (suelta) return;
+          out.n_aros_aparte += 1;
+          if (clase !== 'NINGUNA' && !(conSellador && p.usa_empaque !== false)) out.L_sellado_m += (0.5 * ext.P_ext_mm) / 1000;
+          out.sold_aros.filete_m += (U_.f_cont_soldadura_aro * ext.P_ext_mm) / 1000;
+          return;
+        }
         // Material de la junta que lleva toda brida: media tornillería y medio cordón de la junta o medio empaque (la otra mitad es
         // del extremo con que se une)
         out.tornillos_por_tipo[perfil.tornillo] = (out.tornillos_por_tipo[perfil.tornillo] || 0) + 0.5 * n_tornillos;

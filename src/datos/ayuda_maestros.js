@@ -1182,7 +1182,7 @@
     'Los juegos de tornillo que lleva cada pieza que se atornilla: una brida de placa lleva la mitad de sus barrenos (la otra mitad la pone la brida con que se une).',
     'Número entero de juegos (tornillo, tuerca y rondanas). Confírmelo con el plano de la pieza.',
     'Suma esos juegos, con la reserva de las bridas, al costo de cada partida que compra el artículo y a la tornillería de la lista de compras.',
-    { nom: ARTICULOS, afecta: ['mat'], tip: [0, 16], ej: 'Brida de placa de 5″ con 4 barrenos: 2 juegos por brida.' });
+    { nom: ARTICULOS, afecta: ['mat'], tip: [0, 16], ej: 'Brida de placa de 5″ con 6 barrenos (los de los planos de pedido): 3 juegos por brida.' });
   E('compras.articulos.*.circulo_barrenos_mm', 'Círculo de barrenos · {0}',
     'El diámetro en que van los barrenos de una pieza que se atornilla como brida (una brida de placa): sobre él va el cordón de Sikaflex de su junta.',
     'Tómelo del plano de la pieza, en mm. 0 o vacío: la pieza no lleva junta.',
@@ -1198,6 +1198,11 @@
     'En mm. 0 o vacío si el artículo no es una brida.',
     'No cambia ningún costo: sólo se usa para dibujarla en el plano de pedido.',
     { nom: ARTICULOS, afecta: ['info'], tip: [0, 1500], ej: 'Brida de placa de 5″: 130 mm.' });
+  E('compras.articulos.*.ducto_D_mm', 'Para ducto de · {0}',
+    'Si el artículo es una brida: el diámetro nominal del ducto en que va.',
+    'En mm, el mismo diámetro con que se capturan las piezas (5″ = 127 mm). 0 o vacío si el artículo no es una brida.',
+    'No cambia ningún costo: con él la pestaña Planos cuenta estas bridas en el cuadre de bridas, contra las que piden las piezas de ese diámetro.',
+    { nom: ARTICULOS, afecta: ['info'], tip: [0, 1500], ej: 'Brida de placa de 5″: 127 mm.' });
   E('compras.articulos.*.categoria', 'Categoría en el control de gastos · {0}',
     'En qué renglón del control de gastos cae lo que se cotizó de este artículo, para compararlo con lo que de verdad se gastó.',
     'Elija la misma categoría con la que va a capturar el gasto real del artículo (el ticket o la factura).',

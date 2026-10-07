@@ -119,6 +119,7 @@
       circulo_barrenos_mm: dim('Diámetro del círculo de barrenos', { cero: true }),
     }),
     BRIDA: (p) => ({ ...medidas(p) }),
+    UNION: () => ({ D_mm: dim('Diámetro de la unión'), n_uniones: entero('Uniones por pieza', 1, 50) }),
     INSTALACION: () => ({
       personas: entero('Personas en la cuadrilla', 1, 100),
       dias: real('Días en obra', 0.1, 1000, 'días'),
@@ -151,7 +152,7 @@
   };
 
   /** Campos sí/no de una partida que se fabrica. */
-  const BOOLEANOS = { usa_empaque: 'Empaque' };
+  const BOOLEANOS = { usa_empaque: 'Empaque', bridas_aparte: 'Bridas de otra partida' };
 
   /** Campos que valen para toda partida que se fabrica (todas menos COMPRADO). */
   const CAMPOS_FABRICADA = {
@@ -205,15 +206,28 @@
         ['proceso_corte', claves(sub(sub(M.proceso, 'corte'), 'v_m_min')), 'Proceso de corte'],
         ['perfil_id', claves(sub(M.herrajes, 'perfiles')), 'Perfil de aros']);
       if (fam === 'RECTO' || fam === 'CODO' || fam === 'BRIDA') lista.push(['forma', ['REDONDA', 'RECTANGULAR'], 'Sección']);
-      if (fam === 'RECTO') lista.push(['tipo_costura', claves(sub(M.proceso, 'costuras')), 'Tipo de costura'], ['extremo_ajuste', GEO.EXTREMOS_AJUSTE, 'Extremo del tramo de ajuste']);
+      if (fam === 'RECTO') lista.push(['tipo_costura', claves(sub(M.proceso, 'costuras')), 'Tipo de costura'], ['extremo_ajuste', GEO.EXTREMOS_AJUSTE, 'Extremo final del tramo']);
       if (fam === 'REDUCCION') lista.push(['excentrica', ['NO', 'CARA_PLANA'], 'Tipo de reducción']);
     }
     lista.push(['riesgo', claves(sub(M.capas, 'imprevistos_pct')), 'Clase de riesgo']);
     return lista;
   }
 
-  /** omitir_operaciones y subcontratos: listas de lo esperado, copiadas. */
+  /** omitir_operaciones, subcontratos y extremos sin brida: listas de lo esperado, copiadas. */
   function revisarListas(p, errores) {
+    if (vacio(p.extremos_sin_brida) || (Array.isArray(p.extremos_sin_brida) && !p.extremos_sin_brida.length)) delete p.extremos_sin_brida;
+    else {
+      const ids = GEO.EXTREMOS_FAMILIA[p.familia];
+      if (!ids) errores.push(`Extremos sin brida: no aplica a esta familia (sólo a codos, reducciones, transiciones e injertos; en el tramo recto, el extremo final).`);
+      else if (!Array.isArray(p.extremos_sin_brida)) errores.push('Extremos sin brida: debe ser una lista de extremos.');
+      else {
+        p.extremos_sin_brida.forEach((x) => {
+          if (typeof x !== 'string' || !ids.includes(x)) errores.push(`Extremos sin brida: «${texto(x)}» no es un extremo de la pieza (use ${ids.join(', ')}).`);
+        });
+        p.extremos_sin_brida = ids.filter((id) => p.extremos_sin_brida.includes(id));
+      }
+    }
+
     if (vacio(p.omitir_operaciones)) delete p.omitir_operaciones;
     else if (!Array.isArray(p.omitir_operaciones)) errores.push('Operaciones omitidas: debe ser una lista de operaciones.');
     else if (p.omitir_operaciones.length > 50) errores.push('Operaciones omitidas: demasiados elementos.');
@@ -243,12 +257,17 @@
 
   /**
    * Una partida guardada por una versión anterior, con los campos de hoy: el extremo del tramo de ajuste se guardaba como
-   * sí/no (`ajuste_sin_brida`): sí = SIN_BRIDA, no = CON_BRIDA (lo que no es sí/no se descarta). No muta la partida recibida.
+   * sí/no (`ajuste_sin_brida`): sí = SIN_BRIDA, no = CON_BRIDA (lo que no es sí/no se descarta). Ese sí/no era sólo del tramo
+   * de ajuste: `extremo_solo_ajuste` lo recuerda, para que un tramo sin ajuste siga con brida en ambos extremos. No muta la
+   * partida recibida.
    */
   function migrarPartida(p) {
     if (!tiene(p, 'ajuste_sin_brida')) return p;
     const q = { ...p };
-    if (typeof q.ajuste_sin_brida === 'boolean' && vacio(q.extremo_ajuste)) q.extremo_ajuste = q.ajuste_sin_brida ? 'SIN_BRIDA' : 'CON_BRIDA';
+    if (typeof q.ajuste_sin_brida === 'boolean' && vacio(q.extremo_ajuste)) {
+      q.extremo_ajuste = q.ajuste_sin_brida ? 'SIN_BRIDA' : 'CON_BRIDA';
+      q.extremo_solo_ajuste = true;
+    }
     delete q.ajuste_sin_brida;
     return q;
   }
@@ -503,8 +522,8 @@
           else if (a.tornillos_pieza !== undefined && !(Number.isInteger(a.tornillos_pieza) && a.tornillos_pieza >= 0 && a.tornillos_pieza <= 1000)) {
             agregar(['compras', 'articulos', id, 'tornillos_pieza'], `debe ser un número entero de juegos, de 0 a 1 000 (vale ${texto(a.tornillos_pieza)})`);
           }
-          else if (['circulo_barrenos_mm', 'diam_ext_mm', 'diam_int_mm'].some((k) => a[k] !== undefined && !(typeof a[k] === 'number' && a[k] >= 0 && a[k] <= 5000))) {
-            const k = ['circulo_barrenos_mm', 'diam_ext_mm', 'diam_int_mm'].find((c) => a[c] !== undefined && !(typeof a[c] === 'number' && a[c] >= 0 && a[c] <= 5000));
+          else if (['circulo_barrenos_mm', 'diam_ext_mm', 'diam_int_mm', 'ducto_D_mm'].some((k) => a[k] !== undefined && !(typeof a[k] === 'number' && a[k] >= 0 && a[k] <= 5000))) {
+            const k = ['circulo_barrenos_mm', 'diam_ext_mm', 'diam_int_mm', 'ducto_D_mm'].find((c) => a[c] !== undefined && !(typeof a[c] === 'number' && a[c] >= 0 && a[c] <= 5000));
             agregar(['compras', 'articulos', id, k], `debe ser un diámetro de 0 a 5 000 mm (vale ${texto(a[k])})`);
           }
           else if (a.categoria !== undefined && !tiene(GAS.CATEGORIAS, a.categoria)) {

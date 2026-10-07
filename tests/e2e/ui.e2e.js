@@ -84,7 +84,7 @@ const ok = (cond, msg) => {
 
   console.log('3) Alta de cada familia con sus valores por defecto');
   await page.click('#btn-nueva');
-  for (const fam of ['Tramo recto', 'Codo', 'Reducción', 'Transición', 'Injerto simple', 'Reducción con injerto', 'Personalizada', 'Comprado']) {
+  for (const fam of ['Tramo recto', 'Codo', 'Reducción', 'Transición', 'Injerto simple', 'Reducción con injerto', 'Armado de piezas', 'Personalizada', 'Comprado']) {
     await page.click('#btn-agregar');
     await page.waitForSelector('#dlg-partida[open]');
     await page.click(`.fam:has(span:text-is("${fam}"))`);
@@ -93,7 +93,7 @@ const ok = (cond, msg) => {
     await page.click('#dlg-guardar');
     await page.waitForTimeout(80);
   }
-  ok(await page.locator('#lista-partidas .partida').count() === 8, 'las 8 familias quedaron en la lista');
+  ok(await page.locator('#lista-partidas .partida').count() === 9, 'las 9 familias quedaron en la lista');
 
   console.log('4) Validación: un injerto demasiado corto no se puede guardar');
   await page.click('#btn-agregar');
@@ -107,11 +107,11 @@ const ok = (cond, msg) => {
 
   console.log('5) Duplicar, eliminar y deshacer');
   await page.locator('#lista-partidas .partida').first().locator('button[aria-label="Duplicar"]').click();
-  ok(await page.locator('#lista-partidas .partida').count() === 9, 'duplicar suma una partida');
+  ok(await page.locator('#lista-partidas .partida').count() === 10, 'duplicar suma una partida');
   await page.locator('#lista-partidas .partida').nth(2).locator('button[aria-label="Eliminar"]').click();
-  ok(await page.locator('#lista-partidas .partida').count() === 8, 'eliminar resta una partida');
+  ok(await page.locator('#lista-partidas .partida').count() === 9, 'eliminar resta una partida');
   await page.click('.toast button:has-text("Deshacer")');
-  ok(await page.locator('#lista-partidas .partida').count() === 9, 'deshacer la recupera');
+  ok(await page.locator('#lista-partidas .partida').count() === 10, 'deshacer la recupera');
 
   console.log('6) Subcontratos y operaciones omitidas');
   const antes = await estadoApp(page, () => window.COTIZAP.web.estadoApp.res.partidas[0].precio.unitario);
@@ -978,7 +978,7 @@ const ok = (cond, msg) => {
     // la partida: «Según la cotización», o su propio ancho
     await editar(p, 0);
     ok((await p.locator('#f_yarda_mm option').allInnerTexts()).join('|') === 'Según la cotización · 914 mm · 3 ft|914 mm · 3 ft|1,220 mm · 4 ft', 'la partida ofrece «Según la cotización · 914 mm · 3 ft» y los dos anchos');
-    ok((await p.locator('#f_extremo_ajuste option').allInnerTexts()).join('|') === 'Predeterminado · Brida suelta (aro terminado, tornillos y junta)|Brida suelta (aro terminado, tornillos y junta)|Sin brida (fuera de este precio)|Brida de taller en ambos extremos', 'y el extremo del ajuste: lo predeterminado (brida suelta), brida suelta, sin brida o brida de taller');
+    ok((await p.locator('#f_extremo_ajuste option').allInnerTexts()).join('|') === 'Predeterminado · con ajuste, brida suelta; sin ajuste, bridas en ambos extremos|Brida suelta (aro terminado, tornillos y junta)|Sin brida (brida en un solo extremo)|Brida de taller (bridas en ambos extremos)', 'y el extremo final: lo predeterminado (con ajuste, brida suelta; sin ajuste, de taller), brida suelta, sin brida o brida de taller');
     ok(await p.locator('#f_ajuste_sin_brida').count() === 0 && await p.locator('#f_L_max_pieza_mm').count() === 0, 'ya no están «Tramo de ajuste» (sí/no) ni «Longitud máx. por pieza»');
     ok(/3 yardas y ajuste de 258 mm/.test(await p.locator('#dlg-prev').innerText()), 'la vista previa usa el ancho de la cotización: «3 yardas y ajuste de 258 mm»');
     await p.selectOption('#f_yarda_mm', '1220');
@@ -1044,7 +1044,7 @@ const ok = (cond, msg) => {
     ok(guardada.extremo_ajuste === 'CON_BRIDA' && guardada.ajuste_sin_brida === undefined, 'el «no» de la versión anterior (ajuste_sin_brida: false) pasa a «Brida de taller en ambos extremos»');
     ok((await det()).geometria.n_piezas === 2 && (await det()).qto.her.n_aros === 4 && (await det()).qto.her.aros_sueltos.length === 0, 'y se calcula con brida de taller en ambos extremos: 2 piezas (3 yardas y el ajuste), 4 bridas y ningún aro suelto');
     await editar(p, 0);
-    ok((await p.locator('#f_extremo_ajuste option:checked').innerText()).trim() === 'Brida de taller en ambos extremos', 'el formulario lo muestra así');
+    ok((await p.locator('#f_extremo_ajuste option:checked').innerText()).trim() === 'Brida de taller (bridas en ambos extremos)', 'el formulario lo muestra así');
     ok(await p.locator('#f_L_max_pieza_mm').count() === 0, 'y la «longitud máxima por pieza» de una cotización anterior se ignora (ya no existe)');
     await p.click('#dlg-cancelar');
     await cargar((b) => { b.cotizacion.yarda_mm = 5000; b.cotizacion.partidas[0] = { ...b.cotizacion.partidas[0], extremo_ajuste: undefined, ajuste_sin_brida: true }; });
@@ -1052,7 +1052,7 @@ const ok = (cond, msg) => {
     ok((await cotP()).extremo_ajuste === 'SIN_BRIDA', 'y el «sí» de la versión anterior pasa a «Sin brida»');
     await cargar((b) => { b.cotizacion.yarda_mm = 'abc'; delete b.cotizacion.partidas[0].ajuste_sin_brida; b.cotizacion.partidas[0].extremo_ajuste = 'NINGUNO'; });
     ok(await p.locator('#c_yarda_mm').inputValue() === '', 'un ancho que no es número se descarta');
-    ok(/Extremo del tramo de ajuste: «NINGUNO» no existe/.test((await det()).errores.join(' ')), 'y un extremo de ajuste que no existe se señala en la partida');
+    ok(/Extremo final del tramo: «NINGUNO» no existe/.test((await det()).errores.join(' ')), 'y un extremo de ajuste que no existe se señala en la partida');
     await cargar((b) => { delete b.cotizacion.partidas[0].extremo_ajuste; b.cotizacion.partidas[0].yarda_mm = 1000; b.cotizacion.partidas[0].L_mm = 3000; b.cotizacion.yarda_mm = 914; });
     ok((await det()).geometria.detalle.yarda_mm === 1000, 'la yarda de 1 000 mm de la partida manda sobre la de 914 mm de la cotización');
     await editar(p, 0);
@@ -1065,7 +1065,7 @@ const ok = (cond, msg) => {
     ok(await p.locator('input#m_proceso__armado_yardas__yarda_defecto_mm').inputValue() === '1220' && await p.locator('input#m_proceso__armado_yardas__yardas_por_pieza_max').inputValue() === '3'
       && await p.locator('input#m_proceso__armado_yardas__ajuste_tolerancia_mm').inputValue() === '25', 'las tablas traen el armado: yarda 1 220 mm, 3 yardas por pieza y tolerancia 25 mm');
     const ea = p.locator('select#m_proceso__armado_yardas__extremo_ajuste_defecto');
-    ok(await ea.inputValue() === 'SUELTA' && (await ea.locator('option').allInnerTexts()).join('|') === 'Brida suelta (aro terminado, tornillos y junta)|Sin brida (fuera de este precio)|Brida de taller en ambos extremos', 'el extremo del ajuste por omisión se elige de una lista: brida suelta (la de arranque), sin brida o brida de taller');
+    ok(await ea.inputValue() === 'SUELTA' && (await ea.locator('option').allInnerTexts()).join('|') === 'Brida suelta (aro terminado, tornillos y junta)|Sin brida (brida en un solo extremo)|Brida de taller (bridas en ambos extremos)', 'el extremo del ajuste por omisión se elige de una lista: brida suelta (la de arranque), sin brida o brida de taller');
     const jy = p.locator('select#m_proceso__armado_yardas__junta_entre_yardas');
     ok(await jy.inputValue() === 'PITTSBURGH' && (await jy.locator('option').allInnerTexts()).join('|') === 'Soldada a tope|Soldada a traslape|Engargolado Pittsburgh', 'y la junta entre yardas, de la lista de costuras: engargolado Pittsburgh');
     const lista = await p.locator('input[id^="m_proceso__armado_yardas__yardas_mm"]').evaluateAll((es) => es.map((e) => e.value));
@@ -1806,16 +1806,33 @@ const ok = (cond, msg) => {
     // e) el pedido del 30-sep-2026: bridas, codos y reducciones con injerto, como las hojas del taller
     await p.click('#planos-ejemplo');
     await p.waitForTimeout(200);
+    const tarjeta = (m) => p.locator(`.pieza-plano:has(.pieza-marca:text-is("${m}"))`).evaluate((e) => e.textContent);
     const ped = await R(() => { const E = window.COTIZAP.web.estadoApp; return { n: E.cot.partidas.length, err: E.res.totales.n_partidas_error }; });
-    ok(ped.n === 18 && ped.err === 0, 'el pedido de ejemplo trae sus 18 partidas y todas se calculan');
+    ok(ped.n === 36 && ped.err === 0, 'el pedido de ejemplo trae sus 36 partidas (bridas, codos, reducciones con injerto, yardas y armados) y todas se calculan');
     const cabs = await texto('.hoja-cab h3');
-    ok(cabs.length === 3 && cabs[0] === 'Bridas' && /^Codos.*Acero galvanizado · cal\. 24$/.test(cabs[1]) && /^Reducciones con injerto e injertos.*cal\. 24$/.test(cabs[2]), 'tres hojas: bridas, codos y reducciones con injerto (galvanizado cal. 24)');
+    ok(cabs.length === 8 && cabs[0] === 'Bridas' && /^Codos.*Acero galvanizado · cal\. 24$/.test(cabs[1]) && /^Reducciones con injerto e injertos.*cal\. 24$/.test(cabs[2])
+      && ['11″', '10″', '6″', '5″'].every((x, i) => cabs[3 + i].startsWith(`Ductos de ${x}`)) && cabs[7] === 'Armado de piezas',
+    'ocho hojas, como los planos: bridas, codos, reducciones con injerto, ductos de 11″, 10″, 6″ y 5″ y el armado de piezas');
     const marcas = await texto('.pieza-marca');
-    ok(marcas.join(' ') === 'B1 B2 B3 B4 B5 B6 C1 C2 C3 C4 C5 I1 I2 I3 I4 I5 I6 I7', 'cada pieza lleva su marca (B1…B6, C1…C5, I1…I7)');
+    const serie = (l, n) => Array.from({ length: n }, (_, i) => `${l}${i + 1}`).join(' ');
+    ok(marcas.join(' ') === [serie('B', 6), serie('C', 5), serie('I', 8), serie('D', 11), serie('A', 6)].join(' '), 'cada pieza lleva su marca (B1…B6, C1…C5, I1…I8, D1…D11, A1…A6)');
+    ok(/18 yardas y 1 tramo de ajuste/.test(await p.locator('.hoja[data-grupo="RECTOS"]').first().innerText()), 'la hoja de ductos de 11″ cuenta sus 18 yardas y el tramo de ajuste');
+    const d1 = await tarjeta('D1');
+    const d3 = await tarjeta('D3');
+    ok(/4 piezas/.test(d1) && /3 yardas unidas/.test(d1) && /Bridas en ambos extremos/.test(d1) && (d1.match(/914/g) || []).length >= 3 && /2,742/.test(d1) && /Brida en un extremo/.test(d3) && /1,828/.test(d3),
+      'los ductos dicen sus yardas y sus bridas como los planos (3 yardas unidas, bridas en ambos extremos; 2 yardas unidas, brida en un extremo), con cada yarda acotada');
+    ok(await p.locator('.pieza-plano:has(.pieza-marca:text-is("D1")) svg .pl-brida').count() === 2 && await p.locator('.pieza-plano:has(.pieza-marca:text-is("D3")) svg .pl-brida').count() === 1
+      && await p.locator('.pieza-plano:has(.pieza-marca:text-is("D2")) svg .pl-brida-suelta').count() === 1, 'las bridas se dibujan donde van (la suelta del ajuste, punteada)');
+    ok(await p.locator('.pieza-plano:has(.pieza-marca:text-is("A1")) .pieza-tit').evaluate((e) => e.textContent) === 'Unir injerto de 11″ con codo de 60° para obtener 90°', 'el armado de piezas se llama como en el plano de armado');
+    ok(!/Bridas de otra partida/.test(await p.locator('#planos-hojas .hoja').allInnerTexts().then((x) => x.join(' '))), 'en las hojas no va el dato interno de las bridas de otra partida');
+    // el cuadre de bridas: 11″, 10″, 9″ y 7″ cuadran con la hoja de bridas; falta 1 de 6″ y sobran 3 de 5″
+    const cuadre = await p.locator('.cuadre').innerText();
+    const filasCuadre = await p.locator('.cuadre tbody tr').evaluateAll((trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent.trim()).join('|')));
+    ok(filasCuadre.join(' / ') === 'Ø11″|22|22|Cuadran / Ø10″|6|6|Cuadran / Ø9″|2|2|Cuadran / Ø7″|4|4|Cuadran / Ø6″|3|2|Faltan 1 / Ø5″|21|24|Sobran 3' && /Faltan 1 de Ø6″ y sobran 3 de Ø5″/.test(cuadre),
+      'el cuadre de bridas: cuadran 11″, 10″, 9″ y 7″; falta 1 de 6″ y sobran 3 de 5″');
     const tits = await texto('.pieza-tit');
     ok(['Brida de 11″', 'Brida de 9″', 'Codo 60° Ø11″ · 3 gajos', 'Ducto de 11″ con injerto de 11″ a 30°', 'Reducción de 11″ a 10″ con injerto de 5″ a 30°', 'Reducción de 10″ a 6″ con injerto de 7″ a 30°'].every((t) => tits.includes(t)),
       'los títulos son los de los planos («Reducción de 11″ a 10″ con injerto de 5″ a 30°», «Codo 60° Ø11″ · 3 gajos»…)');
-    const tarjeta = (m) => p.locator(`.pieza-plano:has(.pieza-marca:text-is("${m}"))`).evaluate((e) => e.textContent);
     const b1 = await tarjeta('B1');
     const b3 = await tarjeta('B3');
     const b6 = await tarjeta('B6');
@@ -1823,7 +1840,7 @@ const ok = (cond, msg) => {
       'las bridas dicen cuántas son, sus diámetros y sus barrenos (8 en la de 11″, 6 en la de 9″ y en las de placa)');
     const c1 = await tarjeta('C1');
     ok(/2 piezas/.test(c1) && /191/.test(c1) && /254/.test(c1) && /5 gajos/.test(c1), 'el codo de 5″ trae las cotas del plano (R = 191 y 254 mm, 5 gajos)');
-    ok(await p.locator('.hoja-num').first().innerText() === 'Hoja 1 de 3', 'cada hoja lleva su número en el cajetín');
+    ok(await p.locator('.hoja-num').first().innerText() === 'Hoja 1 de 8', 'cada hoja lleva su número en el cajetín');
     await p.click('.toast:has-text("pedido de ductería") button:has-text("Deshacer")');
     await p.waitForTimeout(150);
     ok(await R(() => window.COTIZAP.web.estadoApp.cot.partidas.length) === 9 && await p.locator('.hoja').count() === 6, 'Deshacer regresa la cotización anterior y sus hojas');
@@ -1846,7 +1863,7 @@ const ok = (cond, msg) => {
     await p.emulateMedia({ media: 'print' });
     const vis = (sel) => p.evaluate((s) => getComputedStyle(document.querySelector(s)).display !== 'none', sel);
     await p.evaluate(() => document.body.classList.add('imprimir-planos'));
-    ok(await vis('#panel-planos') && await vis('.hoja') && !(await vis('#propuesta')) && !(await vis('.barra')) && !(await vis('.planos-cab')) && !(await vis('.pieza-ir')), 'al imprimir los planos sólo salen las hojas (sin la propuesta, la barra ni los botones)');
+    ok(await vis('#panel-planos') && await vis('.hoja') && !(await vis('#propuesta')) && !(await vis('.barra')) && !(await vis('.planos-cab')) && !(await vis('.pieza-ir')) && !(await vis('.cuadre')), 'al imprimir los planos sólo salen las hojas (sin la propuesta, la barra, los botones ni el cuadre de bridas)');
     await p.evaluate(() => document.body.classList.remove('imprimir-planos'));
     ok(await vis('#propuesta') && !(await vis('main')), 'al imprimir la propuesta sólo sale la propuesta');
     await p.emulateMedia({ media: 'screen' });
@@ -1858,7 +1875,17 @@ const ok = (cond, msg) => {
     await p.click('#tab-cotizacion');
     await p.click('#lista-partidas button:has-text("Ver un pedido de ejemplo")');
     await p.waitForTimeout(150);
-    ok(await R(() => window.COTIZAP.web.estadoApp.cot.partidas.length) === 18, 'la lista vacía ofrece abrir el pedido de ejemplo');
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.partidas.length) === 36, 'la lista vacía ofrece abrir el pedido de ejemplo');
+    // el codo de 5″ del pedido: su otro extremo se une al tramo (sin brida) y sus bridas son de otra partida
+    await editar(p, 0);
+    ok(await p.locator('#f_extremos_sin_brida input[value="B"]').isChecked() && !(await p.locator('#f_extremos_sin_brida input[value="A"]').isChecked()) && await p.inputValue('#f_bridas_aparte') === 'true',
+      'el formulario muestra el extremo sin brida (casilla) y las bridas de otra partida');
+    const conUno = await R(() => window.COTIZAP.web.estadoApp.res.partidas[0].precio.unitario);
+    await p.locator('#f_extremos_sin_brida input[value="B"]').uncheck();
+    await p.click('#dlg-guardar');
+    await p.waitForTimeout(120);
+    const sinMarca = await R(() => ({ p: window.COTIZAP.web.estadoApp.cot.partidas[0], u: window.COTIZAP.web.estadoApp.res.partidas[0].precio.unitario, b: window.COTIZAP.web.estadoApp.res.bridas.filas.find((x) => Math.round(x.D_nom_mm) === 127) }));
+    ok(sinMarca.p.extremos_sin_brida === undefined && sinMarca.u > conUno && sinMarca.b.piden === 23, 'quitar la casilla le devuelve su brida: cuesta unirla y el cuadre pide 2 bridas de 5″ más');
     await p.context().close();
 
     // i) en el celular las hojas caben sin desplazamiento horizontal
@@ -1866,7 +1893,7 @@ const ok = (cond, msg) => {
     await m.evaluate(() => window.COTIZAP.web.abrirCotizacion(window.COTIZAP.ejemplos.pedidoDucteria()));
     await m.click('#tab-planos');
     await m.waitForTimeout(150);
-    ok(await m.locator('.pieza-plano').count() === 18 && await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'Planos en el celular: las 18 piezas sin desplazamiento horizontal');
+    ok(await m.locator('.pieza-plano').count() === 36 && await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'Planos en el celular: las 36 piezas y el cuadre sin desplazamiento horizontal');
     await m.context().close();
   }
 

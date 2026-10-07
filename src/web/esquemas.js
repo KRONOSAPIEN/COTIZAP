@@ -22,6 +22,7 @@
     ['RAMAL', 'Injerto simple'],
     ['REDUCCION_INJERTO', 'Reducción con injerto'],
     ['BRIDA', 'Bridas sueltas'],
+    ['UNION', 'Armado de piezas'],
     ['PERSONALIZADO', 'Personalizada'],
     ['SOPORTE', 'Soportería'],
     ['COMPRADO', 'Comprado'],
@@ -36,10 +37,18 @@
   };
   /** Título del cuadro principal de cada familia. */
   W.TITULO_CAMPOS = {
-    COMPRADO: 'Artículo comprado', BRIDA: 'Ducto en que van las bridas', SOPORTE: 'Pieza de soportería', INSTALACION: 'Cuadrilla en obra',
+    COMPRADO: 'Artículo comprado', BRIDA: 'Ducto en que van las bridas', UNION: 'Unión entre dos piezas', SOPORTE: 'Pieza de soportería', INSTALACION: 'Cuadrilla en obra',
   };
   /** Cómo se llama la cantidad de cada familia. */
-  W.ETIQUETA_CANTIDAD = { BRIDA: 'Bridas (aros)', SOPORTE: 'Piezas', INSTALACION: 'Veces (visitas iguales)' };
+  W.ETIQUETA_CANTIDAD = { BRIDA: 'Bridas (aros)', UNION: 'Piezas armadas', SOPORTE: 'Piezas', INSTALACION: 'Veces (visitas iguales)' };
+  /** Los extremos de cada pieza que pueden ir sin brida, como se le dicen en el taller (los nombres son los del motor). */
+  W.EXTREMOS = {
+    CODO: [['A', 'Un extremo'], ['B', 'El otro extremo']],
+    REDUCCION: [['D1', 'El extremo mayor (D1)'], ['D2', 'El extremo menor (D2)']],
+    TRANSICION: [['redondo', 'El extremo redondo'], ['rectangular', 'El extremo rectangular']],
+    RAMAL: [['tronco_1', 'Un extremo del tronco'], ['tronco_2', 'El otro extremo del tronco'], ['injerto', 'El injerto']],
+    REDUCCION_INJERTO: [['D1', 'El extremo mayor (D1)'], ['D2', 'El extremo menor (D2)'], ['injerto', 'El injerto']],
+  };
   /** Familias que ya no se ofrecen para partidas nuevas, pero que se siguen calculando para abrir cotizaciones anteriores. */
   W.FAMILIAS_RETIRADAS = [['PANTALON', 'Pantalón (retirado)']];
 
@@ -58,7 +67,8 @@
     tipo_costura: [['A_TOPE', 'Soldada a tope'], ['TRASLAPE', 'Soldada a traslape'], ['PITTSBURGH', 'Engargolado Pittsburgh']],
     excentrica: [['NO', 'Concéntrica'], ['CARA_PLANA', 'Excéntrica · cara plana']],
     // Extremo libre del tramo de ajuste (el de las tablas maestras se ofrece aparte, como «Predeterminado»)
-    ajuste: [['SUELTA', 'Brida suelta (aro terminado, tornillos y junta)'], ['SIN_BRIDA', 'Sin brida (fuera de este precio)'], ['CON_BRIDA', 'Brida de taller en ambos extremos']],
+    ajuste: [['SUELTA', 'Brida suelta (aro terminado, tornillos y junta)'], ['SIN_BRIDA', 'Sin brida (brida en un solo extremo)'], ['CON_BRIDA', 'Brida de taller (bridas en ambos extremos)']],
+    bridas_aparte: [['', 'Se hacen en esta partida (aros, tornillos y junta)'], ['true', 'Son de otra partida (Bridas sueltas o compradas): aquí sólo se unen al ducto']],
     driver: [['PIEZA', 'Por pieza'], ['KG_NETO', 'Por kg neto'], ['KG_BRUTO', 'Por kg bruto'], ['M2_NETO', 'Por m² de lámina'], ['M_CORTE', 'Por m de corte'], ['M_SOLDADURA', 'Por m de soldadura']],
     iva_compra: [['', 'Automático: el del catálogo (un precio capturado, antes de IVA)'], ['true', 'Sí: el precio trae IVA (se le quita)'], ['false', 'No: el precio es antes de IVA']],
     factura: [['true', 'Con factura'], ['false', 'Sin factura']],
@@ -85,8 +95,8 @@
         ayuda: 'La yarda es un anillo rolado del ancho de la lámina; se engargolan hasta 3 por pieza',
       },
       {
-        id: 'extremo_ajuste', grupo: 'armado', etiqueta: 'Extremo del tramo de ajuste', tipo: 'select', opciones: 'ajuste',
-        ayuda: 'Lo que sobra de yardas completas es el tramo de ajuste (menos de una yarda): su extremo libre no lleva brida de taller, para cortarlo y ponerlo en campo',
+        id: 'extremo_ajuste', grupo: 'armado', etiqueta: 'Extremo final del tramo', tipo: 'select', opciones: 'ajuste',
+        ayuda: 'Con tramo de ajuste (lo que sobra de yardas completas) es su extremo libre, para cortarlo y ponerlo en campo; sin ajuste lleva brida de taller salvo que pida otra cosa. «Sin brida» es la «brida en un extremo» de los planos: el otro va liso, para unirlo a otra pieza o a una manguera',
       },
     ],
     CODO: [
@@ -167,6 +177,10 @@
       { id: 'a_mm', etiqueta: 'Ancho a del ducto', tipo: 'dim', visible: rect, defecto: 500 },
       { id: 'b_mm', etiqueta: 'Alto b del ducto', tipo: 'dim', visible: rect, defecto: 300 },
     ],
+    UNION: [ // la unión soldada entre dos piezas de otras partidas: «unir injerto de 11″ con codo de 60° para obtener 90°»
+      { id: 'D_mm', etiqueta: 'Diámetro de la unión', tipo: 'dim', defecto: 279.4, ayuda: 'El de las bocas que se unen. Las piezas van en sus partidas, sin brida en esos extremos' },
+      { id: 'n_uniones', etiqueta: 'Uniones por pieza', tipo: 'int', opcional: true, min: 1, paso: 1, ayuda: 'Vacío = 1. Un codo, un injerto y una yarda armados en una pieza son 2 uniones' },
+    ],
     SOPORTE: [ // ménsulas, abrazaderas y postes cortados de una barra de la lista del proveedor
       { id: 'barra_id', etiqueta: 'Barra de la que se cortan', tipo: 'select', opciones: 'barras', defecto: 'ANG_1_1_4X1_8' },
       {
@@ -206,6 +220,7 @@
 
   // Familias de lámina que forman un ducto (la de bridas sueltas sólo hace los aros: siempre bridada, sin lámina que cortar)
   const DUCTOS = ['RECTO', 'CODO', 'REDUCCION', 'TRANSICION', 'RAMAL', 'REDUCCION_INJERTO', 'PANTALON', 'PERSONALIZADO'];
+  const CON_EXTREMOS = ['CODO', 'REDUCCION', 'TRANSICION', 'RAMAL', 'REDUCCION_INJERTO'];
 
   /** Campos de material y proceso (sólo las familias de lámina; `familias` = las únicas en que aparece el campo). */
   W.CAMPOS_MATERIAL = [
@@ -214,7 +229,15 @@
     { id: 'espesor_mm', etiqueta: 'Espesor', tipo: 'num', unidad: 'mm', min: 0.2, paso: 0.01, visible: (v) => v.calibre === 'PROPIO' },
     { id: 'ref_diametro', etiqueta: 'Dimensión nominal', tipo: 'select', opciones: 'ref_diametro', defecto: 'INTERIOR', familias: [...DUCTOS, 'BRIDA'] },
     { id: 'tipo_union', etiqueta: 'Unión', tipo: 'select', opciones: 'tipo_union', defecto: 'BRIDADO', familias: DUCTOS },
-    { id: 'clase_sellado', etiqueta: 'Sellado', tipo: 'select', opciones: 'clase_sellado', defecto: 'C' },
+    {
+      id: 'bridas_aparte', etiqueta: 'Las bridas', tipo: 'select', opciones: 'bridas_aparte', booleano: true, defecto: '', familias: DUCTOS, visible: (v) => (v.tipo_union || 'BRIDADO') === 'BRIDADO',
+      ayuda: 'Si los aros los hace el taller en una partida de Bridas sueltas (o son bridas de placa compradas), aquí sólo se cotiza armarlos y soldarlos al ducto; la pestaña Planos cuadra cuántas se necesitan',
+    },
+    {
+      id: 'extremos_sin_brida', etiqueta: 'Extremos sin brida', tipo: 'marcas', opciones: 'extremos', familias: CON_EXTREMOS, visible: (v) => v.tipo_union !== 'LISO',
+      ayuda: 'Los que se unen a otra pieza (armado de piezas) o a una manguera: no llevan brida',
+    },
+    { id: 'clase_sellado', etiqueta: 'Sellado', tipo: 'select', opciones: 'clase_sellado', defecto: 'C', familias: [...DUCTOS, 'BRIDA'] },
     { id: 'ubicacion', etiqueta: 'Instalación', tipo: 'select', opciones: 'ubicacion', defecto: '' },
     {
       id: 'pintura', etiqueta: 'Pintura', tipo: 'select', opciones: 'pintura', defecto: '',
@@ -228,7 +251,7 @@
   W.CAMPOS_AVANZADOS = [
     { id: 'caras_pintadas', etiqueta: 'Caras pintadas', tipo: 'select', opciones: 'caras_pintadas', defecto: '1', familias: DUCTOS },
     { id: 'proceso_corte', etiqueta: 'Proceso de corte', tipo: 'select', opciones: 'proceso_corte', defecto: '', familias: DUCTOS },
-    { id: 'perfil_id', etiqueta: 'Perfil de aros', tipo: 'select', opciones: 'perfiles', defecto: '' },
+    { id: 'perfil_id', etiqueta: 'Perfil de aros', tipo: 'select', opciones: 'perfiles', defecto: '', familias: [...DUCTOS, 'BRIDA'] },
     { id: 'merma_pct', etiqueta: 'Merma (sustituye a la de maestros)', tipo: 'pct', opcional: true, unidad: '%', min: 0, max: 60, paso: 0.5, familias: DUCTOS },
     { id: 'n_espigas', etiqueta: 'Extremos con espiga', tipo: 'int', opcional: true, min: 0, ayuda: 'Vacío = por familia', visible: (v) => v.tipo_union === 'ESPIGA' },
     { id: 'L_penetraciones_m', etiqueta: 'Penetraciones a sellar', tipo: 'num', unidad: 'm', opcional: true, min: 0, paso: 0.1, visible: (v) => v.clase_sellado === 'A' },
@@ -240,6 +263,7 @@
     if (W.esDeLamina(familia)) {
       Object.assign(p, { material_id: 'ACERO_CARBON', calibre: '16', ref_diametro: 'INTERIOR', tipo_union: 'BRIDADO', clase_sellado: 'C' });
     }
+    if (familia === 'UNION') p.tipo_union = 'LISO'; // la unión no lleva bridas: las piezas que une están en sus partidas
     W.CAMPOS[familia].forEach((c) => { if (c.defecto !== undefined) p[c.id] = c.defecto; });
     return p;
   };
@@ -294,6 +318,15 @@
     const s = (x) => fDiam(x, u.diam);
     const l = (x) => fLong(x, u.long);
     const de = (tabla, id) => (M && tabla(M) && tabla(M)[id] && tabla(M)[id].descripcion) || id;
+    return `${dimensiones()}${uniones()}`;
+    // lo que dicen los planos de las bridas: extremos sin brida y bridas de otra partida
+    function uniones() {
+      if (!W.esDeLamina(p.familia) || p.tipo_union === 'LISO' || p.familia === 'BRIDA' || p.familia === 'UNION') return '';
+      const sin = Array.isArray(p.extremos_sin_brida) ? p.extremos_sin_brida.length : 0;
+      const ext = p.familia === 'RECTO' && p.extremo_ajuste === 'SIN_BRIDA' ? ' · brida en un extremo' : sin ? ` · ${plural(sin, 'extremo', 'extremos')} sin brida` : '';
+      return `${ext}${p.bridas_aparte === true && (p.tipo_union || 'BRIDADO') === 'BRIDADO' ? ' · bridas de otra partida' : ''}`;
+    }
+    function dimensiones() {
     switch (p.familia) {
       case 'RECTO':
         return `${p.forma === 'RECTANGULAR' ? `${s(p.a_mm)} × ${s(p.b_mm)}` : d(p.D_mm)} × ${l(p.L_mm)}`;
@@ -320,6 +353,8 @@
       }
       case 'BRIDA':
         return p.forma === 'RECTANGULAR' ? `marco para ducto ${s(p.a_mm)} × ${s(p.b_mm)}` : `aro para ducto ${d(p.D_mm)}`;
+      case 'UNION':
+        return `unión soldada ${d(p.D_mm)}${Number(p.n_uniones) > 1 ? ` · ${plural(p.n_uniones, 'unión', 'uniones')} por pieza` : ''}`;
       case 'SOPORTE': {
         const largo = p.largo_pieza_mm !== undefined && p.largo_pieza_mm !== '' ? `${l(p.largo_pieza_mm)} por pieza`
           : Number(p.abrazadera_D_mm) > 0 ? `abrazadera para ducto ${d(p.abrazadera_D_mm)}` : 'sin largo';
@@ -329,6 +364,7 @@
         return `${plural(p.personas, 'persona', 'personas')} × ${plural(p.dias, 'día', 'días')}${Number(p.viajes) > 0 ? ` · ${plural(p.viajes, 'viaje', 'viajes')}` : ''}`;
       default:
         return '';
+    }
     }
   };
 }(typeof self !== 'undefined' ? self : this));

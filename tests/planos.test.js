@@ -134,7 +134,11 @@ test('Planos: soportería (abrazadera de media vuelta con orejas, pieza recta), 
   assert.ok(dibujo(PIEZAS.mensula).datos.includes('1,300 mm por pieza'));
   const r = dibujo(PIEZAS.recto);
   assert.equal(r.trazos.filter((t) => t.clase === 'junta').length, 2, '2 juntas entre las 3 yardas (2 + ajuste)');
-  assert.ok(r.datos.includes('2 yardas de 1,220 + ajuste de 560'));
+  assert.ok(r.datos.includes('2 yardas unidas + 560 mm de ajuste'), 'como en los planos de yardas');
+  assert.ok(r.datos.includes('Brida en un extremo y una suelta'), 'el ajuste lleva la brida suelta de las tablas');
+  assert.equal(r.titulo_corto, '2 yardas unidas + 560 mm de ajuste');
+  assert.deepEqual(r.cotas.filter((k) => k.campo === null && k.t === 'cota').map((k) => k.texto), ['1,220', '1,220', '560'], 'cada yarda acotada arriba');
+  assert.deepEqual(r.trazos.filter((t) => /^brida/.test(t.clase)).map((t) => t.clase), ['brida', 'brida-suelta'], 'la brida de taller y la suelta, en sus extremos');
   const largo = dibujo(PIEZAS.rectoLargo);
   assert.equal(largo.trazos.filter((t) => t.clase === 'corte').length, 2, 'un tramo de 10 m se dibuja con un corte');
   assert.ok(textos(PL.arbol(largo, { px: 380 })).includes('10,000'), 'la cota dice el largo real');
@@ -177,34 +181,42 @@ test('Planos: formato de taller — pulgadas en octavos, si no milímetros', () 
   assert.equal(F.nominal(250), '250 mm');
 });
 
-test('el pedido del 30-sep-2026 (ejemplo): sus 18 partidas se calculan, se dibujan y se llaman como en los planos', () => {
+test('el pedido del 30-sep-2026 (ejemplo): sus 36 partidas se calculan, se dibujan, se llaman como en los planos y sus bridas cuadran como en la hoja de bridas', () => {
   const E = require('../src/datos/ejemplos');
   const cot = E.pedidoDucteria();
   const r = C.cotizar(cot, M);
-  assert.equal(r.partidas.length, 18);
+  assert.equal(r.partidas.length, 36);
   assert.equal(r.totales.n_partidas_error, 0);
   const dibujos = r.partidas.map((f) => PL.plano(f, M));
   assert.ok(dibujos.every(Boolean), 'todas las piezas del pedido tienen plano');
-  const titulos = cot.partidas.map((p) => PL.titulo(p)).filter(Boolean);
-  assert.deepEqual(titulos.slice(0, 12), [
-    'Codo 90° Ø5″ · 5 gajos', 'Codo 90° Ø6″ · 5 gajos', 'Codo 60° Ø7″ · 5 gajos', 'Codo 60° Ø11″ · 3 gajos', 'Codo 90° Ø11″ · 5 gajos',
-    'Ducto de 11″ con injerto de 11″ a 30°', 'Reducción de 11″ a 10″ con injerto de 5″ a 30°', 'Reducción de 10″ a 6″ con injerto de 7″ a 30°',
-    'Ducto de 6″ con injerto de 3″ a 30°', 'Reducción de 7″ a 5″ con injerto de 5″ a 30°', 'Reducción de 10″ a 9″ con injerto de 5″ a 30°',
-    'Reducción de 9″ a 7″ con injerto de 5″ a 30°',
-  ]);
-  // las piezas que pide cada hoja: 60 bridas (22 + 6 + 2 + 4 de solera, 2 + 24 de placa), 7 codos y 9 reducciones con injerto
+  const titulos = cot.partidas.map((p) => PL.titulo(p));
+  ['Codo 90° Ø5″ · 5 gajos', 'Codo 60° Ø11″ · 3 gajos', 'Ducto de 11″ con injerto de 11″ a 30°', 'Reducción de 11″ a 10″ con injerto de 5″ a 30°',
+    'Reducción de 10″ a 6″ con injerto de 7″ a 30°', 'Ducto de 6″ con injerto de 3″ a 30°', 'Reducción de 9″ a 7″ con injerto de 5″ a 30°', 'Unión de piezas Ø11″', '2 uniones de piezas Ø6″']
+    .forEach((t) => assert.ok(titulos.includes(t), t));
+  // las piezas que pide cada hoja: 60 bridas, 7 codos, 9 reducciones con injerto e injertos, 20 ductos rectos y 6 armados
   const piezas = (fams) => cot.partidas.filter((p) => fams.includes(p.familia)).reduce((s, p) => s + p.cantidad, 0);
-  assert.equal(piezas(['BRIDA', 'COMPRADO']), 60);
-  assert.equal(piezas(['CODO']), 7);
-  assert.equal(piezas(['REDUCCION_INJERTO', 'RAMAL']), 9);
-  // barrenos como en el plano de bridas: 8 en las de 11″ y 10″, 6 en las de 9″, 7″ y en las de placa
-  const barrenos = r.partidas.filter((f) => f.familia === 'BRIDA').map((f) => f.qto.her.aros_sueltos[0].n_tornillos);
-  assert.deepEqual(barrenos, [8, 8, 6, 6]);
-  assert.ok(dibujos.slice(16).every((d) => d.datos.includes('6 barrenos')));
-  // las de lámina, sin brida (las bridas van en sus partidas) y de galvanizado cal. 24
-  cot.partidas.filter((p) => ['CODO', 'REDUCCION_INJERTO', 'RAMAL'].includes(p.familia)).forEach((p) => {
-    assert.equal(p.tipo_union, 'LISO');
-    assert.equal(p.material_id, 'GALVANIZADO');
-    assert.equal(p.calibre, 24);
+  assert.deepEqual([piezas(['BRIDA', 'COMPRADO']), piezas(['CODO']), piezas(['REDUCCION_INJERTO', 'RAMAL']), piezas(['RECTO']), piezas(['UNION'])], [60, 7, 9, 20, 6]);
+  // las yardas de cada diámetro: 18 de 11″ (con 1 ajuste de 600), 3 de 10″, 1 de 6″ y 16 de 5″ con 5 ajustes (500 y 4 de 700: la hoja las cuenta como 20 yardas)
+  const yardas = {};
+  r.partidas.filter((f) => f.familia === 'RECTO').forEach((f) => {
+    const a = f.geometria.detalle.armado;
+    const k = Math.round(f.entrada.D_mm / 25.4);
+    yardas[k] = yardas[k] || [0, 0];
+    yardas[k][0] += a.n_completas * f.entrada.cantidad;
+    yardas[k][1] += (a.ajuste_mm > 0 ? 1 : 0) * f.entrada.cantidad;
   });
+  assert.deepEqual(yardas, { 11: [18, 1], 10: [3, 0], 6: [1, 0], 5: [16, 5] });
+  // «bridas en ambos extremos» / «brida en un extremo», como dicen los planos de yardas
+  const ductos = dibujos.filter((d) => d.familia === 'RECTO');
+  ['3 yardas unidas', '2 yardas unidas + 600 mm de ajuste', '2 yardas unidas', '1 yarda', '1 yarda + 700 mm de ajuste'].forEach((t) => assert.ok(ductos.some((d) => d.titulo_corto === t), t));
+  assert.ok(ductos.every((d) => d.datos.some((x) => /^Bridas? en (ambos|un) extremos?/.test(x))));
+  // barrenos como en el plano de bridas: 8 en las de 11″ y 10″, 6 en las de 9″, 7″ y en las de placa
+  assert.deepEqual(r.partidas.filter((f) => f.familia === 'BRIDA').map((f) => f.qto.her.aros_sueltos[0].n_tornillos), [8, 8, 6, 6]);
+  // el cuadre: 11″, 10″, 9″ y 7″ cuadran con la hoja de bridas; con estos planos falta 1 de 6″ y sobran 3 de 5″
+  assert.deepEqual(r.bridas.filas.map((x) => [Math.round(x.D_nom_mm * 10) / 10, x.piden, x.hay]), [[279.4, 22, 22], [254, 6, 6], [228.6, 2, 2], [177.8, 4, 4], [152.4, 3, 2], [127, 21, 24]]);
+  // las piezas de lámina: galvanizado cal. 24 con sus bridas de otra partida; los armados, sin bridas
+  cot.partidas.filter((p) => ['CODO', 'REDUCCION_INJERTO', 'RAMAL', 'RECTO'].includes(p.familia)).forEach((p) => {
+    assert.deepEqual([p.material_id, p.calibre, p.tipo_union, p.bridas_aparte], ['GALVANIZADO', 24, 'BRIDADO', true]);
+  });
+  assert.equal(cot.yarda_mm, 914, 'yardas de 3 ft, como en los planos');
 });

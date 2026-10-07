@@ -61,7 +61,7 @@
     const k_dif = A.k_dif[fam] === undefined ? 1 : A.k_dif[fam];
     const t_junta = A.t_junta_base_min + A.t_junta_por_m_min * (PF.D_ref_mm / 1000);
     const t_armado = k_dif * (PF.n_piezas * A.t_fijo_pieza_min + PF.n_juntas_internas * t_junta
-      + her.n_aros * A.t_ajuste_aro_min + her.n_fijaciones * A.t_fijacion_min + her.n_espigas * A.t_formado_espiga_min);
+      + (her.n_aros + (her.n_aros_aparte || 0)) * A.t_ajuste_aro_min + her.n_fijaciones * A.t_fijacion_min + her.n_espigas * A.t_formado_espiga_min);
 
     /* --- Fabricación de aros de brida (rolado de la solera): los que se arman al ducto y los que se mandan sueltos --- */
     const t_aros = [...her.aros, ...her.aros_sueltos].reduce((s, a) => s + P.aros.t_fijo_aro_min + P.aros.t_roll_aro_min_m * (a.L_aro_mm / 1000), 0);

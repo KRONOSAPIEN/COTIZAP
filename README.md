@@ -176,7 +176,7 @@ Cuatro detalles se **supusieron** y conviene confirmarlos con el taller (se edit
 
 | Familia | Geometría | Precisión |
 | --- | --- | --- |
-| Tramo recto (redondo y rectangular) | desarrollo con fibra neutra; **armado por yardas** (anillos del ancho de la lámina, 3 por pieza, con tramo de ajuste) | exacta |
+| Tramo recto (redondo y rectangular) | desarrollo con fibra neutra; **armado por yardas** (anillos del ancho de la lámina, 3 por pieza, con tramo de ajuste); «bridas en ambos extremos» o «brida en un extremo», como en los planos de yardas | exacta |
 | Codo de 30°, 45°, 60° o 90° (segmentado y de radio) | longitud de eje exacta; factor `tan(α/2)/(α/2)` | exacta (verificada con malla 3D) |
 | Reducción (concéntrica y excéntrica) | tronco de cono, integral numérica | exacta (verificada con malla 3D) |
 | Transición redondo → rectángulo | triangulación estándar | exacta (verificada con malla 3D) |
@@ -184,6 +184,7 @@ Cuatro detalles se **supusieron** y conviene confirmarlos con el taller (se edit
 | Reducción con injerto, a 30° o 45° | el injerto va **sobre el cono** y siempre de extremo mayor a menor (inclinado hacia D2): la intersección cilindro–cono se resuelve numéricamente (silleta, orificio y soldadura); el largo de la reducción sale solo (el mínimo que aloja la silleta con 25 mm de holgura) o se captura | exacta (verificada contra cálculo independiente por fuerza bruta); merma y dificultad por calibrar |
 | Personalizada | área desarrollada desde CAD | la que traiga el CAD |
 | Bridas sueltas | sólo aros terminados (rolados, cerrados, barrenados y pintados) para el ducto de otro, sin lámina | la del aro de taller |
+| Armado de piezas | la unión soldada entre dos piezas de otras partidas («unir injerto de 11″ con codo de 60° para obtener 90°»): una junta de armado y un filete al perímetro exterior por unión | exacta (recalculada a mano) |
 | Soportería | piezas cortadas de una barra de la lista (ménsulas, abrazaderas —por el diámetro del ducto—, postes), con anclajes del catálogo, tornillos y minutos reales de taller | — |
 | Comprado | precio de compra o artículo del catálogo; un precio con IVA se cuesta sin IVA; lo que se atornilla como brida (las bridas de placa del proveedor de corte) lleva su tornillería y su Sikaflex | — |
 | Instalación | cuadrilla en obra (personas × días × horas a $62.50) y viáticos (casetas, gasolina, hospedaje, comidas, otros; con o sin factura) | — |
@@ -192,12 +193,14 @@ Cuatro detalles se **supusieron** y conviene confirmarlos con el taller (se edit
 
 ## Planos de las piezas
 
-Cada partida se dibuja **acotada, como en los planos de pedido del taller** (los de AutoCAD con que se mandan a fabricar bridas, codos y reducciones):
+Cada partida se dibuja **acotada, como en los planos de pedido del taller** (los de AutoCAD con que se mandan a fabricar bridas, codos, reducciones, yardas y el armado de piezas):
 
-- **Al capturar**, el dibujo se rehace con cada dato; la cota del campo en que está el cursor se resalta, y pulsar una cota lleva a su campo. Sin descripción, la partida se llama como en los planos: «Reducción de 11″ a 10″ con injerto de 5″ a 30°», «Codo 90° Ø5″ · 5 gajos», «Brida de 9″».
+- **Al capturar**, el dibujo se rehace con cada dato; la cota del campo en que está el cursor se resalta, y pulsar una cota lleva a su campo. Cada pieza dice qué extremos van **sin brida** (casillas: se unen a otra pieza o a una manguera) y si sus bridas son **de otra partida** (aquí sólo se arman y se sueldan al ducto). Sin descripción, la partida se llama como en los planos: «Reducción de 11″ a 10″ con injerto de 5″ a 30°», «Codo 90° Ø5″ · 5 gajos», «Brida de 9″».
 - **En la lista**, cada pieza trae su miniatura; **en el desglose**, su plano grande con sus datos (D, R, gajos, Dint/Dperf/Dext, barrenos…).
 - **La pestaña Planos** arma las hojas de pedido: una por tipo de pieza y, en las de lámina, por material y calibre («CODOS / ACERO GALVANIZADO · CAL. 24»), cada pieza con su marca (B1, C1, I1…), cuántas piezas son, su dibujo y sus datos, y un cajetín con proyecto, fecha y número de hoja. **Imprimir planos** las imprime solas, una por página carta horizontal.
-- **Ver el ejemplo: pedido del 30-sep-2026** abre el pedido de los planos del taller (7 codos, 9 reducciones con injerto e injertos y 60 bridas) para verlo dibujado y costeado.
+- **Los ductos rectos** van en una hoja por diámetro, como los planos de yardas («DUCTOS DE 11″ · 18 yardas»): cada pieza con sus yardas acotadas («3 yardas unidas», «2 yardas unidas + 600 mm de ajuste») y sus bridas dibujadas donde van («bridas en ambos extremos», «brida en un extremo»). Al final, la hoja de **armado de piezas**.
+- **Cuadre de bridas.** Si las bridas de las piezas son «de otra partida» (las hace el taller en una partida de Bridas sueltas o son de placa compradas), la pestaña cuenta, por diámetro, cuántas piden las piezas —sin los extremos que se unen a otra pieza o a una manguera— contra las que hay en las partidas de bridas, y dice cuántas faltan o sobran.
+- **Ver el ejemplo: pedido del 30-sep-2026** abre el pedido completo de los planos del taller (7 codos, 9 reducciones con injerto e injertos, 20 ductos rectos en yardas, 6 armados y 60 bridas: 36 partidas) para verlo dibujado, cuadrado y costeado; el documento compara hacerlo en el taller contra comprarlo ([§7.5](docs/arquitectura-cotizador-ducterias.md#75-caso-real--el-pedido-de-ductería-completo-fabricar-o-comprar)).
 
 Los dibujos salen de `src/web/planos.js` (funciones puras, probadas en `tests/planos.test.js`); lo que difiere de los planos del taller está en [§10.13](docs/arquitectura-cotizador-ducterias.md#1013-diferencias-con-los-planos-de-pedido-por-confirmar) y el detalle en [§8.5](docs/arquitectura-cotizador-ducterias.md#85-dibujos-acotados-y-planos-de-pedido).
 

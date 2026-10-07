@@ -94,6 +94,7 @@
     PANTALON: '<path d="M20 29V19M28 29V19M20 19L9 6M28 19l11-13M9 6h6M33 6h6"/>',
     PERSONALIZADO: '<path d="M10 25l15-15 6 6-15 15H10z"/><path d="M28 7l3-3 6 6-3 3"/>',
     COMPRADO: '<path d="M8 11l16-7 16 7v14l-16 6-16-6z"/><path d="M8 11l16 6 16-6M24 17v14"/>',
+    UNION: '<path d="M4 8h16v16H4M44 8H28v16h16"/><path d="M24 4v24"/><path d="M20 8l4 4 4-4M20 24l4-4 4 4"/>',
     BRIDA: '<circle cx="24" cy="16" r="13"/><circle cx="24" cy="16" r="6.5"/><circle cx="33.75" cy="16.00" r="1"/><circle cx="30.89" cy="22.89" r="1"/><circle cx="24.00" cy="25.75" r="1"/><circle cx="17.11" cy="22.89" r="1"/><circle cx="14.25" cy="16.00" r="1"/><circle cx="17.11" cy="9.11" r="1"/><circle cx="24.00" cy="6.25" r="1"/><circle cx="30.89" cy="9.11" r="1"/>',
     SOPORTE: '<path d="M8 4v24M4 9h4M4 23h4"/><path d="M8 14h32"/><path d="M8 26l20-12"/><circle cx="30" cy="8.5" r="5.5"/>',
     INSTALACION: '<path d="M6 24h36"/><path d="M10 24a14 14 0 0 1 28 0"/><path d="M20 11.5V8h8v3.5"/><path d="M24 10v14"/><path d="M8 28h32"/>',

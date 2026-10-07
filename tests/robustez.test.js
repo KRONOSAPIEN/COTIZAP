@@ -48,8 +48,11 @@ function generador(semilla) {
     const mp = maybe(0.15, () => r1(u(0, 0.5), 3)); if (mp !== undefined) o.merma_pct = mp;
     const pf = maybe(0.2, () => pick(['SOL38x4.8', 'L25x3.2', 'L38x3.2', 'L38x4.8', 'L51x4.8', 'L64x6.4'])); if (pf) o.perfil_id = pf;
     if (rnd() < 0.1) o.caras_pintadas = pick([1, 2]);
+    if (rnd() < 0.2) o.bridas_aparte = rnd() < 0.8;
     return o;
   };
+  // extremos que se unen a otra pieza (sin brida): un subconjunto cualquiera de los de la familia
+  const sinBrida = (p, ids) => { if (rnd() < 0.3) p.extremos_sin_brida = ids.filter(() => rnd() < 0.5); return p; };
   const GEN = {
     RECTO() {
       const rect = rnd() < 0.3;
@@ -65,28 +68,33 @@ function generador(semilla) {
       if (rect) { p.a_mm = r1(u(100, 1500)); p.b_mm = r1(u(100, 1500)); } else p.D_mm = r1(u(50, 1500));
       const g = maybe(0.3, () => Math.floor(u(2, 9))); if (g) p.n_gajos = g;
       const lt = maybe(0.3, () => r1(u(0, 400))); if (lt !== undefined) p.L_tangente_mm = lt;
-      return p;
+      return sinBrida(p, ['A', 'B']);
     },
     REDUCCION() {
       const D1 = r1(u(100, 1500));
       const p = { familia: 'REDUCCION', D1_mm: D1, D2_mm: r1(D1 * u(0.3, 0.95)), excentrica: pick(['NO', 'CARA_PLANA']) };
       const L = maybe(0.5, () => r1(u(50, 1500))); if (L) p.L_mm = L;
-      return p;
+      return sinBrida(p, ['D1', 'D2']);
     },
     TRANSICION() {
       const p = { familia: 'TRANSICION', D_mm: r1(u(100, 1200)), a_mm: r1(u(100, 1500)), b_mm: r1(u(100, 1500)) };
       const H = maybe(0.5, () => r1(u(50, 1500))); if (H) p.H_mm = H;
-      return p;
+      return sinBrida(p, ['redondo', 'rectangular']);
     },
     RAMAL() {
       const D = r1(u(150, 1500));
-      return { familia: 'RAMAL', D_mm: D, d_mm: r1(D * u(0.2, 0.9)), L_cuerpo_mm: r1(u(200, 3000)), L_ramal_mm: r1(u(100, 1500)), beta_deg: pick([30, 45]) };
+      return sinBrida({ familia: 'RAMAL', D_mm: D, d_mm: r1(D * u(0.2, 0.9)), L_cuerpo_mm: r1(u(200, 3000)), L_ramal_mm: r1(u(100, 1500)), beta_deg: pick([30, 45]) }, ['tronco_1', 'tronco_2', 'injerto']);
     },
     REDUCCION_INJERTO() {
       const D1 = r1(u(200, 1500)); const D2 = r1(D1 * u(0.4, 0.95));
       const p = { familia: 'REDUCCION_INJERTO', D1_mm: D1, D2_mm: D2, d_mm: r1(D2 * u(0.15, 0.75)), beta_deg: pick([30, 45]) };
       const L = maybe(0.3, () => r1(u(100, 1500))); if (L) p.L_reduccion_mm = L;
       const Lr = maybe(0.3, () => r1(u(100, 1800))); if (Lr) p.L_ramal_mm = Lr;
+      return sinBrida(p, ['D1', 'D2', 'injerto']);
+    },
+    UNION() {
+      const p = { familia: 'UNION', D_mm: r1(u(50, 1500)) };
+      const n = maybe(0.5, () => Math.ceil(u(0, 4))); if (n) p.n_uniones = n;
       return p;
     },
     PERSONALIZADO() {
@@ -155,7 +163,7 @@ test('Partidas válidas al azar (todas las familias): sin excepciones, sin NaN y
     const s = r.costos.subtotales;
     assert.ok(Math.abs(s.materiales + s.consumibles + s.mano_obra + s.equipo + s.herramienta_menor + s.subcontratos + s.viaticos - r.costos.CD) <= 1e-6 * Math.max(1, r.costos.CD), `CD ${JSON.stringify(p)}`);
     if (p.familia !== 'COMPRADO' && p.familia !== 'INSTALACION') {
-      assert.ok(r.peso.neto_unitario_kg > 0, JSON.stringify(p));
+      if (p.familia !== 'UNION') assert.ok(r.peso.neto_unitario_kg > 0, JSON.stringify(p)); // la unión no lleva lámina: no pesa
       // cantidades ≠ precios: con todos los precios ×2.5 el levantamiento de cantidades es idéntico
       const r2 = C.cotizarPartida(p, M2);
       assert.equal(JSON.stringify(r2.qto), JSON.stringify(r.qto), `QTO depende de precios: ${JSON.stringify(p)}`);
@@ -204,6 +212,7 @@ const PLANTILLAS = {
   COMPRADO: { familia: 'COMPRADO', cantidad: 2, riesgo: 'MEDIO', precio_compra_unitario: 1800, peso_kg: 9 },
   BRIDA: { ...COMUN, familia: 'BRIDA', D_mm: 279.4 },
   BRIDA_RECT: { ...COMUN, familia: 'BRIDA', forma: 'RECTANGULAR', a_mm: 400, b_mm: 300 },
+  UNION: { ...COMUN, familia: 'UNION', D_mm: 279.4, n_uniones: 2 },
   INSTALACION: {
     familia: 'INSTALACION', cantidad: 1, riesgo: 'MEDIO', personas: 2, dias: 5, horas_dia: 8, viajes: 1, casetas_viaje: 806, gasolina_viaje: 1500, noches: 4, hospedaje_noche: 650, comida_dia: 250, otros_gastos: 1200,
   },
@@ -237,7 +246,7 @@ test('Medidas obligatorias: cero, negativas, «casi cero» y descomunales (1e12)
   const OBLIGATORIAS = {
     RECTO: ['D_mm', 'L_mm'], RECTO_RECT: ['a_mm', 'b_mm', 'L_mm'], CODO: ['D_mm', 'k_R'], CODO_RECT: ['a_mm', 'b_mm'], REDUCCION: ['D1_mm', 'D2_mm'], TRANSICION: ['D_mm', 'a_mm', 'b_mm'],
     RAMAL: ['D_mm', 'd_mm', 'L_cuerpo_mm', 'L_ramal_mm'], REDUCCION_INJERTO: ['D1_mm', 'D2_mm', 'd_mm'], PERSONALIZADO: ['A_neta_m2', 'n_piezas'], COMPRADO: ['cantidad'],
-    BRIDA: ['D_mm'], BRIDA_RECT: ['a_mm', 'b_mm'], INSTALACION: ['personas', 'dias'], SOPORTE: ['largo_pieza_mm'],
+    BRIDA: ['D_mm'], BRIDA_RECT: ['a_mm', 'b_mm'], UNION: ['D_mm', 'n_uniones'], INSTALACION: ['personas', 'dias'], SOPORTE: ['largo_pieza_mm'],
   };
   Object.entries(OBLIGATORIAS).forEach(([nombre, campos]) => campos.forEach((campo) => {
     const raros = [0, -1, -304.8, 1e-9, 1e7, 1e12, 1e300, ...(campo.endsWith('_mm') ? [0.5, 5] : [])]; // en mm, menos de 10 también es «casi cero»
@@ -365,7 +374,7 @@ test('Ancho de la yarda y tramo de ajuste: límites, tipo y valores de las tabla
   assert.doesNotThrow(() => C.cotizarPartida({ ...R, yarda_mm: 914 }, M));
   assert.doesNotThrow(() => C.cotizarPartida({ ...R, yarda_mm: '1220' }, M), 'también como texto');
   // el extremo del ajuste: sólo SUELTA, SIN_BRIDA o CON_BRIDA (vacío = lo que digan las tablas)
-  ['no', 'suelta', 'SUELTO', 0, 1, true, false, [], {}, ['SUELTA']].forEach((x) => assert.throws(() => C.cotizarPartida({ ...R, extremo_ajuste: x }, M), /Extremo del tramo de ajuste: .* no existe \(use SUELTA, SIN_BRIDA, CON_BRIDA\)/, `extremo_ajuste ${JSON.stringify(x)}`));
+  ['no', 'suelta', 'SUELTO', 0, 1, true, false, [], {}, ['SUELTA']].forEach((x) => assert.throws(() => C.cotizarPartida({ ...R, extremo_ajuste: x }, M), /Extremo final del tramo: .* no existe \(use SUELTA, SIN_BRIDA, CON_BRIDA\)/, `extremo_ajuste ${JSON.stringify(x)}`));
   ['SUELTA', 'SIN_BRIDA', 'CON_BRIDA', '', null, undefined].forEach((x) => assert.doesNotThrow(() => C.cotizarPartida({ ...R, extremo_ajuste: x }, M), String(x)));
   // el sí/no de la versión anterior sólo se entiende como sí/no (un texto cualquiera no se interpreta como nada: se descarta, no se inventa)
   [true, false].forEach((x) => assert.doesNotThrow(() => C.cotizarPartida({ ...R, ajuste_sin_brida: x }, M)));
@@ -625,4 +634,16 @@ test('Valores no válidos escritos a mano en los maestros (a diferencia de un pa
   assert.equal(textos.length, 2, textos.join(' | '));
   assert.match(textos.join(' '), /precio kg acero carbon/);
   assert.match(textos.join(' '), /tasa anual/);
+});
+
+test('Extremos sin brida y bridas de otra partida: sólo valores de la familia y sí/no; lo válido se calcula', () => {
+  const codo = PLANTILLAS.CODO;
+  [['X'], 'A', [1], [null], {}, true, 5, [['A']]].forEach((x) => assert.throws(() => C.cotizarPartida({ ...codo, extremos_sin_brida: x }, M), /Extremos sin brida/, JSON.stringify(x)));
+  assert.throws(() => C.cotizarPartida({ ...PLANTILLAS.RECTO, extremos_sin_brida: ['A'] }, M), /Extremos sin brida: no aplica/, 'el tramo recto lo dice con su extremo final');
+  [[], null, '', undefined, ['A'], ['B', 'A', 'A']].forEach((x) => assert.doesNotThrow(() => C.cotizarPartida({ ...codo, extremos_sin_brida: x }, M), JSON.stringify(x)));
+  assert.deepEqual(C.cotizarPartida({ ...codo, extremos_sin_brida: ['B', 'A', 'A'] }, M).geometria.extremos_sin_brida, ['A', 'B'], 'sin repetidos, en el orden de la pieza');
+  ['si', 1, 0, [], {}].forEach((x) => assert.throws(() => C.cotizarPartida({ ...codo, bridas_aparte: x }, M), /Bridas de otra partida: .* no es sí\/no/, JSON.stringify(x)));
+  [true, false, '', null].forEach((x) => assert.doesNotThrow(() => C.cotizarPartida({ ...codo, bridas_aparte: x }, M), String(x)));
+  // con espiga o liso, «bridas de otra partida» no hace nada
+  ['ESPIGA', 'LISO'].forEach((t) => assert.equal(C.cotizarPartida({ ...codo, tipo_union: t, bridas_aparte: true }, M).precio.importe, C.cotizarPartida({ ...codo, tipo_union: t }, M).precio.importe, t));
 });

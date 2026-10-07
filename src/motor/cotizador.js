@@ -30,6 +30,7 @@
     PERSONALIZADO: 'Pieza personalizada (CAD)',
     COMPRADO: 'Artículo comprado',
     BRIDA: 'Bridas sueltas (sólo aros)',
+    UNION: 'Armado de piezas (unión soldada)',
     INSTALACION: 'Instalación en obra',
     SOPORTE: 'Soportería',
   };
@@ -263,6 +264,7 @@
       compra: {
         articulo_id: p.articulo_id, unidad: art ? art.unidad : 'pza', precio, iva_incluido, unitario_sin_iva, categoria: (art && art.categoria) || 'PROVEEDOR',
         tornillos_pieza, tornillos: p.cantidad * tornillos_pieza, tornillo, precio_tornillo, reserva_tornillos: reserva,
+        ducto_D_mm: art && art.ducto_D_mm > 0 ? art.ducto_D_mm : 0, // si es una brida: el ducto en que va (el cuadre de bridas)
         circulo_barrenos_mm: circulo, junta, V_sellador_ml, L_empaque_m, // la junta, por pieza
       },
       peso: { neto_unitario_kg: p.peso_kg || 0, neto_total_kg: (p.peso_kg || 0) * p.cantidad },
@@ -492,6 +494,50 @@
    * queda como { ok: false, errores } (y `interno: true` si fue una falla inesperada del cálculo, no de los datos).
    * Una cotización o una lista de partidas mal formada se toma como vacía.
    */
+  /**
+   * Cuadre de bridas por medida nominal: las que piden las piezas cuyas bridas son de otra partida (`bridas_aparte`: de taller y
+   * sueltas, en sus extremos con brida) contra las que hay en las partidas de bridas (familia Brida y bridas compradas cuyo
+   * artículo dice para qué ducto son: `ducto_D_mm`). `diferencia` = hay − piden (negativa: faltan; positiva: sobran).
+   * Sólo se arma si alguna pieza pide bridas de otra partida (sin eso no hay qué cuadrar).
+   */
+  function cuadreBridas(filas) {
+    const tabla = new Map();
+    const fila = (forma, a, b) => {
+      const k = forma === 'REDONDA' ? `R${U.redondear(a, 1)}` : `X${U.redondear(a, 1)}x${U.redondear(b, 1)}`;
+      if (!tabla.has(k)) tabla.set(k, { forma, D_nom_mm: forma === 'REDONDA' ? a : undefined, a_nom_mm: forma === 'REDONDA' ? undefined : a, b_nom_mm: forma === 'REDONDA' ? undefined : b, piden: 0, hay: 0, partidas_piden: 0, partidas_hay: 0 });
+      return tabla.get(k);
+    };
+    let piden = 0;
+    filas.filter((f) => f.ok).forEach((f) => {
+      const n = f.entrada.cantidad;
+      const her = f.qto && f.qto.her;
+      if (her && her.bridas_aparte && her.bridas.length) {
+        const vistas = new Set();
+        her.bridas.forEach((b) => {
+          const x = fila(b.forma, b.forma === 'REDONDA' ? b.D_nom_mm : b.a_nom_mm, b.b_nom_mm);
+          x.piden += n;
+          piden += n;
+          if (!vistas.has(x)) { x.partidas_piden += 1; vistas.add(x); }
+        });
+      }
+      if (f.familia === 'BRIDA' && her && her.bridas[0]) {
+        const b = her.bridas[0];
+        const x = fila(b.forma, b.forma === 'REDONDA' ? b.D_nom_mm : b.a_nom_mm, b.b_nom_mm);
+        x.hay += n;
+        x.partidas_hay += 1;
+      }
+      if (f.familia === 'COMPRADO' && f.compra && f.compra.ducto_D_mm > 0) {
+        const x = fila('REDONDA', f.compra.ducto_D_mm);
+        x.hay += n;
+        x.partidas_hay += 1;
+      }
+    });
+    if (!piden) return { activo: false, filas: [], piden: 0, hay: 0, cuadra: true };
+    const lista = [...tabla.values()].map((x) => ({ ...x, diferencia: x.hay - x.piden }))
+      .sort((a, b) => (a.forma === b.forma ? (b.D_nom_mm || b.a_nom_mm) - (a.D_nom_mm || a.a_nom_mm) : a.forma === 'REDONDA' ? -1 : 1));
+    return { activo: true, filas: lista, piden, hay: lista.reduce((s, x) => s + x.hay, 0), cuadra: lista.every((x) => x.diferencia === 0) };
+  }
+
   function cotizar(cot, M0) {
     const c = esObjeto(cot) ? cot : {};
     const ef = maestrosEfectivos(c, M0);
@@ -547,6 +593,7 @@
       partidas: filas,
       automaticas, // partidas que agrega el cálculo (el sobrante de comprar piezas enteras): no son de la lista del usuario
       compras,
+      bridas: cuadreBridas(filas), // las bridas que piden las piezas contra las partidas de bridas, por medida
       maestros: M, // las tablas con las capas de esta cotización: lo que usó cada partida
       capas: C,
       parametros: ef.aplicados,
