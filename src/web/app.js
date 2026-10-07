@@ -1711,6 +1711,7 @@
     $$('.panel').forEach((p) => { p.hidden = p.id !== `panel-${t}`; });
     if (t === 'maestros' && W.maestrosUI) W.maestrosUI.render();
     if (t === 'planos' && W.planosUI) W.planosUI.render();
+    if (t === 'rapida' && W.rapidaUI) W.rapidaUI.render();
     const el = destino ? $(destino) : null;
     if (el) el.scrollIntoView({ block: 'start', behavior: root.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   }
@@ -1739,6 +1740,7 @@
     renderPropuesta();
     if (W.comprasUI) W.comprasUI.render();
     if (W.planosUI && estado.tab === 'planos') W.planosUI.render(); // los planos se dibujan sólo a la vista
+    if (W.rapidaUI && estado.tab === 'rapida') W.rapidaUI.render(); // las tablas maestras o la unidad pudieron cambiar
   }
   W.render = render;
   W.persistir = persistir;

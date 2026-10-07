@@ -43,6 +43,7 @@
     geo: 'Forma de la pieza',
     lim: 'Qué se acepta capturar',
     info: 'Sólo informa',
+    rapida: 'Cotización rápida',
   };
 
   /* ---------- Unidades y presentación de los valores (las usa también el editor) ---------- */
@@ -155,6 +156,36 @@
     'Una tabla por servicio. Cada renglón dice «hasta tal diámetro, el calibre más delgado permitido es N». Mayor número de calibre = lámina más delgada.',
     'No cambia el precio. Si una partida usa un calibre más delgado que el permitido, el cotizador avisa en su detalle.',
     { origen: 'ilustrativo', origenTxt: 'Valores ilustrativos y no normativos: pueble la tabla con su norma interna.', afecta: ['info'], ojo: 'Los valores de arranque son ILUSTRATIVOS (no normativos): pueble la tabla con su norma interna, SMACNA o ACGIH.' });
+
+  E('rapida', 'Cotización rápida',
+    'La regla del taller para dar un precio en minutos con el diámetro mayor y los metros hasta el punto más alejado.',
+    'Lámina en hojas enteras × su precio sin IVA × el factor, más las bridas según los metros, más la utilidad y el IVA.',
+    'Sólo mueve la pestaña «Cotización rápida»: las partidas de la cotización detallada no usan estos valores.',
+    { origen: 'mixto', origenTxt: 'El factor y las bridas por metros son del taller; la utilidad de arranque es ilustrativa.', afecta: ['rapida'] });
+  E('rapida.hoja_defecto', 'Lámina con que se cuenta',
+    'La hoja de la lista del proveedor que se usa si en la cotización rápida no se elige otra.',
+    'Se elige de la lista del proveedor (sólo las hojas con precio).',
+    'Cambia cuántas hojas salen (por su tamaño) y su precio.',
+    { afecta: ['rapida'], ej: 'Galvanizada cal. 22 de 4 × 10 ft: cada hoja da 3 yardas de 11″.' });
+  E('rapida.factor_lamina', 'Factor de la lámina',
+    'Por cuánto se multiplica el costo de la lámina para cubrir la mano de obra, los accesorios y lo demás.',
+    'Un número: 3 es la regla del taller.',
+    'El precio sube en proporción: con 3, cada $1,000 de lámina son $3,000 antes de bridas, utilidad e IVA.',
+    { afecta: ['rapida'], tip: [1.5, 5] });
+  E('rapida.utilidad_pct', 'Utilidad de la cotización rápida',
+    'La utilidad que se suma sobre el costo (lámina por el factor más las bridas).',
+    'En %, sobre el costo. Cada cotización rápida puede cambiarla.',
+    'Con 20 %, un costo de $31,172 queda en $37,407 antes de IVA.',
+    { afecta: ['rapida'], tip: [0, 60], ojo: 'Se suma al costo, no es un % del precio como la utilidad de la pila de precio.' });
+  E('rapida.bridas_por_metros', 'Bridas por metros',
+    'Lo que se suma por las bridas según los metros hasta el punto más alejado.',
+    'Cada renglón dice «hasta tantos metros, tanto». Se usa el primero que alcance. Importes sin IVA.',
+    'Sube o baja el precio en lo que cambie el renglón. Más metros que el último renglón no tienen precio: agregue un renglón.',
+    { afecta: ['rapida'],
+      cols: {
+        'hasta m': 'Metros hasta el punto más alejado que cubre el renglón (40 m incluye los 40 m).',
+        importe: 'Lo que se suma por las bridas, en MXN sin IVA.',
+      } });
 
   /* ---------------------------------------- Precios ---------------------------------------- */
   const P = (clave, t, que, como, efecto, extra) => E(`precios.${clave}`, t, que, como, efecto, extra);
@@ -1497,7 +1528,7 @@
   }
 
   /* ---------- Recorrido de las tablas tal como las dibuja el editor ---------- */
-  const GRUPOS = ['proveedor', 'precios', 'compras', 'mano_obra', 'merma', 'capas', 'proceso', 'herrajes', 'materiales', 'calibres', 'servicios'];
+  const GRUPOS = ['proveedor', 'precios', 'compras', 'mano_obra', 'merma', 'capas', 'rapida', 'proceso', 'herrajes', 'materiales', 'calibres', 'servicios'];
   const esObj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
   const esTablaPares = (v) => Array.isArray(v) && v.length > 0 && v.every((x) => Array.isArray(x) && x.length === 2 && x.every((y) => typeof y === 'number'));
   const esTablaObjetos = (v) => Array.isArray(v) && v.length > 0 && v.every((x) => esObj(x));

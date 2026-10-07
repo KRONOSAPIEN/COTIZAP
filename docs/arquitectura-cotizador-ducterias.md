@@ -422,11 +422,21 @@ Con FSR = 1.00 la hora **no recupera** lo que se paga y no se trabaja —la sema
 | `yarda_min_mm` | 300 | ancho de yarda (de lámina) más angosto |
 | `yarda_max_mm` | 2,000 | ancho de yarda (de lámina) más ancho |
 
+**T11 · Cotización rápida** (`rapida`; regla del taller, 7-oct-2026; reglas en §5.8). La hoja de la lista del proveedor con que se cuentan las hojas (`hoja_defecto`: galvanizada cal. 22 de 4 × 10 ft), el **factor de la lámina** (`factor_lamina` = 3), la **utilidad** que se suma sobre el costo (`utilidad_pct` = 20 %, ilustrativa) y las **bridas por metros**:
+
+| Metros hasta el punto más alejado | Bridas (MXN sin IVA) |
+| --- | --- |
+| hasta 40 m | 5,000.00 |
+| más de 40 y hasta 80 m | 12,000.00 |
+| más de 80 y hasta 120 m | 18,000.00 |
+
+Ninguna partida de la cotización detallada usa esta tabla: un valor inválido aquí sólo detiene la cotización rápida.
+
 #### 2.2.1 Ayuda integrada en el editor de tablas maestras
 
 Las tablas maestras son el lugar donde el taller mete sus números, y un número sin explicación se llena mal. Por eso **cada dato, sección, tabla y grupo del editor trae un botón ⓘ** que abre una ventana emergente (con el cursor en un campo, `F1` hace lo mismo; `Esc` la cierra). Los textos viven en un catálogo propio, `src/datos/ayuda_maestros.js` —no en la interfaz—, y no contienen cifras de cálculo: sólo explicaciones, rangos usuales de referencia y ejemplos.
 
-El catálogo tiene **245 entradas** (cada una con un patrón de ruta, donde `*` cubre una clave) que explican los **572 elementos** que dibuja el editor: 11 grupos, 93 secciones, 456 datos y 12 tablas.
+El catálogo tiene **250 entradas** (cada una con un patrón de ruta, donde `*` cubre una clave) que explican los **577 elementos** que dibuja el editor: 12 grupos, 93 secciones, 459 datos y 13 tablas.
 
 Cada entrada responde tres preguntas y dice qué parte del precio mueve:
 
@@ -1305,6 +1315,35 @@ IVA acreditable = Σ IVA de los gastos con factura                              
 
 La venta es la pactada; sin ella, el precio calculado. La comparación por categoría dice en qué renglón se gastó de más (o de menos) contra lo cotizado y cuánto se ha gastado de cada uno.
 
+### 5.8 Cotización rápida
+
+Para dar un precio en minutos, sin capturar pieza por pieza, el taller usa una regla (7-oct-2026): con el **diámetro mayor** del sistema y los **metros hasta el punto más alejado**, se cuentan las láminas que hacen falta para esos metros de ducto a ese diámetro, su costo se multiplica por 3, se suman las bridas según los metros y, sobre eso, la utilidad y el IVA. La app la tiene en su propia pestaña (**Cotización rápida**; `src/motor/rapida.js` y `src/web/rapida_ui.js`) con sus valores en T11:
+
+```text
+B          = π · (D + e) + holgura de la costura del material       # plantilla de una yarda (D interior; galvanizado: Pittsburgh, 32 mm)
+yardas     = ⌈ metros ÷ ancho de la hoja ⌉                          # la yarda es el ancho de la hoja, como en el tramo recto (§3.2)
+por_hoja   = ⌊ largo de la hoja ÷ B ⌋ ;  hojas = ⌈ yardas ÷ por_hoja ⌉
+             (si B > largo de la hoja: cada yarda lleva hojas completas y un retazo; los retazos se acomodan juntos)
+lámina     = hojas × precio de la hoja sin IVA                       # lista del proveedor (T3b)
+costo      = lámina × factor_lamina + bridas(metros)                 # el primer renglón de «bridas por metros» que alcanza
+precio     = costo × (1 + utilidad)                                  # la utilidad se SUMA sobre el costo (no es % del precio)
+total      = precio × (1 + IVA)                                      # el IVA de la pila de precio (T9)
+```
+
+Con la lámina galvanizada cal. 22 de 4 × 10 ft ($920 con IVA = $793.10 sin IVA) y la utilidad de arranque:
+
+| Diámetro | Metros | Yardas (1.22 m) | Yardas por hoja | Hojas | Lámina sin IVA | Lámina × 3 | Bridas | Costo | Utilidad 20 % | Antes de IVA | Total con IVA |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 11″ | 40 | 33 | 3 | 11 | 8,724.14 | 26,172.41 | 5,000.00 | 31,172.41 | 6,234.48 | 37,406.90 | **43,392.00** |
+| 11″ | 41 | 34 | 3 | 12 | 9,517.24 | 28,551.72 | 12,000.00 | 40,551.72 | 8,110.34 | 48,662.07 | **56,448.00** |
+| 6″ | 60 | 50 | 5 | 10 | 7,931.03 | 23,793.10 | 12,000.00 | 35,793.10 | 7,158.62 | 42,951.72 | **49,824.00** |
+| 11″ | 100 | 83 | 3 | 28 | 22,206.90 | 66,620.69 | 18,000.00 | 84,620.69 | 16,924.14 | 101,544.83 | **117,792.00** |
+| 18″ | 80 | 66 | 2 | 33 | 26,172.41 | 78,517.24 | 12,000.00 | 90,517.24 | 18,103.45 | 108,620.69 | **126,000.00** |
+
+Para 11″ y 40 m: la plantilla de una yarda mide π × (279.4 + 0.85) + 32 = 912 mm, así que cada hoja de 3,048 mm da 3 yardas; 40 m son 33 yardas de 1.219 m, es decir, 11 hojas. La utilidad capturada en la pestaña vale sólo para esa cotización rápida; vacía, se usa la de T11. El diámetro se captura en la unidad de la cotización (pulgadas o mm) y lo capturado se recuerda en el navegador. Más metros que el último renglón de las bridas no tienen precio: la app lo dice y no da un total.
+
+Es una **estimación**: todo el sistema al diámetro mayor, en ductos rectos, sin aprovechar retazos entre yardas, y lo demás (codos, reducciones, mano de obra, soportería, instalación) cubierto por el factor. Para un precio fino se capturan las partidas.
+
 ---
 
 ## 6. Pseudocódigo maestro
@@ -1920,6 +1959,7 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 | §7.4 El proyecto de la hoja de control de gastos (partidas y gastos) y §8.5 el pedido de ductería del 30-sep-2026, que la app abre como ejemplos | `src/datos/ejemplos.js` |
 | §8.5 Dibujos acotados de cada pieza (trazos y cotas en mm, cotas ligadas a sus campos, títulos como en los planos, árbol SVG a escala) | `src/web/planos.js` |
 | §8.5 Pestaña Planos (hojas de pedido por tipo de pieza y material, marcas, impresión) | `src/web/planos_ui.js` |
+| §5.8 Cotización rápida (hojas enteras, factor, bridas por metros, utilidad e IVA) y su pestaña | `src/motor/rapida.js`, `src/web/rapida_ui.js` |
 | Interfaz web (captura, desglose, editor de maestros, propuesta imprimible) | `src/web/` (`index.html`, `app.js`, `maestros_ui.js`, `maestros_ayuda_ui.js`, `esquemas.js`, `dom.js`, `estilos.css`) |
 | Pestaña Compras y gastos (venta y precio mínimo, lista de compras, captura de gastos y comparación) | `src/web/compras_ui.js` |
 | Guardado automático de las tablas maestras (artefacto y navegador) | `src/web/almacen.js` |
@@ -1953,6 +1993,7 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 - **Ayuda de las tablas maestras** (`tests/ayuda_maestros.test.js`, sección 23 de `tests/e2e/ui.e2e.js`): cobertura exhaustiva del catálogo contra lo que dibuja el editor (grupos, secciones, datos y tablas, incluidas las claves con punto como el perfil `SOL38x4.8`), sin entradas muertas ni tapadas; calidad de los textos (completos, con tope de longitud, sin marcas ni nombres técnicos); rangos usuales que contienen a los valores de arranque; columnas de tabla y opciones que coinciden con las reales. En el navegador: un ⓘ por cada elemento; la ventana (qué es, cómo se llena, qué esperar; Esc, clic fuera y F1); la sensibilidad «si sube 10 %» comparada con una cotización independiente; probar, aplicar y deshacer (el precio vuelve al centavo); marcas de modificado y de fuera de rango; la comparación de opciones; las listas de precios, calibres y procesos; los booleanos y el cordón vacío que sobreviven a recargar; el ajuste de golpe de salarios y precios del proveedor como un solo cambio; el ranking ordenado; la guía; la hoja del celular sin desbordamiento; y sólo lectura.
 - **Extremos, bridas de otra partida, armado de piezas y cuadre de bridas** (`tests/armado_piezas.test.js`): el extremo final del tramo con y sin ajuste en sus tres modos (y el sí/no de la versión anterior, que sigue siendo sólo del ajuste); los extremos con nombre de cada familia y lo que se quita con cada uno (aro, media junta, barrenos, filete aro–ducto); las bridas de otra partida, que sólo se arman y se sueldan al ducto (el mismo filete y el mismo ajuste que con aros propios, ningún aro, tornillo, barreno, cierre ni pintura); la unión recalculada a mano (π · D_ext por unión y una junta de armado: engargolada en galvanizado, soldada en acero al carbón); el galvanizado engargolado contra el mismo codo y la misma reducción con injerto soldados (los mismos metros, transversales y longitudinales, la holgura del Pittsburgh y el sellador); la brida con ceja (sin filete, el tiempo y la lámina de la ceja exactos); y el cuadre por diámetro, con bridas de solera, de placa y piezas con bridas propias que no cuentan. `tests/robustez.test.js` los lleva también al azar y con valores hostiles.
 - **Dibujos acotados** (`tests/planos.test.js`, sección 25 de `tests/e2e/ui.e2e.js`): cada familia se dibuja sin valores inválidos y su marco contiene todo; las cotas son las de los planos de pedido (codo de 5″: 191 y 254 mm; Dint/Dperf/Dext y barrenos de las bridas; los de las bridas de placa, del catálogo) y llevan el campo que miden; los títulos («Reducción de 11″ a 10″ con injerto de 5″ a 30°»); las miniaturas sin cotas; los tramos rectos como en los planos de yardas (cada yarda acotada, «3 yardas unidas», «brida en un extremo y una suelta», las bridas dibujadas donde van); y el pedido completo (36 partidas, todas con plano: sus yardas por diámetro, los barrenos de los planos y el cuadre de bridas contra la hoja de bridas). En el navegador: el dibujo vivo del diálogo, la cota resaltada con el cursor en su campo y el clic en una cota que lleva al campo, el nombre automático, las miniaturas de la lista, el plano del desglose, la pestaña Planos (las ocho hojas del pedido, marcas, títulos, datos, cajetín, el cuadre de bridas, «Ver en la cotización», Deshacer), las casillas de extremos sin brida y el selector de bridas de otra partida (quitar una casilla devuelve la brida y el cuadre la pide), la impresión de sólo las hojas, el estado vacío y el celular.
+- **Cotización rápida** (`tests/rapida.test.js`, sección 26 de `tests/e2e/ui.e2e.js`): el caso de 11″ y 40 m recalculado a mano (plantilla, 33 yardas, 11 hojas, $43,392.00 con IVA); los rangos de bridas en sus bordes (40 m todavía son $5,000; 40.01 m, $12,000) y el error de más de 120 m; utilidad, factor y otra lámina; las hojas nunca bajan con más metros o más diámetro y siempre alcanzan para el área pedida; la plantilla más larga que la hoja; errores legibles y que una tabla rápida rota no detenga la cotización detallada. En la interfaz: el desglose, los rangos, fracciones, mm, lo recordado, «Limpiar» y las cinco pestañas en 320 px.
 - **Interfaz de extremo a extremo (opcional, Playwright):** `tests/e2e/ui.e2e.js` da de alta cada familia, edita y guarda cada partida **sin cambios** en tres combinaciones de unidades y exige que el precio no se mueva (el formulario no pierde datos), y recorre validaciones, subcontratos, tablas maestras, persistencia, guardar/cargar y pantalla móvil.
 
 ### 8.5 Dibujos acotados y planos de pedido
@@ -2185,3 +2226,14 @@ Los planos de pedido del 30-sep-2026 confirmaron el gramil (24 mm), los barrenos
 | Ajuste de las yardas con «brida en un extremo» | Los de 2 yardas + 600 y + 500 mm llevan brida de taller en las yardas y la suelta en el ajuste (lo de las tablas); los de 914 + 700 mm, sin brida en el extremo de 700 (se unen a un codo o a una manguera) | El extremo final de cada partida | Con la suelta de los dos ajustes cuadra la hoja de 11″; si no se mandan sueltas, sobra 1 de 11″ y 1 más de 5″. |
 | Cómo y quién fija las bridas al ducto | **Confirmado (7-oct-2026): no se sueldan;** se meten y se le hace una ceja al ducto (§3.5.9). Se supone que la ceja la hizo quien hizo la ductería | `materiales.*.brida_al_ducto` (T1) | Si las puso el taller en obra, la ductería del proveedor vale la fila «sin meter las bridas» de §7.5. |
 | El pedido de $22,000 | **Confirmado (7-oct-2026):** es toda esta ductería, en cal. 22 | §7.5 | — |
+
+### 10.14 Supuestos de la cotización rápida por confirmar
+
+| Supuesto | Valor usado | Dónde se cambia | Efecto si es distinto |
+| --- | --- | --- | --- |
+| El costo de la lámina que se multiplica por 3 | El precio de la hoja **sin IVA** (el IVA se suma al final) | §5.8 | Con el precio con IVA, el total sube 16 % en la parte de la lámina (y el IVA se cobraría dos veces). |
+| Utilidad | 20 %, **sumada sobre el costo** (costo × 1.20); ilustrativa | T11 (`utilidad_pct`) o la pestaña | Si es un % del precio (como en la pila, §5.2), con 20 % el precio sería costo ÷ 0.80: 4 % más. |
+| Importes de las bridas por metros | Antes de IVA | T11 (`bridas_por_metros`) | Si ya traen IVA, el total baja 16 % de ese importe. |
+| Más de 120 m | Sin precio: la app pide agregar un renglón | T11 | — |
+| La hoja y la yarda | Galvanizada cal. 22 de 4 × 10 ft; la yarda es su ancho (1.22 m), como en el tramo recto | T11 (`hoja_defecto`) o la pestaña | Con yardas de 3 ft (hoja de 3 × 10 ft) salen otras hojas: elegirla en la pestaña si está en la lista del proveedor. |
+| Retazos | No se aprovechan entre yardas (cada hoja da yardas completas) | §5.8 | Si el taller usa los retazos para codos o reducciones, cuenta menos hojas: el factor ya lo cubre. |

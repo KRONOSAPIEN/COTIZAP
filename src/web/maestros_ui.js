@@ -26,6 +26,7 @@
     ['mano_obra', 'Mano de obra y equipo', 'Costo por hora = salario por día × días pagados ÷ (días trabajados × horas por día) × FSR: $500 × 7 ÷ (5 × 8) = $87.50. El salario ya incluye prestaciones, por eso FSR = 1.00.'],
     ['merma', 'Merma por familia', 'Fracción del material comprado que no queda en la pieza (se captura en %).'],
     ['capas', 'Pila de precio', 'Indirectos, imprevistos, financiamiento, utilidad, comisión e IVA.'],
+    ['rapida', 'Cotización rápida', 'Lámina en hojas enteras × factor, más las bridas por metros, más la utilidad y el IVA. Sólo la usa la pestaña «Cotización rápida».'],
     ['proceso', 'Proceso de fabricación', 'Velocidades, tiempos fijos, soldadura, pintura, eficiencia del taller y límites de captura de las partidas.'],
     ['herrajes', 'Herrajes de unión', 'Perfiles de aros, tipos de unión, empaque y sellador.'],
     ['materiales', 'Materiales', 'Densidad, tabla de calibre, variables de precio y consumibles por material.'],
@@ -109,6 +110,7 @@
     ['compras.articulos.*.categoria', () => Object.keys(C.gastos.CATEGORIAS).map((k) => [k, C.gastos.CATEGORIAS[k]])],
     ['proceso.soportes.anclaje_defecto', () => Object.keys(W.estadoApp.M.compras.articulos).map((k) => [k, W.estadoApp.M.compras.articulos[k].descripcion || k])],
     ['proceso.soportes.tornillo', () => claves(W.estadoApp.M.herrajes.tornillo_precio_ref)],
+    ['rapida.hoja_defecto', () => C.rapida.hojas(W.estadoApp.M).map((x) => [x.id, x.descripcion])],
     ['proceso.costuras.*.cordon', () => [['', 'Sin cordón (no se suelda)'], ['TOPE', 'A tope'], ['FILETE', 'De filete']]],
     ...REFS_PRECIO.map(([patron, re]) => [patron, () => opcionesDePrecio(re)]),
   ].map(([patron, lista]) => [patron.split('.'), lista]);

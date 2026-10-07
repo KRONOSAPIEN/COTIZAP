@@ -1897,6 +1897,77 @@ const ok = (cond, msg) => {
     await m.context().close();
   }
 
+  console.log('26) Cotización rápida: diámetro mayor y metros → hojas enteras × 3 + bridas por metros + utilidad + IVA');
+  {
+    const p = await nuevaPagina();
+    const total = () => p.locator('#rapida-total-val').innerText();
+    const desglose = () => p.locator('#rapida-desglose').innerText();
+    await p.click('#tab-rapida');
+    ok(await p.locator('#panel-rapida').isVisible() && await p.getByRole('tab', { name: 'Cotización rápida' }).count() === 1, 'la pestaña «Cotización rápida» abre su panel (nombre accesible completo aunque diga «Rápida»)');
+    ok(/Capture el diámetro máximo y los metros/.test(await p.locator('#rapida-resultado').innerText()) && await p.locator('#r_diam_unidad').innerText() === 'pulgadas', 'vacía, explica qué capturar; el diámetro va en la unidad de la cotización (pulgadas)');
+
+    // a) el caso del taller: 11″ y 40 m en galvanizada cal. 22 de 4 × 10 ft
+    await p.fill('#r_diam', '11');
+    await p.fill('#r_metros', '40');
+    ok(await total() === '$43,392.00', '11″ y 40 m: $43,392.00 con IVA');
+    const d = await desglose();
+    ok(/Lámina: 11 hojas × \$793\.10/.test(d) && /\$8,724\.14/.test(d) && /Lámina × 3\s+Cubre/.test(d) && /\$26,172\.41/.test(d) && /Por 40 m: hasta 40 m\.\s+\$5,000\.00/.test(d)
+      && /Utilidad 20 %[\s\S]*\$6,234\.48/.test(d) && /IVA 16 %\s+\$5,985\.10/.test(d), 'el desglose: 11 hojas × $793.10, × 3, bridas $5,000 (hasta 40 m), utilidad 20 % sobre el costo e IVA');
+    ok(/33 yardas de 1\.22 m/.test(d) && /3 yardas de 11″/.test(d), 'dice cómo salen las hojas: 33 yardas de 1.22 m, 3 por hoja');
+
+    // b) los rangos de bridas y el tope de la tabla
+    await p.fill('#r_metros', '41');
+    ok(/de 40 a 80 m\.\s+\$12,000\.00/.test(await desglose()), 'de 40 a 80 m las bridas son $12,000');
+    await p.fill('#r_metros', '120');
+    ok(/de 80 a 120 m\.\s+\$18,000\.00/.test(await desglose()), 'hasta 120 m, $18,000');
+    await p.fill('#r_metros', '150');
+    ok(await p.locator('.rapida-error[role="alert"]').isVisible() && /llegan a 120 m/.test(await p.locator('.rapida-error').innerText()) && await p.locator('#rapida-total-val').count() === 0, 'más de 120 m: lo dice y no da un precio');
+    await p.fill('#r_metros', '11 1/2');
+    ok(/Por 11\.5 m/.test(await desglose()), 'acepta fracciones como en el resto de la app (11 1/2)');
+
+    // c) la utilidad de esta cotización, otra lámina y el factor de las tablas
+    await p.fill('#r_metros', '40');
+    await p.fill('#r_utilidad', '30');
+    const esperado = ((11 * 920 / 1.16) * 3 + 5000) * 1.3 * 1.16;
+    ok(await total() === `$${esperado.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'la utilidad capturada (30 %) se suma sobre el costo');
+    await p.fill('#r_utilidad', '');
+    await p.selectOption('#r_hoja', 'GALV_C24_4X10');
+    ok(/Lámina: 11 hojas × \$603\.45/.test(await desglose()), 'otra lámina de la lista del proveedor (cal. 24: $700 con IVA → $603.45)');
+    await p.selectOption('#r_hoja', '');
+    await p.click('#tab-maestros');
+    await p.fill('#maestros-buscar', 'factor');
+    const fac = p.locator('input#m_rapida__factor_lamina');
+    ok(await fac.inputValue() === '3' && await p.locator('.m-grupo[data-grupo="rapida"]').count() === 1, 'en Tablas maestras está su grupo, con el factor de 3');
+    await fac.fill('2.5');
+    await fac.dispatchEvent('change');
+    await p.click('#tab-rapida');
+    ok(/Lámina × 2\.5/.test(await desglose()), 'el factor cambiado en las tablas se usa en la cotización rápida');
+
+    // d) en milímetros, y lo capturado se recuerda
+    await p.click('#tab-cotizacion');
+    await p.selectOption('#c_unidad_diam', 'mm');
+    await p.click('#tab-rapida');
+    await p.fill('#r_diam', '279.4');
+    ok(await p.locator('#r_diam_unidad').innerText() === 'mm' && /3 yardas de 279\.4 mm/.test(await desglose()), 'con la cotización en mm, el diámetro se captura en mm');
+    await p.reload();
+    await p.waitForSelector('#lista-partidas .partida');
+    await p.click('#tab-rapida');
+    ok(await p.inputValue('#r_diam') === '279.4' && await p.inputValue('#r_metros') === '40', 'lo capturado se recuerda al volver a abrir');
+    await p.click('#rapida-limpiar');
+    ok(await p.inputValue('#r_diam') === '' && /Capture el diámetro/.test(await p.locator('#rapida-resultado').innerText()), '«Limpiar» deja la cotización rápida en blanco');
+    await p.context().close();
+
+    // e) en el celular: cinco pestañas en dos renglones y sin desplazamiento horizontal
+    const m = await nuevaPagina({ viewport: { width: 320, height: 700 }, isMobile: true, hasTouch: true });
+    await m.click('#tab-rapida');
+    await m.fill('#r_diam', '11');
+    await m.fill('#r_metros', '40');
+    const cajas = await m.locator('.tabs [role="tab"]').evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { y: Math.round(r.top), w: r.width, cabe: e.scrollWidth <= e.clientWidth + 1 }; }));
+    ok(cajas.length === 5 && new Set(cajas.map((c) => c.y)).size === 2 && cajas.every((c) => c.cabe) && await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+      'en 320 px: las cinco pestañas en dos renglones, cada texto cabe, y nada se sale de la pantalla');
+    await m.context().close();
+  }
+
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

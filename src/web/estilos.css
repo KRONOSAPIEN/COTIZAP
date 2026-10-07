@@ -165,6 +165,8 @@ code, .m-et code { font-family: var(--font-mono); font-size: 0.92em; }
 }
 .tabs [role="tab"]:hover { background: var(--surface-2); }
 .tabs [role="tab"][aria-selected="true"] { color: var(--accent); background: var(--accent-soft); }
+.tab-corto { display: none; }
+@media (max-width: 1439px) { .tab-largo { display: none; } .tab-corto { display: inline; } } /* «Rápida» donde no cabe «Cotización rápida» */
 .acciones { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* -------------------------------------------------------------------------- botones y campos */
@@ -296,8 +298,10 @@ main { padding: 16px 24px 48px; max-width: 1540px; margin-inline: auto; }
   main { padding-inline: 16px; padding-top: 12px; }
   .barra { position: static; padding: 10px 16px; gap: 8px 12px; }
   .marca-sub { display: none; }
-  .tabs { flex: 1 1 100%; margin: 0; }
-  .tabs [role="tab"] { flex: 1 1 0; min-width: 0; text-align: center; padding-inline: 4px; line-height: 1.15; font-size: 13px; } /* cuatro pestañas caben aun en 320 px: el texto se parte en dos renglones */
+  /* cinco pestañas en dos renglones: tres arriba y dos abajo; aun en 320 px el texto cabe (se parte en dos renglones) */
+  .tabs { flex: 1 1 100%; margin: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .tabs [role="tab"] { grid-column: span 2; min-width: 0; text-align: center; padding-inline: 4px; line-height: 1.15; font-size: 13px; }
+  .tabs [role="tab"]:nth-child(n + 4) { grid-column: span 3; }
   .acciones { flex: 1 1 100%; }
   .acciones .btn { flex: 1; padding: 6px 8px; min-height: 36px; font-size: 13px; }
   .datos { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; gap: 10px 12px; }
@@ -706,6 +710,20 @@ kbd { font: 500 11.5px var(--font-mono); padding: 1px 6px; border: 1px solid var
 .cuadre p { font-size: 13px; color: var(--fg-2); max-width: 90ch; }
 .cuadre .tabla { font-size: 13px; }
 .cuadre .faltan { color: var(--crit); font-weight: 600; }
+/* -------------------------------------------------------------------------- cotización rápida */
+.rapida { display: grid; gap: 16px; align-items: start; }
+@media (min-width: 960px) { .rapida { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); } }
+.rapida-datos { grid-template-columns: minmax(0, 1fr); margin-bottom: 0; }
+.rapida-datos input, .rapida-datos select { font-size: 16px; }
+.rapida-res { display: grid; gap: 12px; min-width: 0; }
+.rapida-tabla td { padding: 8px; }
+.rapida-tabla .r-concepto { font-weight: 600; }
+.rapida-tabla .r-detalle { font-size: 12.5px; color: var(--fg-2); margin-top: 2px; max-width: 60ch; }
+.rapida-tabla tr.r-sub td { background: var(--surface-2); }
+.rapida-tabla tr.r-total td { font-weight: 700; font-size: 15px; border-top: 2px solid var(--line-strong); border-bottom: 0; }
+.rapida-error { background: var(--crit-soft); border-color: color-mix(in srgb, var(--crit) 45%, var(--line)); box-shadow: none; }
+.rapida-error ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.rapida-vacia { display: grid; gap: 6px; color: var(--fg-2); }
 .cuadre .sobran { color: var(--warn); font-weight: 600; }
 .cuadre .cuadran { color: var(--good); font-weight: 600; }
 #planos-hojas > .vacio { background: var(--surface); border: 1px dashed var(--line-strong); border-radius: var(--radio); }

@@ -339,7 +339,7 @@
   /* Tablas maestras                                                    */
   /* ------------------------------------------------------------------ */
 
-  const SECCIONES = ['precios', 'proveedor', 'mano_obra', 'merma', 'capas', 'proceso', 'herrajes', 'materiales', 'calibres', 'servicios', 'compras'];
+  const SECCIONES = ['precios', 'proveedor', 'mano_obra', 'merma', 'capas', 'proceso', 'herrajes', 'materiales', 'calibres', 'servicios', 'compras', 'rapida'];
 
   // Números que deben ser MAYORES que 0: entran como divisor (velocidad, eficiencia, rendimiento…) o dan forma a algo (paso
   // de tornillos, tamaño de hoja, densidad). Un cero aquí produce NaN o un precio infinito. `*` = cualquier clave.
@@ -533,6 +533,23 @@
           else if (a.categoria !== undefined && !tiene(GAS.CATEGORIAS, a.categoria)) {
             agregar(['compras', 'articulos', id, 'categoria'], `debe ser una categoría del control de gastos (${Object.keys(GAS.CATEGORIAS).join(', ')}); vale ${texto(a.categoria)}`);
           }
+        });
+      }
+    }
+
+    // Cotización rápida: la hoja con que se cuenta la lámina existe, la utilidad es razonable y las bridas por metros van en orden
+    if (quiere('rapida')) {
+      const R = M.rapida;
+      if (!tiene(M.proveedor && M.proveedor.hojas, R.hoja_defecto)) agregar(['rapida', 'hoja_defecto'], `debe ser una hoja de la lista del proveedor; vale ${texto(R.hoja_defecto)}`);
+      if (typeof R.factor_lamina !== 'number' || !(R.factor_lamina > 0)) agregar(['rapida', 'factor_lamina'], `debe ser un número mayor que 0 (vale ${texto(R.factor_lamina)})`);
+      if (typeof R.utilidad_pct !== 'number' || !(R.utilidad_pct >= 0 && R.utilidad_pct <= 10)) agregar(['rapida', 'utilidad_pct'], `debe ser de 0 % a 1 000 % (vale ${texto(R.utilidad_pct)})`);
+      const filas = R.bridas_por_metros;
+      if (!Array.isArray(filas) || !filas.length || !filas.every(esObjeto)) agregar(['rapida', 'bridas_por_metros'], 'debe ser una tabla con al menos un renglón «hasta m» e «importe»');
+      else {
+        filas.forEach((r, i) => {
+          if (typeof r.hasta_m !== 'number' || !(r.hasta_m > 0)) agregar(['rapida', 'bridas_por_metros', i, 'hasta_m'], `debe ser un número de metros mayor que 0 (vale ${texto(r.hasta_m)})`);
+          else if (i > 0 && typeof filas[i - 1].hasta_m === 'number' && !(r.hasta_m > filas[i - 1].hasta_m)) agregar(['rapida', 'bridas_por_metros', i, 'hasta_m'], 'los metros deben ir de menor a mayor');
+          if (typeof r.importe !== 'number' || !(r.importe >= 0)) agregar(['rapida', 'bridas_por_metros', i, 'importe'], `debe ser un importe de 0 en adelante (vale ${texto(r.importe)})`);
         });
       }
     }

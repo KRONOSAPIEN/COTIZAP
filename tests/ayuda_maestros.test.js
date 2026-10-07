@@ -19,8 +19,8 @@ const clave = (ruta) => ruta.join('.');
 
 test('recorrer: ve los mismos datos que dibuja el editor (grupos, secciones, datos y tablas)', () => {
   const porTipo = (t) => unidades.filter((u) => u.tipo === t).length;
-  assert.equal(porTipo('grupo'), 11);
-  assert.equal(porTipo('tabla'), 12, 'tablas: servicios 3, proveedor 2, velocidades de corte 3, rolado, engargolado, soldadura y selección de perfil');
+  assert.equal(porTipo('grupo'), 12);
+  assert.equal(porTipo('tabla'), 13, 'tablas: servicios 3, proveedor 2, velocidades de corte 3, rolado, engargolado, soldadura, selección de perfil y bridas por metros');
   assert.ok(unidades.some((u) => u.tipo === 'sub' && clave(u.ruta) === 'proceso.soldadura.procesos.GMAW'));
   assert.ok(unidades.some((u) => u.tipo === 'fila' && clave(u.ruta) === 'herrajes.perfiles.SOL38x4.8.ancho_mm'), 'las claves con punto (SOL38x4.8) son una sola clave');
   assert.ok(unidades.some((u) => u.tipo === 'fila' && clave(u.ruta) === 'proceso.costuras.PITTSBURGH.cordon'), 'un valor null se dibuja como dato');

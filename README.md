@@ -11,7 +11,7 @@ Cotizador para ducterías de lámina (colección de polvo y control ambiental). 
 | **Documento de arquitectura** | [`docs/arquitectura-cotizador-ducterias.md`](docs/arquitectura-cotizador-ducterias.md) | Insumos, fórmulas geométricas, mano de obra y consumibles, estructura de precios, lista de compras, venta pactada y control de gastos, pseudocódigo, ejemplos resueltos paso a paso y un proyecto real. Es la especificación. |
 | **Motor de cálculo** | `src/motor/` | Funciones puras, sin dependencias. Separa *cantidades* de *precios*. |
 | **Tablas maestras** | `src/datos/maestros.js` · `src/datos/ayuda_maestros.js` | Lista de precios del proveedor, catálogo de compras, materiales, calibres, perfiles, uniones, velocidades, tarifas, merma y capas de precio; y la ayuda de cada dato (qué es, cómo se llena, qué esperar). |
-| **Aplicación web** | `src/web/` | Captura de partidas con su dibujo acotado en vivo, desglose paso a paso, planos de pedido imprimibles, compras y gastos del proyecto, editor de tablas maestras con ayuda integrada, propuesta imprimible. |
+| **Aplicación web** | `src/web/` | Cotización rápida con el diámetro mayor y los metros, captura de partidas con su dibujo acotado en vivo, desglose paso a paso, planos de pedido imprimibles, compras y gastos del proyecto, editor de tablas maestras con ayuda integrada, propuesta imprimible. |
 | **Pruebas** | `tests/` | Geometría contra mallas 3D independientes, ejemplo recalculado línea por línea, política de precios, robustez ante datos absurdos o dañados, dibujos acotados, interfaz de extremo a extremo. |
 
 ## Empezar
@@ -89,6 +89,17 @@ El encabezado de la cotización lleva los parámetros comerciales que se ajustan
 - Valen **sólo para esa cotización**: un campo que se cambia queda marcado, dice cuál es el valor de las tablas y tiene *Restablecer*; un campo sin tocar sigue las ediciones de las tablas. Una cotización nueva arranca otra vez con los de las tablas.
 - Los totales muestran el descuento, la **utilidad real** (en pesos y como % del precio, ya con el descuento) y el **costo total**, y avisan en rojo si el descuento deja el precio por debajo del piso (sin utilidad). La propuesta imprimible lleva el descuento y las condiciones de pago.
 - Los parámetros viajan con la cotización al exportar e importar el JSON; un valor inválido de un archivo se ignora y se avisa. Cuatro supuestos quedan por confirmar: [§10.7 del documento](docs/arquitectura-cotizador-ducterias.md#107-supuestos-de-los-parámetros-de-la-cotización-por-confirmar).
+
+## Cotización rápida
+
+Para dar un precio en minutos, la pestaña **Cotización rápida** (*Rápida* en pantallas angostas) pide sólo el **diámetro máximo** y los **metros hasta el punto más alejado**, y aplica la regla del taller:
+
+1. Cuenta las **hojas enteras** de lámina para esos metros a ese diámetro. Cada yarda es el ancho de la hoja y su plantilla, el perímetro más la holgura del engargolado. Con la galvanizada cal. 22 de 4 × 10 ft, cada hoja da 3 yardas de 11″.
+2. Multiplica el costo de esas hojas (sin IVA, de la lista del proveedor) **por 3**.
+3. Suma las **bridas según los metros**: hasta 40 m, $5,000; de 40 a 80 m, $12,000; de 80 a 120 m, $18,000.
+4. Suma la **utilidad** sobre ese costo (20 % de arranque; se cambia en la pestaña) y luego el **IVA**.
+
+Ejemplo: 11″ y 40 m son 33 yardas, 11 hojas ($8,724.14), × 3 = $26,172.41, más $5,000 de bridas, más 20 % y el IVA: **$43,392.00**. La lámina se elige de la lista del proveedor. El factor, los rangos de bridas, la utilidad y la lámina de arranque están en *Tablas maestras › Cotización rápida*. Más de 120 m no tiene precio de bridas: agregue un renglón. La regla y sus supuestos están en el [documento, §5.8](docs/arquitectura-cotizador-ducterias.md#58-cotización-rápida) y [§10.14](docs/arquitectura-cotizador-ducterias.md#1014-supuestos-de-la-cotización-rápida-por-confirmar).
 
 ## Compras y gastos del proyecto
 
@@ -214,8 +225,8 @@ src/
   datos/maestros.js                        tablas maestras (valores ilustrativos)
   datos/ayuda_maestros.js                  ayuda de cada dato de las tablas (qué es · cómo se llena · qué esperar)
   datos/ejemplos.js                        el proyecto real de la hoja de control de gastos y el pedido de ductería del 30-sep-2026
-  motor/                                   util · gastos · geometria · material · proveedor · mano_obra · consumibles · precios · validacion · compras · cotizador
-  web/                                     index.html · app.js · almacen.js · maestros_ui.js · maestros_ayuda_ui.js · compras_ui.js · planos.js · planos_ui.js · esquemas.js · dom.js · estilos.css
+  motor/                                   util · gastos · geometria · material · proveedor · mano_obra · consumibles · precios · validacion · compras · cotizador · rapida
+  web/                                     index.html · app.js · almacen.js · maestros_ui.js · maestros_ayuda_ui.js · compras_ui.js · planos.js · planos_ui.js · rapida_ui.js · esquemas.js · dom.js · estilos.css
 tests/                                     *.test.js (node:test) · e2e/ui.e2e.js (Playwright, opcional)
 scripts/construir.js                       empaquetado a un solo HTML
 ```

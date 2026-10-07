@@ -22,6 +22,7 @@
   </div>
   <nav class="tabs" role="tablist" aria-label="Secciones">
     <button type="button" role="tab" id="tab-cotizacion" data-tab="cotizacion" aria-selected="true" aria-controls="panel-cotizacion">Cotización</button>
+    <button type="button" role="tab" id="tab-rapida" data-tab="rapida" aria-selected="false" aria-controls="panel-rapida" aria-label="Cotización rápida"><span class="tab-largo">Cotización rápida</span><span class="tab-corto" aria-hidden="true">Rápida</span></button>
     <button type="button" role="tab" id="tab-planos" data-tab="planos" aria-selected="false" aria-controls="panel-planos">Planos</button>
     <button type="button" role="tab" id="tab-compras" data-tab="compras" aria-selected="false" aria-controls="panel-compras">Compras y gastos</button>
     <button type="button" role="tab" id="tab-maestros" data-tab="maestros" aria-selected="false" aria-controls="panel-maestros">Tablas maestras</button>
@@ -89,6 +90,25 @@
         <div id="totales" class="tarjeta totales"></div>
         <div id="detalle" class="tarjeta detalle"></div>
       </aside>
+    </div>
+  </section>
+
+  <section id="panel-rapida" class="panel" role="tabpanel" aria-labelledby="tab-rapida" hidden>
+    <div class="planos-cab">
+      <div>
+        <h2>Cotización rápida</h2>
+        <p>Un precio en minutos con el diámetro mayor y los metros hasta el punto más alejado: la lámina en hojas enteras por 3, más las bridas según los metros, más la utilidad y el IVA. Para el precio pieza por pieza, capture las partidas en «Cotización».</p>
+      </div>
+      <div class="planos-acc"><button type="button" class="btn btn-sec" id="rapida-limpiar">Limpiar</button></div>
+    </div>
+    <div class="rapida">
+      <form class="datos rapida-datos" id="rapida-form" aria-label="Datos de la cotización rápida" novalidate>
+        <div class="campo"><label for="r_diam">Diámetro máximo (<span id="r_diam_unidad">pulgadas</span>)</label><input id="r_diam" type="text" inputmode="decimal" autocomplete="off" placeholder="p. ej. 11"></div>
+        <div class="campo"><label for="r_metros">Metros hasta el punto más alejado</label><input id="r_metros" type="text" inputmode="decimal" autocomplete="off" placeholder="p. ej. 40"></div>
+        <div class="campo"><label for="r_hoja">Lámina</label><select id="r_hoja"></select></div>
+        <div class="campo"><label for="r_utilidad">Utilidad (% sobre el costo)</label><input id="r_utilidad" type="text" inputmode="decimal" autocomplete="off"></div>
+      </form>
+      <div id="rapida-resultado" class="rapida-res" aria-live="polite"></div>
     </div>
   </section>
 
@@ -250,6 +270,7 @@
 <script src="../motor/validacion.js"></script>
 <script src="../motor/compras.js"></script>
 <script src="../motor/cotizador.js"></script>
+<script src="../motor/rapida.js"></script>
 <script src="dom.js"></script>
 <script src="esquemas.js"></script>
 <script src="planos.js"></script>
@@ -257,6 +278,7 @@
 <script src="maestros_ui.js"></script>
 <script src="compras_ui.js"></script>
 <script src="planos_ui.js"></script>
+<script src="rapida_ui.js"></script>
 <script src="almacen.js"></script>
 <script src="app.js"></script>
 </body>

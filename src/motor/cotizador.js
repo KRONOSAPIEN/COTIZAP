@@ -381,7 +381,8 @@
   function exigirMaestrosSanos(M, familia, previos) {
     const todos = previos || VAL.problemasMaestros(M);
     const secciones = SECCIONES_FAMILIA[familia];
-    const propios = secciones ? todos.filter((x) => secciones.includes(x.ruta[0])) : todos; // lo comprado sólo usa la pila de precio y el catálogo
+    // lo comprado sólo usa la pila de precio y el catálogo; ninguna partida usa la tabla de la cotización rápida
+    const propios = secciones ? todos.filter((x) => secciones.includes(x.ruta[0])) : todos.filter((x) => x.ruta[0] !== 'rapida');
     if (propios.length) {
       const lista = propios.slice(0, 6).map((x) => `Tablas maestras · ${VAL.textoProblema(x)}`);
       if (propios.length > lista.length) lista.push(`…y ${propios.length - lista.length} valores más en las tablas maestras.`);

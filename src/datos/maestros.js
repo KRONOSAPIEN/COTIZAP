@@ -513,6 +513,25 @@
       iva_pct: 0.16,
       cargo_minimo_partida: 250.0,
     },
+
+    /* ------------------------------------------------------------------ */
+    /* COTIZACIÓN RÁPIDA (regla del taller, 7-oct-2026)                   */
+    /* Con el diámetro mayor y los metros hasta el punto más alejado: las */
+    /* hojas enteras para esos metros a ese diámetro × su precio sin IVA  */
+    /* × factor_lamina, más las bridas por metros (el primer renglón cuyo */
+    /* «hasta m» alcanza), más la utilidad (sumada sobre el costo) y el   */
+    /* IVA de la pila de precio. Ver motor/rapida.js.                     */
+    /* ------------------------------------------------------------------ */
+    rapida: {
+      hoja_defecto: 'GALV_C22_4X10', // la hoja de la lista del proveedor con que se cuenta la lámina si no se elige otra
+      factor_lamina: 3, // el costo de la lámina se multiplica por esto: cubre la mano de obra, los accesorios y lo demás
+      utilidad_pct: 0.2, // se suma sobre el costo (lámina × factor + bridas). Ilustrativa: el taller no la ha dicho
+      bridas_por_metros: [ // hasta 40 m, $5,000; de 40 a 80 m, $12,000; de 80 a 120 m, $18,000 (sin IVA)
+        { hasta_m: 40, importe: 5000 },
+        { hasta_m: 80, importe: 12000 },
+        { hasta_m: 120, importe: 18000 },
+      ],
+    },
   };
 
   /**
