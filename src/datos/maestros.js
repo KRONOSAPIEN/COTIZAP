@@ -519,13 +519,19 @@
     /* Con el diámetro mayor y los metros hasta el punto más alejado: las */
     /* hojas enteras para esos metros a ese diámetro × su precio sin IVA  */
     /* × factor_lamina, más las bridas por metros (el primer renglón cuyo */
-    /* «hasta m» alcanza), más la utilidad (sumada sobre el costo) y el   */
-    /* IVA de la pila de precio. Ver motor/rapida.js.                     */
+    /* «hasta m» alcanza), más la mano de obra de los días de fabricación */
+    /* de bridas y de instalación, más la utilidad (sumada sobre el       */
+    /* costo) y el IVA de la pila de precio. Ver motor/rapida.js.         */
     /* ------------------------------------------------------------------ */
     rapida: {
       hoja_defecto: 'GALV_C22_4X10', // la hoja de la lista del proveedor con que se cuenta la lámina si no se elige otra
       factor_lamina: 3, // el costo de la lámina se multiplica por esto: cubre la mano de obra, los accesorios y lo demás
-      utilidad_pct: 0.2, // se suma sobre el costo (lámina × factor + bridas). Ilustrativa: el taller no la ha dicho
+      utilidad_pct: 0.2, // se suma sobre el costo (lámina × factor + bridas + mano de obra por días). Ilustrativa: el taller no la ha dicho
+      // los días de la pestaña suman su mano de obra (el taller, 7-oct-2026): días × personas × pago por día
+      personas_fabricacion: 1, // la fabricación de las bridas: 1 persona
+      pago_dia_fabricacion: 500, // a $500 por día
+      personas_instalacion: 2, // la instalación: 2 personas
+      pago_dia_instalacion: 500, // a $500 por día cada una
       bridas_por_metros: [ // hasta 40 m, $5,000; de 40 a 80 m, $12,000; de 80 a 120 m, $18,000 (sin IVA)
         { hasta_m: 40, importe: 5000 },
         { hasta_m: 80, importe: 12000 },

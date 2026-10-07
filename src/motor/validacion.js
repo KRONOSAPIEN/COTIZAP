@@ -543,6 +543,12 @@
       if (!tiene(M.proveedor && M.proveedor.hojas, R.hoja_defecto)) agregar(['rapida', 'hoja_defecto'], `debe ser una hoja de la lista del proveedor; vale ${texto(R.hoja_defecto)}`);
       if (typeof R.factor_lamina !== 'number' || !(R.factor_lamina > 0)) agregar(['rapida', 'factor_lamina'], `debe ser un número mayor que 0 (vale ${texto(R.factor_lamina)})`);
       if (typeof R.utilidad_pct !== 'number' || !(R.utilidad_pct >= 0 && R.utilidad_pct <= 10)) agregar(['rapida', 'utilidad_pct'], `debe ser de 0 % a 1 000 % (vale ${texto(R.utilidad_pct)})`);
+      ['personas_fabricacion', 'personas_instalacion'].forEach((k) => {
+        if (!(Number.isInteger(R[k]) && R[k] >= 0 && R[k] <= 100)) agregar(['rapida', k], `debe ser un número entero de personas, de 0 a 100 (vale ${texto(R[k])})`);
+      });
+      ['pago_dia_fabricacion', 'pago_dia_instalacion'].forEach((k) => {
+        if (typeof R[k] !== 'number' || !(R[k] >= 0)) agregar(['rapida', k], `debe ser un importe por día de 0 en adelante (vale ${texto(R[k])})`);
+      });
       const filas = R.bridas_por_metros;
       if (!Array.isArray(filas) || !filas.length || !filas.every(esObjeto)) agregar(['rapida', 'bridas_por_metros'], 'debe ser una tabla con al menos un renglón «hasta m» e «importe»');
       else {

@@ -422,7 +422,7 @@ Con FSR = 1.00 la hora **no recupera** lo que se paga y no se trabaja —la sema
 | `yarda_min_mm` | 300 | ancho de yarda (de lámina) más angosto |
 | `yarda_max_mm` | 2,000 | ancho de yarda (de lámina) más ancho |
 
-**T11 · Cotización rápida** (`rapida`; regla del taller, 7-oct-2026; reglas en §5.8). La hoja de la lista del proveedor con que se cuentan las hojas (`hoja_defecto`: galvanizada cal. 22 de 4 × 10 ft), el **factor de la lámina** (`factor_lamina` = 3), la **utilidad** que se suma sobre el costo (`utilidad_pct` = 20 %, ilustrativa) y las **bridas por metros**:
+**T11 · Cotización rápida** (`rapida`; regla del taller, 7-oct-2026; reglas en §5.8). La hoja de la lista del proveedor con que se cuentan las hojas (`hoja_defecto`: galvanizada cal. 22 de 4 × 10 ft), el **factor de la lámina** (`factor_lamina` = 3), la **utilidad** que se suma sobre el costo (`utilidad_pct` = 20 %, ilustrativa), la **mano de obra por días** (`personas_fabricacion` = 1 y `pago_dia_fabricacion` = $500 para la fabricación de las bridas; `personas_instalacion` = 2 y `pago_dia_instalacion` = $500 para la instalación) y las **bridas por metros**:
 
 | Metros hasta el punto más alejado | Bridas (MXN sin IVA) |
 | --- | --- |
@@ -436,7 +436,7 @@ Ninguna partida de la cotización detallada usa esta tabla: un valor inválido a
 
 Las tablas maestras son el lugar donde el taller mete sus números, y un número sin explicación se llena mal. Por eso **cada dato, sección, tabla y grupo del editor trae un botón ⓘ** que abre una ventana emergente (con el cursor en un campo, `F1` hace lo mismo; `Esc` la cierra). Los textos viven en un catálogo propio, `src/datos/ayuda_maestros.js` —no en la interfaz—, y no contienen cifras de cálculo: sólo explicaciones, rangos usuales de referencia y ejemplos.
 
-El catálogo tiene **250 entradas** (cada una con un patrón de ruta, donde `*` cubre una clave) que explican los **577 elementos** que dibuja el editor: 12 grupos, 93 secciones, 459 datos y 13 tablas.
+El catálogo tiene **254 entradas** (cada una con un patrón de ruta, donde `*` cubre una clave) que explican los **581 elementos** que dibuja el editor: 12 grupos, 93 secciones, 463 datos y 13 tablas.
 
 Cada entrada responde tres preguntas y dice qué parte del precio mueve:
 
@@ -1317,7 +1317,7 @@ La venta es la pactada; sin ella, el precio calculado. La comparación por categ
 
 ### 5.8 Cotización rápida
 
-Para dar un precio en minutos, sin capturar pieza por pieza, el taller usa una regla (7-oct-2026): con el **diámetro mayor** del sistema y los **metros hasta el punto más alejado**, se cuentan las láminas que hacen falta para esos metros de ducto a ese diámetro, su costo se multiplica por 3, se suman las bridas según los metros y, sobre eso, la utilidad y el IVA. La app la tiene en su propia pestaña (**Cotización rápida**; `src/motor/rapida.js` y `src/web/rapida_ui.js`) con sus valores en T11:
+Para dar un precio en minutos, sin capturar pieza por pieza, el taller usa una regla (7-oct-2026): con el **diámetro mayor** del sistema y los **metros hasta el punto más alejado**, se cuentan las láminas que hacen falta para esos metros de ducto a ese diámetro, su costo se multiplica por 3, se suman las bridas según los metros y la mano de obra de los días de fabricación de bridas y de instalación y, sobre eso, la utilidad y el IVA. La app la tiene en su propia pestaña (**Cotización rápida**; `src/motor/rapida.js` y `src/web/rapida_ui.js`) con sus valores en T11:
 
 ```text
 B          = π · (D + e) + holgura de la costura del material       # plantilla de una yarda (D interior; galvanizado: Pittsburgh, 32 mm)
@@ -1326,6 +1326,8 @@ por_hoja   = acomodo de plantillas yarda × B en la hoja (abajo) ;  hojas = ⌈ 
              (si la plantilla no cabe de ninguna forma: cada yarda lleva hojas completas y un retazo; los retazos se acomodan juntos)
 lámina     = hojas × precio de la hoja sin IVA                       # lista del proveedor (T3b)
 costo      = lámina × factor_lamina + bridas(metros)                 # el primer renglón de «bridas por metros» que alcanza
+           + días_fab × personas_fab × pago_día_fab                 # fabricación de las bridas: 1 persona × $500
+           + días_inst × personas_inst × pago_día_inst              # instalación: 2 personas × $500
 precio     = costo × (1 + utilidad)                                  # la utilidad se SUMA sobre el costo (no es % del precio)
 total      = precio × (1 + IVA)                                      # el IVA de la pila de precio (T9)
 ```
@@ -1348,9 +1350,9 @@ Con la lámina galvanizada cal. 22 de 4 × 10 ft ($920 con IVA = $793.10 sin IVA
 
 Para 11″ y 40 m con yardas de 4 ft: la plantilla de una yarda mide π × (279.4 + 0.85) + 32 = 912 mm, así que cada hoja de 3,048 mm da 3 yardas; 40 m son 33 yardas, es decir, 11 hojas. Con yardas de 3 ft son 44 yardas: la hoja de 4 ft también da 3 (una franja de 305 mm se desperdicia), así que salen 15 hojas.
 
-**El plazo.** La pestaña tiene un apartado para los **días de fabricación** y los **días de instalación** (de 0 a 365, admite medios días); se muestran junto al total («5 días de fabricación + 3 días de instalación = 8 días») y **no cambian el precio**: la fabricación ya la cubre el factor. La utilidad capturada en la pestaña vale sólo para esa cotización rápida; vacía, se usa la de T11. El diámetro se captura en la unidad de la cotización (pulgadas o mm) y lo capturado se recuerda en el navegador. Más metros que el último renglón de las bridas no tienen precio: la app lo dice y no da un total.
+**El plazo y su mano de obra** (el taller, 7-oct-2026). La pestaña tiene un apartado para los **días de fabricación de bridas** y los **días de instalación** (de 0 a 365, admite medios días). Se muestran junto al total («5 días de fabricación de bridas + 3 días de instalación = 8 días») y **suman su mano de obra al costo**, antes de la utilidad: la fabricación de las bridas, 1 persona a $500 por día; la instalación, 2 personas a $500 por día. Con 11″ y 40 m, 5 días de bridas ($2,500) y 3 de instalación ($3,000) llevan el costo de $31,172.41 a $36,672.41 y el total de $43,392.00 a **$51,048.00**. Sin días no se suma nada. La utilidad capturada en la pestaña vale sólo para esa cotización rápida; vacía, se usa la de T11. El diámetro se captura en la unidad de la cotización (pulgadas o mm) y lo capturado se recuerda en el navegador. Más metros que el último renglón de las bridas no tienen precio: la app lo dice y no da un total.
 
-Es una **estimación**: todo el sistema al diámetro mayor, en ductos rectos, sin aprovechar retazos entre yardas, y lo demás (codos, reducciones, mano de obra, soportería, instalación) cubierto por el factor. Para un precio fino se capturan las partidas.
+Es una **estimación**: todo el sistema al diámetro mayor, en ductos rectos, sin aprovechar retazos entre yardas, y lo demás (codos, reducciones, mano de obra del ducto, soportería) cubierto por el factor; la fabricación de las bridas y la instalación, por sus días. Para un precio fino se capturan las partidas.
 
 ---
 
@@ -2246,4 +2248,4 @@ Los planos de pedido del 30-sep-2026 confirmaron el gramil (24 mm), los barrenos
 | La hoja y la yarda | Galvanizada cal. 22 de 4 × 10 ft; la yarda es su ancho (1.22 m), como en el tramo recto | T11 (`hoja_defecto`) o la pestaña | Con yardas de 3 ft (hoja de 3 × 10 ft) salen otras hojas: elegirla en la pestaña si está en la lista del proveedor. |
 | Retazos | No se aprovechan entre láminas; en una lámina, el acomodo de guillotina mete las que quepan (incluso giradas) | §5.8 | Si el taller usa los retazos para codos o reducciones, cuenta menos hojas: el factor ya lo cubre. |
 | Yarda de 3 ft en galvanizado | La lista del proveedor sólo trae la galvanizada de 4 × 10 ft: se corta la yarda de 3 ft de ella y se desperdicia una franja de 1 ft | Lista del proveedor (T3b): agregar la de 3 × 10 ft | Con la hoja de 3 × 10 ft (si se compra), la yarda de 3 ft la toma sola y salen menos hojas. |
-| Días de fabricación e instalación | Sólo informan el plazo; no suman costo | §5.8 | Si la instalación debe cobrarse (cuadrilla × días), hay que agregarla: hoy no está en la regla. |
+| Días de fabricación e instalación | **Confirmado (7-oct-2026):** suman su mano de obra: bridas, 1 persona × $500 por día; instalación, 2 personas × $500 por día; con utilidad e IVA encima | T11 | Otra cuadrilla u otro pago se cambian en T11. Los viáticos (hospedaje, comidas) no están: la instalación es local. |

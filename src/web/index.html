@@ -97,7 +97,7 @@
     <div class="planos-cab">
       <div>
         <h2>Cotización rápida</h2>
-        <p>Un precio en minutos con el diámetro mayor y los metros hasta el punto más alejado: la lámina en hojas enteras por 3, más las bridas según los metros, más la utilidad y el IVA. Para el precio pieza por pieza, capture las partidas en «Cotización».</p>
+        <p>Un precio en minutos con el diámetro mayor y los metros hasta el punto más alejado: la lámina en hojas enteras por 3, más las bridas según los metros, más la mano de obra de los días de fabricación de bridas y de instalación, más la utilidad y el IVA. Para el precio pieza por pieza, capture las partidas en «Cotización».</p>
       </div>
       <div class="planos-acc"><button type="button" class="btn btn-sec" id="rapida-limpiar">Limpiar</button></div>
     </div>
@@ -110,9 +110,9 @@
         <div class="datos-sub">Lámina y precio</div>
         <div class="campo"><label for="r_hoja">Lámina</label><select id="r_hoja"></select></div>
         <div class="campo"><label for="r_utilidad">Utilidad (% sobre el costo)</label><input id="r_utilidad" type="text" inputmode="decimal" autocomplete="off"></div>
-        <div class="datos-sub">Plazo <span class="datos-sub-nota">Para el cliente: no suma al precio.</span></div>
-        <div class="campo"><label for="r_dias_fab">Días de fabricación</label><input id="r_dias_fab" type="text" inputmode="decimal" autocomplete="off" placeholder="p. ej. 5"></div>
-        <div class="campo"><label for="r_dias_ins">Días de instalación</label><input id="r_dias_ins" type="text" inputmode="decimal" autocomplete="off" placeholder="p. ej. 3"></div>
+        <div class="datos-sub">Plazo y mano de obra <span class="datos-sub-nota">Los días dan el plazo y suman su mano de obra al costo.</span></div>
+        <div class="campo"><label for="r_dias_fab">Días de fabricación de bridas</label><input id="r_dias_fab" type="text" inputmode="decimal" autocomplete="off" placeholder="p. ej. 5" aria-describedby="r_fab_nota"><span class="nota r-cuadrilla" id="r_fab_nota"></span></div>
+        <div class="campo"><label for="r_dias_ins">Días de instalación</label><input id="r_dias_ins" type="text" inputmode="decimal" autocomplete="off" placeholder="p. ej. 3" aria-describedby="r_ins_nota"><span class="nota r-cuadrilla" id="r_ins_nota"></span></div>
       </form>
       <div id="rapida-resultado" class="rapida-res" aria-live="polite"></div>
     </div>

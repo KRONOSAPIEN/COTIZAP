@@ -1930,10 +1930,14 @@ const ok = (cond, msg) => {
     await p.fill('#r_diam', '11');
     await p.locator('#r_yarda input[value="1220"]').check();
 
-    // el plazo: días de fabricación e instalación, sin cambiar el precio
+    // el plazo y la mano de obra: días de fabricación de bridas (1 persona × $500) e instalación (2 personas × $500)
+    ok(await p.locator('#r_fab_nota').innerText() === '1 persona × $500.00 por día' && await p.locator('#r_ins_nota').innerText() === '2 personas × $500.00 por día', 'bajo cada campo de días, la cuadrilla y su pago (de las tablas)');
     await p.fill('#r_dias_fab', '5');
     await p.fill('#r_dias_ins', '3');
-    ok(await p.locator('#rapida-plazo').innerText() === 'Plazo: 5 días de fabricación + 3 días de instalación = 8 días' && await total() === '$43,392.00', 'el plazo: 5 días de fabricación + 3 de instalación = 8 días, y el precio no cambia');
+    const dd = await desglose();
+    ok(await p.locator('#rapida-plazo').innerText() === 'Plazo: 5 días de fabricación de bridas + 3 días de instalación = 8 días' && /Fabricación de bridas: 5 días\s+5 días × 1 persona × \$500\.00 por día\.\s+\$2,500\.00/.test(dd)
+      && /Instalación: 3 días\s+3 días × 2 personas × \$500\.00 por día\.\s+\$3,000\.00/.test(dd) && await total() === '$51,048.00',
+      'el plazo (8 días) y su mano de obra: bridas $2,500 + instalación $3,000, con utilidad e IVA: $51,048.00');
     await p.fill('#r_dias_ins', '-2');
     ok(/días de instalación deben ser de 0 a 365/.test(await p.locator('#rapida-resultado').innerText()), 'días inválidos: lo dice');
     await p.fill('#r_dias_ins', '3');
@@ -1951,7 +1955,7 @@ const ok = (cond, msg) => {
     // c) la utilidad de esta cotización, otra lámina y el factor de las tablas
     await p.fill('#r_metros', '40');
     await p.fill('#r_utilidad', '30');
-    const esperado = ((11 * 920 / 1.16) * 3 + 5000) * 1.3 * 1.16;
+    const esperado = ((11 * 920 / 1.16) * 3 + 5000 + 2500 + 3000) * 1.3 * 1.16; // con los días de bridas e instalación capturados arriba
     ok(await total() === `$${esperado.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'la utilidad capturada (30 %) se suma sobre el costo');
     await p.fill('#r_utilidad', '');
     await p.selectOption('#r_hoja', 'GALV_C24_4X10');

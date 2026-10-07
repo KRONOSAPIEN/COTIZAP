@@ -51,7 +51,7 @@
     [/^precio_kg_/, 'MXN/kg'], [/^precio_m3_/, 'MXN/m³'], [/^precio_m_/, 'MXN/m'], [/^precio_cartucho/, 'MXN/cartucho'], [/^precio_pza/, 'MXN/pza'],
     [/^precio_juego/, 'MXN/juego'], [/^precio_L_/, 'MXN/L'], [/salario_hora/, 'MXN/h'], [/equipo_h$/, 'MXN/h'], [/gif_por_hora/, 'MXN/h'], [/cargo_minimo/, 'MXN'],
     [/_mm$/, 'mm'], [/_mm2$/, 'mm²'], [/_m_min$/, 'm/min'], [/_min_m2$/, 'min/m²'], [/_min_m$/, 'min/m'], [/_min_kg$/, 'min/kg'], [/_min$/, 'min'], [/_deg$/, '°'],
-    [/^salario_diario$/, 'MXN/día'], [/^dias_/, 'días'], [/^horas_dia$/, 'h/día'], [/_envase_L$/, 'L'], [/^tornillos_multiplo$/, 'juegos'], [/^tornillos_pieza$/, 'juegos'],
+    [/^salario_diario$/, 'MXN/día'], [/^pago_dia_/, 'MXN/día'], [/^personas_/, 'personas'], [/^dias_/, 'días'], [/^horas_dia$/, 'h/día'], [/_envase_L$/, 'L'], [/^tornillos_multiplo$/, 'juegos'], [/^tornillos_pieza$/, 'juegos'],
     [/^ml_sellador_junta_m$/, 'mL/m'],
     [/_kg_m3$/, 'kg/m³'], [/_g_cm3$/, 'g/cm³'], [/_L_min$/, 'L/min'], [/_um$/, 'µm'], [/^sv_pct$/, '%'], [/^dias_cobro$/, 'días'], [/ml_por_m/, 'mL/m'], [/^cartucho_ml$/, 'mL'],
   ];
@@ -159,7 +159,7 @@
 
   E('rapida', 'Cotización rápida',
     'La regla del taller para dar un precio en minutos con el diámetro mayor y los metros hasta el punto más alejado.',
-    'Lámina en hojas enteras × su precio sin IVA × el factor, más las bridas según los metros, más la utilidad y el IVA.',
+    'Lámina en hojas enteras × su precio sin IVA × el factor, más las bridas según los metros, la mano de obra de los días, la utilidad y el IVA.',
     'Sólo mueve la pestaña «Cotización rápida»: las partidas de la cotización detallada no usan estos valores.',
     { origen: 'mixto', origenTxt: 'El factor y las bridas por metros son del taller; la utilidad de arranque es ilustrativa.', afecta: ['rapida'] });
   E('rapida.hoja_defecto', 'Lámina con que se cuenta',
@@ -173,10 +173,30 @@
     'El precio sube en proporción: con 3, cada $1,000 de lámina son $3,000 antes de bridas, utilidad e IVA.',
     { afecta: ['rapida'], tip: [1.5, 5] });
   E('rapida.utilidad_pct', 'Utilidad de la cotización rápida',
-    'La utilidad que se suma sobre el costo (lámina por el factor más las bridas).',
+    'La utilidad que se suma sobre el costo (lámina por el factor, bridas y mano de obra por días).',
     'En %, sobre el costo. Cada cotización rápida puede cambiarla.',
     'Con 20 %, un costo de $31,172 queda en $37,407 antes de IVA.',
     { afecta: ['rapida'], tip: [0, 60], ojo: 'Se suma al costo, no es un % del precio como la utilidad de la pila de precio.' });
+  E('rapida.personas_fabricacion', 'Personas en la fabricación de bridas',
+    'Cuántas personas hacen las bridas en los días de fabricación de la cotización rápida.',
+    'Un número entero. El taller: 1 persona.',
+    'La mano de obra de la fabricación es días × personas × pago por día: con 1 persona a $500, 4 días son $2,000.',
+    { afecta: ['rapida'], tip: [1, 4] });
+  E('rapida.pago_dia_fabricacion', 'Pago por día en la fabricación de bridas',
+    'Lo que gana por día cada persona que hace las bridas.',
+    'En MXN por día. El taller: $500.',
+    'Sube o baja la mano de obra de la fabricación en proporción a los días.',
+    { afecta: ['rapida'], tip: [300, 1500] });
+  E('rapida.personas_instalacion', 'Personas en la instalación',
+    'Cuántas personas instalan en los días de instalación de la cotización rápida.',
+    'Un número entero. El taller: 2 personas.',
+    'La mano de obra de la instalación es días × personas × pago por día: con 2 personas a $500, 3 días son $3,000.',
+    { afecta: ['rapida'], tip: [1, 6] });
+  E('rapida.pago_dia_instalacion', 'Pago por día en la instalación',
+    'Lo que gana por día cada persona que instala.',
+    'En MXN por día. El taller: $500.',
+    'Sube o baja la mano de obra de la instalación en proporción a los días y a las personas.',
+    { afecta: ['rapida'], tip: [300, 1500] });
   E('rapida.bridas_por_metros', 'Bridas por metros',
     'Lo que se suma por las bridas según los metros hasta el punto más alejado.',
     'Cada renglón dice «hasta tantos metros, tanto». Se usa el primero que alcance. Importes sin IVA.',

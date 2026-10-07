@@ -1,7 +1,8 @@
 /**
  * COTIZAP · web/rapida_ui.js — Pestaña «Cotización rápida»: un precio en minutos con el diámetro mayor y los metros hasta el
  * punto más alejado (motor/rapida.js). Se elige la yarda (3 o 4 ft), se ve cómo salen las yardas de cada lámina (el acomodo
- * dibujado a escala y una tira con todas las láminas) y se anotan los días de fabricación y de instalación (el plazo).
+ * dibujado a escala y una tira con todas las láminas) y se anotan los días de fabricación de bridas y de instalación: dan el
+ * plazo y suman su mano de obra (días × personas × pago por día, de las tablas).
  * Lo capturado se recuerda en este navegador; los valores de la regla (factor, bridas por metros, utilidad y lámina de
  * arranque) están en Tablas maestras › Cotización rápida.
  * Depende de app.js (W.estadoApp) para las tablas maestras y la unidad de diámetro de la cotización.
@@ -136,12 +137,17 @@
     h('td', null, h('div', { class: 'r-concepto' }, concepto), detalle ? h('div', { class: 'r-detalle' }, detalle) : null),
     h('td', { class: 'num' }, importe));
 
+  /** «2 personas × $500 por día» */
+  const cuadrilla = (personas, pago) => `${plural(personas, 'persona', 'personas')} × ${W.mxn(pago)} por día`;
+  /** El renglón de la mano de obra de unos días (sólo si se capturaron). */
+  const manoDeObra = (concepto, m) => (m.dias > 0 ? renglon(`${concepto}: ${corto(m.dias)} ${m.dias === 1 ? 'día' : 'días'}`, `${corto(m.dias)} ${m.dias === 1 ? 'día' : 'días'} × ${cuadrilla(m.personas, m.pago_dia)}.`, W.mxn(m.importe)) : null);
+
   function nominal(D_mm) {
     return enPulgadas() ? `${corto(D_mm / W.MM_IN)}″` : `${corto(D_mm)} mm`;
   }
 
   function textoPlazo(p) {
-    const partes = [p.fabricacion > 0 ? `${corto(p.fabricacion)} ${p.fabricacion === 1 ? 'día' : 'días'} de fabricación` : '', p.instalacion > 0 ? `${corto(p.instalacion)} ${p.instalacion === 1 ? 'día' : 'días'} de instalación` : ''].filter(Boolean);
+    const partes = [p.fabricacion > 0 ? `${corto(p.fabricacion)} ${p.fabricacion === 1 ? 'día' : 'días'} de fabricación de bridas` : '', p.instalacion > 0 ? `${corto(p.instalacion)} ${p.instalacion === 1 ? 'día' : 'días'} de instalación` : ''].filter(Boolean);
     return partes.length ? `${partes.join(' + ')}${partes.length > 1 ? ` = ${corto(p.total)} ${p.total === 1 ? 'día' : 'días'}` : ''}` : 'sin días';
   }
 
@@ -162,6 +168,8 @@
         renglon(`Lámina: ${plural(r.hojas, 'hoja', 'hojas')} × ${W.mxn(hj.sin_iva)}`, `${hj.descripcion}, sin IVA. ${cuenta}`, W.mxn(r.lamina)),
         renglon(`Lámina × ${corto(r.factor)}`, 'Cubre la mano de obra, los accesorios y lo demás.', W.mxn(r.lamina_factor)),
         renglon('Bridas', `Por ${corto(r.entrada.L_m)} m: ${tramo}.`, W.mxn(r.bridas.importe)),
+        manoDeObra('Fabricación de bridas', r.mano_obra.fabricacion),
+        manoDeObra('Instalación', r.mano_obra.instalacion),
         renglon('Costo', null, W.mxn(r.costo), 'r-sub'),
         renglon(`Utilidad ${corto(r.utilidad_pct * 100)} %`, 'Sobre el costo.', W.mxn(r.utilidad)),
         renglon('Precio antes de IVA', null, W.mxn(r.precio), 'r-sub'),
@@ -204,6 +212,10 @@
       ...hojas.map((x) => h('option', { value: x.id }, x.descripcion)));
     sel.value = elegida;
     $('#r_utilidad').placeholder = M.rapida ? `${corto(M.rapida.utilidad_pct * 100)} (de las tablas)` : '';
+    if (M.rapida) {
+      $('#r_fab_nota').textContent = cuadrilla(M.rapida.personas_fabricacion, M.rapida.pago_dia_fabricacion);
+      $('#r_ins_nota').textContent = cuadrilla(M.rapida.personas_instalacion, M.rapida.pago_dia_instalacion);
+    }
     const cont = $('#rapida-resultado');
     const e = entrada();
     if (e.D_mm === undefined && e.L_m === undefined) {

@@ -736,6 +736,7 @@ kbd { font: 500 11.5px var(--font-mono); padding: 1px 6px; border: 1px solid var
 .segmento input:checked + span { background: var(--accent-soft); color: var(--accent); }
 .segmento input:checked + span small { color: var(--accent); }
 .segmento input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: -3px; }
+.r-cuadrilla { font-size: 12px; color: var(--fg-3); }
 .r-plazo { font-size: 14px; color: var(--fg-2); padding-top: 10px; border-top: 1px solid var(--line); }
 .r-plazo strong { color: var(--fg); }
 /* la lámina dibujada: la hoja, sus yardas numeradas y el sobrante rayado */

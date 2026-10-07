@@ -6,6 +6,8 @@
  *   láminas  = hojas enteras de la lista del proveedor para hacer esos metros de ducto a ese diámetro
  *   lámina   = láminas × precio de la hoja sin IVA
  *   costo    = lámina × factor_lamina (3: cubre mano de obra, accesorios y lo demás) + bridas por metros
+ *              + días de fabricación de bridas × personas × pago por día (1 × $500)
+ *              + días de instalación × personas × pago por día (2 × $500)
  *   precio   = costo × (1 + utilidad)            (la utilidad se SUMA sobre el costo)
  *   total    = precio × (1 + IVA)
  *
@@ -20,7 +22,7 @@
  * yarda a lo ancho de la hoja, como en el tramo recto), todas giradas, o una franja de cada una. El acomodo trae el
  * rectángulo de cada plantilla para dibujar la hoja. Si la plantilla no cabe en la hoja de ninguna forma, cada yarda lleva
  * hojas completas y un retazo, y los retazos se acomodan juntos.
- * Los días de fabricación y de instalación sólo informan el plazo: no suman costo (el factor ya cubre la fabricación).
+ * Los días de fabricación (de las bridas) y de instalación dan el plazo y suman su mano de obra al costo, antes de la utilidad.
  * Pura: no muta nada; lanza ErrorValidacion con mensajes legibles.
  */
 (function (root, factory) {
@@ -132,7 +134,8 @@
 
   /**
    * entrada: { D_mm, L_m, yarda_mm?, hoja_id?, utilidad_pct?, dias_fabricacion?, dias_instalacion? }  (utilidad en fracción: 0.20)
-   * Devuelve el desglose: hoja, plantilla, acomodo, yardas, hojas, lámina, factor, bridas, costo, utilidad, precio, IVA, total y plazo.
+   * Devuelve el desglose: hoja, plantilla, acomodo, yardas, hojas, lámina, factor, bridas, mano de obra por días, costo, utilidad,
+   * precio, IVA, total y plazo.
    */
   function cotizar(entrada, M) {
     // las tablas de las que depende: su propia tabla, la lista del proveedor, los materiales y calibres, la costura y el IVA
@@ -196,7 +199,13 @@
     const ultima = aco.n > 0 ? n_yardas - (n_hojas - 1) * aco.n : 0; // yardas que lleva la última hoja
     const lamina = n_hojas * precio.sin_iva;
     const lamina_factor = lamina * factor;
-    const costo = lamina_factor + bridas.importe;
+    // la mano de obra de los días: días × personas × pago por día (sin días, nada)
+    const cuadrilla = (dias, personas, pago) => ({ dias: dias || 0, personas, pago_dia: pago, importe: (dias || 0) * personas * pago });
+    const mano_obra = {
+      fabricacion: cuadrilla(diasFab, R.personas_fabricacion, R.pago_dia_fabricacion),
+      instalacion: cuadrilla(diasIns, R.personas_instalacion, R.pago_dia_instalacion),
+    };
+    const costo = lamina_factor + bridas.importe + mano_obra.fabricacion.importe + mano_obra.instalacion.importe;
     const utilidad = costo * u;
     const precio_neto = costo + utilidad;
     const iva_monto = precio_neto * iva;
@@ -210,7 +219,7 @@
       plantilla_mm: B, holgura_mm: holgura, costura: mat.costura, D_med_mm: d.D_med, yarda_mm: Y,
       acomodo: aco, yardas: n_yardas, yardas_por_hoja: aco.n, yardas_ultima_hoja: ultima, hojas: n_hojas, aprovechamiento: aprovechado, kg: n_hojas * precio.kg,
       lamina, factor, lamina_factor,
-      bridas,
+      bridas, mano_obra,
       costo, utilidad_pct: u, utilidad, precio: precio_neto, iva_pct: iva, iva: iva_monto, total: precio_neto + iva_monto,
       plazo: diasFab === null && diasIns === null ? null : { fabricacion: diasFab || 0, instalacion: diasIns || 0, total: (diasFab || 0) + (diasIns || 0) },
       advertencias,

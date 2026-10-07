@@ -177,14 +177,27 @@ test('Acomodo: las plantillas no se enciman, caen dentro de la hoja y nadie acom
   assert.equal(R.acomodo(1219, 3048, 914, 3300).n, 0, 'la plantilla más larga que la hoja no se acomoda');
 });
 
-test('Plazo: los días de fabricación e instalación se informan y no cambian el precio', () => {
+test('Días: dan el plazo y suman su mano de obra (bridas: 1 persona × $500; instalación: 2 × $500) antes de la utilidad', () => {
   const M = crearMaestros();
   const sin = R.cotizar({ D_mm: 279.4, L_m: 40 }, M);
   assert.equal(sin.plazo, null);
+  assert.equal(sin.mano_obra.fabricacion.importe + sin.mano_obra.instalacion.importe, 0, 'sin días, sin mano de obra');
   const con = R.cotizar({ D_mm: 279.4, L_m: 40, dias_fabricacion: 5, dias_instalacion: 2.5 }, M);
   assert.deepEqual(con.plazo, { fabricacion: 5, instalacion: 2.5, total: 7.5 });
-  assert.equal(con.total, sin.total);
+  assert.deepEqual(con.mano_obra.fabricacion, { dias: 5, personas: 1, pago_dia: 500, importe: 2500 });
+  assert.deepEqual(con.mano_obra.instalacion, { dias: 2.5, personas: 2, pago_dia: 500, importe: 2500 });
+  cerca(con.costo, sin.costo + 2500 + 2500, 1e-9, 'la mano de obra se suma al costo');
+  cerca(con.total, (sin.costo + 5000) * 1.2 * 1.16, 1e-6, 'y lleva utilidad e IVA');
+  // el caso de la pestaña: 11″ y 40 m, 5 días de bridas y 3 de instalación → $51,048.00
+  cerca(R.cotizar({ D_mm: 279.4, L_m: 40, dias_fabricacion: 5, dias_instalacion: 3 }, M).total, ((11 * 920 / 1.16) * 3 + 5000 + 2500 + 3000) * 1.2 * 1.16, 1e-6);
   assert.deepEqual(R.cotizar({ D_mm: 279.4, L_m: 40, dias_instalacion: 3 }, M).plazo, { fabricacion: 0, instalacion: 3, total: 3 });
+  // las personas y el pago por día salen de las tablas
+  const M3 = crearMaestros();
+  M3.rapida.personas_instalacion = 3;
+  M3.rapida.pago_dia_instalacion = 600;
+  assert.equal(R.cotizar({ D_mm: 279.4, L_m: 40, dias_instalacion: 2 }, M3).mano_obra.instalacion.importe, 2 * 3 * 600);
+  M3.rapida.personas_fabricacion = 1.5;
+  assert.throws(() => R.cotizar({ D_mm: 279.4, L_m: 40 }, M3), /personas fabricacion: debe ser un número entero de personas/);
   assert.throws(() => R.cotizar({ D_mm: 279.4, L_m: 40, dias_fabricacion: -1 }, M), /días de fabricación deben ser de 0 a 365/);
   assert.throws(() => R.cotizar({ D_mm: 279.4, L_m: 40, dias_instalacion: NaN }, M), /días de instalación/);
 });
