@@ -248,12 +248,23 @@
     return m ? m.nombre.split(' (')[0] : p.material_id;
   };
   const resumenMaterial = (p) => (!esLamina(p.familia) ? '' : `${nombreMaterial(p)} · ${p.espesor_mm > 0 ? `${p.espesor_mm} mm` : `cal. ${p.calibre}`}`);
-  /** Título de una partida: su descripción; sin ella, la del artículo del catálogo (lo comprado) o el nombre de la familia. */
+  /**
+   * Título de una partida: su descripción; sin ella, la del artículo del catálogo (lo comprado), el nombre de la pieza como en
+   * los planos de pedido («Reducción de 11″ a 10″ con injerto de 5″ a 30°») o el de la familia.
+   */
   const tituloPartida = (p) => {
     if (p.descripcion) return p.descripcion;
     const art = p.familia === 'COMPRADO' && p.articulo_id && estado.M.compras.articulos[p.articulo_id];
-    return art && art.descripcion ? art.descripcion : NOMBRE_FAM[p.familia];
+    if (art && art.descripcion) return art.descripcion;
+    return C.planos.titulo(p) || NOMBRE_FAM[p.familia];
   };
+  /** El dibujo acotado de una partida calculada (o null si su familia no se dibuja). opciones: las de planos.arbol. */
+  function figuraPlano(f, opciones) {
+    const d = f && f.ok ? C.planos.plano(f, estado.res.maestros) : null;
+    return d ? W.svgArbol(C.planos.arbol(d, opciones)) : null;
+  }
+  /** Miniatura de la pieza para la lista (o el ícono de su familia). */
+  const miniatura = (p, f) => h('span', { class: 'mini-plano' }, figuraPlano(f, { px: 64, alto_max: 44, compacto: true }) || W.iconoFamilia(p.familia));
   const dims = (p) => W.resumenDims(p, unidades(), estado.M);
   /** Las partidas que suman al total: las del usuario que se calcularon y las automáticas (el sobrante de comprar piezas enteras). */
   const filasOk = (R) => [...R.partidas.filter((f) => f.ok), ...(R.automaticas || [])];
@@ -523,7 +534,7 @@
         class: 'partida-main', role: 'button', tabindex: '0', 'aria-pressed': String(sel),
         onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activar(); } },
       },
-      W.iconoFamilia(p.familia),
+      miniatura(p, f),
       h('div', { class: 'partida-txt' },
         h('div', { class: 'partida-titulo' }, tituloPartida(p)),
         h('div', { class: 'partida-meta' }, [dims(p), resumenMaterial(p)].filter(Boolean).join(' · ')),
@@ -547,7 +558,9 @@
       reemplazar(ul, h('li', { class: 'vacio' },
         h('p', { class: 'vacio-tit' }, 'Todavía no hay partidas'),
         h('p', null, 'Agregue tramos rectos, codos, reducciones, transiciones, injertos o piezas compradas. El precio se calcula mientras captura.'),
-        h('button', { type: 'button', class: 'btn btn-primario', onclick: () => abrirDialogo(null) }, W.icono('mas'), 'Agregar la primera partida')));
+        h('div', { class: 'vacio-acc' },
+          h('button', { type: 'button', class: 'btn btn-primario', onclick: () => abrirDialogo(null) }, W.icono('mas'), 'Agregar la primera partida'),
+          h('button', { type: 'button', class: 'btn btn-sec', onclick: () => W.planosUI.verEjemplo() }, 'Ver un pedido de ejemplo'))));
       return;
     }
     reemplazar(ul, ps.map(filaPartida), (estado.res.automaticas || []).map(filaAutomatica));
@@ -1087,6 +1100,15 @@
     ];
   }
 
+  /** El plano de la pieza en el desglose: el dibujo acotado y sus datos, como en los planos de pedido. */
+  function seccionPlano(f) {
+    const d = C.planos.plano(f, estado.res.maestros);
+    if (!d) return null;
+    return seccion('Plano de la pieza', h('figure', { class: 'det-plano' },
+      W.svgArbol(C.planos.arbol(d, { px: 520, alto_max: 360 })),
+      h('figcaption', null, h('strong', null, d.titulo), h('ul', { class: 'plano-datos' }, d.datos.filter(Boolean).map((x) => h('li', null, x))))), true, 'medidas en mm');
+  }
+
   function renderDetalle() {
     const cont = $('#detalle');
     const i = estado.cot.partidas.findIndex((p) => p.id === estado.sel);
@@ -1097,20 +1119,21 @@
     const p = estado.cot.partidas[i];
     const f = estado.res.partidas[i];
     const cab = h('div', { class: 'det-cab' },
-      W.iconoFamilia(p.familia),
+      miniatura(p, f),
       h('div', null, h('h3', null, tituloPartida(p)), h('p', { class: 'det-sub' }, [dims(p), resumenMaterial(p)].filter(Boolean).join(' · '))),
       h('button', { type: 'button', class: 'btn', onclick: () => abrirDialogo(p.id) }, W.icono('editar'), 'Editar'));
     if (!f.ok) {
       reemplazar(cont, cab, h('div', { class: 'errores' }, h('p', { class: 'errores-tit' }, W.icono('error'), 'No se puede calcular esta partida'), h('ul', null, f.errores.map((e) => h('li', null, e)))));
       return;
     }
+    const plano = seccionPlano(f);
     if (p.familia === 'COMPRADO') {
-      reemplazar(cont, cab, detalleResumen(f), seccion('Compra', detalleCompra(f), true, W.mxn(f.costos.CD)), seccion('Pila de precio', detallePila(f), true));
+      reemplazar(cont, cab, detalleResumen(f), plano, seccion('Compra', detalleCompra(f), true, W.mxn(f.costos.CD)), seccion('Pila de precio', detallePila(f), true));
       return;
     }
     if (p.familia === 'INSTALACION' || p.familia === 'SOPORTE') {
       const obra = p.familia === 'INSTALACION';
-      reemplazar(cont, cab, detalleResumen(f),
+      reemplazar(cont, cab, detalleResumen(f), plano,
         obra ? seccion('Cuadrilla y viáticos', detalleInstalacion(f), true, `${W.num(f.instalacion.horas, 1)} h · ${W.mxn(f.costos.subtotales.viaticos)} de viáticos`)
           : seccion('Pieza, barra y anclajes', detalleSoporte(f), true, `${W.num(f.soporte.L_total_m, 2)} m de barra`),
         seccion('Pila de precio', detallePila(f), true, W.mxn(f.precio.total_sin_redondeo)),
@@ -1119,14 +1142,14 @@
     }
     if (p.familia === 'BRIDA') { // sólo aros: no hay lámina; lo que importa son los aros, su tornillería y su junta
       const a = f.qto.her.aros_sueltos[0];
-      reemplazar(cont, cab, detalleResumen(f),
+      reemplazar(cont, cab, detalleResumen(f), plano,
         seccion('Aros, tornillería y junta', detalleHerrajes(f), true, a ? `${W.num(a.L_aro_mm, 0)} mm de solera por aro` : ''),
         seccion('Pila de precio', detallePila(f), true, W.mxn(f.precio.total_sin_redondeo)),
         seccion('Tiempos de fabricación', detalleTiempos(f), false, `${W.num(f.costos.h_MOD, 2)} h`),
         seccion('Costo directo por concepto', detalleCostos(f), false, W.mxn(f.costos.CD)));
       return;
     }
-    reemplazar(cont, cab, detalleResumen(f),
+    reemplazar(cont, cab, detalleResumen(f), plano,
       seccion('Geometría, peso y merma', detalleGeometria(f), true, `${W.num(f.geometria.A_neta_m2, 3)} m² · ${W.num(f.qto.lam.m_bruta_kg, 2)} kg brutos`),
       seccion('Pila de precio', detallePila(f), true, W.mxn(f.precio.total_sin_redondeo)),
       seccion('Tiempos de fabricación', detalleTiempos(f), false, `${W.num(f.costos.h_MOD, 2)} h`),
@@ -1403,7 +1426,9 @@
       if (p.familia === 'RECTO' && estado.res.yarda_mm !== undefined) defs.yarda_mm = estado.res.yarda_mm; // lo que decide la cotización, si la partida no elige
       const f = C.cotizador.cotizarPartida({ ...defs, ...p }, estado.res.maestros);
       const ind = f.indicadores;
+      const fig = figuraPlano(f, { px: 300, alto_max: 250 });
       cont.replaceChildren(tit,
+        fig ? h('div', { class: 'prev-plano' }, fig) : null,
         h('div', { class: 'prev-precio' }, h('div', { class: 'tile-et' }, 'Precio unitario'), h('div', { class: 'prev-val' }, W.mxn(f.precio.unitario)), h('div', { class: 'tile-sub' }, `${p.cantidad} × = ${W.mxn(f.precio.importe)}`)),
         h('dl', { class: 'kvs kvs-1' },
           kv('Peso neto', W.num(f.peso.neto_total_kg, 2), 'kg'),
@@ -1418,11 +1443,21 @@
           f.costos.subtotales.viaticos > 0 ? kv('Viáticos (costo)', W.mxn(f.costos.subtotales.viaticos)) : null),
         f.advertencias.length ? h('ul', { class: 'avisos' }, f.advertencias.map((a) => h('li', null, W.icono('aviso'), h('span', null, a)))) : h('p', { class: 'nota ok' }, W.icono('check'), 'Datos consistentes'));
       dlg.error = null;
+      resaltarCota();
     } catch (err) {
       const msgs = err instanceof U.ErrorValidacion ? err.errores : [String(err.message || err)];
       dlg.error = msgs;
       cont.replaceChildren(tit, bloqueErrores(msgs));
     }
+    const desc = $('#f_descripcion');
+    if (desc && p.familia !== 'COMPRADO') desc.placeholder = C.planos.titulo(p) || NOMBRE_FAM[p.familia] || '';
+  }
+
+  /** En el dibujo del diálogo se resalta la cota del dato que se está capturando. */
+  function resaltarCota() {
+    const el = document.activeElement;
+    const campo = el && el.id && el.id.startsWith('f_') ? el.id.slice(2) : null;
+    $$('#dlg-prev .pl-cotas[data-campo]').forEach((g) => g.classList.toggle('activa', g.dataset.campo === campo));
   }
 
   function abrirDialogo(id) {
@@ -1463,6 +1498,13 @@
 
   function enlazarDialogo() {
     const form = $('#form-partida');
+    form.addEventListener('focusin', resaltarCota);
+    // tocar una cota del dibujo lleva al dato que mide
+    $('#dlg-prev').addEventListener('click', (e) => {
+      const g = e.target.closest && e.target.closest('.pl-cotas[data-campo]');
+      const campo = g && $(`#f_${g.dataset.campo}`);
+      if (campo) { campo.focus(); resaltarCota(); }
+    });
     const delegar = () => { actualizarVisibilidad(); actualizarPreview(); };
     form.addEventListener('input', delegar);
     form.addEventListener('change', (e) => {
@@ -1641,6 +1683,7 @@
     $$('[role="tab"]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === t)));
     $$('.panel').forEach((p) => { p.hidden = p.id !== `panel-${t}`; });
     if (t === 'maestros' && W.maestrosUI) W.maestrosUI.render();
+    if (t === 'planos' && W.planosUI) W.planosUI.render();
     const el = destino ? $(destino) : null;
     if (el) el.scrollIntoView({ block: 'start', behavior: root.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   }
@@ -1668,6 +1711,7 @@
     renderDetalle();
     renderPropuesta();
     if (W.comprasUI) W.comprasUI.render();
+    if (W.planosUI && estado.tab === 'planos') W.planosUI.render(); // los planos se dibujan sólo a la vista
   }
   W.render = render;
   W.persistir = persistir;
@@ -1721,6 +1765,15 @@
   }
 
   W.estadoApp = estado;
+  W.tituloPartida = tituloPartida;
+  W.resumenMaterial = resumenMaterial;
+  /** Lleva a una partida de la cotización (desde los planos): la selecciona y muestra su desglose. */
+  W.verPartida = (id) => {
+    if (!estado.cot.partidas.some((p) => p.id === id)) return;
+    estado.sel = id;
+    render();
+    irPestana('cotizacion', '#detalle');
+  };
   /** Cotiza la cotización abierta con otras tablas maestras, sin tocar el estado: la ayuda de las tablas lo usa para «¿y si…?». */
   W.cotizarCon = (M) => C.cotizador.cotizar(entradaCotizacion(), M);
   W.recalcular = () => { persistir(); render(); };

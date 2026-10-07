@@ -288,6 +288,7 @@ main { padding: 16px 24px 48px; max-width: 1540px; margin-inline: auto; }
 .vacio-tit { font: 600 16px var(--font-ui); color: var(--fg); }
 .vacio p { max-width: 46ch; }
 .vacio-det { border: 0; padding: 20px 0; }
+.vacio-acc { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 @media (max-width: 719px) {
   .partida { grid-template-columns: minmax(0, 1fr); }
   .partida-der { flex-direction: row; justify-content: space-between; align-items: center; border-top: 1px solid var(--line); padding-top: 6px; }
@@ -296,7 +297,7 @@ main { padding: 16px 24px 48px; max-width: 1540px; margin-inline: auto; }
   .barra { position: static; padding: 10px 16px; gap: 8px 12px; }
   .marca-sub { display: none; }
   .tabs { flex: 1 1 100%; margin: 0; }
-  .tabs [role="tab"] { flex: 1 1 0; min-width: 0; text-align: center; padding-inline: 6px; line-height: 1.15; } /* tres pestañas caben aun en 320 px: el texto se parte en dos renglones */
+  .tabs [role="tab"] { flex: 1 1 0; min-width: 0; text-align: center; padding-inline: 4px; line-height: 1.15; font-size: 13px; } /* cuatro pestañas caben aun en 320 px: el texto se parte en dos renglones */
   .acciones { flex: 1 1 100%; }
   .acciones .btn { flex: 1; padding: 6px 8px; min-height: 36px; font-size: 13px; }
   .datos { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; gap: 10px 12px; }
@@ -387,6 +388,36 @@ main { padding: 16px 24px 48px; max-width: 1540px; margin-inline: auto; }
 .tabla tr.total td { font-weight: 600; border-top: 1px solid var(--line-strong); }
 .tabla tr.grupo td { font-weight: 600; color: var(--fg-2); background: var(--surface-2); }
 .tabla td:last-child:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* -------------------------------------------------------------------------- dibujos acotados (planos.js) */
+svg.plano { display: block; max-width: 100%; height: auto; overflow: visible; }
+.pl-pieza, .pl-junta, .pl-corte, .pl-barra, .pl-anillo, .pl-barreno { vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+.pl-pieza { fill: none; stroke: var(--fg); stroke-width: 1.6px; }
+.pl-relleno { fill: color-mix(in srgb, var(--s1) 14%, transparent); stroke: none; }
+.pl-anillo { fill: color-mix(in srgb, var(--s1) 14%, transparent); stroke: var(--fg); stroke-width: 1.6px; }
+.pl-junta, .pl-corte { fill: none; stroke: var(--fg); stroke-width: 1px; }
+.pl-barra { fill: none; stroke: var(--fg); stroke-width: 4px; }
+.pl-barreno { fill: var(--surface); stroke: var(--fg); stroke-width: 1px; }
+.pl-eje, .pl-eje-fino { fill: none; stroke: var(--fg-3); stroke-width: 0.8px; stroke-dasharray: 10 3 2 3; vector-effect: non-scaling-stroke; }
+.pl-oculta { fill: none; stroke: var(--fg-3); stroke-width: 0.8px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.pl-cota, .pl-ext { fill: none; stroke: var(--accent); stroke-width: 0.9px; vector-effect: non-scaling-stroke; }
+.pl-ext { stroke-width: 0.6px; }
+.pl-flecha { fill: var(--accent); }
+.pl-txt { fill: var(--fg); font-family: var(--font-ui); font-weight: 600; }
+.pl-cotas[data-campo] { cursor: pointer; }
+.pl-cotas.activa .pl-cota, .pl-cotas.activa .pl-ext { stroke: var(--s2); stroke-width: 2px; }
+.pl-cotas.activa .pl-flecha { fill: var(--s2); }
+.pl-cotas.activa .pl-txt { fill: var(--s2); }
+svg.plano-mini .pl-pieza, svg.plano-mini .pl-anillo { stroke-width: 1.2px; }
+svg.plano-mini .pl-barra { stroke-width: 2.5px; }
+svg.plano-mini .pl-junta, svg.plano-mini .pl-barreno { stroke-width: 0.7px; }
+.mini-plano { flex: none; width: 64px; height: 44px; display: grid; place-items: center; color: var(--accent); }
+.mini-plano svg.plano-mini { width: 64px; height: 44px; }
+.prev-plano { margin: 2px 0 10px; padding: 8px; border-radius: var(--radio); background: var(--surface); border: 1px solid var(--line); display: grid; place-items: center; }
+.det-plano { margin: 0; display: grid; gap: 10px; justify-items: center; }
+.det-plano figcaption { justify-self: stretch; display: grid; gap: 4px; font-size: 13px; }
+.plano-datos { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.plano-datos li { background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; font-size: 12.5px; color: var(--fg-2); font-variant-numeric: tabular-nums; }
 
 .hoja-fig { display: flex; flex-direction: column; gap: 8px; }
 .hoja-env { max-width: 440px; }
@@ -655,12 +686,65 @@ kbd { font: 500 11.5px var(--font-mono); padding: 1px 6px; border: 1px solid var
 .m-ultimo-efecto { font-weight: 600; font-variant-numeric: tabular-nums; }
 .m-ultimo-acc { display: flex; align-items: center; gap: 4px; }
 
-/* -------------------------------------------------------------------------- propuesta impresa */
+/* -------------------------------------------------------------------------- pestaña Planos (hojas de pedido) */
+.planos-cab { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 24px; margin-bottom: 10px; }
+.planos-cab p { color: var(--fg-2); max-width: 82ch; margin-top: 4px; }
+.planos-acc { display: flex; flex-wrap: wrap; gap: 8px; }
+.planos-resumen { font-size: 13px; color: var(--fg-2); margin: 0 0 12px; font-variant-numeric: tabular-nums; }
+#planos-hojas { display: grid; gap: 20px; }
+#planos-hojas > .vacio { background: var(--surface); border: 1px dashed var(--line-strong); border-radius: var(--radio); }
+.hoja { background: var(--surface); border: 1.5px solid var(--fg); border-radius: 3px; box-shadow: var(--sombra); display: grid; min-width: 0; }
+.hoja-cab { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; padding: 12px 16px 10px; border-bottom: 1.5px solid var(--fg); }
+.hoja-cab h3 { font: 600 19px/1.2 var(--font-cond); text-transform: uppercase; letter-spacing: 0.04em; display: flex; flex-wrap: wrap; gap: 0 8px; align-items: baseline; }
+.hoja-mat { font: 500 15px var(--font-cond); color: var(--fg-2); }
+.hoja-mat::before { content: "/ "; color: var(--fg-3); }
+.hoja-cuenta { font-size: 13px; color: var(--fg-2); font-variant-numeric: tabular-nums; }
+.hoja-piezas { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); overflow: hidden; }
+.pieza-plano { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px 14px; margin: 0 -1px -1px 0; border-right: 1px dashed var(--line-strong); border-bottom: 1px dashed var(--line-strong); min-width: 0; }
+.pieza-cab { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.pieza-marca { font: 600 12px var(--font-mono); border: 1.5px solid var(--fg); border-radius: 999px; min-width: 32px; height: 32px; padding: 0 6px; display: grid; place-items: center; }
+.pieza-cant { font: 600 13px var(--font-cond); letter-spacing: 0.06em; text-transform: uppercase; background: var(--accent-soft); color: var(--accent); padding: 3px 10px; border-radius: 999px; }
+.pieza-fig { margin: 0; flex: 1; display: grid; place-items: center; min-height: 140px; }
+.pieza-tit { font: 600 15px/1.25 var(--font-cond); text-transform: uppercase; letter-spacing: 0.02em; }
+.pieza-desc { font-size: 12.5px; color: var(--fg-2); margin-top: -4px; }
+.pieza-ir { align-self: flex-start; font-size: 13px; }
+.hoja-pie { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 20px; padding: 8px 16px; border-top: 1.5px solid var(--fg); font-size: 12.5px; color: var(--fg-2); }
+.hoja-et { font: 600 10.5px var(--font-ui); letter-spacing: 0.07em; text-transform: uppercase; color: var(--fg-3); }
+.hoja-num { margin-left: auto; font-weight: 600; color: var(--fg); }
+
+/* -------------------------------------------------------------------------- propuesta impresa (y los planos con «Imprimir planos») */
 #propuesta { display: none; }
 @media print {
   @page { size: letter; margin: 16mm; }
   html, body { background: #fff !important; color: #111 !important; }
-  body > *:not(#propuesta) { display: none !important; }
+  body:not(.imprimir-planos) > *:not(#propuesta) { display: none !important; }
+  /* «Imprimir planos»: sólo las hojas, cada una en su página horizontal, en negro sobre blanco aunque la pantalla esté en oscuro */
+  @page planos { size: letter landscape; margin: 9mm; }
+  :root:root:root, :root:root:root[data-theme] {
+    --surface: #fff; --surface-2: #f2f4f6; --line: #c4c9cf; --line-strong: #8f979f; --fg: #111; --fg-2: #333; --fg-3: #555;
+    --accent: #1d4ea3; --accent-soft: #e6edf9; --s1: #2a78d6; --s2: #eb6834;
+    color-scheme: light; background: #fff;
+  }
+  body.imprimir-planos > *:not(main) { display: none !important; }
+  body.imprimir-planos main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
+  body.imprimir-planos main > *:not(#panel-planos) { display: none !important; }
+  body.imprimir-planos #panel-planos { display: block !important; }
+  body.imprimir-planos .planos-cab, body.imprimir-planos .planos-resumen, body.imprimir-planos .pieza-ir { display: none !important; }
+  body.imprimir-planos #propuesta { display: none !important; }
+  body.imprimir-planos #planos-hojas { display: block; }
+  /* cuatro piezas por renglón: una hoja de hasta ocho piezas cabe en su página, como las del pedido */
+  .hoja { page: planos; break-after: page; box-shadow: none; border-radius: 0; font-family: "Barlow", system-ui, sans-serif; }
+  .hoja:last-child { break-after: auto; }
+  .hoja-cab { padding: 6pt 10pt; }
+  .hoja-piezas { overflow: visible; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .pieza-plano { break-inside: avoid; padding: 6pt 8pt 8pt; gap: 4pt; }
+  .pieza-fig { min-height: 0; }
+  .pieza-fig svg.plano { max-height: 46mm; width: auto; }
+  .pieza-tit { font-size: 10.5pt; }
+  .pieza-cant { border: 0.75pt solid currentColor; font-size: 9pt; }
+  .pieza-marca { min-width: 22pt; height: 22pt; font-size: 8.5pt; }
+  .plano-datos li { font-size: 8pt; padding: 0 5pt; }
+  .hoja-pie { padding: 5pt 10pt; font-size: 8.5pt; }
   #propuesta { display: block !important; background: #fff; color: #111; font: 400 11pt/1.4 "Barlow", system-ui, sans-serif; }
   #propuesta h1 { font: 600 18pt var(--font-cond, sans-serif); margin: 0 0 8pt; }
   #propuesta dl { margin: 0; }

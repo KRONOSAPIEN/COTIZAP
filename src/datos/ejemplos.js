@@ -10,10 +10,16 @@
  * Los gastos son los de la hoja, renglón por renglón (precios con IVA como los trae la hoja; las bridas de placa como las cotizó
  * el proveedor, antes de IVA; todo con factura salvo la raya, que no lleva IVA), con la mano de obra a $62.50 por hora ($500 por
  * día ÷ 8 h, como la calcula el taller). El esmalte no venía en la hoja: va como gasto estimado (lo que pide la lista de compras).
+ * Los barrenos de las bridas son los de los planos de pedido del 30-sep-2026 (8 en las de 11″ y 10″, 6 en las de 9″ y en las de
+ * placa): la media junta de las 60 bridas da los 208 juegos exactos de la hoja, que con la reserva se compran en 220.
  * Supuestos por confirmar: cada ménsula lleva 1 300 mm de ángulo (brazo y pierna de 650 mm: de dos ángulos salen las 7, como se
- * compró); cada abrazadera es de media vuelta para el ducto de 11″, con dos orejas atornilladas a la ménsula (con esos 2 juegos
- * por abrazadera la tornillería da los 220 juegos que se compraron), y las bridas de placa llevan los barrenos de la regla del
- * taller (4 la de 5″, 8 las de 6″ y 7″).
+ * compró) y cada abrazadera es de media vuelta para el ducto de 11″, con dos orejas.
+ *
+ * pedidoDucteria(): las piezas de los planos de pedido del 30-sep-2026, tal como se pidieron (hojas de bridas, de codos y de
+ * reducciones con injerto): codos y reducciones de lámina galvanizada cal. 24 con R = 1.5D, injertos a 30° con los largos de los
+ * planos y las bridas aparte (las de solera se hacen en el taller; las de 5″ y 6″ son de placa cortada). Las piezas de lámina van
+ * sin brida (unión lisa) porque las bridas se cotizan en sus propias partidas. «De 11″ a 11″ con injerto» y «de 6″ a 6″ con
+ * injerto» no reducen: son Injertos simples (ducto con injerto). Para ver cómo se dibujan, cuánto pesan y cuánto costaría hacerlas.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -49,7 +55,7 @@
         brida(11, 22), brida(10, 6), brida(9, 2),
         // 2 días para las 7: 16 h = 960 min ÷ 7 = 137.14 min por pieza
         { familia: 'SOPORTE', descripcion: 'Ménsulas para soportar ductos (650 mm)', cantidad: 7, barra_id: 'ANG_1_1_4X1_8', largo_pieza_mm: 1300, anclajes_pieza: 4, min_pieza: 137.14 },
-        { familia: 'SOPORTE', descripcion: 'Abrazaderas para fijar los ductos a las ménsulas', cantidad: 7, barra_id: 'SOL_1_1_4X1_8', abrazadera_D_mm: 11 * 25.4, tornillos_pieza: 2 },
+        { familia: 'SOPORTE', descripcion: 'Abrazaderas para fijar los ductos a las ménsulas', cantidad: 7, barra_id: 'SOL_1_1_4X1_8', abrazadera_D_mm: 11 * 25.4 },
         { familia: 'SOPORTE', descripcion: 'Poste', cantidad: 1, barra_id: 'PTR_2X2_C14', largo_pieza_mm: 6000 },
         { familia: 'COMPRADO', cantidad: 18, articulo_id: 'ABRAZADERA_MANGUERA' },
         { familia: 'COMPRADO', cantidad: 3, articulo_id: 'MANGUERA_6' },
@@ -80,5 +86,32 @@
     };
   }
 
-  return { casoControlGastos };
+  function pedidoDucteria() {
+    const pulg = (x) => x * 25.4;
+    const lamina = { material_id: 'GALVANIZADO', calibre: 24, tipo_union: 'LISO', ref_diametro: 'INTERIOR' };
+    const codo = (D, theta, gajos, n) => ({ familia: 'CODO', ...lamina, D_mm: pulg(D), theta_deg: theta, k_R: 1.5, n_gajos: gajos, cantidad: n });
+    const reduccion = (D1, D2, d, L, Lr, n) => ({
+      familia: 'REDUCCION_INJERTO', ...lamina, D1_mm: pulg(D1), D2_mm: pulg(D2), d_mm: pulg(d), beta_deg: 30, L_reduccion_mm: L, L_ramal_mm: Lr, cantidad: n,
+    });
+    const injerto = (D, d, L, Lr, n) => ({ familia: 'RAMAL', ...lamina, D_mm: pulg(D), d_mm: pulg(d), beta_deg: 30, L_cuerpo_mm: L, L_ramal_mm: Lr, cantidad: n });
+    const brida = (D, n) => ({ familia: 'BRIDA', material_id: 'GALVANIZADO', calibre: 24, ref_diametro: 'INTERIOR', D_mm: pulg(D), cantidad: n });
+    return {
+      cliente: '',
+      proyecto: 'Ejemplo: pedido de ductería del 30-sep-2026 (planos de bridas, codos y reducciones con injerto)',
+      fecha: '2026-09-30', riesgo: 'MEDIO', servicio: 'POLVO', ubicacion: 'INTERIOR', unidad_diam: 'in', unidad_long: 'mm',
+      partidas: [
+        codo(5, 90, 5, 2), codo(6, 90, 5, 1), codo(7, 60, 5, 1), codo(11, 60, 3, 1), codo(11, 90, 5, 2),
+        injerto(11, 11, 900, 726, 1),
+        reduccion(11, 10, 5, 500, 450, 2), reduccion(10, 6, 7, 500, 550, 1),
+        injerto(6, 3, 400, 260, 1),
+        reduccion(7, 5, 5, 450, 450, 2), reduccion(10, 9, 5, 500, 450, 1), reduccion(9, 7, 5, 500, 450, 1),
+        brida(11, 22), brida(10, 6), brida(9, 2), brida(7, 4),
+        { familia: 'COMPRADO', cantidad: 2, articulo_id: 'BRIDA_PLACA_6' },
+        { familia: 'COMPRADO', cantidad: 24, articulo_id: 'BRIDA_PLACA_5' },
+      ],
+      gastos: [],
+    };
+  }
+
+  return { casoControlGastos, pedidoDucteria };
 }));

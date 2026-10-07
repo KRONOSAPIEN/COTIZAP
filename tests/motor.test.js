@@ -607,14 +607,18 @@ test('Indicadores: precio piso = costo base / (1 − comisión − otros); horas
 /* ====================================================================== */
 const MAT = require('../src/motor/material');
 
-test('Solera 1½" × 3/16": peso lineal = ancho·espesor·ρ; fibra neutra y barreno al centro del ancho', () => {
+test('Solera 1½" × 3/16": peso lineal = ancho·espesor·ρ; fibra neutra al centro del ancho y barreno a 24 mm del borde interior (planos del taller)', () => {
   const p = MAT.perfilDerivado(M, 'SOL38x4.8');
   casi(p.area_mm2, 38.1 * 4.763, 1e-12);
   casi(p.peso_kg_m, (38.1 * 4.763 * 7.85) / 1000, 1e-12);
   casi(p.peso_kg_m, 1.4245, 1e-4, 'peso lineal');
   casi(p.c_centroide_mm, 19.05, 1e-12);
-  casi(p.gramil_mm, 19.05, 1e-12);
+  casi(p.gramil_mm, 24, 1e-12, 'los planos de pedido del 30-sep-2026: Dperf = Dint + 48');
   assert.equal(p.tipo, 'SOLERA');
+  // sin gramil en la tabla, el barreno va al centro del ancho
+  const Msin = crearMaestros();
+  delete Msin.herrajes.perfiles['SOL38x4.8'].gramil_mm;
+  casi(MAT.perfilDerivado(Msin, 'SOL38x4.8').gramil_mm, 19.05, 1e-12);
 });
 
 test('El taller usa la misma brida en todos los diámetros: solera 1½"×3/16", barreno Ø3/8", tornillo 5/16"×1¼"', () => {
@@ -631,12 +635,12 @@ test('El taller usa la misma brida en todos los diámetros: solera 1½"×3/16", 
   });
 });
 
-test('Aro de solera: L = π·(D_ext + ancho) + holgura + puntas de rolado; el círculo de barrenos coincide con la fibra neutra', () => {
+test('Aro de solera: L = π·(D_ext + ancho) + holgura + puntas de rolado; el círculo de barrenos va a 24 mm del borde interior', () => {
   const r = C.cotizarPartida({ ...recto }, M);
   const D_ext = 304.8 + 2 * (0.0598 * 25.4);
   const a = r.qto.her.aros[0];
   casi(a.L_aro_mm, Math.PI * (D_ext + 38.1) + 3.0 + 126, 1e-12);
-  casi(a.P_perno_mm, Math.PI * (D_ext + 38.1), 1e-12, 'D_bc = D_ext + 2·g con g = ancho/2');
+  casi(a.P_perno_mm, Math.PI * (D_ext + 2 * 24), 1e-12, 'D_bc = D_ext + 2·g con g = 24 mm');
   assert.equal(a.n_tornillos, 8);
 });
 
@@ -653,12 +657,22 @@ test('Puntas de rolado: el aro redondo reproduce la regla del taller π × (D + 
   casi(C.cotizarPartida(rect, M).qto.her.aros[0].L_aro_mm, C.cotizarPartida(rect, sin).qto.her.aros[0].L_aro_mm, 1e-12, 'un marco no se rola');
 });
 
-test('Paso entre barrenos: n = múltiplo de 4 ≥ máx(4, ⌈π·D_bc / paso⌉)', () => {
+test('Paso entre barrenos: n = número par ≥ máx(6, ⌈π·D_bc / paso⌉), como en los planos del taller', () => {
   const M2 = crearMaestros({ herrajes: { uniones: { BRIDADO: { paso_tornillo_mm: 100 } } } });
+  const e16 = 2 * 0.0598 * 25.4;
   const n = (D, MM = M) => C.cotizarPartida({ ...recto, D_mm: D }, MM).qto.her.aros[0].n_tornillos;
-  assert.equal(n(304.8, M2), 12);   // π·346 / 100 = 10.9 → 11 → 12
-  assert.equal(n(101.6, M), 4);     // chico: mínimo 4
-  assert.equal(n(609.6, M) % 4, 0);
+  const regla = (D, paso = 150) => { const k = Math.max(6, Math.ceil((Math.PI * (D + e16 + 48)) / paso - 1e-9)); return k % 2 ? k + 1 : k; };
+  assert.equal(n(304.8, M2), 12);   // π·355.8 / 100 = 11.2 → 12
+  assert.equal(n(304.8, M2), regla(304.8, 100));
+  assert.equal(n(101.6, M), 6);     // chico: mínimo 6
+  assert.equal(n(609.6, M), 14);    // π·660.6 / 150 = 13.8 → 14 (con múltiplos de 4 eran 16)
+  [101.6, 203.2, 304.8, 457.2, 609.6, 914.4].forEach((D) => assert.equal(n(D, M), regla(D), `Ø${D}`));
+  // los planos de pedido del 30-sep-2026 (bridas para ducto galvanizado cal. 24): 8 barrenos en 11″ y 10″, 6 en 9″ y 7″
+  const brida = (pulg) => C.cotizarPartida({ familia: 'BRIDA', material_id: 'GALVANIZADO', calibre: 24, D_mm: pulg * 25.4, cantidad: 1 }, M).qto.her.n_barrenos;
+  assert.deepEqual([11, 10, 9, 7].map(brida), [8, 8, 6, 6]);
+  // y con la regla de antes (mínimo 4, múltiplo de 4) la de 9″ llevaría 8
+  const Mant = crearMaestros({ herrajes: { uniones: { BRIDADO: { n_min_tornillos: 4, multiplo_tornillos: 4 } } } });
+  assert.equal(C.cotizarPartida({ familia: 'BRIDA', material_id: 'GALVANIZADO', calibre: 24, D_mm: 9 * 25.4, cantidad: 1 }, Mant).qto.her.n_barrenos, 8);
 });
 
 test('Cada aro se valoriza con el precio de SU perfil: solera ≠ ángulo (barra cotizada o, si no la hay, precio por kg)', () => {
@@ -707,9 +721,10 @@ test('Marco rectangular de solera: L = 2(a+b)_ext + 8c + 4·holgura; 4 cierres d
   const a_ext = 500 + 2 * e;
   const b_ext = 300 + 2 * e;
   const aro = r.qto.her.aros[0];
-  casi(aro.L_aro_mm, 2 * (a_ext + b_ext) + 8 * 19.05 + 4 * 3.0, 1e-12);
-  casi(aro.P_perno_mm, 2 * (a_ext + b_ext) + 8 * 19.05, 1e-12);
-  assert.equal(aro.n_tornillos % 4, 0);
+  casi(aro.L_aro_mm, 2 * (a_ext + b_ext) + 8 * 19.05 + 4 * 3.0, 1e-12, 'el aro va por la fibra neutra (c = ancho/2)');
+  casi(aro.P_perno_mm, 2 * (a_ext + b_ext) + 8 * 24, 1e-12, 'los barrenos, a 24 mm del borde interior');
+  assert.equal(aro.n_tornillos % 2, 0);
+  assert.equal(aro.n_tornillos, Math.ceil((2 * (a_ext + b_ext) + 8 * 24) / 150 - 1e-9) + (Math.ceil((2 * (a_ext + b_ext) + 8 * 24) / 150 - 1e-9) % 2));
   casi(r.qto.her.sold_aros.cierres[0].L_m, (4 * 38.1) / 1000, 1e-12);
 });
 
@@ -923,7 +938,7 @@ test('Sellado clase C: también se sellan las juntas engargoladas entre yardas (
   const sel = (clase, yarda, Mx, extra) => her(clase, yarda, Mx, extra).L_sellado_m;
   const P_med = Math.PI * (304.8 + 0.0598 * 25.4);
   const D_ext = 304.8 + 2 * 0.0598 * 25.4;
-  const P_perno = Math.PI * (D_ext + 2 * 19.05); // círculo de barrenos de la solera de 1½″ (gramil 19.05 mm)
+  const P_perno = Math.PI * (D_ext + 2 * 24); // círculo de barrenos de la solera de 1½″ (gramil 24 mm, como en los planos del taller)
   // la junta de bridas ya la sella el cordón de la junta (Sikaflex en lugar del empaque): la clase C sólo suma las engargoladas
   casi(sel('C', 1220), (2 * P_med) / 1000, 1e-12, '2 juntas engargoladas');
   casi(her('C', 1220).L_junta_sellador_m, (2 * 0.5 * P_perno) / 1000, 1e-12, 'media junta por cada una de las 2 bridas');

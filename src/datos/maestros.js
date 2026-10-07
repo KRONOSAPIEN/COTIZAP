@@ -355,12 +355,13 @@
     herrajes: {
       /* Perfiles para aros de brida (el aro se rola "de canto": el ancho queda en el plano radial).
          ESTÁNDAR DEL TALLER: solera de 1½" × 3/16", barreno de 3/8", tornillo de 5/16" × 1¼", para todos los diámetros.
-         tipo SOLERA = barra plana (barreno al centro: gramil = ancho/2); tipo ANGULO = ala radial de un ángulo.
+         tipo SOLERA = barra plana (gramil: distancia del borde interior al barreno); tipo ANGULO = ala radial de un ángulo.
          Peso lineal, área y centroide se derivan de (tipo, ancho, espesor); no se capturan.
          `tornillo` apunta a `tornillo_precio_ref`; `precio_ref` al precio por kg del perfil. */
       perfiles: {
         'SOL38x4.8': {
-          tipo: 'SOLERA', descripcion: 'Solera 1½" × 3/16"', ancho_mm: 38.1, esp_mm: 4.763, gramil_mm: 19.05,
+          // gramil 24 mm: los planos de pedido del 30-sep-2026 ponen los barrenos a 24 mm del borde interior del aro (Dperf = Dint + 48)
+          tipo: 'SOLERA', descripcion: 'Solera 1½" × 3/16"', ancho_mm: 38.1, esp_mm: 4.763, gramil_mm: 24,
           tornillo: '5/16x1-1/4', tornillo_desc: '5/16" × 1¼"', diam_barreno_mm: 9.525, barreno_desc: '3/8"', precio_ref: 'precio_kg_solera',
         },
         'L25x3.2': {
@@ -398,7 +399,8 @@
         // EMPAQUE: cinta de neopreno (herrajes.empaque) y, aparte, el cordón de sellador de la clase de sellado
         BRIDADO: {
           nombre: 'Bridado (aro de solera + tornillería + sellador en la junta)',
-          paso_tornillo_mm: 150, n_min_tornillos: 4, multiplo_tornillos: 4,
+          // barrenos como en los planos de pedido del 30-sep-2026: 8 en las de 10″ y 11″, 6 en las de 9″ y menores (mínimo 6, número par)
+          paso_tornillo_mm: 150, n_min_tornillos: 6, multiplo_tornillos: 2,
           f_reserva_tornilleria: 0.05, f_traslape_empaque: 0.05, f_cont_soldadura_aro: 1.0,
           junta: 'SELLADOR', ml_sellador_junta_m: 40,
         },
@@ -463,12 +465,13 @@
         SIKAFLEX_BLANCO_600: { descripcion: 'Sellador Sikaflex blanco 600 mL', unidad: 'pza', precio: 459, iva_incluido: true, categoria: 'MATERIAL' },
         SIKAFLEX_GRIS_600: { descripcion: 'Sellador Sikaflex gris 600 mL', unidad: 'pza', precio: 359, iva_incluido: true, categoria: 'MATERIAL' },
         // Bridas de placa de 3/16″ cortadas con plasma por el proveedor de corte (cotización del 2-oct-2026, antes de IVA; barrenos de
-        // 9.5 mm = 3/8″, para el tornillo de 5/16″). tornillos_pieza: juegos de tornillería que lleva cada una (media junta de los
-        // barrenos de la regla del taller: 4, 8 y 8; confirmar con el plano). circulo_barrenos_mm: con él se calcula el cordón de
-        // Sikaflex de su media junta, igual que en las bridas de solera
-        BRIDA_PLACA_5: { descripcion: 'Brida de placa 3/16″ para ducto de 5″ (Ø 194/130 mm, barrenos en Ø 170 mm)', unidad: 'pza', precio: 110, iva_incluido: false, categoria: 'PROVEEDOR', tornillos_pieza: 2, circulo_barrenos_mm: 170 },
-        BRIDA_PLACA_6: { descripcion: 'Brida de placa 3/16″ para ducto de 6″ (Ø 221/157 mm, barrenos en Ø 193 mm)', unidad: 'pza', precio: 120, iva_incluido: false, categoria: 'PROVEEDOR', tornillos_pieza: 4, circulo_barrenos_mm: 193 },
-        BRIDA_PLACA_7: { descripcion: 'Brida de placa 3/16″ para ducto de 7″ (Ø 258/182 mm, barrenos en Ø 230 mm)', unidad: 'pza', precio: 140, iva_incluido: false, categoria: 'PROVEEDOR', tornillos_pieza: 4, circulo_barrenos_mm: 230 },
+        // 9.5 mm = 3/8″, para el tornillo de 5/16″). tornillos_pieza: juegos de tornillería que lleva cada una (media junta: los planos
+        // de pedido del 30-sep-2026 les ponen 6 barrenos). circulo_barrenos_mm: con él se calcula el cordón de Sikaflex de su media
+        // junta, igual que en las bridas de solera. diam_ext_mm y diam_int_mm: sus diámetros exterior e interior, para dibujarla en el
+        // plano de pedido (no cambian el costo)
+        BRIDA_PLACA_5: { descripcion: 'Brida de placa 3/16″ para ducto de 5″ (Ø 194/130 mm, barrenos en Ø 170 mm)', unidad: 'pza', precio: 110, iva_incluido: false, categoria: 'PROVEEDOR', tornillos_pieza: 3, circulo_barrenos_mm: 170, diam_ext_mm: 194, diam_int_mm: 130 },
+        BRIDA_PLACA_6: { descripcion: 'Brida de placa 3/16″ para ducto de 6″ (Ø 221/157 mm, barrenos en Ø 193 mm)', unidad: 'pza', precio: 120, iva_incluido: false, categoria: 'PROVEEDOR', tornillos_pieza: 3, circulo_barrenos_mm: 193, diam_ext_mm: 221, diam_int_mm: 157 },
+        BRIDA_PLACA_7: { descripcion: 'Brida de placa 3/16″ para ducto de 7″ (Ø 258/182 mm, barrenos en Ø 230 mm)', unidad: 'pza', precio: 140, iva_incluido: false, categoria: 'PROVEEDOR', tornillos_pieza: 3, circulo_barrenos_mm: 230, diam_ext_mm: 258, diam_int_mm: 182 },
       },
       // Al comprar piezas enteras (lista de compras): la tornillería se compra en múltiplos de esto, la pintura en envases de
       // este tamaño; las hojas y las barras completas

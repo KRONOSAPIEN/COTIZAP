@@ -99,9 +99,42 @@
     return U.simpson((f) => sqrt(1 - (k * sin(f)) ** 2), 0, PI / 2, 200) / (PI / 2);
   }
 
-  /** K(k) = A_orificio / (π r_b² / sinβ): corrección por curvatura del cuerpo principal. */
+  /**
+   * K(k) = A_orificio / (π r_b² / sinβ): corrección por curvatura del cuerpo principal. El integrando cos²ψ / √(1 − k² sin²ψ) se
+   * escribe como cos²ψ / √(cos²ψ + (1 − k²) sin²ψ), que es lo mismo y no da 0/0 con k = 1 (injerto del diámetro del tronco: K = 4/π).
+   */
   function factorOrificio(k) {
-    return (4 / PI) * U.simpson((ps) => cos(ps) ** 2 / sqrt(1 - (k * sin(ps)) ** 2), 0, PI / 2, 200);
+    return (4 / PI) * U.simpson((ps) => {
+      const c2 = cos(ps) ** 2;
+      const den = sqrt(c2 + (1 - k * k) * sin(ps) ** 2);
+      return den > 0 ? c2 / den : 0;
+    }, 0, PI / 2, 200);
+  }
+
+  /**
+   * Perímetro exacto de la silleta de un injerto cilíndrico (radio rb) sobre un tronco cilíndrico (radio Rm ≥ rb) a β: la curva
+   * de intersección, por puntos. La generatriz φ del injerto toca el tronco a la distancia t(φ) = (√(Rm² − rb² sin²φ) − rb cosφ cosβ) / sinβ
+   * de donde su eje cruza el del tronco. (La elipse π·d·√((1 + csc²β)/2) se queda corta conforme d se acerca a D: −5 % con d/D = 0.8
+   * y −14 % a −18 % con d = D.)
+   */
+  function perimetroSilletaCilindro(Rm, rb, beta, N = 2880) {
+    const cb = cos(beta);
+    const sb = sin(beta);
+    const punto = (phi) => {
+      const sp = sin(phi);
+      const cp = cos(phi);
+      const t = (sqrt(Math.max(0, Rm * Rm - rb * rb * sp * sp)) - rb * cp * cb) / sb;
+      // t·(cosβ, sinβ, 0) + rb·(cosφ·(−sinβ, cosβ, 0) + sinφ·(0, 0, 1))
+      return [t * cb - rb * cp * sb, t * sb + rb * cp * cb, rb * sp];
+    };
+    let per = 0;
+    let previo = punto(0);
+    for (let i = 1; i <= N; i += 1) {
+      const q = punto((2 * PI * i) / N);
+      per += Math.hypot(q[0] - previo[0], q[1] - previo[1], q[2] - previo[2]);
+      previo = q;
+    }
+    return per;
   }
 
   /**
@@ -456,7 +489,7 @@
     const Rm = dm.D_med / 2;
     const rb = db.D_med / 2;
     const k = rb / Rm;
-    exigir(k < 1, 'El injerto debe ser de menor diámetro que el tronco.');
+    exigir(k <= 1 + 1e-9, 'El injerto no puede ser de mayor diámetro que el tronco (del mismo diámetro sí: una «Y» lateral).');
     const beta_deg = p.beta_deg || M.proceso.beta_ramal_defecto_deg;
     exigir(beta_deg >= 20 && beta_deg <= 90, 'El ángulo del injerto β debe estar entre 20° y 90°.');
     const beta = rad(beta_deg);
@@ -469,13 +502,13 @@
     if (L_c < (1.25 * 2 * rb) / sin(beta)) {
       PF.advertencias.push('El tramo recto del tronco es corto para alojar el injerto.');
     }
-    if (k > 0.8) PF.advertencias.push('Relación d/D > 0.8: revisar el diseño; la entrada pierde el comportamiento de injerto.');
+    if (k > 0.8) PF.advertencias.push(`Injerto de ${k > 1 - 1e-9 ? 'igual' : 'casi igual'} diámetro que el tronco (d/D > 0.8): la silleta abraza ${k > 1 - 1e-9 ? 'medio' : 'casi medio'} tronco; revisar el diseño y la soldadura.`);
 
     const A_cuerpo = PI * dm.D_med * L_c;
     const A_ramal = PI * db.D_med * (L_r - t_med);
     const K = factorOrificio(k);
     const A_orificio = ((PI * rb * rb) / sin(beta)) * K;
-    const P_h = PI * db.D_med * sqrt((1 + 1 / sin(beta) ** 2) / 2);
+    const P_h = perimetroSilletaCilindro(Rm, rb, beta);
     const B_c = PI * dm.D_med + M.proceso.costuras.A_TOPE.allowance_mm;
 
     PF.A_neta_m2 = (A_cuerpo - A_orificio + A_ramal) / 1e6;
@@ -578,7 +611,9 @@
   function reduccionInjerto(p, e, M) {
     const PF = nuevoPF('REDUCCION_INJERTO');
     exigir(p.D1_mm > 0 && p.D2_mm > 0 && p.d_mm > 0, 'Los diámetros de la reducción (D1 y D2) y del injerto deben ser mayores que 0.');
-    exigir(p.D2_mm < p.D1_mm, 'D2 debe ser menor que D1: la reducción va de D1 a D2.');
+    exigir(p.D2_mm < p.D1_mm, Math.abs(p.D2_mm - p.D1_mm) < 0.5
+      ? 'D2 debe ser menor que D1: la reducción va de D1 a D2. Si los dos extremos miden lo mismo («de 11″ a 11″ con injerto»), es un Injerto simple.'
+      : 'D2 debe ser menor que D1: la reducción va de D1 a D2.');
     const vacio = p.beta_deg === undefined || p.beta_deg === null || p.beta_deg === '';
     const beta_deg = vacio ? M.proceso.beta_ramal_defecto_deg : Number(p.beta_deg);
     exigir(beta_deg >= 20 && beta_deg <= 90, 'El ángulo del injerto β debe estar entre 20° y 90°.'); // límite del modelo; el taller maneja 30° y 45°
@@ -770,6 +805,7 @@
     razonElipticaE,
     factorOrificio,
     silletaInjertoCono,
+    perimetroSilletaCilindro,
     cruceInjertoCono,
     familias: { recto, codoRedondo, codoRect, reduccion, transicion, ramal, reduccionInjerto, pantalon, personalizado, bridas },
   };

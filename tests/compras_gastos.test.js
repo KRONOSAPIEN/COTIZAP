@@ -112,7 +112,7 @@ test('Bridas sueltas (sólo aros): sin lámina, un aro terminado por unidad con 
   assert.equal(r.qto.her.n_barrenos, 8);
   assert.deepEqual(r.qto.her.tornillos_por_tipo, { '5/16x1-1/4': 4 }, 'media junta de 8 tornillos');
   // la junta: medio cordón de Sikaflex sobre el círculo de barrenos (40 mL por metro + 15 % de merma), sin empaque
-  const P_perno = Math.PI * (11 * 25.4 + 2 * r.espesor_mm + 2 * 19.05);
+  const P_perno = Math.PI * (11 * 25.4 + 2 * r.espesor_mm + 2 * 24); // barrenos a 24 mm del borde interior (planos del taller)
   casi(r.qto.her.aros_sueltos[0].P_perno_mm, P_perno, 1e-12);
   assert.equal(r.qto.her.L_empaque_m, 0);
   assert.equal(r.costos.materiales.empaque, 0);
@@ -227,7 +227,7 @@ test('Brida de placa cortada por el proveedor: precio sin IVA del catálogo, sus
   const J = 3.67; // juego 5/16″ × 1¼″ sin IVA (el tornillo de la solera estándar de las bridas)
   const mL = 395.69 / 600; // Sikaflex de 600 mL a $459 con IVA
   const media = (circulo) => ((0.5 * Math.PI * circulo) / 1000) * 40 * 1.15; // medio cordón sobre el círculo de barrenos, con merma
-  const casos = [['BRIDA_PLACA_5', 24, 110, 2, 170], ['BRIDA_PLACA_6', 2, 120, 4, 193], ['BRIDA_PLACA_7', 4, 140, 4, 230]];
+  const casos = [['BRIDA_PLACA_5', 24, 110, 3, 170], ['BRIDA_PLACA_6', 2, 120, 3, 193], ['BRIDA_PLACA_7', 4, 140, 3, 230]]; // 6 barrenos cada una (planos del 30-sep-2026)
   casos.forEach(([id, n, precio, juegos, circulo]) => {
     const r = C.cotizarPartida({ familia: 'COMPRADO', cantidad: n, articulo_id: id }, M);
     casi(r.costos.materiales.compra, n * precio, 1e-12, `${id}: el proveedor cotiza sin IVA`);
@@ -268,9 +268,9 @@ test('Brida de placa cortada por el proveedor: precio sin IVA del catálogo, sus
     { familia: 'BRIDA', material_id: 'GALVANIZADO', calibre: 22, D_mm: 11 * 25.4, cantidad: 22 },
   ] }, M);
   const t = res.compras.tornillos.find((x) => x.clave === '5/16x1-1/4');
-  assert.equal(t.necesario, 24 * 2 + 2 * 4 + 4 * 4 + 22 * 4, '72 de las placas + 88 de las 22 bridas de solera');
-  casi(t.con_reserva, 160 * 1.05, 1e-12);
-  assert.equal(t.compra, 170);
+  assert.equal(t.necesario, 30 * 3 + 22 * 4, '90 de las placas + 88 de las 22 bridas de solera');
+  casi(t.con_reserva, 178 * 1.05, 1e-12);
+  assert.equal(t.compra, 190);
   casi(t.costo_cotizado, res.partidas.reduce((s, f) => s + (f.costos.materiales.tornilleria || 0), 0), 1e-12);
   // y el Sikaflex: el de las juntas de las bridas de placa más el de las de solera, en cartuchos enteros
   const sel = res.compras.sellador[0];

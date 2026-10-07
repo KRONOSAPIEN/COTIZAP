@@ -1188,6 +1188,16 @@
     'Tómelo del plano de la pieza, en mm. 0 o vacío: la pieza no lleva junta.',
     'Con él se cuesta el material de su media junta, igual que en una brida de solera: medio cordón de Sikaflex (o medio empaque, según la junta de la unión bridada) por pieza, en la partida y en los cartuchos de la lista de compras.',
     { nom: ARTICULOS, afecta: ['mat'], tip: [0, 1500], ej: 'Brida de 5″ con barrenos en Ø 170 mm: medio cordón de 0.27 m, unos 12 mL de Sikaflex con la merma.' });
+  E('compras.articulos.*.diam_ext_mm', 'Diámetro exterior · {0}',
+    'El diámetro exterior de una brida de placa, como viene en su plano.',
+    'En mm. 0 o vacío si el artículo no es una brida.',
+    'No cambia ningún costo: sólo se usa para dibujarla en el plano de pedido.',
+    { nom: ARTICULOS, afecta: ['info'], tip: [0, 1600], ej: 'Brida de placa de 5″: 194 mm.' });
+  E('compras.articulos.*.diam_int_mm', 'Diámetro interior · {0}',
+    'El diámetro interior de una brida de placa (el hueco por donde entra el ducto), como viene en su plano.',
+    'En mm. 0 o vacío si el artículo no es una brida.',
+    'No cambia ningún costo: sólo se usa para dibujarla en el plano de pedido.',
+    { nom: ARTICULOS, afecta: ['info'], tip: [0, 1500], ej: 'Brida de placa de 5″: 130 mm.' });
   E('compras.articulos.*.categoria', 'Categoría en el control de gastos · {0}',
     'En qué renglón del control de gastos cae lo que se cotizó de este artículo, para compararlo con lo que de verdad se gastó.',
     'Elija la misma categoría con la que va a capturar el gasto real del artículo (el ticket o la factura).',
@@ -1231,7 +1241,7 @@
     'Si el perfil es solera (barra plana) o ángulo.',
     'Se elige de la lista. Cambia cómo se calcula el peso lineal y el centroide.',
     'Cambia el peso y el área del aro: un ángulo pesa más que una solera de igual ancho y espesor.',
-    { afecta: ['mat', 'peso'], opc: { SOLERA: 'Barra plana: el barreno va al centro del ancho.', ANGULO: 'Ángulo: la brida es una de sus alas; el barreno va al gramil.' } });
+    { afecta: ['mat', 'peso'], opc: { SOLERA: 'Barra plana: el barreno va al gramil, medido desde el borde interior.', ANGULO: 'Ángulo: la brida es una de sus alas; el barreno va al gramil.' } });
   E('herrajes.perfiles.*.descripcion', 'Descripción del perfil · {0}',
     'El nombre del perfil como lo conoce el taller.',
     'Texto libre, p. ej. Solera 1½″ × 3/16″.',
@@ -1248,8 +1258,8 @@
     'Cambia el peso por metro (espesor +10 % = +10 % de kg) y la velocidad de soldar el cierre del aro.',
     { afecta: ['mat', 'peso', 'mo'], tip: [2, 12] });
   E('herrajes.perfiles.*.gramil_mm', 'Gramil del barreno · {0}',
-    'La distancia del borde del perfil a la línea de barrenos.',
-    'En mm. En solera es la mitad del ancho; en ángulo se mide en el catálogo del ala.',
+    'La distancia del borde interior del aro (el que abraza el ducto) a la línea de barrenos.',
+    'En mm. En la solera de 1½″ los planos del taller la ponen a 24 mm (Dperf = Dint + 48); en ángulo se mide en el catálogo del ala.',
     'Define el diámetro de la circunferencia de barrenos: cambia el largo de aro que rodea los barrenos y por ello el número de tornillos.',
     { afecta: ['mat', 'geo'], tip: [8, 50] });
   E('herrajes.perfiles.*.tornillo', 'Tornillo del perfil · {0}',
@@ -1323,17 +1333,17 @@
     { afecta: ['mat'], tip: [10, 120] });
   E('herrajes.uniones.BRIDADO.paso_tornillo_mm', 'Separación entre tornillos',
     'La distancia máxima entre un tornillo y el siguiente sobre el aro.',
-    'En mm. Con 150, una brida de Ø12″ (≈ 1 077 mm de perímetro de barrenos) lleva 8 tornillos.',
+    'En mm. Con 150, una brida de Ø12″ (≈ 1 118 mm de perímetro de barrenos) lleva 8 tornillos.',
     'Menos separación = más tornillos y más barrenos (material, barrenado y armado). Con 100 mm esa brida lleva 12.',
     { afecta: ['mat', 'mo'], tip: [80, 300] });
   E('herrajes.uniones.BRIDADO.n_min_tornillos', 'Mínimo de tornillos',
     'El menor número de tornillos que lleva una brida, aunque sea muy chica.',
-    'Número entero. 4 es lo usual (uno en cada cuadrante).',
+    'Número entero. Los planos del taller dan 6 a las bridas de 9″ y menores.',
     'Sólo cuenta en bridas chicas: sube sus tornillos y barrenos.',
     { afecta: ['mat', 'mo'], tip: [2, 12] });
   E('herrajes.uniones.BRIDADO.multiplo_tornillos', 'Múltiplo de tornillos',
     'El número de tornillos se redondea hacia arriba a un múltiplo de este valor (para que queden simétricos).',
-    'Número entero. 4 deja la brida con 4, 8, 12… tornillos.',
+    'Número entero. 2 (número par, como en los planos del taller) deja la brida con 6, 8, 10… tornillos.',
     'Un múltiplo mayor agrega tornillos y barrenos de más: con 8, una brida de 9 pasa a 16.',
     { afecta: ['mat', 'mo'], tip: [1, 8] });
   E('herrajes.uniones.BRIDADO.f_reserva_tornilleria', 'Reserva de tornillería',

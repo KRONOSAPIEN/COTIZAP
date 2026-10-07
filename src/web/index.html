@@ -22,6 +22,7 @@
   </div>
   <nav class="tabs" role="tablist" aria-label="Secciones">
     <button type="button" role="tab" id="tab-cotizacion" data-tab="cotizacion" aria-selected="true" aria-controls="panel-cotizacion">Cotización</button>
+    <button type="button" role="tab" id="tab-planos" data-tab="planos" aria-selected="false" aria-controls="panel-planos">Planos</button>
     <button type="button" role="tab" id="tab-compras" data-tab="compras" aria-selected="false" aria-controls="panel-compras">Compras y gastos</button>
     <button type="button" role="tab" id="tab-maestros" data-tab="maestros" aria-selected="false" aria-controls="panel-maestros">Tablas maestras</button>
   </nav>
@@ -89,6 +90,22 @@
         <div id="detalle" class="tarjeta detalle"></div>
       </aside>
     </div>
+  </section>
+
+  <section id="panel-planos" class="panel" role="tabpanel" aria-labelledby="tab-planos" hidden>
+    <div class="planos-cab">
+      <div>
+        <h2>Planos de pedido</h2>
+        <p>Cada pieza de la cotización dibujada y acotada, en una hoja por tipo de pieza y material, como las que se mandan a fabricar: con su número de piezas y una marca para ubicarla. Todas las medidas en mm.</p>
+        <p class="nota" id="planos-sin-imprimir" hidden>En este visor no se puede imprimir. Para imprimir los planos o guardarlos en PDF, copie la cotización con «Guardar y cargar» y cárguela en COTIZAP abierto en su navegador (el archivo cotizap.html).</p>
+      </div>
+      <div class="planos-acc">
+        <button type="button" class="btn btn-primario" id="btn-imprimir-planos">Imprimir planos</button>
+        <button type="button" class="btn btn-sec" id="planos-ejemplo">Ver el ejemplo: pedido del 30-sep-2026</button>
+      </div>
+    </div>
+    <p class="planos-resumen" id="planos-resumen" role="status" hidden></p>
+    <div id="planos-hojas"></div>
   </section>
 
   <section id="panel-compras" class="panel" role="tabpanel" aria-labelledby="tab-compras" hidden>
@@ -235,9 +252,11 @@
 <script src="../motor/cotizador.js"></script>
 <script src="dom.js"></script>
 <script src="esquemas.js"></script>
+<script src="planos.js"></script>
 <script src="maestros_ayuda_ui.js"></script>
 <script src="maestros_ui.js"></script>
 <script src="compras_ui.js"></script>
+<script src="planos_ui.js"></script>
 <script src="almacen.js"></script>
 <script src="app.js"></script>
 </body>

@@ -33,7 +33,7 @@
 
   /**
    * Propiedades derivadas de un perfil de brida (el aro se rola "de canto": el ancho queda en el plano radial).
-   *   SOLERA : barra plana ancho × espesor → área = b·t ; centroide radial = b/2 ; gramil = b/2 (barreno al centro).
+   *   SOLERA : barra plana ancho × espesor → área = b·t ; centroide radial = b/2 ; gramil = el de la tabla (sin dato, b/2).
    *   ANGULO : ala radial de un ángulo de lados iguales → área = t·(2b − t) ; centroide medido desde el dorso.
    */
   function perfilDerivado(M, id) {

@@ -53,6 +53,16 @@
     return entero < 0 ? entero - frac : entero + frac;
   };
 
+  /* ---------------- Dibujos (árbol { tag, a, c, t } de planos.js) → SVG con nodos, sin innerHTML ---------------- */
+  const NS_SVG = 'http://www.w3.org/2000/svg';
+  W.svgArbol = function svgArbol(n) {
+    const el = document.createElementNS(NS_SVG, n.tag);
+    Object.keys(n.a || {}).forEach((k) => el.setAttribute(k, String(n.a[k])));
+    if (n.t !== undefined) el.textContent = n.t;
+    (n.c || []).forEach((c) => el.append(svgArbol(c)));
+    return el;
+  };
+
   /* ---------------- Íconos ---------------- */
   const svg = (inner, vb, cls) => `<svg class="${cls || 'ico'}" viewBox="${vb || '0 0 24 24'}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${inner}</svg>`;
   W.icono = (nombre) => W.h('span', { class: 'icono', html: svg(Object.prototype.hasOwnProperty.call(W.ICONOS, nombre) ? W.ICONOS[nombre] : '') });

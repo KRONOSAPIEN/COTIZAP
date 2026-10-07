@@ -49,21 +49,21 @@ test('Caso real: la lista de compras de la app es la compra de la hoja (6 solera
   assert.equal(barra('SOL_1_1_2X3_16').categoria, 'MATERIAL', 'la solera de las bridas');
   assert.equal(barra('ANG_1_1_4X1_8').categoria, 'SOPORTERIA', 'el ángulo de las ménsulas');
   assert.deepEqual(res.compras.comprados.map((x) => x.categoria), Array(6).fill('PROVEEDOR'), 'ducto, 3 tamaños de brida de placa, abrazaderas de manguera y mangueras');
-  // tornillería: la media junta de cada brida (30 de solera con 8 barrenos; de placa, 24 con 4 y 6 con 8) con 5 % de reserva,
-  // y 2 juegos por abrazadera
+  // tornillería: la media junta de cada brida con los barrenos de los planos de pedido del 30-sep-2026 (8 en las de 11″ y 10″,
+  // 6 en las de 9″ y en las 30 de placa), con 5 % de reserva
   const t = res.compras.tornillos[0];
-  const bridas = 30 * 4 + 24 * 2 + 6 * 4;
-  assert.equal(bridas, 192);
-  assert.equal(t.necesario, bridas + 7 * 2, '206 (la hoja: 208)');
-  casi(t.con_reserva, bridas * 1.05 + 14, 1e-9);
+  const juegos = (22 * 8 + 6 * 8 + 2 * 6 + 30 * 6) / 2;
+  assert.equal(juegos, 208, 'los 208 exactos de la hoja');
+  assert.equal(t.necesario, juegos);
+  casi(t.con_reserva, juegos * 1.05, 1e-9);
   assert.equal(t.compra, 220, 'los 220 juegos que se compraron');
   // Sikaflex: medio cordón de 40 mL/m (+15 % de merma) sobre el círculo de barrenos de cada una de las 60 bridas
   const e = 0.0336 * 25.4; // galvanizado cal. 22
-  const solera = [[11, 22], [10, 6], [9, 2]].reduce((s, [pulg, n]) => s + n * Math.PI * (pulg * 25.4 + 2 * e + 2 * 19.05), 0);
+  const solera = [[11, 22], [10, 6], [9, 2]].reduce((s, [pulg, n]) => s + n * Math.PI * (pulg * 25.4 + 2 * e + 2 * 24), 0); // barrenos a 24 mm del borde interior
   const placa = Math.PI * (24 * 170 + 2 * 193 + 4 * 230);
   const ml = ((0.5 * (solera + placa)) / 1000) * 40 * 1.15;
   casi(res.compras.sellador[0].ml, ml, 1e-6, 'mL de Sikaflex');
-  casi(ml, 1062.77, 0.01);
+  casi(ml, 1084.23, 0.01);
   assert.equal(res.compras.sellador[0].compra, 2, 'los 2 cartuchos que se compraron');
   assert.equal(res.compras.empaque.length, 0, 'sin empaque de neopreno');
   // el esmalte de las bridas de solera: 1 L y 1 L de diluyente, lo que va como gasto estimado
@@ -76,9 +76,11 @@ test('Caso real: la lista de compras de la app es la compra de la hoja (6 solera
 
 test('Caso real: el tiempo de taller es el que dijo el taller (bridas 4 días, ménsulas 2) y la cuadrilla 80 h', () => {
   const h = (fam, re) => res.partidas.filter((f) => f.familia === fam && re.test(f.descripcion)).reduce((s, f) => s + f.costos.h_MOD, 0);
-  casi(h('BRIDA', /./), 32, 0.1, 'las 30 bridas de solera (rolado, cierre, barrenado, esmalte e inspección)');
+  casi(h('BRIDA', /./), 32, 0.15, 'las 30 bridas de solera (rolado, cierre, barrenado, esmalte e inspección)');
   casi(h('SOPORTE', /Ménsulas/), 16, 0.01, 'las 7 ménsulas');
   casi(h('SOPORTE', /Abrazaderas/), (7 * 15) / 60, 1e-12, 'las abrazaderas, con el tiempo de tabla');
+  // los barrenos de las bridas de solera, como en los planos: 8 en las de 11″ y 10″, 6 en las de 9″
+  assert.deepEqual(res.partidas.filter((f) => f.familia === 'BRIDA').map((f) => f.qto.her.n_barrenos), [8, 8, 6]);
   casi(h('INSTALACION', /./), 80, 1e-12);
 });
 

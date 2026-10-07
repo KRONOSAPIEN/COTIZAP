@@ -503,8 +503,9 @@
           else if (a.tornillos_pieza !== undefined && !(Number.isInteger(a.tornillos_pieza) && a.tornillos_pieza >= 0 && a.tornillos_pieza <= 1000)) {
             agregar(['compras', 'articulos', id, 'tornillos_pieza'], `debe ser un número entero de juegos, de 0 a 1 000 (vale ${texto(a.tornillos_pieza)})`);
           }
-          else if (a.circulo_barrenos_mm !== undefined && !(typeof a.circulo_barrenos_mm === 'number' && a.circulo_barrenos_mm >= 0 && a.circulo_barrenos_mm <= 5000)) {
-            agregar(['compras', 'articulos', id, 'circulo_barrenos_mm'], `debe ser un diámetro de 0 a 5 000 mm (vale ${texto(a.circulo_barrenos_mm)})`);
+          else if (['circulo_barrenos_mm', 'diam_ext_mm', 'diam_int_mm'].some((k) => a[k] !== undefined && !(typeof a[k] === 'number' && a[k] >= 0 && a[k] <= 5000))) {
+            const k = ['circulo_barrenos_mm', 'diam_ext_mm', 'diam_int_mm'].find((c) => a[c] !== undefined && !(typeof a[c] === 'number' && a[c] >= 0 && a[c] <= 5000));
+            agregar(['compras', 'articulos', id, k], `debe ser un diámetro de 0 a 5 000 mm (vale ${texto(a[k])})`);
           }
           else if (a.categoria !== undefined && !tiene(GAS.CATEGORIAS, a.categoria)) {
             agregar(['compras', 'articulos', id, 'categoria'], `debe ser una categoría del control de gastos (${Object.keys(GAS.CATEGORIAS).join(', ')}); vale ${texto(a.categoria)}`);

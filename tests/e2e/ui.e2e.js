@@ -1535,8 +1535,8 @@ const ok = (cond, msg) => {
     await p.click('.fam:has(span:text-is("Comprado"))');
     await p.selectOption('#f_articulo_id', 'BRIDA_PLACA_5');
     await p.waitForTimeout(80);
-    ok(await p.getAttribute('#f_precio_compra_unitario', 'placeholder') === '110' && await p.getAttribute('#f_tornillos_pieza', 'placeholder') === '2' && await p.getAttribute('#f_circulo_barrenos_mm', 'placeholder') === '170',
-      'una brida de placa del catálogo sugiere su precio ($110), sus juegos de tornillo (2) y su círculo de barrenos (170 mm)');
+    ok(await p.getAttribute('#f_precio_compra_unitario', 'placeholder') === '110' && await p.getAttribute('#f_tornillos_pieza', 'placeholder') === '3' && await p.getAttribute('#f_circulo_barrenos_mm', 'placeholder') === '170',
+      'una brida de placa del catálogo sugiere su precio ($110), sus juegos de tornillo (3: 6 barrenos) y su círculo de barrenos (170 mm)');
     await p.selectOption('#f_articulo_id', 'ABRAZADERA_MANGUERA');
     await p.waitForTimeout(80);
     ok(await p.inputValue('#f_precio_compra_unitario') === '' && await p.getAttribute('#f_precio_compra_unitario', 'placeholder') === '55', 'al elegir un artículo el precio queda vacío y se sugiere el del catálogo ($55)');
@@ -1755,6 +1755,118 @@ const ok = (cond, msg) => {
     await m.click('#tab-compras');
     await m.waitForTimeout(150);
     ok(await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'Compras y gastos en el celular: sin desplazamiento horizontal');
+    await m.context().close();
+  }
+
+  console.log('25) Dibujos acotados como en los planos de pedido: vista previa viva, miniaturas, desglose y pestaña «Planos»');
+  {
+    const p = await nuevaPagina();
+    const R = (fn, arg) => estadoApp(p, fn, arg);
+    const texto = (sel) => p.locator(sel).evaluateAll((els) => els.map((e) => e.textContent.trim()));
+
+    // a) la lista: cada pieza que se dibuja lleva su miniatura; lo que no (compra, instalación), el ícono de su familia
+    const nDib = await R(() => { const E = window.COTIZAP.web.estadoApp; return E.res.partidas.filter((f) => window.COTIZAP.planos.plano(f, E.res.maestros)).length; });
+    ok(nDib === 7 && await p.locator('#lista-partidas .mini-plano svg.plano-mini').count() === nDib && await p.locator('#lista-partidas .mini-plano svg.plano-mini text').count() === 0,
+      'las 7 piezas de la muestra que se dibujan llevan su miniatura en la lista (sin cotas ni textos)');
+
+    // b) el diálogo dibuja la pieza mientras se captura, resalta la cota del campo y una cota lleva a su campo
+    await p.click('#btn-agregar');
+    await p.waitForSelector('#dlg-partida[open]');
+    await p.click('.fam:has(span:text-is("Reducción con injerto"))');
+    await p.fill('#f_D1_mm', '11');
+    await p.fill('#f_D2_mm', '10');
+    await p.fill('#f_d_mm', '5');
+    await p.selectOption('#f_beta_deg', '30');
+    await p.fill('#f_L_reduccion_mm', '500');
+    await p.fill('#f_L_ramal_mm', '450');
+    await p.focus('#f_d_mm');
+    await p.waitForTimeout(150);
+    const prev = await p.locator('#dlg-prev svg.plano').evaluateAll((els) => els.map((e) => e.textContent));
+    ok(prev.length === 1 && /Ø5″/.test(prev[0]) && /500/.test(prev[0]) && /450/.test(prev[0]) && /30°/.test(prev[0]), 'la vista previa dibuja la reducción con sus cotas: Ø5″, 500, 450 y 30°');
+    ok(await p.locator('#dlg-prev .pl-cotas.activa').count() === 1 && await p.locator('#dlg-prev .pl-cotas.activa').getAttribute('data-campo') === 'd_mm', 'con el cursor en «Diámetro del injerto» se resalta su cota');
+    await p.locator('#dlg-prev .pl-cotas[data-campo="L_ramal_mm"]').dispatchEvent('click');
+    ok(await p.evaluate(() => document.activeElement.id) === 'f_L_ramal_mm' && await p.locator('#dlg-prev .pl-cotas.activa').getAttribute('data-campo') === 'L_ramal_mm', 'pulsar una cota del dibujo lleva el cursor a su campo');
+    ok(await p.getAttribute('#f_descripcion', 'placeholder') === 'Reducción de 11″ a 10″ con injerto de 5″ a 30°', 'sin descripción, la partida se llama como en los planos: «Reducción de 11″ a 10″ con injerto de 5″ a 30°»');
+    await p.fill('#f_D2_mm', '11');
+    await p.waitForTimeout(120);
+    ok(/es un Injerto simple/.test(await p.locator('#dlg-prev').innerText()), '«de 11″ a 11″ con injerto» avisa que es un Injerto simple');
+    await p.click('#dlg-cancelar');
+
+    // c) el desglose de la partida trae su plano
+    await p.locator('#lista-partidas .partida').nth(4).click();
+    await p.waitForTimeout(100);
+    ok(await p.locator('#detalle .det-plano svg.plano').count() === 1 && /Plano de la pieza/.test(await p.locator('#detalle').innerText()), 'el desglose trae «Plano de la pieza»');
+
+    // d) la pestaña «Planos»: una hoja por tipo de pieza y material
+    await p.click('#tab-planos');
+    await p.waitForTimeout(100);
+    ok(!(await p.locator('#panel-planos').isHidden()) && await p.locator('.hoja').count() === 6 && /7 partidas dibujadas/.test(await p.locator('#planos-resumen').innerText()) && /2 partidas no llevan plano/.test(await p.locator('#planos-resumen').innerText()),
+      'la muestra se dibuja en 6 hojas y dice qué partidas no llevan plano');
+
+    // e) el pedido del 30-sep-2026: bridas, codos y reducciones con injerto, como las hojas del taller
+    await p.click('#planos-ejemplo');
+    await p.waitForTimeout(200);
+    const ped = await R(() => { const E = window.COTIZAP.web.estadoApp; return { n: E.cot.partidas.length, err: E.res.totales.n_partidas_error }; });
+    ok(ped.n === 18 && ped.err === 0, 'el pedido de ejemplo trae sus 18 partidas y todas se calculan');
+    const cabs = await texto('.hoja-cab h3');
+    ok(cabs.length === 3 && cabs[0] === 'Bridas' && /^Codos.*Acero galvanizado · cal\. 24$/.test(cabs[1]) && /^Reducciones con injerto e injertos.*cal\. 24$/.test(cabs[2]), 'tres hojas: bridas, codos y reducciones con injerto (galvanizado cal. 24)');
+    const marcas = await texto('.pieza-marca');
+    ok(marcas.join(' ') === 'B1 B2 B3 B4 B5 B6 C1 C2 C3 C4 C5 I1 I2 I3 I4 I5 I6 I7', 'cada pieza lleva su marca (B1…B6, C1…C5, I1…I7)');
+    const tits = await texto('.pieza-tit');
+    ok(['Brida de 11″', 'Brida de 9″', 'Codo 60° Ø11″ · 3 gajos', 'Ducto de 11″ con injerto de 11″ a 30°', 'Reducción de 11″ a 10″ con injerto de 5″ a 30°', 'Reducción de 10″ a 6″ con injerto de 7″ a 30°'].every((t) => tits.includes(t)),
+      'los títulos son los de los planos («Reducción de 11″ a 10″ con injerto de 5″ a 30°», «Codo 60° Ø11″ · 3 gajos»…)');
+    const tarjeta = (m) => p.locator(`.pieza-plano:has(.pieza-marca:text-is("${m}"))`).evaluate((e) => e.textContent);
+    const b1 = await tarjeta('B1');
+    const b3 = await tarjeta('B3');
+    const b6 = await tarjeta('B6');
+    ok(/22 piezas/.test(b1) && /Dint = 281 mm/.test(b1) && /8 barrenos de 9\.5 mm/.test(b1) && /6 barrenos de 9\.5 mm/.test(b3) && /24 piezas/.test(b6) && /Dperf = 170 mm/.test(b6) && /6 barrenos/.test(b6),
+      'las bridas dicen cuántas son, sus diámetros y sus barrenos (8 en la de 11″, 6 en la de 9″ y en las de placa)');
+    const c1 = await tarjeta('C1');
+    ok(/2 piezas/.test(c1) && /191/.test(c1) && /254/.test(c1) && /5 gajos/.test(c1), 'el codo de 5″ trae las cotas del plano (R = 191 y 254 mm, 5 gajos)');
+    ok(await p.locator('.hoja-num').first().innerText() === 'Hoja 1 de 3', 'cada hoja lleva su número en el cajetín');
+    await p.click('.toast:has-text("pedido de ductería") button:has-text("Deshacer")');
+    await p.waitForTimeout(150);
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.partidas.length) === 9 && await p.locator('.hoja').count() === 6, 'Deshacer regresa la cotización anterior y sus hojas');
+
+    // f) «Ver en la cotización» lleva a la partida y a su desglose
+    await R(() => window.COTIZAP.web.planosUI.verEjemplo());
+    await p.waitForTimeout(150);
+    const idI2 = await p.locator('.pieza-plano:has(.pieza-marca:text-is("I2"))').getAttribute('data-id');
+    await p.locator('.pieza-plano:has(.pieza-marca:text-is("I2")) .pieza-ir').click();
+    await p.waitForTimeout(150);
+    ok(await p.getAttribute('#tab-cotizacion', 'aria-selected') === 'true' && await R(() => window.COTIZAP.web.estadoApp.sel) === idI2 && /Reducción de 11″ a 10″ con injerto de 5″ a 30°/.test(await p.locator('#detalle').innerText()),
+      '«Ver en la cotización» abre la partida en la cotización');
+
+    // g) «Imprimir planos» imprime sólo las hojas (y el botón de la propuesta, sólo la propuesta)
+    await p.click('#tab-planos');
+    await p.evaluate(() => { window.__impresiones = []; window.print = () => window.__impresiones.push(document.body.classList.contains('imprimir-planos')); });
+    await p.click('#btn-imprimir-planos');
+    await p.waitForTimeout(50);
+    ok(JSON.stringify(await p.evaluate(() => window.__impresiones)) === '[true]' && !(await p.evaluate(() => document.body.classList.contains('imprimir-planos'))), '«Imprimir planos» imprime con las hojas a la vista y luego regresa la pantalla');
+    await p.emulateMedia({ media: 'print' });
+    const vis = (sel) => p.evaluate((s) => getComputedStyle(document.querySelector(s)).display !== 'none', sel);
+    await p.evaluate(() => document.body.classList.add('imprimir-planos'));
+    ok(await vis('#panel-planos') && await vis('.hoja') && !(await vis('#propuesta')) && !(await vis('.barra')) && !(await vis('.planos-cab')) && !(await vis('.pieza-ir')), 'al imprimir los planos sólo salen las hojas (sin la propuesta, la barra ni los botones)');
+    await p.evaluate(() => document.body.classList.remove('imprimir-planos'));
+    ok(await vis('#propuesta') && !(await vis('main')), 'al imprimir la propuesta sólo sale la propuesta');
+    await p.emulateMedia({ media: 'screen' });
+
+    // h) sin piezas: la pestaña lo dice y ofrece el ejemplo; la lista vacía también
+    await p.click('#btn-nueva');
+    await p.waitForTimeout(100);
+    ok(/Todavía no hay piezas que dibujar/.test(await p.locator('#planos-hojas').innerText()) && await p.locator('#btn-imprimir-planos').isDisabled(), 'sin piezas, la pestaña lo dice y no deja imprimir');
+    await p.click('#tab-cotizacion');
+    await p.click('#lista-partidas button:has-text("Ver un pedido de ejemplo")');
+    await p.waitForTimeout(150);
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.partidas.length) === 18, 'la lista vacía ofrece abrir el pedido de ejemplo');
+    await p.context().close();
+
+    // i) en el celular las hojas caben sin desplazamiento horizontal
+    const m = await nuevaPagina({ viewport: { width: 360, height: 760 }, isMobile: true, hasTouch: true });
+    await m.evaluate(() => window.COTIZAP.web.abrirCotizacion(window.COTIZAP.ejemplos.pedidoDucteria()));
+    await m.click('#tab-planos');
+    await m.waitForTimeout(150);
+    ok(await m.locator('.pieza-plano').count() === 18 && await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'Planos en el celular: las 18 piezas sin desplazamiento horizontal');
     await m.context().close();
   }
 

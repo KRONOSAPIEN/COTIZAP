@@ -11,8 +11,8 @@ Cotizador para ducterías de lámina (colección de polvo y control ambiental). 
 | **Documento de arquitectura** | [`docs/arquitectura-cotizador-ducterias.md`](docs/arquitectura-cotizador-ducterias.md) | Insumos, fórmulas geométricas, mano de obra y consumibles, estructura de precios, lista de compras, venta pactada y control de gastos, pseudocódigo, ejemplos resueltos paso a paso y un proyecto real. Es la especificación. |
 | **Motor de cálculo** | `src/motor/` | Funciones puras, sin dependencias. Separa *cantidades* de *precios*. |
 | **Tablas maestras** | `src/datos/maestros.js` · `src/datos/ayuda_maestros.js` | Lista de precios del proveedor, catálogo de compras, materiales, calibres, perfiles, uniones, velocidades, tarifas, merma y capas de precio; y la ayuda de cada dato (qué es, cómo se llena, qué esperar). |
-| **Aplicación web** | `src/web/` | Captura de partidas, desglose paso a paso, compras y gastos del proyecto, editor de tablas maestras con ayuda integrada, propuesta imprimible. |
-| **Pruebas** | `tests/` | Geometría contra mallas 3D independientes, ejemplo recalculado línea por línea, política de precios, robustez ante datos absurdos o dañados, interfaz de extremo a extremo. |
+| **Aplicación web** | `src/web/` | Captura de partidas con su dibujo acotado en vivo, desglose paso a paso, planos de pedido imprimibles, compras y gastos del proyecto, editor de tablas maestras con ayuda integrada, propuesta imprimible. |
+| **Pruebas** | `tests/` | Geometría contra mallas 3D independientes, ejemplo recalculado línea por línea, política de precios, robustez ante datos absurdos o dañados, dibujos acotados, interfaz de extremo a extremo. |
 
 ## Empezar
 
@@ -164,7 +164,7 @@ Además: cada renglón dice qué es en palabras y conserva el nombre de la varia
 
 ## Brida estándar del taller
 
-Todos los ductos se unen con **bridas de solera 1½" × 3/16", barreno Ø3/8" y tornillo 5/16" × 1¼"**, sin importar el diámetro. Así viene precargado (perfil `SOL38x4.8` en `src/datos/maestros.js`): la solera se rola de canto, el barreno va al centro de su ancho y cada junta lleva múltiplo de 4 tornillos. Los ángulos siguen disponibles como opción por partida (*Perfil de aros*).
+Todos los ductos se unen con **bridas de solera 1½" × 3/16", barreno Ø3/8" y tornillo 5/16" × 1¼"**, sin importar el diámetro. Así viene precargado (perfil `SOL38x4.8` en `src/datos/maestros.js`): la solera se rola de canto, el barreno va a 24 mm del borde interior del aro y cada brida lleva un número par de barrenos, al menos 6, a no más de 150 mm (8 en las de 11″ y 10″, 6 en las de 9″ y menores), como en los planos de pedido del taller. Los ángulos siguen disponibles como opción por partida (*Perfil de aros*).
 
 Cada aro se corta con las **puntas que la roladora no curva** (126 mm por aro, `proceso.aros.puntas_rolado_mm`): así el cálculo da la regla con que el taller corta la solera, π·(D + 81 mm), a menos de 1 mm.
 
@@ -180,7 +180,7 @@ Cuatro detalles se **supusieron** y conviene confirmarlos con el taller (se edit
 | Codo de 30°, 45°, 60° o 90° (segmentado y de radio) | longitud de eje exacta; factor `tan(α/2)/(α/2)` | exacta (verificada con malla 3D) |
 | Reducción (concéntrica y excéntrica) | tronco de cono, integral numérica | exacta (verificada con malla 3D) |
 | Transición redondo → rectángulo | triangulación estándar | exacta (verificada con malla 3D) |
-| Injerto simple, a 30° o 45° (antes ramal en ángulo) | promedio elíptico de la silleta | exacta (verificada) |
+| Injerto simple, a 30° o 45° (antes ramal en ángulo), también del mismo diámetro que el tronco («de 11″ a 11″ con injerto de 11″») | promedio elíptico de la silleta; su perímetro, sobre la curva real | exacta (verificada) |
 | Reducción con injerto, a 30° o 45° | el injerto va **sobre el cono** y siempre de extremo mayor a menor (inclinado hacia D2): la intersección cilindro–cono se resuelve numéricamente (silleta, orificio y soldadura); el largo de la reducción sale solo (el mínimo que aloja la silleta con 25 mm de holgura) o se captura | exacta (verificada contra cálculo independiente por fuerza bruta); merma y dificultad por calibrar |
 | Personalizada | área desarrollada desde CAD | la que traiga el CAD |
 | Bridas sueltas | sólo aros terminados (rolados, cerrados, barrenados y pintados) para el ducto de otro, sin lámina | la del aro de taller |
@@ -190,6 +190,17 @@ Cuatro detalles se **supusieron** y conviene confirmarlos con el taller (se edit
 
 **Ángulos del taller.** Todo injerto (simple o en la reducción) es de **30° o 45°** y los codos son de **30°, 45°, 60° o 90°**. En la captura son listas desplegables; el motor además rechaza cualquier otro ángulo con un mensaje claro (una cotización anterior con un ángulo distinto se abre mostrándolo como *no permitido* hasta corregirlo). Las listas están en las tablas maestras (`proceso.angulos_injerto_deg`, `proceso.angulos_codo_deg`), no en el código.
 
+## Planos de las piezas
+
+Cada partida se dibuja **acotada, como en los planos de pedido del taller** (los de AutoCAD con que se mandan a fabricar bridas, codos y reducciones):
+
+- **Al capturar**, el dibujo se rehace con cada dato; la cota del campo en que está el cursor se resalta, y pulsar una cota lleva a su campo. Sin descripción, la partida se llama como en los planos: «Reducción de 11″ a 10″ con injerto de 5″ a 30°», «Codo 90° Ø5″ · 5 gajos», «Brida de 9″».
+- **En la lista**, cada pieza trae su miniatura; **en el desglose**, su plano grande con sus datos (D, R, gajos, Dint/Dperf/Dext, barrenos…).
+- **La pestaña Planos** arma las hojas de pedido: una por tipo de pieza y, en las de lámina, por material y calibre («CODOS / ACERO GALVANIZADO · CAL. 24»), cada pieza con su marca (B1, C1, I1…), cuántas piezas son, su dibujo y sus datos, y un cajetín con proyecto, fecha y número de hoja. **Imprimir planos** las imprime solas, una por página carta horizontal.
+- **Ver el ejemplo: pedido del 30-sep-2026** abre el pedido de los planos del taller (7 codos, 9 reducciones con injerto e injertos y 60 bridas) para verlo dibujado y costeado.
+
+Los dibujos salen de `src/web/planos.js` (funciones puras, probadas en `tests/planos.test.js`); lo que difiere de los planos del taller está en [§10.13](docs/arquitectura-cotizador-ducterias.md#1013-diferencias-con-los-planos-de-pedido-por-confirmar) y el detalle en [§8.5](docs/arquitectura-cotizador-ducterias.md#85-dibujos-acotados-y-planos-de-pedido).
+
 ## Estructura
 
 ```text
@@ -197,9 +208,9 @@ docs/arquitectura-cotizador-ducterias.md   especificación
 src/
   datos/maestros.js                        tablas maestras (valores ilustrativos)
   datos/ayuda_maestros.js                  ayuda de cada dato de las tablas (qué es · cómo se llena · qué esperar)
-  datos/ejemplos.js                        el proyecto real de la hoja de control de gastos (partidas y gastos)
+  datos/ejemplos.js                        el proyecto real de la hoja de control de gastos y el pedido de ductería del 30-sep-2026
   motor/                                   util · gastos · geometria · material · proveedor · mano_obra · consumibles · precios · validacion · compras · cotizador
-  web/                                     index.html · app.js · almacen.js · maestros_ui.js · maestros_ayuda_ui.js · compras_ui.js · esquemas.js · dom.js · estilos.css
+  web/                                     index.html · app.js · almacen.js · maestros_ui.js · maestros_ayuda_ui.js · compras_ui.js · planos.js · planos_ui.js · esquemas.js · dom.js · estilos.css
 tests/                                     *.test.js (node:test) · e2e/ui.e2e.js (Playwright, opcional)
 scripts/construir.js                       empaquetado a un solo HTML
 ```

@@ -87,7 +87,7 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   const costo_lamina = m_bruta * P.precio_kg_acero_carbon;
 
   /* Paso 6 · aro de brida: solera 1½" × 3/16" rolada de canto (centroide y barreno al centro del ancho) */
-  const ancho = 38.1; const esp = 4.763; const gramil = ancho / 2;
+  const ancho = 38.1; const esp = 4.763; const gramil = 24; // barreno a 24 mm del borde interior (planos de pedido del 30-sep-2026)
   const w = (ancho * esp * 7.85) / 1000;
   const c = ancho / 2;
   const L_aro = PI * (D_ext + 2 * c) + 3.0 + 126; // + holgura de corte + las puntas que la roladora no curva (regla del taller π(D + 81 mm))
@@ -106,9 +106,9 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   const precio_kg_solera = (barra.precio / (1 + M.proveedor.iva_incluido_pct)) / (w * (barra.largo_mm / 1000));
   const costo_perfiles = (m_aros_bruta + m_sueltos_bruta) * precio_kg_solera;
 
-  /* Paso 7 · tornillería: 8 por junta; cada brida —de taller o suelta— aporta media junta; reserva 5 % */
+  /* Paso 7 · tornillería: 8 por junta (número par, mínimo 6, paso ≤ 150 mm); cada brida —de taller o suelta— aporta media junta; reserva 5 % */
   const P_perno = PI * (D_ext + 2 * gramil);
-  const n_tornillos = Math.ceil(Math.max(4, Math.ceil(P_perno / 150 - 1e-9)) / 4 - 1e-9) * 4;
+  const n_tornillos = Math.ceil(Math.max(6, Math.ceil(P_perno / 150 - 1e-9)) / 2 - 1e-9) * 2; // número par, mínimo 6
   assert.equal(n_tornillos, 8);
   const juntas_asignadas = (n_bridas + n_sueltas) * 0.5;
   const costo_tornilleria = n_tornillos * juntas_asignadas * 1.05 * P.precio_juego_tornillo_5_16_x_1_1_4;
@@ -230,9 +230,9 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
 
 /* Los tres modos del extremo del ajuste: el vector de cada uno (CD, C_T y precio con el mismo método del documento). */
 const MODOS = {
-  SIN_BRIDA: { n_aros: 1, n_sueltos: 0, horas: 2.703, CD: 1363.48, C_T: 1770.42, precio: 2308.94 },
-  SUELTA: { n_aros: 1, n_sueltos: 1, horas: 3.751, CD: 1550.56, C_T: 2073.19, precio: 2703.81 },
-  CON_BRIDA: { n_aros: 2, n_sueltos: 0, horas: 3.961, CD: 1577.06, C_T: 2121.51, precio: 2766.83 },
+  SIN_BRIDA: { n_aros: 1, n_sueltos: 0, horas: 2.703, CD: 1363.95, C_T: 1770.95, precio: 2309.63 },
+  SUELTA: { n_aros: 1, n_sueltos: 1, horas: 3.751, CD: 1551.51, C_T: 2074.25, precio: 2705.19 },
+  CON_BRIDA: { n_aros: 2, n_sueltos: 0, horas: 3.961, CD: 1578, C_T: 2122.57, precio: 2768.21 },
 };
 
 test('Ejemplo A — el extremo del ajuste: sin brida, brida suelta (por omisión) o brida de taller', () => {
@@ -293,9 +293,9 @@ const GOLDEN = {
   L_aro_mm: 1215.8,
   n_tornillos: 8,
   horas_mod_reales: 3.751,
-  CD: 1550.56,
-  C_T: 2073.19,
-  precio_unitario: 2703.81,
+  CD: 1551.51,
+  C_T: 2074.25,
+  precio_unitario: 2705.19,
 };
 
 test('Ejemplo A — vector de referencia (valores redondeados que cita el documento)', () => {

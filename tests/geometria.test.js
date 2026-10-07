@@ -628,7 +628,46 @@ test('Silleta del injerto sobre el cono: si el cono casi es un cilindro coincide
     casi(g.A_orificio, cilindro.A_orificio_m2 * 1e6, 1e-4, `orificio β=${b}`);
     casi(g.t_med, cilindro.detalle.t_medio_mm, 1e-6, `t medio β=${b}`);
     casi(g.t_max, cilindro.detalle.t_max_mm, 1e-3, `t máximo β=${b}`); // el máximo del cilindro es el extremo teórico; el discreto lo roza
+    casi(g.P_h, cilindro.detalle.P_orificio_mm, 1e-4, `perímetro β=${b}`); // las dos silletas exactas coinciden
   });
+});
+
+test('Injerto del mismo diámetro que el tronco (una «Y» lateral, como en los planos del taller): orificio, silleta y soldadura exactos', () => {
+  // K(1) = 4/π: con d = D el orificio mide 4·R² / sen β
+  casi(G.factorOrificio(1), 4 / PI, 1e-9);
+  [[279.4, 30], [279.4, 45], [400, 60]].forEach(([D, b]) => {
+    const PF = G.perfilFabricacion({ familia: 'RAMAL', D_mm: D, d_mm: D, L_cuerpo_mm: 1200, L_ramal_mm: 1200, beta_deg: b }, E_16, M);
+    const R = (D + E_16) / 2;
+    const beta = (b * PI) / 180;
+    casi(PF.detalle.k_d_sobre_D, 1, 1e-12);
+    casi(PF.A_orificio_m2 * 1e6, (4 * R * R) / Math.sin(beta), 1e-6, `orificio cerrado β=${b}`);
+    casi(PF.A_orificio_m2 * 1e6, orificioBruto(R, R, b), 2e-4, `orificio contra la malla β=${b}`);
+    casi(PF.detalle.t_medio_mm, (2 * R) / (PI * Math.sin(beta)), 1e-6, `t medio = 2R / (π·sen β), β=${b}`);
+    // el perímetro de la silleta contra la bisección de fuerza bruta (un «cono» sin conicidad es el tronco)
+    const bruto = silletaBruta(R, 0, 0, R, b, 1);
+    casi(PF.detalle.P_orificio_mm, bruto.P_h, 2e-5, `perímetro de la silleta β=${b}`);
+    casi(PF.sold.filete_m * 1000, bruto.P_h, 2e-5);
+    assert.ok(PF.advertencias.some((a) => /igual diámetro/.test(a)));
+  });
+  // el injerto de 11″ a 30° sobre un tronco de 11″ del plano: 900 mm de tronco y 726 mm de injerto
+  const y11 = G.perfilFabricacion({ familia: 'RAMAL', D_mm: 279.4, d_mm: 279.4, L_cuerpo_mm: 900, L_ramal_mm: 726, beta_deg: 30 }, E_16, M);
+  assert.ok(y11.A_neta_m2 > 0);
+  // más grande que el tronco, no
+  assert.throws(() => G.perfilFabricacion({ familia: 'RAMAL', D_mm: 279.4, d_mm: 300, L_cuerpo_mm: 900, L_ramal_mm: 900, beta_deg: 30 }, E_16, M), /mayor diámetro que el tronco/);
+});
+
+test('Injerto simple: el perímetro de la silleta es la curva exacta para toda relación d/D (la elipse se quedaba hasta 18 % corta)', () => {
+  [[400, 100, 30], [400, 200, 45], [400, 268, 90], [400, 320, 45], [400, 360, 30]].forEach(([D, d, b]) => {
+    const PF = G.perfilFabricacion({ familia: 'RAMAL', D_mm: D, d_mm: d, L_cuerpo_mm: 1500, L_ramal_mm: 1500, beta_deg: b }, E_16, M);
+    const bruto = silletaBruta((D + E_16) / 2, 0, 0, (d + E_16) / 2, b, 1);
+    casi(PF.detalle.P_orificio_mm, bruto.P_h, 2e-5, `D=${D} d=${d} β=${b}`);
+    casi(PF.detalle.t_medio_mm, bruto.t_med, 1e-6, `t medio D=${D} d=${d} β=${b}`);
+  });
+  // con un injerto chico la elipse de antes es una buena aproximación (±2.5 %); cerca de d = D no
+  const P = (d, b) => G.perfilFabricacion({ familia: 'RAMAL', D_mm: 400, d_mm: d, L_cuerpo_mm: 1500, L_ramal_mm: 1500, beta_deg: b }, E_16, M).detalle.P_orificio_mm;
+  const elipse = (d, b) => PI * (d + E_16) * Math.sqrt((1 + 1 / Math.sin((b * PI) / 180) ** 2) / 2);
+  assert.ok(Math.abs(P(100, 45) / elipse(100, 45) - 1) < 0.025);
+  assert.ok(P(400, 45) / elipse(400, 45) - 1 > 0.15);
 });
 
 test('Silleta del injerto sobre el cono: un injerto demasiado tendido o demasiado grande no tiene geometría', () => {
@@ -743,7 +782,7 @@ test('Reducción con injerto: ya no hay "lado" (der/izq) ni "sentido" por partid
 test('Reducción con injerto: validaciones físicas (D2 < D1, injerto menor que el cono, largos suficientes) y la inclinación de maestros', () => {
   const ok = (extra) => G.perfilFabricacion({ ...BASE_RI, ...extra }, E_16, M);
   assert.doesNotThrow(() => ok({}));
-  assert.throws(() => ok({ D2_mm: 304.8 }), /D2 debe ser menor que D1/);
+  assert.throws(() => ok({ D2_mm: 304.8 }), /D2 debe ser menor que D1.*es un Injerto simple/); // «de 12″ a 12″ con injerto»: lo manda a la familia correcta
   assert.throws(() => ok({ D2_mm: 400 }), /D2 debe ser menor que D1/);
   assert.throws(() => ok({ d_mm: 300 }), /injerto debe ser de menor diámetro que la reducción/);
   assert.throws(() => ok({ D1_mm: 0 }), U.ErrorValidacion);
