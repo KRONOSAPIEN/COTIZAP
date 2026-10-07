@@ -254,3 +254,21 @@ test('Sin elegir lámina: del ancho de la yarda, la que menos desperdicia; la el
   // con yardas de 4 ft sólo hay una del ancho: la de las tablas
   assert.equal(R.cotizar({ D_mm: 152.4, L_m: 40 }, M).hoja.id, 'GALV_C22_4X10');
 });
+
+test('Mangueras, soportería y viáticos: renglones opcionales en pesos sin IVA que suman al costo, antes de la utilidad', () => {
+  const M = crearMaestros();
+  const base = { D_mm: 279.4, L_m: 31, yarda_mm: 914.4, dias_fabricacion: 4, dias_instalacion: 5 };
+  const sin = R.cotizar(base, M);
+  assert.deepEqual(sin.extras, { mangueras: 0, soporteria: 0, viaticos: 0, importe: 0 });
+  const con = R.cotizar({ ...base, mangueras: 6275.92, soporteria: 2386.2, viaticos: 1987.93 }, M);
+  cerca(con.extras.importe, 10650.05, 1e-6, 'suman $10,650.05');
+  cerca(con.costo, sin.costo + 10650.05, 1e-6, 'al costo');
+  cerca(con.total, (sin.costo + 10650.05) * 1.2 * 1.16, 1e-6, 'y llevan utilidad e IVA');
+  // uno solo, o vacíos / en cero, no cambian nada más
+  cerca(R.cotizar({ ...base, viaticos: 2000 }, M).costo, sin.costo + 2000, 1e-9);
+  assert.equal(R.cotizar({ ...base, mangueras: '', soporteria: null, viaticos: 0 }, M).costo, sin.costo);
+  assert.equal(con.entrada.mangueras, 6275.92);
+  assert.throws(() => R.cotizar({ ...base, mangueras: -1 }, M), /importe de mangueras/);
+  assert.throws(() => R.cotizar({ ...base, soporteria: NaN }, M), /importe de soportería/);
+  assert.throws(() => R.cotizar({ ...base, viaticos: 'mucho' }, M), /importe de viáticos/);
+});

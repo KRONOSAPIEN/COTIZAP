@@ -8,6 +8,7 @@
  *   costo    = lámina × factor_lamina (3: cubre mano de obra, accesorios y lo demás) + bridas por metros
  *              + días de fabricación de bridas × personas × pago por día (1 × $500)
  *              + días de instalación × personas × pago por día (2 × $500)
+ *              + los renglones opcionales en pesos sin IVA: mangueras, soportería y viáticos (lo que el factor no cubre)
  *   precio   = costo × (1 + utilidad)            (la utilidad se SUMA sobre el costo)
  *   total    = precio × (1 + IVA)
  *
@@ -25,6 +26,8 @@
  * rectángulo de cada plantilla para dibujar la hoja. Si la plantilla no cabe en la hoja de ninguna forma, cada yarda lleva
  * hojas completas y un retazo, y los retazos se acomodan juntos.
  * Los días de fabricación (de las bridas) y de instalación dan el plazo y suman su mano de obra al costo, antes de la utilidad.
+ * Las mangueras, la soportería y los viáticos se capturan como importe (MXN sin IVA, vacío = no hay): el factor de la lámina no
+ * los cubre (en el proyecto de referencia sumaron cerca de $10,650) y también entran al costo, antes de la utilidad.
  * Pura: no muta nada; lanza ErrorValidacion con mensajes legibles.
  */
 (function (root, factory) {
@@ -167,8 +170,17 @@
     return n;
   };
 
+  const EXTRAS = [['mangueras', 'mangueras'], ['soporteria', 'soportería'], ['viaticos', 'viáticos']];
+  const leerImporte = (v, nombre, errores) => {
+    if (v === undefined || v === null || v === '') return null;
+    const n = Number(v);
+    if (!finito(n) || n < 0 || n > 100000000) { errores.push(`El importe de ${nombre} debe ser de $0 a $100,000,000 (sin IVA).`); return null; }
+    return n;
+  };
+
   /**
-   * entrada: { D_mm, L_m, yarda_mm?, hoja_id?, utilidad_pct?, dias_fabricacion?, dias_instalacion? }  (utilidad en fracción: 0.20)
+   * entrada: { D_mm, L_m, yarda_mm?, hoja_id?, utilidad_pct?, dias_fabricacion?, dias_instalacion?, mangueras?, soporteria?, viaticos? }
+   * (utilidad en fracción: 0.20; los tres últimos en MXN sin IVA)
    * Devuelve el desglose: hoja, plantilla, acomodo, yardas, hojas, lámina, factor, bridas, mano de obra por días, costo, utilidad,
    * precio, IVA, total y plazo.
    */
@@ -202,6 +214,8 @@
     if (!finito(u) || u < 0 || u > 10) errores.push('La utilidad debe ser de 0 % a 1 000 %.');
     const diasFab = leerDias(e0.dias_fabricacion, 'fabricación', errores);
     const diasIns = leerDias(e0.dias_instalacion, 'instalación', errores);
+    const dadosExtras = {};
+    EXTRAS.forEach(([k, nombre]) => { dadosExtras[k] = leerImporte(e0[k], nombre, errores); });
     const factor = R.factor_lamina;
     const iva = M.capas.iva_pct;
     const bridas = finito(L_m) && L_m > 0 ? bridasPara(M, L_m) : null;
@@ -236,13 +250,15 @@
       fabricacion: cuadrilla(diasFab, R.personas_fabricacion, R.pago_dia_fabricacion),
       instalacion: cuadrilla(diasIns, R.personas_instalacion, R.pago_dia_instalacion),
     };
-    const costo = lamina_factor + bridas.importe + mano_obra.fabricacion.importe + mano_obra.instalacion.importe;
+    const extras = { importe: 0 };
+    EXTRAS.forEach(([k]) => { extras[k] = dadosExtras[k] || 0; extras.importe += extras[k]; });
+    const costo = lamina_factor + bridas.importe + mano_obra.fabricacion.importe + mano_obra.instalacion.importe + extras.importe;
     const utilidad = costo * u;
     const precio_neto = costo + utilidad;
     const iva_monto = precio_neto * iva;
     const aprovechado = Math.min(1, (B * Y * n_yardas) / (n_hojas * W * Lh));
     return {
-      entrada: { D_mm: D, L_m, yarda_mm: Y, hoja_id, utilidad_pct: u, dias_fabricacion: diasFab, dias_instalacion: diasIns },
+      entrada: { D_mm: D, L_m, yarda_mm: Y, hoja_id, utilidad_pct: u, dias_fabricacion: diasFab, dias_instalacion: diasIns, mangueras: dadosExtras.mangueras, soporteria: dadosExtras.soporteria, viaticos: dadosExtras.viaticos },
       hoja: {
         id: hoja_id, descripcion: H.descripcion || hoja_id, material: H.material, calibre: H.calibre, ancho_mm: W, largo_mm: Lh,
         espesor_mm: e, precio: precio.precio, sin_iva: precio.sin_iva, kg: precio.kg,
@@ -251,7 +267,7 @@
       hoja_auto: !e0.hoja_id, hojas_comparadas: candidatas.length, // sin elegir lámina: de cuántas hojas del ancho de la yarda se tomó la más barata
       acomodo: aco, yardas: n_yardas, yardas_por_hoja: aco.n, yardas_ultima_hoja: ultima, hojas: n_hojas, aprovechamiento: aprovechado, kg: n_hojas * precio.kg,
       lamina, factor, lamina_factor,
-      bridas, mano_obra,
+      bridas, mano_obra, extras,
       costo, utilidad_pct: u, utilidad, precio: precio_neto, iva_pct: iva, iva: iva_monto, total: precio_neto + iva_monto,
       plazo: diasFab === null && diasIns === null ? null : { fabricacion: diasFab || 0, instalacion: diasIns || 0, total: (diasFab || 0) + (diasIns || 0) },
       advertencias,

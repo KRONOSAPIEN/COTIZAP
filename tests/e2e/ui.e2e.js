@@ -2066,6 +2066,30 @@ const ok = (cond, msg) => {
     await p.context().close();
   }
 
+  console.log('29) Cotización rápida: mangueras, soportería y viáticos opcionales suman al costo y se nombran en el texto del cliente');
+  {
+    const p = await nuevaPagina();
+    await p.click('#tab-rapida');
+    await p.click('#rapida-ejemplo');
+    await p.waitForTimeout(100);
+    ok(await p.locator('#rapida-total-val').innerText() === '$46,512.00' && !/Mangueras|Soportería|Viáticos/.test(await p.locator('#rapida-desglose').innerText()), 'sin importes no hay renglones extra: $46,512.00');
+    await p.fill('#r_mangueras', '6275.92');
+    await p.fill('#r_soporteria', '2386.20');
+    await p.fill('#r_viaticos', '1987.93');
+    await p.waitForTimeout(100);
+    const tot = Math.round((33413.79 + 10650.05) * 1.2 * 1.16 * 100) / 100;
+    ok(await p.locator('#rapida-total-val').innerText() === `$${tot.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, `el total sube a $${tot}`);
+    const des = await p.locator('#rapida-desglose').innerText();
+    ok(/Mangueras[\s\S]*\$6,275\.92/.test(des) && /Soportería[\s\S]*\$2,386\.20/.test(des) && /Viáticos[\s\S]*\$1,987\.93/.test(des), 'el desglose trae los tres renglones');
+    ok(/Incluye suministro, fabricación, instalación, mangueras, soportería y viáticos\./.test(await p.inputValue('#rapida-texto')), 'el texto del cliente dice lo que incluye');
+    await p.fill('#r_mangueras', 'abc');
+    await p.waitForTimeout(100);
+    ok(/importe de mangueras/.test(await p.locator('.rapida-error').innerText()), 'un importe ilegible se señala');
+    await p.click('#rapida-limpiar');
+    ok(await p.inputValue('#r_mangueras') === '' && await p.inputValue('#r_soporteria') === '' && await p.inputValue('#r_viaticos') === '', 'Limpiar vacía los tres');
+    await p.context().close();
+  }
+
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

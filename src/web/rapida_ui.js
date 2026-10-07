@@ -21,8 +21,8 @@
   const MM_PIE = 304.8;
   const MAX_TIRA = 24; // láminas que se dibujan en la tira; más se resumen
 
-  /** Lo capturado (textos, como se tecleó): diámetro (en la unidad de la cotización), metros, yarda (mm), lámina, utilidad (%) y días. */
-  const VACIA = { cliente: '', diam: '', metros: '', yarda: '', hoja_id: '', utilidad: '', dias_fab: '', dias_ins: '' };
+  /** Lo capturado (textos, como se tecleó): diámetro (en la unidad de la cotización), metros, yarda (mm), lámina, utilidad (%), días e importes opcionales. */
+  const VACIA = { cliente: '', diam: '', metros: '', yarda: '', hoja_id: '', utilidad: '', dias_fab: '', dias_ins: '', mangueras: '', soporteria: '', viaticos: '' };
   const SOLO_COPIAR = !!root.COTIZAP_ENTORNO_ARTIFACT; // en un visor restringido no se puede imprimir
   let captura = null;
   function leerGuardado() {
@@ -59,6 +59,9 @@
       utilidad_pct: u === undefined ? undefined : u / 100,
       dias_fabricacion: numero(captura.dias_fab),
       dias_instalacion: numero(captura.dias_ins),
+      mangueras: numero(captura.mangueras),
+      soporteria: numero(captura.soporteria),
+      viaticos: numero(captura.viaticos),
     };
   }
 
@@ -143,6 +146,21 @@
   /** El renglón de la mano de obra de unos días (sólo si se capturaron). */
   const manoDeObra = (concepto, m) => (m.dias > 0 ? renglon(`${concepto}: ${corto(m.dias)} ${m.dias === 1 ? 'día' : 'días'}`, `${corto(m.dias)} ${m.dias === 1 ? 'día' : 'días'} × ${cuadrilla(m.personas, m.pago_dia)}.`, W.mxn(m.importe)) : null);
 
+  /** El renglón de un importe opcional (sólo si se capturó). */
+  const extra = (concepto, detalle, importe) => (importe > 0 ? renglon(concepto, detalle, W.mxn(importe)) : null);
+
+  /** Lo que incluye el precio, para el cliente: «suministro, fabricación, instalación y soportería». */
+  function incluyeTexto(r) {
+    const x = r.extras;
+    const partes = ['suministro', 'fabricación'];
+    if (r.mano_obra.instalacion.dias > 0) partes.push('instalación');
+    if (x.mangueras > 0) partes.push('mangueras');
+    if (x.soporteria > 0) partes.push('soportería');
+    if (x.viaticos > 0) partes.push('viáticos');
+    const ultima = partes[partes.length - 1];
+    return `${partes.slice(0, -1).join(', ')} ${/^i/.test(ultima) ? 'e' : 'y'} ${ultima}`;
+  }
+
   function nominal(D_mm) {
     return enPulgadas() ? `${corto(D_mm / W.MM_IN)}″` : `${corto(D_mm)} mm`;
   }
@@ -166,7 +184,7 @@
   function textoCliente(r) {
     const c = texto(captura.cliente).trim();
     const vig = Number(E().cot.vigencia_dias);
-    const incluye = r.mano_obra.instalacion.dias > 0 ? 'suministro, fabricación e instalación' : 'suministro y fabricación';
+    const incluye = incluyeTexto(r);
     return [
       `Cotización de ductería${c ? ` · ${c}` : ''}`,
       `Ducto de Ø${nominal(r.entrada.D_mm)}, ${corto(r.entrada.L_m)} m hasta el punto más alejado, en ${materialCliente(r)}, con bridas.`,
@@ -201,7 +219,7 @@
     W.reemplazar($('#rapida-impresion'),
       h('header', { class: 'ri-cab' }, h('h1', null, 'Cotización de ductería'), h('p', null, hoy)),
       c ? h('p', { class: 'ri-cliente' }, h('strong', null, 'Cliente: '), c) : null,
-      h('p', null, `Ducto de Ø${nominal(r.entrada.D_mm)}, ${corto(r.entrada.L_m)} m hasta el punto más alejado, en ${materialCliente(r)}, con bridas. Incluye ${r.mano_obra.instalacion.dias > 0 ? 'suministro, fabricación e instalación' : 'suministro y fabricación'}.`),
+      h('p', null, `Ducto de Ø${nominal(r.entrada.D_mm)}, ${corto(r.entrada.L_m)} m hasta el punto más alejado, en ${materialCliente(r)}, con bridas. Incluye ${incluyeTexto(r)}.`),
       h('table', { class: 'ri-tabla' }, h('tbody', null,
         fila('Subtotal', W.mxn(r.precio)),
         fila(`IVA ${W.pct(r.iva_pct, 0)}`, W.mxn(r.iva)),
@@ -247,6 +265,9 @@
         renglon('Bridas', `Por ${corto(r.entrada.L_m)} m: ${tramo}.`, W.mxn(r.bridas.importe)),
         manoDeObra('Fabricación de bridas', r.mano_obra.fabricacion),
         manoDeObra('Instalación', r.mano_obra.instalacion),
+        extra('Mangueras', 'Importe capturado, sin IVA.', r.extras.mangueras),
+        extra('Soportería', 'Importe capturado, sin IVA.', r.extras.soporteria),
+        extra('Viáticos', 'Importe capturado, sin IVA.', r.extras.viaticos),
         renglon('Costo', null, W.mxn(r.costo), 'r-sub'),
         renglon(`Utilidad ${corto(r.utilidad_pct * 100)} %`, 'Sobre el costo.', W.mxn(r.utilidad)),
         renglon('Precio antes de IVA', null, W.mxn(r.precio), 'r-sub'),
@@ -326,7 +347,7 @@
 
   function iniciar() {
     captura = { ...VACIA, ...leerGuardado() };
-    const campos = [['#r_cliente', 'cliente'], ['#r_diam', 'diam'], ['#r_metros', 'metros'], ['#r_utilidad', 'utilidad'], ['#r_dias_fab', 'dias_fab'], ['#r_dias_ins', 'dias_ins']];
+    const campos = [['#r_cliente', 'cliente'], ['#r_diam', 'diam'], ['#r_metros', 'metros'], ['#r_utilidad', 'utilidad'], ['#r_dias_fab', 'dias_fab'], ['#r_dias_ins', 'dias_ins'], ['#r_mangueras', 'mangueras'], ['#r_soporteria', 'soporteria'], ['#r_viaticos', 'viaticos']];
     campos.forEach(([sel, k]) => {
       const el = $(sel);
       el.value = texto(captura[k]);
