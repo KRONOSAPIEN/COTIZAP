@@ -128,7 +128,7 @@
         giradas < n ? [h('span', { class: 'lam-ley lam-ley-yarda' }), giradas ? 'Yarda a lo ancho de la lámina' : 'Yarda'] : null,
         giradas ? [h('span', { class: 'lam-ley lam-ley-girada' }), 'Yarda a lo largo de la lámina'] : null,
         h('span', { class: 'lam-ley lam-ley-sobra' }), 'Sobrante'),
-      h('p', { class: 'lam-medida' }, `Cada yarda: ${mm(r.yarda_mm)} × ${mm(r.plantilla_mm)} mm (largo × perímetro más la costura).`),
+      h('p', { class: 'lam-medida', id: 'rapida-desarrollo' }, `Desarrollo de cada yarda: π × ${W.num(r.D_med_mm, 1)} mm = ${mm(r.desarrollo_mm)} mm${r.holgura_mm > 0 ? ` + ${mm(r.holgura_mm)} mm de la costura = ${mm(r.plantilla_mm)} mm` : ''}: el perímetro, no el diámetro. Cada yarda mide ${mm(r.yarda_mm)} × ${mm(r.plantilla_mm)} mm.`),
       h('div', { class: 'lam-tira-tit' }, `Las ${plural(r.hojas, 'lámina', 'láminas')} (número · yardas que lleva)`),
       tira);
   }
@@ -281,24 +281,30 @@
     $('#r_diam_unidad').textContent = enPulgadas() ? 'pulgadas' : 'mm';
     renderYardas(M);
     // las hojas de la lista del proveedor (sólo las que tienen precio); sin elegir, la de las tablas o la del ancho de la yarda
+    // sin elegir: de las hojas del ancho de la yarda, la que menos desperdicia con este diámetro y estos metros
     const hojas = C.rapida.hojas(M);
     const sel = $('#r_hoja');
-    const yarda = captura.yarda ? Number(captura.yarda) : undefined;
-    const auto = M.rapida ? C.rapida.hojaPara(M, '', yarda || (M.proceso.armado_yardas || {}).yarda_defecto_mm) : '';
+    const e = entrada();
+    const yarda = captura.yarda ? Number(captura.yarda) : (M.proceso.armado_yardas || {}).yarda_defecto_mm;
+    const auto = M.rapida ? C.rapida.hojaPara(M, '', yarda, e.D_mm, e.L_m) : '';
+    const n_ancho = M.rapida ? C.rapida.hojasDeLaYarda(M, yarda).length : 0;
+    const desc = (hojas.find((x) => x.id === auto) || { descripcion: auto || '—' }).descripcion;
     const elegida = hojas.some((x) => x.id === captura.hoja_id) ? captura.hoja_id : '';
-    W.reemplazar(sel, h('option', { value: '' }, (hojas.find((x) => x.id === auto) || { descripcion: auto || '—' }).descripcion),
+    W.reemplazar(sel, h('option', { value: '' }, desc.replace(/\s*\(.*\)\s*$/, '')),
       ...hojas.map((x) => h('option', { value: x.id }, x.descripcion)));
     sel.value = elegida;
+    $('#r_hoja_nota').textContent = elegida ? 'La que eligió.'
+      : n_ancho > 1 ? `Sin elegir: de las ${W.num(n_ancho, 0)} del ancho de la yarda, la que menos desperdicia con este ducto.` : 'Sin elegir: la de las tablas maestras.';
     $('#r_utilidad').placeholder = M.rapida ? `${corto(M.rapida.utilidad_pct * 100)} (de las tablas)` : '';
     if (M.rapida) {
       $('#r_fab_nota').textContent = cuadrilla(M.rapida.personas_fabricacion, M.rapida.pago_dia_fabricacion);
       $('#r_ins_nota').textContent = cuadrilla(M.rapida.personas_instalacion, M.rapida.pago_dia_instalacion);
     }
     const cont = $('#rapida-resultado');
-    const e = entrada();
     if (e.D_mm === undefined && e.L_m === undefined) {
       W.reemplazar(cont, h('div', { class: 'tarjeta rapida-vacia' },
         h('p', null, 'Capture el diámetro máximo y los metros hasta el punto más alejado.'),
+        h('p', null, h('button', { type: 'button', class: 'btn btn-sec', id: 'rapida-ejemplo', onclick: ejemplo }, 'Probar con el arreglo unifilar: 11″ y 31 m')),
         h('p', { class: 'nota' }, `Regla: lámina en hojas enteras × ${M.rapida ? corto(M.rapida.factor_lamina) : '3'}, más las bridas según los metros, la mano de obra de los días, la utilidad y el IVA. Se cambia en Tablas maestras › Cotización rápida.`)));
       return;
     }
@@ -308,6 +314,14 @@
       const msgs = err && err.errores ? err.errores : [String(err && err.message ? err.message : err)];
       W.reemplazar(cont, h('div', { class: 'tarjeta rapida-error', role: 'alert' }, h('ul', null, msgs.map((m) => h('li', null, m)))));
     }
+  }
+
+  /** El sistema del arreglo unifilar del 22-sep-2026: 31 m (10.8 + 4.8 + 9.6 + 5.5) a 11″, yardas de 3 ft, 4 días de bridas y 5 de instalación. */
+  function ejemplo() {
+    captura = { ...captura, diam: enPulgadas() ? '11' : '279.4', metros: '31', yarda: '914', hoja_id: '', dias_fab: '4', dias_ins: '5' };
+    [['#r_diam', 'diam'], ['#r_metros', 'metros'], ['#r_dias_fab', 'dias_fab'], ['#r_dias_ins', 'dias_ins']].forEach(([sel, k]) => { $(sel).value = captura[k]; });
+    guardar();
+    render();
   }
 
   function iniciar() {

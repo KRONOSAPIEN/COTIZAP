@@ -227,7 +227,7 @@
 
 **T3b · Lista de precios del proveedor de acero** (cotizaciones y factura del 30-sep-2026). El proveedor cotiza **por pieza y con IVA incluido**; aquí se conserva el precio *como se cotiza* y se muestran los valores que el motor deriva de él (§5.1.1). `iva_incluido_pct` = 16 % (0 % si se capturan antes de IVA). «Cálculo» = el cotizador usa ese renglón; «Referencia» = se guarda para comparar, ninguna pieza lo usa todavía. La lámina de la factura está en cal. 12 (negra); las galvanizadas cal. 22 y 24 vienen de las cotizaciones.
 
-*Lámina en hoja* (las galvanizadas de 3 × 10 ft son **aproximadas**: el precio de la 4 × 10 prorrateado por área, a falta de la cotización del proveedor)
+*Lámina en hoja* (las galvanizadas de 3 × 10 y de 3 × 8 ft son **aproximadas**: el precio de la 4 × 10 prorrateado por área, a falta de la cotización del proveedor; la de 3 × 8 ft, la de la nota del arreglo unifilar, sólo la usa la cotización rápida)
 
 | Renglón | Concepto | Hoja (mm) | Precio cotizado (con IVA) | Sin IVA | kg por hoja | $/kg sin IVA | Uso |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -235,6 +235,8 @@
 | `GALV_C24_4X10` | Lámina galvanizada 4 × 10 ft · cal. 24 | 1219 × 3048 | 700.00 | 603.45 | 20.45 | 29.51 | **Cálculo** |
 | `GALV_C22_3X10` | Lámina galvanizada 3 × 10 ft · cal. 22 (aprox., prorrateada de la 4 × 10) | 914 × 3048 | 690.00 | 594.83 | 18.66 | 31.87 | **Cálculo** |
 | `GALV_C24_3X10` | Lámina galvanizada 3 × 10 ft · cal. 24 (aprox., prorrateada de la 4 × 10) | 914 × 3048 | 525.00 | 452.59 | 15.33 | 29.52 | **Cálculo** |
+| `GALV_C22_3X8` | Lámina galvanizada 3 × 8 ft · cal. 22 (aprox., prorrateada de la 4 × 10) | 914 × 2438 | 552.00 | 475.86 | 14.93 | 31.88 | Referencia |
+| `GALV_C24_3X8` | Lámina galvanizada 3 × 8 ft · cal. 24 (aprox., prorrateada de la 4 × 10) | 914 × 2438 | 420.00 | 362.07 | 12.26 | 29.53 | Referencia |
 | `NEGRA_C12_4X10` | Lámina negra 4 × 10 ft · cal. 12 | 1219 × 3048 | 2,020.00 | 1,741.38 | 77.49 | 22.47 | **Cálculo** |
 | `NEGRA_C12_4X8` | Lámina negra 4 × 8 ft · cal. 12 | 1219 × 2438 | 1,620.00 | 1,396.55 | 61.98 | 22.53 | Referencia |
 | `NEGRA_C12_3X10` | Lámina negra 3 × 10 ft · cal. 12 | 914 × 3048 | 1,515.00 | 1,306.03 | 58.10 | 22.48 | **Cálculo** |
@@ -1334,7 +1336,7 @@ precio     = costo × (1 + utilidad)                                  # la utili
 total      = precio × (1 + IVA)                                      # el IVA de la pila de precio (T9)
 ```
 
-**La yarda: 3 o 4 ft.** Se elige en la pestaña (los largos son los de T7c, `proceso.armado_yardas.yardas_mm`; sin elegir, `yarda_defecto_mm`, 4 ft). Sin elegir lámina, se usa la de T11 o, si el proveedor tiene una del mismo material y calibre **cuyo ancho es la yarda** (la de 3 × 10 ft para yardas de 3 ft), ésa. Una yarda de 1,220 mm cabe en la hoja de 4 ft (1,219 mm): se acepta una diferencia de 3 mm.
+**La yarda: 3 o 4 ft.** Se elige en la pestaña (los largos son los de T7c, `proceso.armado_yardas.yardas_mm`; sin elegir, `yarda_defecto_mm`, 4 ft). Sin elegir lámina, se toman las del mismo material y calibre que la de T11 **cuyo ancho es la yarda** (para yardas de 3 ft, las de 3 × 10 y 3 × 8 ft; para las de 4 ft, la de 4 × 10) y se usa **la que menos desperdicia** con ese diámetro y esos metros, que es la más barata; la pestaña dice cuál usó y de cuántas. Con 11″ gana la de 3 × 10 ft (3 yardas por hoja contra 2); con 6″ y 40 m, la de 3 × 8 ft (11 hojas contra 9 más caras). Una yarda de 1,220 mm cabe en la hoja de 4 ft (1,219 mm): se acepta una diferencia de 3 mm.
 
 **El acomodo.** Las plantillas (yarda × B) se acomodan en la hoja con cortes de guillotina, y se queda el que da más: todas **a lo ancho** (la yarda a lo ancho de la hoja, como en el tramo recto), todas **a lo largo**, o una franja de un tipo y el resto del otro. Así, con yardas de 3 ft en la hoja de 4 × 10 ft, en la franja de 1 ft que sobra caben plantillas giradas si el ducto es chico (3″: 11 + 3 = 14 por hoja). La pestaña lo dibuja: una lámina a escala con sus yardas numeradas y el sobrante rayado, y una tira con todas las láminas y cuántas yardas lleva cada una (la última, las que falten). También dice qué fracción de la lámina se aprovecha.
 
@@ -1357,6 +1359,33 @@ Para 11″ y 40 m con yardas de 4 ft: la plantilla de una yarda mide π × (279.
 **Para el cliente.** La pestaña arma el texto que se le manda: el cliente u obra (campo opcional), el ducto, qué incluye (suministro y fabricación, e instalación si hay días de instalación), el precio con IVA, el plazo y la vigencia de la cotización. **No lleva el desglose interno** (factor, utilidad). *Copiar texto* lo pone en el portapapeles (si el visor no lo permite, lo deja seleccionado para copiarlo a mano) e *Imprimir* saca una hoja carta con lo mismo.
 
 Es una **estimación**: todo el sistema al diámetro mayor, en ductos rectos, sin aprovechar retazos entre yardas, y lo demás (codos, reducciones, mano de obra del ducto, soportería) cubierto por el factor; la fabricación de las bridas y la instalación, por sus días. Para un precio fino se capturan las partidas.
+
+#### 5.8.1 Revisión con el arreglo unifilar del 22-sep-2026
+
+El arreglo unifilar del sistema de la obra de §7.4 trae, junto al trazo, el cálculo rápido de la lámina:
+
+> 31 m de Ø11″ · desarrollo: 279 × 914 · de una lámina de 3′ × 8′ salen 8 yardas · se necesitan 34 yardas para cubrir los 31 m · salen de 4.25 láminas, digamos 5 láminas de 3′ × 8′ cal. 22
+
+Los 31 m son los cuatro tramos acotados del unifilar (10.802 + 4.833 + 9.633 + 5.500 = 30.77 m) y las 34 yardas de 3 ft están bien (31 ÷ 0.914 = 33.9). Lo que falla es el **desarrollo**: 279 mm es el diámetro, y la lámina de una yarda tiene que dar la vuelta al ducto, así que su desarrollo es el **perímetro**: π × (279.4 + 0.85) = 880 mm, más 32 mm del engargolado, **912 mm**. De una lámina de 3 × 8 ft (914 × 2,438 mm) salen **2** yardas de 11″, no 8 (2,438 ÷ 279 = 8.7 es lo que da con el diámetro): para 34 yardas hacen falta **17 láminas de 3 × 8 ft, o 12 de 3 × 10 ft** (3 por hoja), no 5. Por área se ve igual: una lámina de 3 × 8 ft mide 2.23 m² y cada yarda de 11″ necesita 0.83 m² (0.914 × 0.912): caben 2.
+
+Así queda la cotización rápida de esa obra (11″, 31 m, yardas de 3 ft, 4 días de bridas y 5 de instalación), contra lo que costó de verdad (§7.4):
+
+| Concepto (sin IVA) | Nota del plano: 5 láminas de 3 × 8 ft | La regla con las láminas bien contadas: 12 de 3 × 10 ft | Lo que costó la obra (§7.4) |
+| --- | --- | --- | --- |
+| Lámina | 2,379.31 | 7,137.93 | — |
+| Ductería (lámina × 3; la obra la compró hecha) | 7,137.93 | 21,413.79 | 18,965.52 |
+| Bridas (placas, soleras, tornillería, Sikaflex y esmalte) | 5,000.00 | 5,000.00 | 6,661.90 |
+| Mano de obra de las bridas (4 días) | 2,000.00 | 2,000.00 | 2,000.00 |
+| Instalación (2 personas × 5 días) | 5,000.00 | 5,000.00 | 5,000.00 |
+| Mangueras y sus abrazaderas | — | — | 6,275.92 |
+| Soportería (ménsulas, abrazaderas, poste y 2 días) | — | — | 2,386.20 |
+| Viáticos | — | — | 1,987.93 |
+| **Costo** | **19,137.93** | **33,413.79** | **43,277.47** |
+| Precio con 20 % de utilidad y el IVA | 26,640.00 | 46,512.00 | se vendió en 45,710.00 |
+
+- Con las láminas bien contadas, **la lámina × 3 ($21,413.79) queda 13 % arriba de lo que cobró el proveedor por fabricar toda la ductería ($18,965.52)**: el factor de 3 está bien calibrado para la ductería. Con las 5 láminas de la nota, × 3 daría $7,137.93: ni la mitad de lo que costó la ductería hecha.
+- Aun bien contada, la regla queda $9,863.68 abajo del costo real de la obra: no trae las **mangueras** ($6,275.92), la **soportería** ($2,386.20) ni los **viáticos** ($1,987.93), y las bridas costaron $1,661.90 más que los $5,000 de la tabla (eran 60: 30 de solera y 30 de placa). Con 20 % de utilidad e IVA la regla da $46,512.00; la obra se vendió en $45,710.00 con IVA y perdió $3,872.30 antes de indirectos (§7.4).
+- La pestaña trae esta obra como ejemplo («Probar con el arreglo unifilar: 11″ y 31 m») y en cada cotización escribe el desarrollo de la yarda («π × 280.3 mm = 880 mm + 32 mm de la costura = 912 mm: el perímetro, no el diámetro»).
 
 ---
 
@@ -2235,7 +2264,12 @@ Los planos de pedido del 30-sep-2026 confirmaron el gramil (24 mm), los barrenos
 | Engargolado de los accesorios | Las juntas entre gajos y la silleta de los injertos se engargolan como la junta entre yardas (su pliegue en la merma); las costuras longitudinales, con la holgura del Pittsburgh (32 mm) | `materiales.*.costura` (T1) y `proceso.costuras` (T7) | Si la silleta lleva otra unión (collarín con remaches, por ejemplo), cambian su tiempo y su lámina. |
 | La ceja de las bridas | 10 mm de lámina por brida; 2 min + 3 min por metro de perímetro, aparte del ajuste del aro | `herrajes.uniones.BRIDADO.ceja_mm`, `proceso.armado.t_ceja_aro_min` y `t_ceja_aro_min_m` | Medirlo en una pieza: mueve las horas de armado del pedido (56 cejas). |
 | Bridas de 6″ y 5″ | Las piezas piden 3 de 6″ y 21 de 5″; la hoja de bridas trae 2 y 24 | Las partidas, o los extremos sin brida | La de 6″ que falta «va en otra unión»: el taller mandará el diagrama. Sobran 3 de 5″ (reserva, o el codo de 60° de 5″ que falta en la hoja de codos). |
-| Codo de 60° de 5″ | No se agregó: lo pide el armado de la reducción de 11″ a 10″ con injerto de 5″, pero no viene en la hoja de codos | Una partida de codo | Si se hizo, suma un codo y una brida de 5″ (sobrarían 2). |
+| Codo de 60° de 5″ | No se agregó: lo pide el armado de la reducción de 11″ a 10″ con injerto de 5″, pero no viene en la hoja de codos | Una partida de codo | Si se hizo, suma un codo y una brida de 5″ (sobrarían 2). El arreglo 3D dibuja 6 codos de 60° de 5″ (C5). |
+| Codos de 5″ en el arreglo 3D | La hoja de codos pide 2 de 5″ a 90°; el arreglo 3D del 30-sep-2026 dibuja 13: 7 de 90° (C4) y 6 de 60° (C5), en las bajadas a las máquinas | Partidas de codo | Si los 11 que faltan se hicieron en el taller o se compraron aparte, no entran en el pedido del proveedor (§7.5) pero sí cuestan en la obra. Los demás codos (C1, C2, C3 y C6) cuadran. |
+| Reducciones en el arreglo 3D | Cuadran con las hojas: R1 a R8, 9 piezas, todos los injertos a 30° | — | — |
+| Yardas en el arreglo 3D | El arreglo dibuja de 11″ 19 yardas y 1 de ajuste de 3 ft (las hojas: 18 y un ajuste de 600 mm), y de 5″ 11 yardas con ajustes de 400, 600 y 750 mm (las hojas: 16 con ajustes de 500 mm y 4 de 700 mm); 10″ y 6″ cuadran | Las partidas de tramo recto | Se tomaron las hojas de yardas, que son lo que se pidió; el arreglo es la revisión 0. |
+| Bridas en el arreglo 3D | El arreglo cuenta 96 (30 de 11″, 6 de 10″, 2 de 9″, 6 de 7″, 6 de 6″ y 46 de 5″: cada cara de cada junta del arreglo); la hoja de bridas, 60 | El cuadre de bridas (§8.5) | Las juntas que el armado del 2-oct-2026 cambió por uniones engargoladas ya no llevan brida; las del arreglo cuentan también las bajadas de 5″. |
+| Reducciones de 6″ a 5″ del unifilar | El arreglo unifilar del 22-sep-2026 lleva 2 reducciones de 6″ a 5″ (una «con cejas, 100 mm») para las mangueras de 6″, que no vienen en las hojas de pedido | Una partida de reducción | Si se hicieron, ahí puede ir la brida de 6″ que falta en el cuadre. |
 | «Una yarda de 3″» del armado del codo de 6″ | Es la yarda de 6″ (no hay ducto de 3″ en las hojas de yardas); el injerto de 3″ va a una manguera, sin brida | La partida del injerto y la yarda | Si hay un tramo de 3″, falta en las yardas y lleva una brida de 3″ que no viene en la hoja de bridas. |
 | Ajuste de las yardas con «brida en un extremo» | Los de 2 yardas + 600 y + 500 mm llevan brida de taller en las yardas y la suelta en el ajuste (lo de las tablas); los de 914 + 700 mm, sin brida en el extremo de 700 (se unen a un codo o a una manguera) | El extremo final de cada partida | Con la suelta de los dos ajustes cuadra la hoja de 11″; si no se mandan sueltas, sobra 1 de 11″ y 1 más de 5″. |
 | Cómo y quién fija las bridas al ducto | **Confirmado (7-oct-2026): no se sueldan;** se meten y se le hace una ceja al ducto (§3.5.9). Se supone que la ceja la hizo quien hizo la ductería | `materiales.*.brida_al_ducto` (T1) | Si las puso el taller en obra, la ductería del proveedor vale la fila «sin meter las bridas» de §7.5. |
@@ -2252,4 +2286,6 @@ Los planos de pedido del 30-sep-2026 confirmaron el gramil (24 mm), los barrenos
 | La hoja y la yarda | Galvanizada cal. 22 de 4 × 10 ft; la yarda es su ancho (1.22 m), como en el tramo recto | T11 (`hoja_defecto`) o la pestaña | Con yardas de 3 ft (hoja de 3 × 10 ft) salen otras hojas: elegirla en la pestaña si está en la lista del proveedor. |
 | Retazos | No se aprovechan entre láminas; en una lámina, el acomodo de guillotina mete las que quepan (incluso giradas) | §5.8 | Si el taller usa los retazos para codos o reducciones, cuenta menos hojas: el factor ya lo cubre. |
 | Precio de la galvanizada de 3 × 10 ft | **Aproximado:** el de la 4 × 10 prorrateado por área (× 914 / 1,219): cal. 22 $690 y cal. 24 $525 con IVA, el mismo $/kg | Lista del proveedor (T3b) | Con la cotización real del proveedor cambia el precio de las yardas de 3 ft (en la cotización rápida y en los tramos rectos con yarda de 3 ft). |
+| Precio de la galvanizada de 3 × 8 ft | **Aproximado** igual (× 914 × 2,438 / (1,219 × 3,048)): cal. 22 $552 y cal. 24 $420 con IVA | Lista del proveedor (T3b) | Como los precios aproximados van por área, la lámina que «menos desperdicia» es la de mejor acomodo; con los precios reales (la hoja chica suele costar más por kg) puede ganar la otra. |
+| Mangueras, soportería y viáticos | No están en la regla (el factor de 3 cubre la ductería) | — | En la obra del unifilar (§5.8.1) fueron $10,650.05 sin IVA: si la obra los lleva, la cotización rápida se queda corta. |
 | Días de fabricación e instalación | **Confirmado (7-oct-2026):** suman su mano de obra: bridas, 1 persona × $500 por día; instalación, 2 personas × $500 por día; con utilidad e IVA encima | T11 | Otra cuadrilla u otro pago se cambian en T11. Los viáticos (hospedaje, comidas) no están: la instalación es local. |

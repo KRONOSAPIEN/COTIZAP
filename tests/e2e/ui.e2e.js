@@ -2052,6 +2052,24 @@ const ok = (cond, msg) => {
     await p.context().close();
   }
 
+  console.log('28) El arreglo unifilar del 22-sep-2026 en la cotización rápida: el desarrollo y la lámina que menos desperdicia');
+  {
+    const p = await nuevaPagina();
+    await p.click('#tab-rapida');
+    await p.click('#rapida-ejemplo');
+    await p.waitForTimeout(100);
+    ok(await p.inputValue('#r_diam') === '11' && await p.inputValue('#r_metros') === '31' && await p.locator('#r_yarda input[value="914"]').isChecked()
+      && await p.inputValue('#r_dias_fab') === '4' && await p.inputValue('#r_dias_ins') === '5', 'el ejemplo carga el sistema del unifilar: 11″, 31 m, yardas de 3 ft, 4 días de bridas y 5 de instalación');
+    ok(await p.locator('#rapida-total-val').innerText() === '$46,512.00' && /34 yardas ÷ 3 = 12 láminas/.test(await p.locator('#rapida-acomodo').innerText()), '31 m son 34 yardas: 12 láminas de 3 × 10 ft (no 5), $46,512.00');
+    ok(/Desarrollo de cada yarda: π × 280\.3 mm = 880 mm \+ 32 mm de la costura = 912 mm: el perímetro, no el diámetro/.test(await p.locator('#rapida-desarrollo').innerText()),
+      'dice el desarrollo de la yarda: el perímetro (π × D), no el diámetro');
+    ok(/de las 2 del ancho de la yarda, la que menos desperdicia/.test(await p.locator('#r_hoja_nota').innerText()) && /3 × 10 ft/.test(await p.locator('#r_hoja option[value=""]').innerText()),
+      'sin elegir lámina: de las dos de 3 ft (3 × 10 y 3 × 8), la que menos desperdicia');
+    await p.selectOption('#r_hoja', 'GALV_C22_3X8');
+    ok(/34 yardas ÷ 2 = 17 láminas/.test(await p.locator('#rapida-acomodo').innerText()) && await p.locator('#r_hoja_nota').innerText() === 'La que eligió.', 'con la de 3 × 8 ft salen 2 yardas por lámina: 17 láminas');
+    await p.context().close();
+  }
+
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

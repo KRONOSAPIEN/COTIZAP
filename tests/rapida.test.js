@@ -131,7 +131,8 @@ test('Las tablas de arranque están sanas y una tabla rápida rota no bloquea la
 
 test('Yarda de 3 o 4 ft: con la hoja de 4 × 10 ft la de 3 ft deja una franja de sobrante; con la de 3 × 10 ft la ocupa entera', () => {
   const M = crearMaestros();
-  delete M.proveedor.hojas.GALV_C22_3X10; // como antes de cotizar la de 3 × 10 ft
+  delete M.proveedor.hojas.GALV_C22_3X10; // como antes de cotizar las galvanizadas de 3 ft
+  delete M.proveedor.hojas.GALV_C22_3X8;
   const de4 = R.cotizar({ D_mm: 279.4, L_m: 40, yarda_mm: 1220 }, M);
   const de3 = R.cotizar({ D_mm: 279.4, L_m: 40, yarda_mm: 914 }, M);
   assert.equal(de3.yardas, Math.ceil(40000 / 914)); // 44 yardas de 3 ft
@@ -206,4 +207,50 @@ test('Días: dan el plazo y suman su mano de obra (bridas: 1 persona × $500; in
   assert.throws(() => R.cotizar({ D_mm: 279.4, L_m: 40 }, M3), /personas fabricacion: debe ser un número entero de personas/);
   assert.throws(() => R.cotizar({ D_mm: 279.4, L_m: 40, dias_fabricacion: -1 }, M), /días de fabricación deben ser de 0 a 365/);
   assert.throws(() => R.cotizar({ D_mm: 279.4, L_m: 40, dias_instalacion: NaN }, M), /días de instalación/);
+});
+
+test('El arreglo unifilar del 22-sep-2026: 31 m a 11″ en yardas de 3 ft — el desarrollo es el perímetro, no el diámetro', () => {
+  const M = crearMaestros();
+  const e = 0.0336 * 25.4; // cal. 22 galvanizado
+  const desarrollo = Math.PI * (279.4 + e); // 880.4 mm
+  const B = desarrollo + 32; // + la holgura del Pittsburgh: 912.4 mm
+  // la nota del plano tomó el desarrollo como 279 × 914 (el diámetro): de una lámina de 3 × 8 ft «salen 8 yardas» → 34 ÷ 8 = 4.25 → 5 láminas
+  assert.equal(R.acomodo(914, 2438, 914, 279).n, 8);
+  assert.equal(Math.ceil(Math.ceil(31000 / 914) / 8), 5);
+  // con el desarrollo de verdad, de una lámina de 3 × 8 ft salen 2 yardas y de una de 3 × 10 ft, 3
+  assert.equal(R.acomodo(914, 2438, 914, B).n, 2);
+  assert.equal(R.acomodo(914, 3048, 914, B).n, 3);
+  const r = R.cotizar({ D_mm: 279.4, L_m: 31, yarda_mm: 914, dias_fabricacion: 4, dias_instalacion: 5 }, M);
+  cerca(r.desarrollo_mm, desarrollo, 1e-6, 'desarrollo');
+  cerca(r.plantilla_mm, B, 1e-6, 'plantilla');
+  assert.equal(r.yardas, 34);
+  assert.equal(r.hoja.id, 'GALV_C22_3X10', 'sin elegir: de las de 3 ft, la que menos desperdicia (3 × 10: 12 hojas; 3 × 8: 17)');
+  assert.equal(r.hojas_comparadas, 2);
+  assert.equal(r.hojas, 12);
+  const r38 = R.cotizar({ D_mm: 279.4, L_m: 31, yarda_mm: 914, hoja_id: 'GALV_C22_3X8' }, M);
+  assert.equal(r38.hojas, 17);
+  assert.ok(r38.lamina > r.lamina);
+  // el total de la regla con 4 días de bridas y 5 de instalación (2 personas)
+  cerca(r.costo, (12 * 690 / 1.16) * 3 + 5000 + 4 * 500 + 5 * 2 * 500, 1e-6);
+  cerca(r.total, 46512.0, 0.005);
+});
+
+test('Sin elegir lámina: del ancho de la yarda, la que menos desperdicia; la elegida manda', () => {
+  const M = crearMaestros();
+  assert.deepEqual(R.hojasDeLaYarda(M, 914), ['GALV_C22_3X10', 'GALV_C22_3X8']);
+  assert.deepEqual(R.hojasDeLaYarda(M, 1220), ['GALV_C22_4X10']);
+  // 6″ y 40 m: 3 × 8 ft da 4 por hoja (11 hojas) y 3 × 10 ft, 5 (9 hojas): por área gana la de 3 × 8
+  const seis = R.cotizar({ D_mm: 152.4, L_m: 40, yarda_mm: 914 }, M);
+  assert.equal(seis.hoja.id, 'GALV_C22_3X8');
+  const otra = R.cotizar({ D_mm: 152.4, L_m: 40, yarda_mm: 914, hoja_id: 'GALV_C22_3X10' }, M);
+  assert.ok(seis.lamina <= otra.lamina);
+  // en todo diámetro, la que elige nunca cuesta más que la otra del mismo ancho
+  [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 18].forEach((pulg) => {
+    const auto = R.cotizar({ D_mm: pulg * 25.4, L_m: 37, yarda_mm: 914 }, M);
+    ['GALV_C22_3X10', 'GALV_C22_3X8'].forEach((id) => {
+      assert.ok(auto.lamina <= R.cotizar({ D_mm: pulg * 25.4, L_m: 37, yarda_mm: 914, hoja_id: id }, M).lamina + 0.005, `${pulg}″ ${id}`);
+    });
+  });
+  // con yardas de 4 ft sólo hay una del ancho: la de las tablas
+  assert.equal(R.cotizar({ D_mm: 152.4, L_m: 40 }, M).hoja.id, 'GALV_C22_4X10');
 });

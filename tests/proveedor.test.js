@@ -115,6 +115,7 @@ test('El cálculo usa la hoja cotizada de ese material y calibre (la del tamaño
   assert.equal(usos.PLACA_3_16_4X8, 'REFERENCIA');
   assert.equal(usos.NEGRA_C12_4X8, 'REFERENCIA', 'otro largo de la misma lámina: no es la hoja de ninguna yarda');
   assert.equal(usos.NEGRA_C12_3X8, 'REFERENCIA');
+  assert.equal(usos.GALV_C22_3X8, 'REFERENCIA', 'la galvanizada de 3 × 8 ft sólo la usa la cotización rápida');
 });
 
 test('La lámina de una yarda es la hoja de ese ancho (3 ft = 914 mm, 4 ft = 1 220 mm); sin esa hoja cotizada, la estándar', () => {
@@ -143,9 +144,10 @@ test('Un precio inválido (0, negativo o sin medidas) no se usa: el cálculo cae
     const Mx = crearMaestros();
     Mx.proveedor.hojas.GALV_C22_4X10.precio = precio; // a mano: crearMaestros descarta un parche con un texto donde va un número
     Mx.proveedor.hojas.GALV_C22_3X10.precio = precio;
+    Mx.proveedor.hojas.GALV_C22_3X8.precio = precio;
     assert.equal(PROV.laminaDe(Mx, 'GALVANIZADO', 22), null, `precio ${precio}`);
   });
-  const Msm = crearMaestros({ proveedor: { hojas: { GALV_C22_4X10: { ancho_mm: 0 }, GALV_C22_3X10: { ancho_mm: 0 } } } });
+  const Msm = crearMaestros({ proveedor: { hojas: { GALV_C22_4X10: { ancho_mm: 0 }, GALV_C22_3X10: { ancho_mm: 0 }, GALV_C22_3X8: { ancho_mm: 0 } } } });
   assert.equal(PROV.laminaDe(Msm, 'GALVANIZADO', 22), null);
   assert.equal(PROV.tablas(Msm).hojas.find((r) => r.id === 'GALV_C22_4X10').precio_kg, null, 'se muestra sin $/kg');
   assert.doesNotThrow(() => PROV.tablas({ ...M, proveedor: undefined }), 'maestros sin lista: no se rompe');

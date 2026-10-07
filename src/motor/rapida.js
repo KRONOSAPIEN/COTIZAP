@@ -15,8 +15,10 @@
  * 80 m, $12,000; de 80 a 120 m, $18,000). Más metros que el último renglón no tienen precio de bridas: es error.
  *
  * Cómo se cuentan las hojas. El ducto se arma de yardas de 3 o 4 ft (la yarda es el largo de cada anillo); la plantilla de una
- * yarda es un rectángulo de yarda × B, con B el perímetro medio más la holgura de la costura del material:
- *   B = π · (D + e) + holgura        (el diámetro es el interior, como en las partidas)
+ * yarda es un rectángulo de yarda × B, con B el DESARROLLO (el perímetro medio, no el diámetro) más la holgura de la costura:
+ *   B = π · (D + e) + holgura        (el diámetro es el interior, como en las partidas; 11″ galvanizado cal. 22: 912 mm)
+ * Sin elegir lámina, de las hojas del ancho de la yarda (mismo material y calibre que la de las tablas) se usa la más barata
+ * para ese diámetro: la que menos desperdicia.
  *   yardas = ⌈ metros ÷ yarda ⌉,   hojas = ⌈ yardas ÷ yardas por hoja ⌉
  * Las yardas por hoja salen de acomodar las plantillas en la hoja con cortes de guillotina (`acomodo`): todas derechas (la
  * yarda a lo ancho de la hoja, como en el tramo recto), todas giradas, o una franja de cada una. El acomodo trae el
@@ -63,17 +65,50 @@
   }
 
   /**
-   * La hoja con que se cotiza: la elegida; si no, la de las tablas o, si el proveedor tiene una del mismo material y calibre
-   * cuyo ancho es la yarda (la de 3 × 10 ft para yardas de 3 ft), ésa.
+   * La plantilla de una yarda en la hoja `H` para un ducto de `D` mm (interior): el DESARROLLO —el perímetro medio, π × (D + e),
+   * no el diámetro— más la holgura de la costura del material (el galvanizado se engargola: Pittsburgh).
    */
-  function hojaPara(M, hoja_id, yarda) {
+  function plantillaDe(M, H, D) {
+    const mat = M.materiales[H.material];
+    const e = PROV.espesorHoja(M, H);
+    const d = GEO.dimensionesRedondas(D, e, 'INTERIOR');
+    const costura = M.proceso.costuras[mat.costura] || M.proceso.costuras.A_TOPE || { allowance_mm: 0 };
+    const holgura = costura.allowance_mm || 0;
+    return { e, d, holgura, costura: mat.costura, B: Math.PI * d.D_med + holgura };
+  }
+
+  /**
+   * Las hojas que pueden servir sin elegir lámina: las del mismo material y calibre que la de las tablas cuyo ancho es la yarda
+   * (la yarda es el ancho de la lámina: para yardas de 3 ft, las de 3 × 10 y 3 × 8 ft); si no hay ninguna, la de las tablas.
+   */
+  function hojasDeLaYarda(M, yarda) {
     const H = (M.proveedor && M.proveedor.hojas) || {};
-    if (hoja_id) return hoja_id;
     const base = H[M.rapida.hoja_defecto];
-    if (!base || !finito(yarda)) return M.rapida.hoja_defecto;
-    if (Math.abs(base.ancho_mm - yarda) <= HOLGURA_MM) return M.rapida.hoja_defecto;
-    const otra = hojas(M).find((x) => x.material === base.material && Number(x.calibre) === Number(base.calibre) && Math.abs(x.ancho_mm - yarda) <= HOLGURA_MM);
-    return otra ? otra.id : M.rapida.hoja_defecto;
+    if (!base || !finito(yarda)) return [M.rapida.hoja_defecto];
+    const delAncho = hojas(M).filter((x) => x.material === base.material && Number(x.calibre) === Number(base.calibre) && Math.abs(x.ancho_mm - yarda) <= HOLGURA_MM)
+      .map((x) => x.id).sort((a, b) => (a === M.rapida.hoja_defecto ? -1 : b === M.rapida.hoja_defecto ? 1 : 0));
+    return delAncho.length ? delAncho : [M.rapida.hoja_defecto];
+  }
+
+  /** Cuánto cuesta la lámina de `L_m` metros a `D` mm en la hoja `id` con yardas de `yarda` mm (Infinity si no se acomoda). */
+  function costoLamina(M, id, yarda, D, L_m) {
+    const H = M.proveedor.hojas[id];
+    const p = H ? PROV.convertir(M, H.precio, PROV.kgHoja(M, H)) : null;
+    if (!p) return Infinity;
+    const n = acomodo(H.ancho_mm, H.largo_mm, yarda, plantillaDe(M, H, D).B).n;
+    return n > 0 ? Math.ceil(Math.ceil((L_m * 1000) / yarda - EPS) / n - EPS) * p.sin_iva : Infinity;
+  }
+
+  /**
+   * La hoja con que se cotiza: la elegida; si no, de las hojas del ancho de la yarda (`hojasDeLaYarda`), la que sale más barata
+   * para ese diámetro y esos metros —la que menos lámina desperdicia—; a igualdad, la de las tablas y luego el orden de la lista.
+   */
+  function hojaPara(M, hoja_id, yarda, D, L_m) {
+    if (hoja_id) return hoja_id;
+    const ids = hojasDeLaYarda(M, yarda);
+    if (ids.length < 2 || !(D > 0) || !(L_m > 0)) return ids[0];
+    const costos = ids.map((id) => { try { return costoLamina(M, id, yarda, D, L_m); } catch (err) { return Infinity; } });
+    return ids.reduce((mejor, id, i) => (costos[i] < costos[ids.indexOf(mejor)] - 0.005 ? id : mejor), ids[0]);
   }
 
   /**
@@ -156,7 +191,8 @@
     const Y = e0.yarda_mm === undefined || e0.yarda_mm === null || e0.yarda_mm === '' ? AY.yarda_defecto_mm : Number(e0.yarda_mm);
     if (!finito(Y) || !(Y > 0)) errores.push('El largo de la yarda debe ser mayor que 0.');
     else if ((finito(lim.yarda_min_mm) && Y < lim.yarda_min_mm) || (finito(lim.yarda_max_mm) && Y > lim.yarda_max_mm)) errores.push(`La yarda debe ser de ${lim.yarda_min_mm} a ${lim.yarda_max_mm} mm.`);
-    const hoja_id = hojaPara(M, e0.hoja_id, Y);
+    const candidatas = e0.hoja_id ? [] : hojasDeLaYarda(M, Y);
+    const hoja_id = hojaPara(M, e0.hoja_id, Y, finito(D) && D > 0 ? D : undefined, finito(L_m) && L_m > 0 && L_m <= 100000 ? L_m : undefined);
     const H = M.proveedor && M.proveedor.hojas && M.proveedor.hojas[hoja_id];
     const precio = H ? PROV.convertir(M, H.precio, PROV.kgHoja(M, H)) : null;
     if (!H) errores.push(`La lámina «${hoja_id}» no está en la lista del proveedor.`);
@@ -175,13 +211,8 @@
     }
     if (errores.length) throw new U.ErrorValidacion(errores);
 
-    // La plantilla de una yarda: perímetro medio + holgura de la costura del material (el galvanizado se engargola)
-    const mat = M.materiales[H.material];
-    const e = PROV.espesorHoja(M, H);
-    const d = GEO.dimensionesRedondas(D, e, 'INTERIOR');
-    const costura = M.proceso.costuras[mat.costura] || M.proceso.costuras.A_TOPE || { allowance_mm: 0 };
-    const holgura = costura.allowance_mm || 0;
-    const B = Math.PI * d.D_med + holgura;
+    // La plantilla de una yarda: el desarrollo (perímetro medio) + la holgura de la costura del material
+    const { e, d, holgura, costura, B } = plantillaDe(M, H, D);
     const W = Number(H.ancho_mm);
     const Lh = Number(H.largo_mm);
     const n_yardas = Math.ceil((L_m * 1000) / Y - EPS);
@@ -216,7 +247,8 @@
         id: hoja_id, descripcion: H.descripcion || hoja_id, material: H.material, calibre: H.calibre, ancho_mm: W, largo_mm: Lh,
         espesor_mm: e, precio: precio.precio, sin_iva: precio.sin_iva, kg: precio.kg,
       },
-      plantilla_mm: B, holgura_mm: holgura, costura: mat.costura, D_med_mm: d.D_med, yarda_mm: Y,
+      plantilla_mm: B, desarrollo_mm: B - holgura, holgura_mm: holgura, costura, D_med_mm: d.D_med, yarda_mm: Y,
+      hoja_auto: !e0.hoja_id, hojas_comparadas: candidatas.length, // sin elegir lámina: de cuántas hojas del ancho de la yarda se tomó la más barata
       acomodo: aco, yardas: n_yardas, yardas_por_hoja: aco.n, yardas_ultima_hoja: ultima, hojas: n_hojas, aprovechamiento: aprovechado, kg: n_hojas * precio.kg,
       lamina, factor, lamina_factor,
       bridas, mano_obra,
@@ -226,5 +258,5 @@
     };
   }
 
-  return { cotizar, hojas, yardas, bridasPara, acomodo, hojaPara };
+  return { cotizar, hojas, yardas, bridasPara, acomodo, hojaPara, hojasDeLaYarda, plantillaDe };
 }));
