@@ -94,7 +94,12 @@
     filasCalculadas(res).forEach((f) => {
       const s = f.costos.subtotales;
       c.CONSUMIBLE += s.herramienta_menor || 0;
-      if (f.familia === 'COMPRADO') c[f.compra && Object.prototype.hasOwnProperty.call(c, f.compra.categoria) ? f.compra.categoria : 'PROVEEDOR'] += s.materiales;
+      if (f.familia === 'COMPRADO') {
+        // la compra, en la categoría del artículo; la tornillería y la junta de lo que se atornilla, material (como las de las bridas)
+        const compra = f.costos.materiales.compra || 0;
+        c[f.compra && Object.prototype.hasOwnProperty.call(c, f.compra.categoria) ? f.compra.categoria : 'PROVEEDOR'] += compra;
+        c.MATERIAL += s.materiales - compra;
+      }
       else if (f.familia === 'SOPORTE') {
         c.SOPORTERIA += s.materiales;
         c.MANO_OBRA += s.mano_obra;

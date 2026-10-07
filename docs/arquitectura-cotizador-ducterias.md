@@ -4,7 +4,7 @@
 
 > Documento de arquitectura para analistas de datos y programadores. Define **qué se calcula, con qué fórmulas y con qué datos**, sin depender de una plataforma. La implementación de referencia (JavaScript sin dependencias) vive en `src/`, sus pruebas en `tests/`, y **todas las cifras de los ejemplos de este documento son la salida literal del motor**.
 >
-> ⚠ **Sólo tres grupos de valores son reales: la mano de obra ($500 por día, dato del taller: $87.50 por hora trabajada), la lámina y los perfiles de la lista del proveedor (cotizaciones y factura del 30-sep-2026) y los artículos del catálogo de compras (hoja de control de gastos del 6-oct-2026). Todo lo demás —consumibles, equipo, tiempos, indirectos, utilidad— es ILUSTRATIVO** en este documento y en `src/datos/maestros.js`: existe para que el motor funcione y para servir de vector de prueba, y debe sustituirse por precios, tarifas y estudios de tiempos del taller antes de cotizar a un cliente (§10). El proyecto real de la hoja de control de gastos se reproduce completo en §7.4.
+> ⚠ **Sólo cuatro grupos de valores son reales: la mano de obra ($500 por día, dato del taller: $62.50 la hora, el salario del día ÷ 8 h), la lámina y los perfiles de la lista del proveedor (cotizaciones y factura del 30-sep-2026), los artículos del catálogo de compras (hoja de control de gastos del 6-oct-2026 y cotización del proveedor de corte del 2-oct-2026) y los tiempos de rolado y barrenado de las bridas (calibrados con el taller: 30 bridas en 4 días). Todo lo demás —consumibles, equipo, los demás tiempos, indirectos, utilidad— es ILUSTRATIVO** en este documento y en `src/datos/maestros.js`: existe para que el motor funcione y para servir de vector de prueba, y debe sustituirse por precios, tarifas y estudios de tiempos del taller antes de cotizar a un cliente (§10). El proyecto real de la hoja de control de gastos se reproduce completo en §7.4.
 
 ## Contenido
 
@@ -33,10 +33,11 @@
 | Diámetro y calibre del ejemplo | Ø12" (interior), calibre 16, acero al carbón, 3 m, bridado (los valores sugeridos en el prompt). | §7 |
 | Injerto simple, reducción con injerto y ángulos del taller | El «ramal en ángulo» pasó a llamarse **injerto simple** (misma geometría, id `RAMAL`). El «pantalón» se sustituyó por la **reducción con injerto** (id `REDUCCION_INJERTO`): una reducción D1 → D2 con el injerto **sobre el cono**. **Todo injerto es a 30° o 45°** y **los codos son de 30°, 45°, 60° o 90°**: son listas de maestros y el cotizador rechaza cualquier otro ángulo. El pantalón se retiró de la interfaz; el motor lo sigue calculando sólo para abrir cotizaciones anteriores. Seis supuestos de detalle están por confirmar con el taller (§10.5). | §3.4.1 · §3.4.4 · §3.4.5 · §7.3 · §10.5 |
 | Parámetros de precio de la cotización | El encabezado de la cotización lleva los parámetros comerciales que se ajustan al cotizar —**margen de utilidad, comisión de ventas, descuento al cliente y días de cobro** y, en «Más parámetros de precio», **administración, financiamiento anual e IVA**— para no ir a las tablas maestras. Valen sólo para esa cotización: el motor los toma de `cotizacion.parametros` y los pone encima de las capas de T9 (§5.4); lo que no se cambia sale de los maestros. Cuatro supuestos de detalle están por confirmar (§10.7). | §5.2 · §5.4 · §6 · §10.7 |
-| Mano de obra por día y lista de precios del proveedor | Los trabajadores ganan **$500 por día, sin utilidades y ya con prestaciones** (FSR = 1.00). La semana paga 7 días por 5 de 8 h trabajadas ($3,500 por 40 h), así que **la hora trabajada cuesta $87.50**: `salario_hora = salario_diario · días_pagados / (días_trabajados · horas_día)` y `mo_h = salario_hora · FSR` (T8). El proveedor de acero cotiza **por pieza y con IVA incluido** (hojas y barras): la lista (T3b) conserva el precio como se cotiza y el motor lo convierte a **$/kg sin IVA** con los kg de la pieza (§5.1.1); lo que no está cotizado usa un precio por kg de respaldo. Cuatro supuestos de detalle están por confirmar (§10.6). | T3 · T3b · T8 · §4.1 · §5.1.1 · §10.6 |
-| Hoja de control de gastos (proyecto vendido por otro ingeniero) | Se analizó la hoja del 6-oct-2026 de un proyecto que se vendió en **$45,710 más IVA** y acabó con pocas pérdidas, y se agregó lo que le faltaba a la app: **bridas sueltas** (sólo aros, con las puntas de la solera que la roladora no curva: la regla del taller π·(D + 81 mm)), **soportería** cortada de barras de la lista, **artículos del catálogo de compras con o sin IVA** (un precio con IVA se cuesta sin él), **instalación en obra con viáticos**, la **lista de compras en piezas enteras** (con la opción de cobrar el sobrante), la **venta pactada** contra el precio mínimo y el **control de gastos** real contra cotizado. Convención de IVA: la venta es **más IVA** y los precios del proveedor **traen IVA**. El proyecto completo es el caso de referencia de §7.4; doce supuestos están por confirmar (§10.12). | T3c · T7e · §3.5.1 · §3.6 · §4.5 · §5.5–5.7 · §7.4 · §10.12 |
-| Brida estándar del taller | **Una sola brida para todos los diámetros: aro de solera 1½" × 3/16", barreno Ø3/8", tornillo 5/16" × 1¼".** Se modela como el perfil `SOL38x4.8` (tipo solera, rolada "de canto"), que lleva en sus propias columnas el barreno y el tornillo; los ángulos quedan como opción por partida (`perfil_id`). Cinco supuestos de detalle están por confirmar con el taller (§10.4). | T4 · T5 · §3.5 · §10.4 |
-| Armado del tramo recto por yardas | El taller no rola tramos de 3 m: rola **yardas** —anillos del ancho de la lámina (914 mm = 3 ft ó 1 220 mm = 4 ft)—, las **engargola** hasta de 3 en una pieza con brida en ambos extremos, y lo que falta lo arma con las yardas completas que sobren y un **tramo de ajuste** (menos de una yarda) cuyo extremo libre **no lleva brida de taller**, para ponerlo en campo ajustando la distancia. **Quien diseña elige el ancho de la yarda** (3 ft ó 4 ft) en el encabezado de la cotización, o por partida. En ese extremo libre se cotiza, por omisión, la **brida suelta** —el taller manda el aro ya terminado (rolado, con el cierre soldado, barrenado y pintado), con sus tornillos y su empaque, sin soldarlo al ducto: se suelda en obra—; la partida puede pedir también «sin brida» (la brida no está en el precio) o «brida de taller». El motor reparte el largo así (§3.2): anillos que se rolan por separado, juntas engargoladas entre yardas, bridas sólo donde corresponde, corte con un tajo a lo ancho de la hoja. Los supuestos de detalle están por confirmar (§10.9). | T7c · §3.2 · §3.5.7 · §4.1 · §10.9 |
+| Mano de obra por día y lista de precios del proveedor | Los trabajadores ganan **$500 por día** ($3,500 a la semana ÷ 7), **sin utilidades ni prestaciones**, y el taller cuesta la hora como **el salario del día ÷ 8 h = $62.50** (FSR = 1.00): `salario_hora = salario_diario / horas_día` y `mo_h = salario_hora · FSR` (T8). Así no se recuperan los 2 días de descanso que se pagan ni las prestaciones: con FSR = 7/5 = 1.40 la hora costaría $87.50 (§4.1, §7.4.1). El proveedor de acero cotiza **por pieza y con IVA incluido** (hojas y barras): la lista (T3b) conserva el precio como se cotiza y el motor lo convierte a **$/kg sin IVA** con los kg de la pieza (§5.1.1); lo que no está cotizado usa un precio por kg de respaldo. Cuatro supuestos de detalle están por confirmar (§10.6). | T3 · T3b · T8 · §4.1 · §5.1.1 · §10.6 |
+| Hoja de control de gastos (proyecto vendido por otro ingeniero) | Se analizó la hoja del 6-oct-2026 de un proyecto que se vendió en **$45,710 con IVA** y acabó con pérdidas, y se agregó lo que le faltaba a la app: **bridas sueltas** (sólo aros, con las puntas de la solera que la roladora no curva: la regla del taller π·(D + 81 mm)), **soportería** cortada de barras de la lista, **artículos del catálogo de compras con o sin IVA** (un precio con IVA se cuesta sin él), **instalación en obra con viáticos**, la **lista de compras en piezas enteras** (con la opción de cobrar el sobrante), la **venta pactada** contra el precio mínimo y el **control de gastos** real contra cotizado. Convención de IVA: la venta pactada se captura **con o sin IVA** (la de este proyecto venía con IVA: el margen se mide sin él) y los precios del proveedor **traen IVA**. Con las respuestas del taller del 7-oct-2026 el caso quedó así: la hora a $62.50, las bridas de solera en **4 días**, **Sikaflex en lugar del empaque**, esmalte en las bridas, ménsulas de 650 mm en 2 días, abrazaderas para el ducto de 11″, instalación local (sin hospedaje ni comidas) y las 30 bridas de placa del proveedor de corte con su tornillería y su Sikaflex. El proyecto completo es el caso de referencia de §7.4; los supuestos que quedan están en §10.12. | T3c · T7e · §3.5.1 · §3.5.4 · §3.6 · §4.5 · §5.5–5.7 · §7.4 · §10.12 |
+| Junta de las bridas con Sikaflex | El taller **sella la cara de la brida con un cordón de Sikaflex** sobre el círculo de barrenos, en lugar del empaque de neopreno (`uniones.BRIDADO.junta = SELLADOR`; 40 mL por metro + 15 % de merma; media junta por brida, de taller, suelta o de placa comprada). Ese cordón es también el sello de la junta transversal: no se le suma el de la clase C. El empaque sigue disponible (`EMPAQUE`). | T5 · §3.5.4 · §3.5.5 |
+| Brida estándar del taller | **Una sola brida para todos los diámetros: aro de solera 1½" × 3/16", barreno Ø3/8", tornillo 5/16" × 1¼".** Se modela como el perfil `SOL38x4.8` (tipo solera, rolada "de canto"), que lleva en sus propias columnas el barreno y el tornillo; los ángulos quedan como opción por partida (`perfil_id`). Los supuestos de detalle están por confirmar con el taller (§10.4); la junta con Sikaflex ya la confirmó. | T4 · T5 · §3.5 · §10.4 |
+| Armado del tramo recto por yardas | El taller no rola tramos de 3 m: rola **yardas** —anillos del ancho de la lámina (914 mm = 3 ft ó 1 220 mm = 4 ft)—, las **engargola** hasta de 3 en una pieza con brida en ambos extremos, y lo que falta lo arma con las yardas completas que sobren y un **tramo de ajuste** (menos de una yarda) cuyo extremo libre **no lleva brida de taller**, para ponerlo en campo ajustando la distancia. **Quien diseña elige el ancho de la yarda** (3 ft ó 4 ft) en el encabezado de la cotización, o por partida. En ese extremo libre se cotiza, por omisión, la **brida suelta** —el taller manda el aro ya terminado (rolado, con el cierre soldado, barrenado y pintado), con sus tornillos y el material de su junta, sin soldarlo al ducto: se suelda en obra—; la partida puede pedir también «sin brida» (la brida no está en el precio) o «brida de taller». El motor reparte el largo así (§3.2): anillos que se rolan por separado, juntas engargoladas entre yardas, bridas sólo donde corresponde, corte con un tajo a lo ancho de la hoja. Los supuestos de detalle están por confirmar (§10.9). | T7c · §3.2 · §3.5.7 · §4.1 · §10.9 |
 | Pintura según el material y la instalación | **Lo que se pinta depende del material y el sistema, de dónde va instalado el ducto.** Acero al carbón: se pinta —en **interior**, sólo pintura (esmalte); en **exterior**, primario y pintura—. Lámina galvanizada: **no se pinta más que las bridas** (con el mismo criterio: interior, sólo pintura; exterior, primario y pintura). Inoxidable: no se pinta. La instalación se elige una vez en el encabezado de la cotización y cada partida puede traer la suya; si una partida elige un sistema de pintura, vale para todo lo que se pinta. El ducto y las bridas se calculan por separado (superficie, manos, tiempo y litros). Los supuestos de detalle están por confirmar (§10.10). | T7d · §4.1 · §4.3 · §10.10 |
 | Público objetivo | Ingenieros de ventas técnicas en México y desarrolladores internos. Moneda **MXN**, **IVA 16 %** aparte, **Factor de Salario Real (FSR)** para mano de obra. | `capas.iva_pct`, `mano_obra.FSR` |
 
@@ -68,7 +69,7 @@
 | **Merma (φ)** | Fracción del material comprado que no queda en la pieza. |
 | **QTO** | *Quantity take-off*: levantamiento de cantidades físicas, sin precios. |
 | **CD / CI / GIF** | Costo directo / costo indirecto / gastos indirectos de fábrica. |
-| **MOD / FSR** | Mano de obra directa / Factor de Salario Real (convierte el salario base en costo real; vale 1.00 porque los $500 por día del taller ya incluyen las prestaciones). |
+| **MOD / FSR** | Mano de obra directa / Factor de Salario Real (convierte el salario en lo que cuesta cada hora trabajada: días de descanso pagados y prestaciones; vale 1.00 porque el taller cuesta la hora como $500 ÷ 8 h; 7/5 = 1.40 recupera los días de descanso). |
 | **FO** | Factor de operación: arco encendido ÷ tiempo total de soldadura. |
 | **GMAW / GTAW** | Soldadura MIG-MAG (microalambre) / TIG (varilla). |
 | **MSG / GSG / USSG** | Tablas de calibre: acero al carbón / galvanizado / inoxidable. |
@@ -156,11 +157,11 @@
 | `REDUCCION_INJERTO` | `D1_mm`, `D2_mm` (< D1), `d_mm`, `beta_deg` (**30** ó **45**; 45), `L_reduccion_mm`, `L_ramal_mm` | El injerto va **sobre el cono** y siempre de extremo mayor a menor (inclinado hacia D2): es un dato de maestros (`proceso.injerto_inclinado_hacia`), no se captura por partida. Los dos largos son opcionales: vacíos → automáticos (§3.4.5). |
 | `BRIDA` (bridas sueltas) | redondo: `D_mm` · rectangular: `a_mm`, `b_mm` (la medida **del ducto** en que van) | Sólo aros terminados, sin lámina; siempre bridada. Material y calibre son los del ducto (§3.6.1). |
 | `PERSONALIZADO` | `A_neta_m2`, `L_corte_m`, `L_sold_tope_m`, `L_sold_filete_m`, `n_piezas`, `n_extremos`, `D_ref_mm` | Para campanas y piezas con desarrollo CAD. |
-| `SOPORTE` (soportería) | `barra_id` (de T3b), `largo_pieza_mm`, `anclajes_pieza` (0), `articulo_anclaje` (el de T7e), `tornillos_pieza` (0), `min_pieza` (el de T7e) | Ménsulas, abrazaderas y postes cortados de una barra de la lista (§3.6.2). |
-| `COMPRADO` | `articulo_id` (de T3c, opcional), `precio_compra_unitario` (vacío = el del catálogo), `iva_incluido` (sí/no; vacío = el del catálogo, y un precio capturado es antes de IVA), `peso_kg` | Compuertas, mangueras, el ducto de un proveedor…: pasa por la pila sin mano de obra; un precio con IVA se cuesta sin IVA (§3.6.3). |
+| `SOPORTE` (soportería) | `barra_id` (de T3b), `largo_pieza_mm` o, en una abrazadera, `abrazadera_D_mm` (el diámetro del ducto que abraza), `anclajes_pieza` (0), `articulo_anclaje` (el de T7e), `tornillos_pieza` (0), `min_pieza` (minutos reales; el de T7e) | Ménsulas, abrazaderas y postes cortados de una barra de la lista (§3.6.2). |
+| `COMPRADO` | `articulo_id` (de T3c, opcional), `precio_compra_unitario` (vacío = el del catálogo), `iva_incluido` (sí/no; vacío = el del catálogo, y un precio capturado es antes de IVA), `peso_kg`, `tornillos_pieza` y `circulo_barrenos_mm` (si se atornilla como brida; vacío = los del artículo) | Compuertas, mangueras, el ducto de un proveedor…: pasa por la pila sin mano de obra; un precio con IVA se cuesta sin IVA (§3.6.3). |
 | `INSTALACION` | `personas`, `dias`, `horas_dia` (la jornada de T8), `viajes`, `casetas_viaje`, `gasolina_viaje`, `noches`, `hospedaje_noche`, `comida_dia`, `otros_gastos`, `gastos_con_factura` (sí), `comidas_con_factura` (no) | La cuadrilla en obra y sus viáticos, capturados con IVA como en el ticket (§4.5). La `cantidad` son visitas iguales. |
 
-**Entradas por cotización** (`cotizacion`): `cliente`, `proyecto`, `fecha`, `vigencia_dias`, unidades de captura de diámetros y longitudes, `servicio` y `riesgo` por omisión de las partidas (cada partida puede traer los suyos), la **instalación** (`ubicacion`: interior o exterior, que decide la pintura), el **ancho de la yarda** (`yarda_mm`) de los tramos rectos —lo elige quien diseña: 914 ó 1 220 mm; cada tramo puede traer el suyo— los **parámetros de precio propios** de la cotización (`parametros`, §5.4): margen de utilidad, comisión, descuento, días de cobro, administración, financiamiento anual e IVA; la **venta pactada** con el cliente (`venta_pactada`, MXN sin IVA, §5.6); si se **cobra el sobrante de comprar piezas enteras** (`piezas_enteras`, sí/no, §5.5); y los **gastos reales** del proyecto (`gastos`: fecha, concepto, categoría, cantidad, precio unitario, si trae IVA y si tiene factura, §5.7).
+**Entradas por cotización** (`cotizacion`): `cliente`, `proyecto`, `fecha`, `vigencia_dias`, unidades de captura de diámetros y longitudes, `servicio` y `riesgo` por omisión de las partidas (cada partida puede traer los suyos), la **instalación** (`ubicacion`: interior o exterior, que decide la pintura), el **ancho de la yarda** (`yarda_mm`) de los tramos rectos —lo elige quien diseña: 914 ó 1 220 mm; cada tramo puede traer el suyo— los **parámetros de precio propios** de la cotización (`parametros`, §5.4): margen de utilidad, comisión, descuento, días de cobro, administración, financiamiento anual e IVA; la **venta pactada** con el cliente (`venta_pactada`, MXN; con IVA si `venta_pactada_con_iva`, §5.6); si se **cobra el sobrante de comprar piezas enteras** (`piezas_enteras`, sí/no, §5.5); y los **gastos reales** del proyecto (`gastos`: fecha, concepto, categoría, cantidad, precio unitario, si trae IVA y si tiene factura, §5.7).
 
 ### 2.2 Tablas maestras
 
@@ -263,6 +264,9 @@
 | `CARRETILLA_EMBALADA` | Carretilla embalada | pza | 172.41 | No | 172.41 | Soportería y anclajes |
 | `SIKAFLEX_BLANCO_600` | Sellador Sikaflex blanco 600 mL | pza | 459.00 | Sí | 395.69 | Material |
 | `SIKAFLEX_GRIS_600` | Sellador Sikaflex gris 600 mL | pza | 359.00 | Sí | 309.48 | Material |
+| `BRIDA_PLACA_5` | Brida de placa 3/16″ para ducto de 5″ (Ø 194/130 mm, barrenos en Ø 170 mm) | pza | 110.00 | No | 110.00 | Compras y trabajos de terceros |
+| `BRIDA_PLACA_6` | Brida de placa 3/16″ para ducto de 6″ (Ø 221/157 mm, barrenos en Ø 193 mm) | pza | 120.00 | No | 120.00 | Compras y trabajos de terceros |
+| `BRIDA_PLACA_7` | Brida de placa 3/16″ para ducto de 7″ (Ø 258/182 mm, barrenos en Ø 230 mm) | pza | 140.00 | No | 140.00 | Compras y trabajos de terceros |
 
 **T4 · Perfiles de aros de brida.** La primera fila es el **estándar del taller** y se usa en todos los diámetros; las demás (ángulos) son opcionales por partida con `perfil_id`. El área, el peso lineal y el centroide se **derivan** de (tipo, ancho, espesor) y no se capturan; el gramil, el barreno, el tornillo y la variable de precio son datos del perfil. Fórmulas en §3.5.1.
 
@@ -282,7 +286,7 @@
 | Elemento principal | aro de solera 1½" × 3/16" por extremo (estándar del taller) | prolongación macho `prof_espiga_mm` = 60 | — |
 | Fijación | barreno Ø3/8" + tornillo 5/16" × 1¼" + tuerca + 2 rondanas; paso máx. 150 mm; mín. 4; múltiplo de 4 | autotaladrante; paso máx. 150 mm; mín. 4 | — |
 | Reserva de herraje | 5 % | 5 % | — |
-| Empaque | sí: cinta de neopreno 1½" × 1/8" sobre el círculo de barrenos (traslape 5 %) | no | no |
+| Junta (`junta`) | **`SELLADOR`**: cordón de Sikaflex sobre el círculo de barrenos, `ml_sellador_junta_m` 40 mL/m (+15 % de merma); o `EMPAQUE`: cinta de neopreno 1½" × 1/8" (traslape 5 %) más el cordón de la clase | no | no |
 | Soldadura de aro | filete continuo aro–ducto (`f_cont` = 1.0) + cierre a tope del aro | — | — |
 
 **T6 · Merma y dificultad por familia** (φ = fracción del material comprado que no queda en la pieza)
@@ -310,22 +314,24 @@
 | 3.0 | 6.00 | 3.00 | 5.00 | 3.50 | 0.32 |
 | 4.5 | 4.75 | 2.40 | 3.70 | 2.50 | 0.24 |
 
-**T7b · Tiempos fijos y unitarios** (minutos estándar; ilustrativos)
+**T7b · Tiempos fijos y unitarios** (minutos estándar; ilustrativos salvo los de las bridas, calibrados con el taller)
 
 | Operación | Parámetros |
 | --- | --- |
 | Corte | `t_manejo_hoja` 4.0 por hoja-equivalente · `t_prog_cnc` 6.0 por **partida** (sólo plasma/láser) |
 | Rolado | `t_fijo` 3.0 por virola · 3 pasadas (4 en plegado rectangular) · `k_rolado` 1.6 para conos |
 | Armado | `t_fijo_pieza` 6.0 · `t_junta` = 3.0 + 6.0·D_ref[m] · `t_ajuste_aro` 4.0 · `t_fijación` 0.4 · `t_formado_espiga` 3.0 |
-| Aros de brida | `t_fijo_aro` 4.0 · `t_roll_aro` 2.5 por metro de barra · holgura de corte 3 mm · **puntas que no se rolan 126 mm** por aro (`proceso.aros`, §3.5.1) |
-| Barrenado | 0.35 por barreno |
+| Aros de brida | `t_fijo_aro` 10.0 · `t_roll_aro` 19.0 por metro de barra · holgura de corte 3 mm · **puntas que no se rolan 126 mm** por aro (`proceso.aros`, §3.5.1) |
+| Barrenado | 2.0 por barreno |
+
+Los tiempos de las bridas se calibraron con el taller (7-oct-2026): las 30 bridas de solera del caso de §7.4 (22 de 11″, 6 de 10″ y 2 de 9″) llevan **4 días** (32 h) —«se tarda mucho en el rolado y barrenado»—, y con estos tiempos la app da 32.05 h reales. El reparto entre rolado y barrenado es un supuesto (§10.12).
 | Engargolado | `t_fijo_pieza` 2.0 · velocidad 3.0 / 2.5 / 1.8 / 1.2 m/min a 0.5 / 1.0 / 1.5 / 2.0 mm |
 | Pintura | `t_prep` 4.0 min/m² · `t_aplicación` 3.0 min/m² por mano |
 | Inspección y embalaje | `t_fijo_qc` 3.0 · `k_manejo` 0.05 min/kg |
 
 **Otros parámetros de proceso:** `eficiencia_taller` η = 0.80 · hoja estándar 1 219 × 3 048 mm · semiángulo máx. de reducciones 15° · α máx. por junta de codo 22.5° · holguras de costura (mm): `A_TOPE` 1.0, `TRASLAPE` 25, `PITTSBURGH` 32 · soldadura GMAW (`FO` 0.40, 15 L/min, η_dep 0.93, pre/post-flujo 10 %) y GTAW (velocidad ×0.5, `FO` 0.35, 9 L/min, η_dep 0.98, pre/post-flujo 15 %) · `k_cordón` tope 1.75 y filete 1.00, `A_cordón_min` 2.0 mm² · pintura: primario SV 55 %, DFT 50 µm, η_transf. 0.65; esmalte SV 45 %, DFT 40 µm, η_transf. 0.65; diluyente 10 %.
 
-**T7e · Soportería** (`proceso.soportes`): `t_fab_pieza_min` 15 min de taller por pieza (corte, doblez, barreno y punteo, a la tarifa de armado) · `anclaje_defecto` `TAQUETE_3_8` (un artículo de T3c) · `tornillo` `5/16x1-1/4` (un tornillo de `herrajes.tornillo_precio_ref`). Valores supuestos (§10.12).
+**T7e · Soportería** (`proceso.soportes`): `t_fab_pieza_min` 15 **minutos reales** de taller por pieza (corte, doblez, barreno y punteo, a la tarifa de armado; lo que tarda el taller, sin la eficiencia) · `anclaje_defecto` `TAQUETE_3_8` (un artículo de T3c) · `tornillo` `5/16x1-1/4` (un tornillo de `herrajes.tornillo_precio_ref`) · `oreja_abrazadera_mm` 50 (cada oreja de una abrazadera de media vuelta, §3.6.2). Valores supuestos (§10.12); la partida trae sus propios minutos (las ménsulas del caso: 2 días para las 7).
 
 **T7c · Armado del tramo recto por yardas** (`proceso.armado_yardas`; reglas en §3.2)
 
@@ -336,7 +342,7 @@
 | `yardas_por_pieza_max` | 3 | yardas engargoladas en una pieza con bridas en ambos extremos (el tramo de ajuste cuenta como una) |
 | `ajuste_tolerancia_mm` | 25 | un sobrante menor que esto no es tramo de ajuste: a ±25 mm de un múltiplo de la yarda se cuentan yardas completas |
 | `junta_entre_yardas` | `PITTSBURGH` | cómo se unen las yardas de una pieza: clave de `proceso.costuras` (engargolado Pittsburgh) |
-| `extremo_ajuste_defecto` | `SUELTA` | qué lleva el extremo libre del tramo de ajuste cuando la partida no pide otra cosa: `SUELTA` (aro, tornillos y empaque sueltos), `SIN_BRIDA` (nada) o `CON_BRIDA` (brida de taller) |
+| `extremo_ajuste_defecto` | `SUELTA` | qué lleva el extremo libre del tramo de ajuste cuando la partida no pide otra cosa: `SUELTA` (aro, tornillos y material de la junta, sueltos), `SIN_BRIDA` (nada) o `CON_BRIDA` (brida de taller) |
 
 **T7d · Pintura** (`proceso.pintura` y `materiales.*.pintura_cuerpo` / `pintura_bridas`; reglas en §4.1 y §4.3). Cada material lleva dos reglas, **una para el ducto y otra para las bridas**, y cada una dice qué sistema se aplica según la instalación:
 
@@ -363,26 +369,28 @@ Las **manos** (valores ilustrativos: confirmar con la ficha técnica de la pintu
 | `primario` | 55 % | 50 µm | 0.65 | 11.00 m²/L | 7.15 m²/L | `precio_L_primario` |
 | `esmalte` | 45 % | 40 µm | 0.65 | 11.25 m²/L | 7.31 m²/L | `precio_L_esmalte` |
 
-**T8 · Tarifas de operación** (`mano_obra`). Los trabajadores ganan **$500 por día, sin utilidades y ya con prestaciones** (FSR = 1.00). La **jornada** (`mano_obra.jornada`) convierte el día en horas trabajadas: la semana paga **7 días** (el séptimo incluido) por **5 días de 8 h** trabajadas, así que el trabajador gana $3,500 por 40 h y **la hora trabajada cuesta $87.50**, más el equipo de la operación. `instalacion` es la tarifa de la cuadrilla en obra (§4.5).
+**T8 · Tarifas de operación** (`mano_obra`). Los trabajadores ganan **$500 por día** ($3,500 a la semana ÷ 7 días), **sin utilidades ni prestaciones**, y el taller cuesta la hora como el salario del día entre las horas de la jornada (`mano_obra.jornada.horas_dia` = 8): **$62.50 la hora**, más el equipo de la operación. `instalacion` es la tarifa de la cuadrilla en obra (§4.5).
 
 ```text
-salario_hora = salario_diario · días_pagados_semana / (días_trabajados_semana · horas_día)     # 500 · 7 / (5 · 8) = 87.50
-mo_h         = salario_hora · FSR
+salario_hora = salario_diario / horas_día          # 500 / 8 = 62.50
+mo_h         = salario_hora · FSR                   # FSR = 1.00
 ```
 
-| Operación | Salario por día (MXN) | Salario por hora trabajada = día · 7 / (5 · 8) | `mo_h` = salario por hora · FSR (MXN/h) | Equipo (MXN/h) | Tarifa total (MXN/h) |
+Con FSR = 1.00 la hora **no recupera** lo que se paga y no se trabaja —la semana paga 7 días por 5 trabajados: $1,000 de cada $3,500— ni las prestaciones (IMSS, aguinaldo, vacaciones). Para recuperarlo, `FSR` = 7/5 = **1.40** da $87.50 la hora; con prestaciones, más (§4.1, §7.4.1).
+
+| Operación | Salario por día (MXN) | Salario por hora = día ÷ 8 h | `mo_h` = salario por hora · FSR (1.00) (MXN/h) | Equipo (MXN/h) | Tarifa total (MXN/h) |
 | --- | --- | --- | --- | --- | --- |
-| `corte` | 500 | 87.50 | 87.50 | 45 | 132.50 |
-| `rolado` | 500 | 87.50 | 87.50 | 55 | 142.50 |
-| `armado` | 500 | 87.50 | 87.50 | 25 | 112.50 |
-| `aros` | 500 | 87.50 | 87.50 | 40 | 127.50 |
-| `soldadura` | 500 | 87.50 | 87.50 | 45 | 132.50 |
-| `engargolado` | 500 | 87.50 | 87.50 | 35 | 122.50 |
-| `barrenado` | 500 | 87.50 | 87.50 | 25 | 112.50 |
-| `acabado` | 500 | 87.50 | 87.50 | 20 | 107.50 |
-| `pintura` | 500 | 87.50 | 87.50 | 40 | 127.50 |
-| `qc_embalaje` | 500 | 87.50 | 87.50 | 0 | 87.50 |
-| `instalacion` | 500 | 87.50 | 87.50 | 0 | 87.50 |
+| `corte` | 500 | 62.50 | 62.50 | 45 | 107.50 |
+| `rolado` | 500 | 62.50 | 62.50 | 55 | 117.50 |
+| `armado` | 500 | 62.50 | 62.50 | 25 | 87.50 |
+| `aros` | 500 | 62.50 | 62.50 | 40 | 102.50 |
+| `soldadura` | 500 | 62.50 | 62.50 | 45 | 107.50 |
+| `engargolado` | 500 | 62.50 | 62.50 | 35 | 97.50 |
+| `barrenado` | 500 | 62.50 | 62.50 | 25 | 87.50 |
+| `acabado` | 500 | 62.50 | 62.50 | 20 | 82.50 |
+| `pintura` | 500 | 62.50 | 62.50 | 40 | 102.50 |
+| `qc_embalaje` | 500 | 62.50 | 62.50 | 0 | 62.50 |
+| `instalacion` | 500 | 62.50 | 62.50 | 0 | 62.50 |
 
 **T9 · Capas de precio** (valores ilustrativos; ver §5)
 
@@ -415,7 +423,7 @@ mo_h         = salario_hora · FSR
 
 Las tablas maestras son el lugar donde el taller mete sus números, y un número sin explicación se llena mal. Por eso **cada dato, sección, tabla y grupo del editor trae un botón ⓘ** que abre una ventana emergente (con el cursor en un campo, `F1` hace lo mismo; `Esc` la cierra). Los textos viven en un catálogo propio, `src/datos/ayuda_maestros.js` —no en la interfaz—, y no contienen cifras de cálculo: sólo explicaciones, rangos usuales de referencia y ejemplos.
 
-El catálogo tiene **234 entradas** (cada una con un patrón de ruta, donde `*` cubre una clave) que explican los **527 elementos** que dibuja el editor: 11 grupos, 90 secciones, 414 datos y 12 tablas.
+El catálogo tiene **237 entradas** (cada una con un patrón de ruta, donde `*` cubre una clave) que explican los **552 elementos** que dibuja el editor: 11 grupos, 93 secciones, 436 datos y 12 tablas.
 
 Cada entrada responde tres preguntas y dice qué parte del precio mueve:
 
@@ -441,7 +449,7 @@ Un ejemplo de lo que ve quien pulsa ⓘ junto a la utilidad (el último renglón
 >
 > **Ojo.** Si el encabezado de la cotización trae su propio margen, se usa ése en ella.
 >
-> **Con su cotización** (Ejemplo A, $2,366.22 antes de IVA): si baja 10 % (18 %): ▼ −$59.15 · −2.50 % · si sube 10 % (22 %): ▲ +$62.27 · +2.63 %.
+> **Con su cotización** (Ejemplo A, $2,703.81 antes de IVA): si baja 10 % (18 %): ▼ −$67.60 · −2.50 % · si sube 10 % (22 %): ▲ +$71.15 · +2.63 %.
 
 Lo que **sí depende de la cotización abierta** se calcula, no se escribe: cotizar de nuevo con **una copia** de las tablas (`cotizarCon(M)`, que no toca lo guardado). Así la ventana de un número muestra *si baja o sube 10 %* cuánto cambia el precio y permite **probar otro valor sin guardar**; la de una lista **compara cada opción** con la cotización; la de una tabla del proveedor o un grupo de salarios **ajusta todos los valores de golpe** («el proveedor subió 6 %»); y la de un grupo o sección calcula **qué datos de ahí mueven más el precio**. Si la cotización no usa el dato (por ejemplo, la chatarra con recuperación en 0 %), lo dice en vez de mostrar ceros.
 
@@ -474,7 +482,7 @@ La prueba `tests/ayuda_maestros.test.js` hace cumplir las reglas del catálogo: 
 | V9 | `utilidad + comisión + otros < 100 %` del precio | Error |
 | V10 | Toda variable `precio_*` referenciada existe en la tabla de precios | Error |
 | V11 | Lista del proveedor: un renglón con precio ≤ 0 o sin medidas válidas no se usa (el cálculo cae al precio por kg de T3) | Silencioso; el renglón se ve como sin $/kg |
-| V12 | `salario_diario ≥ 0` en cada operación; jornada con días pagados y trabajados de 1 a 7 y horas por día de más de 0 a 24 | Error (con el nombre de la operación o de la jornada) |
+| V12 | `salario_diario ≥ 0` en cada operación; horas por día de la jornada de más de 0 a 24 | Error (con el nombre de la operación o de la jornada) |
 | V13 | `cotizacion.parametros`: un valor fuera de sus límites (§5.4), no numérico o —en días— no entero se **ignora** y rige el de las tablas maestras; vacío = sin parámetro | Aviso con el nombre del parámetro |
 | V14 | **Tipo:** todo campo numérico de la partida es un número finito. Un texto numérico («12.5», «1e3») se acepta y se convierte; `NaN`, `±Infinity`, texto no numérico, listas, objetos y booleanos se rechazan. Un vacío opcional («», `null`) significa «automático» | Error: «Diámetro: «abc» no es un número» |
 | V15 | **Rango:** cada medida, longitud, espesor, cantidad y conteo está dentro de T10 o de su rango propio (por ejemplo costuras longitudinales 1–8, gajos 2–60, merma 0–90 %); cero, negativos y «casi cero» (1 mm, 10⁻⁹) se rechazan; en un campo opcional el 0 equivale a vacío | Error con el rango y lo que trae la partida |
@@ -485,9 +493,9 @@ La prueba `tests/ayuda_maestros.test.js` hace cumplir las reglas del catálogo: 
 | V20 | **Datos que vienen de fuera** (navegador, almacén compartido, archivo importado): un parche de maestros conserva sólo lo que tiene la forma de las tablas (un número donde va un número…; lo demás se descarta y se cuenta); una cotización importada conserva lo sano: las partidas que no son objetos se descartan, los `id` se reponen únicos, y los textos, unidades, riesgo y servicio inválidos vuelven a su valor por defecto. `__proto__` nunca entra | Se avisa cuántos valores se ignoraron; un archivo sin lista de partidas se rechaza sin tocar nada |
 | V21 | **Armado por yardas:** `yarda_mm` de la partida entre `yarda_min_mm` y `yarda_max_mm` (T10; vacío o 0 = el de la cotización y, si no, el de T7c); `extremo_ajuste` es `SUELTA`, `SIN_BRIDA` o `CON_BRIDA` (el `ajuste_sin_brida` sí/no de una versión anterior se convierte: sí = `SIN_BRIDA`, no = `CON_BRIDA`); en las tablas, `yardas_mm` es una lista de anchos dentro de esos límites, `yardas_por_pieza_max` un entero ≥ 1, `junta_entre_yardas` un tipo de costura que existe y `extremo_ajuste_defecto` uno de los tres extremos | Error con la ruta |
 | V22 | `cotizacion.yarda_mm`: un ancho fuera de los límites de la yarda o no numérico se **ignora** y rige el de las tablas (como en V13); vacío = el de las tablas. Sólo lo heredan los tramos rectos | Aviso con el valor |
-| V23 | **Familias sin lámina:** `COMPRADO` trae precio o artículo del catálogo; `iva_incluido` es sí/no; `INSTALACION` trae personas (entero 1–100) y días (0.1–1 000); horas por día 0.5–24 (vacío = la jornada); los sí/no de factura son sí/no; `SOPORTE` trae una barra de T3b con precio y largo válidos, y la pieza cabe en la barra; el anclaje existe en T3c; minutos por pieza 0.1–10 000 (vacío = T7e). `BRIDA` sólo lleva unión `BRIDADO` | Error con el dato |
-| V24 | **Catálogo y soportería en las tablas:** IVA de las compras en [0, 100 %); cada artículo trae precio numérico, `iva_incluido` sí/no y, si la trae, una `categoria` del control de gastos; `tornillos_multiplo` entero; el anclaje y el tornillo de T7e existen | Error «Tablas maestras · ruta: …» |
-| V25 | `cotizacion.venta_pactada`: un importe no numérico o negativo se **ignora** y se avisa (vacío = no hay venta pactada); `piezas_enteras` sólo cuenta si es sí | Aviso con el valor |
+| V23 | **Familias sin lámina:** `COMPRADO` trae precio o artículo del catálogo; `iva_incluido` es sí/no; `tornillos_pieza` entero 0–1 000 y `circulo_barrenos_mm` una medida (0 = sin junta); `INSTALACION` trae personas (entero 1–100) y días (0.1–1 000); horas por día 0.5–24 (vacío = la jornada); los sí/no de factura son sí/no; `SOPORTE` trae una barra de T3b con precio y largo válidos y un largo por pieza o, en una abrazadera, el diámetro del ducto (`abrazadera_D_mm`), y la pieza cabe en la barra; el anclaje existe en T3c; minutos por pieza 0.1–10 000 (vacío = T7e). `BRIDA` sólo lleva unión `BRIDADO` | Error con el dato |
+| V24 | **Catálogo y soportería en las tablas:** IVA de las compras en [0, 100 %); cada artículo trae precio numérico, `iva_incluido` sí/no y, si los trae, `tornillos_pieza` entero de 0 a 1 000, `circulo_barrenos_mm` de 0 a 5 000 mm y una `categoria` del control de gastos; `tornillos_multiplo` entero; el anclaje y el tornillo de T7e existen; la junta de la unión bridada es `SELLADOR` o `EMPAQUE`; la jornada no pasa de 24 h | Error «Tablas maestras · ruta: …» |
+| V25 | `cotizacion.venta_pactada`: un importe no numérico o negativo se **ignora** y se avisa (vacío = no hay venta pactada); `venta_pactada_con_iva` y `piezas_enteras` sólo cuentan si son sí | Aviso con el valor |
 | V26 | **Gastos reales:** cantidad y precio numéricos de 0 en adelante (un renglón inválido se marca y no suma); un renglón vacío no cuenta ni es error; una categoría que no existe pasa a «Otros»; sin decir si hay factura, sí, salvo en mano de obra e instalación (la raya no lleva IVA) | Error por renglón |
 
 La validación vive en `src/motor/validacion.js` (V14–V16, V18, V19), `src/motor/geometria.js` (V17) y `sanearParche` en `src/datos/maestros.js` (V20). Una partida que no se puede calcular **no detiene la cotización**: queda como `{ ok: false, errores }` y las demás se calculan; una falla inesperada del cálculo se atrapa por partida (`interno: true`) en vez de romper la pantalla.
@@ -553,7 +561,7 @@ Rectangular:  P_med = 2·(a + b + 2e) ;  B = P_med + n_costuras·a_costura
 - **Engargolado.** Las juntas entre yardas son engargolado (`proceso.armado_yardas.junta_entre_yardas` = `PITTSBURGH`; si se cambiara a una costura soldada, serían soldadura a tope y juntas de armado). Cada junta y cada costura longitudinal engargolada es una operación (§4.1). Las juntas engargoladas son transversales: llevan sellador en toda clase de sellado menos NINGUNA (§3.5.5).
 - **Hoja.** La hoja de la que sale el tramo es del ancho de la yarda: el manejo de hojas (`n_hojas_eq`) usa `Y × 3 048` y el precio de la lámina se busca en la lista del proveedor con ese ancho (§5.1.1).
 - **Extremo libre del tramo de ajuste** (`extremo_ajuste`; por omisión el de T7c, `extremo_ajuste_defecto` = `SUELTA`; la partida puede pedir otro). La brida de ese extremo se instala en obra, ajustada a la distancia que se necesite; lo que se cotiza del extremo es:
-  - `SUELTA` — el taller manda **suelto** el aro de esa brida **ya terminado** —se rola la solera, se suelda el cierre del aro, se barrena y se pinta— con sus tornillos y su empaque, **sin soldarlo al ducto**: se suelda en obra donde se corta el tramo (§3.5.7). Se cobra el material y esas operaciones; no se cobra el armado del aro al ducto, el filete aro–ducto ni el sellador de su junta.
+  - `SUELTA` — el taller manda **suelto** el aro de esa brida **ya terminado** —se rola la solera, se suelda el cierre del aro, se barrena y se pinta— con sus tornillos y el material de su junta (medio cordón de Sikaflex), **sin soldarlo al ducto**: se suelda en obra donde se corta el tramo (§3.5.7). Se cobra el material y esas operaciones; no se cobra el armado del aro al ducto ni el filete aro–ducto.
   - `SIN_BRIDA` — **nada**: la brida y su junta no están en el precio de la partida.
   - `CON_BRIDA` — brida de taller en ambos extremos, como en cualquier otra pieza: se fabrica y se suelda (no queda un extremo libre para ajustar en campo).
 
@@ -561,12 +569,12 @@ Rectangular:  P_med = 2·(a + b + 2e) ;  B = P_med + n_costuras·a_costura
 
 | Yarda (mm) | `extremo_ajuste` | Qué cotiza el extremo libre | Armado | Bridas de taller | Aros sueltos | CD (MXN) | Precio antes de IVA (MXN) | Más que «sin brida» |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1,220 | `SIN_BRIDA` | Nada: la brida de ese extremo no está en el precio | 2 yardas + ajuste de 560 mm | 1 | 0 | 1,337.60 | 2,176.74 | — |
-| 1,220 | `SUELTA` | El aro terminado (rolado, cierre soldado, barrenado y pintado), los tornillos y el empaque; no se suelda al ducto | 2 yardas + ajuste de 560 mm | 1 | 1 | 1,448.85 | 2,366.22 | +189.48 |
-| 1,220 | `CON_BRIDA` | Brida fabricada y soldada en taller, como en los demás extremos | 2 yardas + ajuste de 560 mm | 2 | 0 | 1,488.09 | 2,447.91 | +271.17 |
-| 914 | `SIN_BRIDA` | Nada: la brida de ese extremo no está en el precio | 3 yardas y ajuste de 258 mm | 3 | 0 | 1,665.22 | 2,782.45 | — |
-| 914 | `SUELTA` | El aro terminado (rolado, cierre soldado, barrenado y pintado), los tornillos y el empaque; no se suelda al ducto | 3 yardas y ajuste de 258 mm | 3 | 1 | 1,776.47 | 2,971.94 | +189.49 |
-| 914 | `CON_BRIDA` | Brida fabricada y soldada en taller, como en los demás extremos | 3 yardas y ajuste de 258 mm | 4 | 0 | 1,815.71 | 3,053.63 | +271.18 |
+| 1,220 | `SIN_BRIDA` | Nada: la brida de ese extremo no está en el precio | 2 yardas + ajuste de 560 mm | 1 | 0 | 1,363.48 | 2,308.94 | — |
+| 1,220 | `SUELTA` | El aro terminado (rolado, cierre soldado, barrenado y pintado), los tornillos y el material de su junta; no se suelda al ducto | 2 yardas + ajuste de 560 mm | 1 | 1 | 1,550.56 | 2,703.81 | +394.87 |
+| 1,220 | `CON_BRIDA` | Brida fabricada y soldada en taller, como en los demás extremos | 2 yardas + ajuste de 560 mm | 2 | 0 | 1,577.06 | 2,766.83 | +457.89 |
+| 914 | `SIN_BRIDA` | Nada: la brida de ese extremo no está en el precio | 3 yardas y ajuste de 258 mm | 3 | 0 | 1,811.84 | 3,280.13 | — |
+| 914 | `SUELTA` | El aro terminado (rolado, cierre soldado, barrenado y pintado), los tornillos y el material de su junta; no se suelda al ducto | 3 yardas y ajuste de 258 mm | 3 | 1 | 1,998.92 | 3,674.99 | +394.86 |
+| 914 | `CON_BRIDA` | Brida fabricada y soldada en taller, como en los demás extremos | 3 yardas y ajuste de 258 mm | 4 | 0 | 2,025.42 | 3,738.02 | +457.89 |
 
   La brida suelta cuesta menos que la de taller: es el mismo aro, con el mismo material y las mismas operaciones (rolado, cierre soldado, barrenado y pintura), pero no se arma ni se suelda al ducto y su junta no se sella en taller.
 
@@ -750,7 +758,7 @@ Verificación independiente (`tests/geometria.test.js`): `t(φ)` por bisección 
 | Injerto simple 45° | tronco − orificio + injerto | `A_inj = π·d·(L − t_med)` | 25 % | 1.60 |
 | Reducción con injerto 30°/45° | cono − orificio + injerto (§3.4.5) | numérica; verificada por fuerza bruta | 28 % | 1.90 |
 
-### 3.5 Herrajes de unión: bridas, tornillería, empaque, sellador y espiga
+### 3.5 Herrajes de unión: bridas, tornillería, junta (Sikaflex o empaque), sellador y espiga
 
 #### 3.5.1 Aros de brida (solera de 1½" × 3/16" rolada "de canto")
 
@@ -801,26 +809,30 @@ A_cordón_cierre = máx( A_mín , k_tope · t² )        # con el espesor t de l
 
 El cierre del aro se suelda en un espesor mayor que el de la lámina, así que su cordón es más grande y su velocidad de avance menor (§4.1 y §4.3).
 
-#### 3.5.4 Empaque
+#### 3.5.4 Junta de la brida: Sikaflex (o empaque)
+
+El taller sella la cara de la brida con un **cordón de Sikaflex sobre el círculo de barrenos**, en lugar del empaque de neopreno (respuesta del taller del 7-oct-2026). Es la opción de arranque, `uniones.BRIDADO.junta = SELLADOR`; `EMPAQUE` vuelve a la cinta de neopreno. Cada brida lleva media junta —la otra mitad es de la brida con que se une—, sea de taller, suelta (§3.5.7) o una brida de placa comprada con su círculo de barrenos (§3.6.3):
 
 ```text
-L_empaque = Σ_extremos 0.5 · P_perno · (1 + f_traslape)          # m, una sola cinta por junta, sobre el círculo de barrenos (extremos de taller y sueltos)
+SELLADOR:  L_junta   = Σ_extremos 0.5 · P_perno / 1000                       # m de cordón sobre el círculo de barrenos
+           V_junta   = L_junta · ml_sellador_junta_m · (1 + f_merma)          # 40 mL/m · 1.15 ; se suma al sellador (§3.5.5)
+EMPAQUE:   L_empaque = Σ_extremos 0.5 · P_perno · (1 + f_traslape) / 1000     # m de cinta de neopreno 1½" × 1/8", traslape 5 %
 ```
 
-Se asume cinta de neopreno de 1½" × 1/8" (el ancho de la solera) y traslape de 5 % en el empalme (§10.4).
+Con `usa_empaque = false` la partida no lleva material de junta (ni cordón ni cinta). El cordón de 40 mL por metro (≈ un cordón de 7 mm) es un supuesto (§10.12).
 
 #### 3.5.5 Sellador por clase (SMACNA)
 
 ```text
-Clase C : juntas transversales                      L = Σ_extremos_de_taller 0.5·P_ext  (bridado)  |  Σ_espigas P_ext
+Clase C : juntas transversales                      L = Σ_extremos_de_taller 0.5·P_ext  (bridado con EMPAQUE)  |  Σ_espigas P_ext
                                                         + L_juntas engargoladas entre yardas
 Clase B : C + costuras longitudinales NO soldadas   L = C + L_engargolado_longitudinal
 Clase A : B + penetraciones                         L = B + L_penetraciones
-V_sellador = L · ml_por_m · (1 + f_merma)           # ml_por_m = 20 mL/m (cordón ≈ 5 mm) ; f_merma = 15 %
+V_sellador = L · ml_por_m · (1 + f_merma) + V_junta  # ml_por_m = 20 mL/m (cordón ≈ 5 mm) ; f_merma = 15 % ; V_junta de §3.5.4
 Costo      = V_sellador · precio_cartucho / mL_cartucho
 ```
 
-Las costuras **soldadas** son herméticas y no consumen sellador.
+Las costuras **soldadas** son herméticas y no consumen sellador. Con la junta de **Sikaflex** (`SELLADOR`), el cordón de la junta ya sella la junta transversal de bridas: la clase C no le suma el suyo (sólo las juntas engargoladas, las espigas y lo de las clases B y A).
 
 #### 3.5.6 Espiga (macho–hembra)
 
@@ -835,7 +847,7 @@ Tramo recto: 1 macho por pieza. Accesorios: un macho por extremo (configurable c
 
 #### 3.5.7 Brida suelta (extremo libre del tramo de ajuste)
 
-Cuando el extremo del ajuste se cotiza como `SUELTA` (§3.2), el taller fabrica el aro **completo**, pero **no lo une al ducto**: ese extremo se corta y se ajusta en campo, así que el aro sale suelto —con sus tornillos y su empaque— y se suelda en obra. El motor lo trata como un aro de brida al que se le hace todo menos unirlo:
+Cuando el extremo del ajuste se cotiza como `SUELTA` (§3.2), el taller fabrica el aro **completo**, pero **no lo une al ducto**: ese extremo se corta y se ajusta en campo, así que el aro sale suelto —con sus tornillos y el material de su junta— y se suelda en obra. El motor lo trata como un aro de brida al que se le hace todo menos unirlo:
 
 ```text
 extremos_sueltos      = PF.extremos_sueltos                  # un extremo por tramo de ajuste con brida suelta (sólo unión BRIDADO)
@@ -844,7 +856,7 @@ aro suelto            = el aro de §3.5.1, del mismo perfil y diámetro:  L_aro 
 Material (como cualquier brida):
   costo del perfil     += m_aro_bruta · precio_kg_perfil      # y el flete de entrada (2 %) también cubre el perfil del aro suelto
   juegos de tornillería += 0.5 · n_tornillos · (1 + f_reserva)  # media junta (§3.5.2)
-  L_empaque            += 0.5 · P_perno · (1 + f_traslape)      # medio empaque (§3.5.4)
+  junta                += 0.5 · P_perno                         # medio cordón de Sikaflex (o medio empaque) (§3.5.4)
 
 Se le hace en taller (igual que a un aro de taller):
   Aros          t += t_fijo_aro + t_roll_aro · L_aro / 1000    # se rola la solera
@@ -856,7 +868,7 @@ Se le hace en taller (igual que a un aro de taller):
 NO se le hace (se hace en obra):
   Armado        no suma t_ajuste_aro                            # no se arma al ducto: n_aros cuenta sólo los aros de taller
   Soldadura     no suma el filete aro–ducto                     # no se suelda al ducto
-  Sellador      no suma media junta                             # la junta se sella en obra
+  Sellador      no suma el cordón de la clase de su media junta # con EMPAQUE la junta se sella en obra; con Sikaflex, su cordón es el sello
 ```
 
 El acabado (`f_acabado · t_soldadura`) y los consumibles de soldadura y de pintura siguen a esos metros y esa superficie. El peso que se manda incluye el aro (`peso.aros_sueltos_neto_kg`) y los drivers de subcontrato por kilogramo (`KG_NETO`, `KG_BRUTO`) y por metro de soldadura (`M_SOLDADURA`) lo cuentan, porque es acero fabricado que va en la partida. Con unión `ESPIGA` o `LISO` no hay aros: `SUELTA` y `SIN_BRIDA` cuestan lo mismo.
@@ -865,27 +877,30 @@ El acabado (`f_acabado · t_soldadura`) y los consumibles de soldadura y de pint
 
 #### 3.6.1 Bridas sueltas (`BRIDA`: sólo aros)
 
-Una partida de **bridas sueltas** cotiza aros terminados que se mandan sin unir a un ducto: los del ducto que fabricó un proveedor, refacciones o bridas que se sueldan en obra. Su medida es **la del ducto en que van** (redondo `D_mm` o rectangular `a_mm × b_mm`) y su material y calibre son los del ducto: dan `D_ext` y la regla de pintura de las bridas (el galvanizado pinta sus bridas, T7d). No hay lámina que cortar, rolar ni armar; cada unidad es el aro suelto de §3.5.7 —rolado, con el cierre soldado, barrenado y pintado— con su media junta de tornillos y de empaque. Sólo lleva unión bridada (V23).
+Una partida de **bridas sueltas** cotiza aros terminados que se mandan sin unir a un ducto: los del ducto que fabricó un proveedor, refacciones o bridas que se sueldan en obra. Su medida es **la del ducto en que van** (redondo `D_mm` o rectangular `a_mm × b_mm`) y su material y calibre son los del ducto: dan `D_ext` y la regla de pintura de las bridas (el galvanizado pinta sus bridas, T7d). No hay lámina que cortar, rolar ni armar; cada unidad es el aro suelto de §3.5.7 —rolado, con el cierre soldado, barrenado y pintado— con su media junta de tornillos y de Sikaflex (o empaque). Sólo lleva unión bridada (V23).
 
 ```text
 PF.familia = BRIDA ;  A_neta = 0 ;  n_piezas = 0 ;  n_virolas = 0 ;  extremos_sueltos = [ el del ducto ]
-por unidad:  1 aro suelto (L_aro de §3.5.1, con las puntas) + 0.5·n_tornillos juegos + 0.5·P_perno de empaque
+por unidad:  1 aro suelto (L_aro de §3.5.1, con las puntas) + 0.5·n_tornillos juegos + 0.5·P_perno de cordón de Sikaflex (o de empaque)
 horas:       aros + soldadura (cierre) + barrenado + acabado + pintura (bridas) + inspección          # sin corte, rolado ni armado
 ```
 
 #### 3.6.2 Soportería (`SOPORTE`)
 
-Ménsulas, abrazaderas y postes que se cortan de una **barra de la lista del proveedor** (T3b): cada pieza usa `largo_pieza_mm` de barra, puede llevar anclajes del catálogo de compras (T3c) y tornillos, y cuesta minutos de taller (corte, doblez, barreno y punteo) a la tarifa de armado.
+Ménsulas, abrazaderas y postes que se cortan de una **barra de la lista del proveedor** (T3b): cada pieza usa `largo_pieza_mm` de barra, puede llevar anclajes del catálogo de compras (T3c) y tornillos, y cuesta **minutos reales** de taller (corte, doblez, barreno y punteo: lo que dice el taller que tarda, sin la eficiencia) a la tarifa de armado. Una **abrazadera** de media vuelta se puede pedir por el diámetro del ducto que abraza (`abrazadera_D_mm`): su largo sale solo.
 
 ```text
-L_total   = cantidad · largo_pieza / 1000                              # m de barra
+largo     = largo_pieza  |  π·(abrazadera_D + t)/2 + 2·oreja           # abrazadera: media vuelta en la fibra neutra de la solera (t = su espesor) y dos orejas de 50 mm (T7e)
+L_total   = cantidad · largo / 1000                                    # m de barra
 perfil    = L_total · precio_m_sin_IVA / (1 − φ_perfil)                # la fracción de barra que se usa, con la merma de perfil (T6)
 anclajes  = cantidad · anclajes_pieza · precio_sin_IVA(articulo_anclaje) # por omisión el de T7e (taquete de 3/8″)
 tornillos = cantidad · tornillos_pieza · precio_juego(T7e.tornillo)
-h_taller  = cantidad · min_pieza / 60 / η                              # min_pieza: el de la partida o T7e (15 min)
+h_taller  = cantidad · min_pieza / 60                                 # min_pieza: el de la partida o T7e (15 min); minutos reales, sin η
 CD        = perfil + anclajes + tornillos + h_taller · (mo_h + equipo_h)(armado) + herramienta_menor
-peso      = cantidad · kg_m · largo_pieza / 1000
+peso      = cantidad · kg_m · largo / 1000
 ```
+
+Para la abrazadera del ducto de 11″ del caso de §7.4, con solera de 1¼″ × 1/8″: π·(279.4 + 3.175)/2 + 2·50 = **543.87 mm**; las 7 salen de una solera de 6 m.
 
 Una pieza más larga que la barra se rechaza (no sale de una sola barra). Cuántas barras completas hay que comprar lo dice la lista de compras (§5.5), que acomoda las piezas en las barras.
 
@@ -896,9 +911,16 @@ Lo que se compra hecho —el ducto que fabrica un proveedor, mangueras, abrazade
 ```text
 precio    = precio_compra_unitario (si se captura)  |  T3c[articulo_id].precio
 iva       = iva_incluido de la partida  |  (si no se capturó precio) el del artículo  |  no
-CD        = cantidad · precio / (1 + compras.iva_pct)   si iva ;   cantidad · precio   si no
-categoría = T3c[articulo_id].categoria  |  PROVEEDOR                    # el renglón del control de gastos donde cae (§5.7)
+compra    = cantidad · precio / (1 + compras.iva_pct)   si iva ;   cantidad · precio   si no
+categoría = T3c[articulo_id].categoria  |  PROVEEDOR                    # el renglón del control de gastos donde cae la compra (§5.7)
+
+Si se atornilla como brida (una brida de placa que corta un proveedor):
+tornillería = cantidad · tornillos_pieza · (1 + f_reserva) · precio_juego(tornillo de la brida estándar)    # tornillos_pieza: la mitad de sus barrenos
+junta       = cantidad · 0.5 · π · circulo_barrenos / 1000 · 40 mL/m · 1.15 de Sikaflex (o medio empaque)    # §3.5.4
+CD          = compra + tornillería + junta                                # la tornillería y la junta caen en «Material» del control de gastos
 ```
+
+`tornillos_pieza` y `circulo_barrenos_mm` son del artículo (T3c) o de la partida. Las bridas de placa de 5″, 6″ y 7″ del caso de §7.4 (cotización del proveedor de corte del 2-oct-2026) están en el catálogo con su precio antes de IVA, su círculo de barrenos (170, 193 y 230 mm) y los juegos de la regla del taller (2, 4 y 4 por brida: por confirmar con el plano, §10.12).
 
 ---
 
@@ -924,10 +946,10 @@ Acabado      t = f_acabado(material) · t_soldadura
 Pintura      t = Σ_partes A_parte · ( t_prep + n_manos_parte · t_aplicación )      # partes: el ducto y las bridas, cada una con su sistema (T7d); una parte sin pintura no suma
 Inspección   t = t_fijo_qc + k_manejo · m_neta_total                            # lámina + aros de taller + aros sueltos
 t_real(op)   = t_estándar(op) / η_taller
-Costo(op)    = (t_real / 60) · ( mo_h(op) + equipo_h(op) )        mo_h = salario_diario · días_pagados / (días_trabajados · horas_día) · FSR
+Costo(op)    = (t_real / 60) · ( mo_h(op) + equipo_h(op) )        mo_h = salario_diario / horas_día · FSR
 ```
 
-`FSR` (Factor de Salario Real) convierte un salario base en costo real (prestaciones, aguinaldo, vacaciones, cargas sociales). Los trabajadores ganan **$500 por día, sin utilidades y ya con las prestaciones**, por eso FSR = 1.00; la semana paga 7 días por 40 h trabajadas, así que **la hora trabajada cuesta $87.50** (T8). El factor se conserva por si el salario se captura algún día sin prestaciones (con FSR = 1.55 la hora costaría $135.63). La hoja de control de gastos dividió los $3,500 de la semana entre 56 h (7 días de 8 h) y puso la hora en $62.50: con 40 h trabajadas es $87.50 (§7.4).
+`FSR` (Factor de Salario Real) convierte el salario en lo que de verdad cuesta cada hora trabajada: lo que se paga y no se trabaja (los días de descanso, vacaciones, festivos) y las prestaciones y cargas (IMSS, INFONAVIT, aguinaldo, prima vacacional). El taller cuesta la hora como **el salario del día ÷ 8 h = $62.50**, sin utilidades ni prestaciones, por eso FSR = 1.00 (T8). **Ojo:** la semana paga 7 días por 5 trabajados, así que cada hora trabajada le cuesta al taller $3,500 ÷ 40 h = **$87.50**: con FSR = 1.00 se deja de cobrar $25 por hora (en el caso de §7.4, $3,200 en 128 h). Para recuperarlo, `FSR` = 7/5 = **1.40**; con prestaciones, más (§7.4.1).
 
 ### 4.2 Drivers por familia
 
@@ -969,12 +991,12 @@ Corte:  costo = L_corte · precio_m_corte[proceso]            # electrodos, boqu
 
 | Material | Instalación | Ducto | Bridas | Superficie pintada (m²) | Pintura + diluyente (L) | Costo de la pintura (MXN) | Pintura (min reales) | Precio antes de IVA (MXN) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `ACERO_CARBON` | Interior | sólo pintura | sólo pintura | 3.078 | 0.463 | 112.40 | 26.9 | 2,387.71 |
-| `ACERO_CARBON` | Exterior | primario + pintura | primario + pintura | 3.078 | 0.937 | 210.14 | 38.5 | 2,589.73 |
-| `GALVANIZADO` | Interior | sin pintura | sólo pintura | 0.177 | 0.027 | 6.47 | 1.6 | 2,727.60 |
-| `GALVANIZADO` | Exterior | sin pintura | primario + pintura | 0.177 | 0.054 | 12.10 | 2.2 | 2,739.23 |
-| `INOX_304` | Interior | sin pintura | sin pintura | 0.000 | 0.000 | 0.00 | 0.0 | 7,038.32 |
-| `INOX_304` | Exterior | sin pintura | sin pintura | 0.000 | 0.000 | 0.00 | 0.0 | 7,038.32 |
+| `ACERO_CARBON` | Interior | sólo pintura | sólo pintura | 3.078 | 0.463 | 112.40 | 26.9 | 2,725.29 |
+| `ACERO_CARBON` | Exterior | primario + pintura | primario + pintura | 3.078 | 0.937 | 210.14 | 38.5 | 2,920.06 |
+| `GALVANIZADO` | Interior | sin pintura | sólo pintura | 0.177 | 0.027 | 6.47 | 1.6 | 3,074.23 |
+| `GALVANIZADO` | Exterior | sin pintura | primario + pintura | 0.177 | 0.054 | 12.10 | 2.2 | 3,085.44 |
+| `INOX_304` | Interior | sin pintura | sin pintura | 0.000 | 0.000 | 0.00 | 0.0 | 7,352.22 |
+| `INOX_304` | Exterior | sin pintura | sin pintura | 0.000 | 0.000 | 0.00 | 0.0 | 7,352.22 |
 
 ### 4.4 Costos de operación y subcontratos
 
@@ -993,7 +1015,7 @@ La cuadrilla que instala en obra cobra **horas reales** (en obra no se aplica la
 
 ```text
 horas     = cantidad · personas · días · horas_día                     # horas_día: la de la partida o la jornada de T8 (8 h)
-MO        = horas · mo_h(instalación)                                  # $87.50 la hora trabajada ; equipo_h = 0
+MO        = horas · mo_h(instalación)                                  # $62.50 la hora ($500 ÷ 8 h) ; equipo_h = 0
 casetas   = cantidad · viajes · casetas_viaje
 gasolina  = cantidad · viajes · gasolina_viaje
 hospedaje = cantidad · personas · noches · hospedaje_noche
@@ -1016,7 +1038,7 @@ La `cantidad` son visitas iguales: dos visitas cuestan exactamente el doble (sin
 CD = Materiales + Consumibles + Mano de obra + Equipo + Herramienta menor + Subcontratos + Viáticos (§4.5)
 
 Materiales  = m_bruta·precio_kg(material, calibre) − crédito_chatarra + Σ_aros m_aro_bruta·precio_kg(perfil)     # §5.1.1: lista del proveedor o, si no hay, precio_kg_<material> / precio_kg_<perfil>
-              + Σ_tipos juegos·precio_juego_<tornillo> + L_empaque·precio_m_empaque + V_sellador·precio_mL_sellador
+              + Σ_tipos juegos·precio_juego_<tornillo> + L_empaque·precio_m_empaque + V_sellador·precio_mL_sellador      # V_sellador incluye el cordón de la junta (§3.5.4)
               + fijaciones·precio_pza + flete_material% · (lámina + perfil)
 Herramienta menor = herramienta_menor_pct · Mano de obra
 ```
@@ -1143,8 +1165,8 @@ Cada partida cuesta la **fracción** de material que consume (kg de lámina con 
 ```text
 hojas     = ⌈ Σ kg brutos ÷ kg de la hoja ⌉                               # por material, espesor y tamaño de hoja (T3b o la hoja estándar)
 barras    = acomodo de las piezas en barras                               # aros de brida y piezas de soportería, por barra de T3b (o de 6 m)
-tornillos = ⌈ Σ juegos con reserva ÷ múltiplo ⌉ · múltiplo                # compras.tornillos_multiplo = 10
-sellador  = ⌈ Σ mL ÷ mL del cartucho ⌉ ;  pintura = ⌈ Σ L ÷ envase ⌉ · envase   # cartucho de 600 mL ; envase de 1 L
+tornillos = ⌈ Σ juegos con reserva ÷ múltiplo ⌉ · múltiplo                # compras.tornillos_multiplo = 10 ; bridas de solera y de placa, y soportería
+sellador  = ⌈ Σ mL ÷ mL del cartucho ⌉ ;  pintura = ⌈ Σ L ÷ envase ⌉ · envase   # cartucho de 600 mL (con la junta de toda brida, también las de placa) ; envase de 1 L
 empaque, anclajes y artículos comprados: lo que piden (ya se compran así)
 sobrante(renglón) = máx( 0 , importe de la compra entera − lo que ya cobran las partidas )
 ```
@@ -1157,17 +1179,20 @@ Cada renglón dice en qué categoría del control de gastos cae (la barra que s�
 
 ### 5.6 Venta pactada y precio mínimo
 
-Con la **venta pactada** (lo que se acordó con el cliente, MXN sin IVA) el motor mide lo que de verdad deja el proyecto y la compara con tres referencias:
+Con la **venta pactada** (lo que se acordó con el cliente) el motor mide lo que de verdad deja el proyecto y la compara con tres referencias. Se captura como se pactó: **antes de IVA** o, con `venta_pactada_con_iva = true` (la casilla «El importe ya incluye IVA»), **con IVA**; entonces se le quita el IVA de la cotización y todo se mide sin él:
 
 ```text
+venta          = venta_pactada / (1 + iva%)   si venta_pactada_con_iva ;   venta_pactada   si no
 CD_total       = Σ CD_i                                                   # material, mano de obra, compras y viáticos
 precio_mínimo  = Σ C_base_i / (1 − c_ventas − otros)                      # utilidad cero: cubre CD, indirectos, imprevistos, financiamiento y comisión
 precio_calc    = subtotal_neto                                            # el de la pila de precio, con la utilidad de la cotización
 utilidad_venta = venta · (1 − c_ventas − otros) − Σ C_base_i
 margen_venta   = utilidad_venta / venta
 cubre_CD       = venta ≥ CD_total ;  cubre_mínimo = venta ≥ precio_mínimo
-IVA            = venta · iva%                                             # la venta es MÁS IVA
+IVA            = venta · iva%  ;  total = venta + IVA                     # con IVA capturado, el total es lo capturado
 ```
+
+El IVA de la venta no es ingreso: es del SAT, menos el que se acreditó en las compras (§7.4.1).
 
 La app lo dibuja como una **regla de tres zonas**: de 0 al costo directo *pierde* (rojo), del costo directo al precio mínimo *cubre el costo directo pero no los indirectos* (amarillo) y arriba del precio mínimo *gana* (verde), con las marcas del precio calculado y de la venta pactada. Los totales de la cotización repiten el resultado. Un importe inválido se ignora y se avisa (V25).
 
@@ -1187,7 +1212,7 @@ Lo cotizado se reparte en las **mismas categorías**, desde el costo directo de 
 
 | Categoría | Lo cotizado que cae ahí |
 | --- | --- |
-| Material | lámina, perfiles de los aros, tornillería, empaque, sellador y flete; artículos del catálogo de material; el sobrante cobrado |
+| Material | lámina, perfiles de los aros, tornillería, empaque, sellador y flete; artículos del catálogo de material; la tornillería y la junta de lo comprado que se atornilla (bridas de placa); el sobrante cobrado |
 | Consumibles | soldadura, gas, corte, pintura y la herramienta menor de toda partida |
 | Mano de obra del taller | la mano de obra de las partidas de lámina y de la soportería |
 | Compras y trabajos de terceros | artículos comprados sin catálogo o del catálogo de compras a terceros; subcontratos |
@@ -1233,7 +1258,7 @@ FUNCIÓN cotizar_partida(p, M):
 
     # ── QTO: sólo cantidades físicas, ningún precio ─────────────────────────────────────
     PF  ← GEOMETRÍA[p.familia](p, e, M)                  # A_neta, L_corte, L_sold, n_piezas, extremos…
-    her ← herrajes(PF, p, M)                             # aros, tornillos, empaque, sellador, espigas
+    her ← herrajes(PF, p, M)                             # aros, tornillos, junta (Sikaflex o empaque), sellador, espigas
     lam ← lámina(PF.A_neta + her.A_espiga, mat, e, φ[p.familia])   # m_neta ; m_bruta = m_neta / (1 − φ)
     pin ← pintura(PF, her, p)                            # superficie y manos
     t   ← tiempos(PF, her, lam, pin, mat, e, M)          # minutos estándar por operación
@@ -1266,7 +1291,7 @@ FUNCIÓN cotizar_partida(p, M):
 | `yarda_mm` | **1 220 mm** (4 ft: la de las tablas, T7c, porque ni la cotización ni la partida eligen otra; el ancho de la hoja) |
 | `tipo_costura` | A_TOPE (soldada; holgura de raíz 1.0 mm) |
 | `tipo_union` | BRIDADO |
-| `extremo_ajuste` | **SUELTA** (por omisión de T7c): el extremo del tramo de ajuste no lleva brida de taller —se corta en campo—, así que la pieza lleva **una** brida fabricada; del otro extremo el taller manda **suelto** el aro **terminado** (rolado, con el cierre soldado, barrenado y pintado) con sus tornillos y su empaque, sin soldarlo al ducto |
+| `extremo_ajuste` | **SUELTA** (por omisión de T7c): el extremo del tramo de ajuste no lleva brida de taller —se corta en campo—, así que la pieza lleva **una** brida fabricada; del otro extremo el taller manda **suelto** el aro **terminado** (rolado, con el cierre soldado, barrenado y pintado) con sus tornillos y el material de su junta (medio cordón de Sikaflex), sin soldarlo al ducto |
 | `clase_sellado` | C (juntas transversales) |
 | `pintura` | PRIMARIO, elegido en la partida: 1 mano de primario en el ducto y en las bridas (sólo la cara exterior del ducto) |
 | `servicio` / `riesgo` | POLVO / MEDIO |
@@ -1330,17 +1355,17 @@ Precio del perfil    = barra `SOL_1_1_2X3_16`: 250.00 con IVA → 25.215 MXN/kg 
 Costo de perfil      = (1.823 + 1.823) · 25.215 = 91.94 MXN
 ```
 
-**Paso 7 · Barrenos, tornillería, empaque y sellador** (barreno Ø3/8" = 9.525 mm · tornillo 5/16" × 1¼")
+**Paso 7 · Barrenos, tornillería, junta de Sikaflex y sellador** (barreno Ø3/8" = 9.525 mm · tornillo 5/16" × 1¼")
 
 ```text
-D_bc (círculo de barrenos) = D_ext + 2g = 307.8378 + 2·19.05 = 345.938 mm  →  π·D_bc = 1086.80 mm   (barreno al centro de la solera: g = b/2)
-n_barrenos por brida       = ⌈1086.80 / 150⌉ = 8  →  múltiplo de 4 ≥ máx(4, 8) = 8
-n_juntas_asignadas         = (1 + 1) extremos · 0.5 = 1.0   (cada junta se reparte entre las dos bridas que la forman —de taller o suelta—; la otra mitad es de la brida del tramo vecino)
-Juegos de tornillería      = 8 · 1.05 (reserva) = 8.4  →  · 3.67 = 30.83 MXN   (juego = tornillo 5/16" × 1¼" + tuerca + 2 rondanas)
-n_barrenos (total)         = (1 + 1) aros · 8 = 16   (también se barrena el aro suelto)
-L_empaque                  = 1.0 junta · 1086.80 mm · 1.05 / 1000 = 1.1411 m  →  · 28.00 = 31.95 MXN
-L_sellado (clase C)        = 0.5 junta · π·D_ext / 1000 + 2 juntas engargoladas · π·D_med / 1000 = 0.4836 + 1.9247 = 2.4082 m   (la junta del aro suelto se sella en obra)
-V_sellador                 = 2.4082 m · 20 mL/m · 1.15 = 55.39 mL  →  · (395.69 / 600) = 36.53 MXN   (cartucho Sikaflex de 600 mL: $459 con IVA)
+D_bc (círculo de barrenos)   = D_ext + 2g = 307.8378 + 2·19.05 = 345.938 mm  →  π·D_bc = 1086.80 mm   (barreno al centro de la solera: g = b/2)
+n_barrenos por brida         = ⌈1086.80 / 150⌉ = 8  →  múltiplo de 4 ≥ máx(4, 8) = 8
+n_juntas_asignadas           = (1 + 1) extremos · 0.5 = 1.0   (cada junta se reparte entre las dos bridas que la forman —de taller o suelta—; la otra mitad es de la brida del tramo vecino)
+Juegos de tornillería        = 8 · 1.05 (reserva) = 8.4  →  · 3.67 = 30.83 MXN   (juego = tornillo 5/16" × 1¼" + tuerca + 2 rondanas)
+n_barrenos (total)           = (1 + 1) aros · 8 = 16   (también se barrena el aro suelto)
+Junta de la brida (Sikaflex) = 1.0 junta · π·D_bc / 1000 = 1.0 · 1.0868 = 1.0868 m · 40 mL/m · 1.15 = 49.99 mL   (el taller sella la cara de la brida con un cordón de Sikaflex sobre los barrenos, en lugar del empaque de neopreno: L_empaque = 0)
+L_sellado (clase C)          = 2 juntas engargoladas · π·D_med / 1000 = 1.9247 m   (la junta de bridas ya la sella su cordón de Sikaflex: no se le suma el de la clase)
+V_sellador                   = 1.9247 m · 20 mL/m · 1.15 + 49.99 mL = 94.26 mL  →  · (395.69 / 600) = 62.16 MXN   (cartucho Sikaflex de 600 mL: $459 con IVA)
 ```
 
 **Paso 8 · Longitudes de proceso**
@@ -1362,16 +1387,16 @@ A_pintura                    = π·D_ext·L_capa + (1 + 1) aros·(caras + canto)
 | Corte (guillotina) | 0.8448 hojas de 1,220 × 3 048 · 4.0 min + 3.963 m / 7.975 m/min | 3.88 |
 | Rolado | 3 anillos · 3.0 min + 3 pasadas · 3.0 m / 5.962 m/min   (cada yarda se rola aparte) | 10.51 |
 | Armado y punteo | 1 pieza · 6.0 + 1 aro · 4.0   (el aro suelto no se arma al ducto) | 10.00 |
-| Aros de brida | (1 + 1) · (4.0 + 2.5 min/m · 1.2158 m)   (se rolan el de taller y el suelto) | 14.08 |
+| Aros de brida | (1 + 1) · (10.0 + 19.0 min/m · 1.2158 m)   (se rolan el de taller y el suelto; tiempos calibrados con el taller, T7b) | 66.20 |
 | Soldadura | t_arco = (3.967 m / 0.497 m/min) + (0.0762 m / 0.240 m/min en 4.763 mm) = 7.98 + 0.32 = 8.30 min;  ÷ FO (0.4) | 20.75 |
 | Engargolado | 2 juntas · 2.0 min + 1.9247 m / 1.777 m/min | 5.08 |
-| Barrenado | 16 barrenos Ø3/8" · 0.35 min   (los dos aros) | 5.60 |
+| Barrenado | 16 barrenos Ø3/8" · 2.0 min   (los dos aros) | 32.00 |
 | Acabado | 0.25 · t_soldadura | 5.19 |
 | Pintura | 3.0784 m² · (4.0 preparación + 1 mano · 3.0) | 21.55 |
 | Inspección y embalaje | 3.0 + 0.05 min/kg · 37.923 kg | 4.90 |
-| **Total estándar** |  | **101.53** |
+| **Total estándar** |  | **180.05** |
 
-`t_real = t_estándar / η = 101.53 / 0.8 = 126.91 min = 2.1152 h`
+`t_real = t_estándar / η = 180.05 / 0.8 = 225.06 min = 3.7511 h`
 
 **Paso 10 · Consumibles**
 
@@ -1392,59 +1417,58 @@ Costo de pintura       = 0.4305 · 220 + 0.0431 · 70 = 97.73 MXN
 
 | Operación | t real (min) | MO (MXN/h) | Equipo (MXN/h) | Costo (MXN) |
 | --- | --- | --- | --- | --- |
-| Corte | 4.85 | 87.50 | 45 | 10.70 |
-| Rolado | 13.14 | 87.50 | 55 | 31.20 |
-| Armado y punteo | 12.50 | 87.50 | 25 | 23.44 |
-| Aros de brida | 17.60 | 87.50 | 40 | 37.40 |
-| Soldadura | 25.94 | 87.50 | 45 | 57.28 |
-| Engargolado | 6.35 | 87.50 | 35 | 12.97 |
-| Barrenado | 7.00 | 87.50 | 25 | 13.12 |
-| Acabado | 6.48 | 87.50 | 20 | 11.62 |
-| Pintura | 26.94 | 87.50 | 40 | 57.24 |
-| Inspección y embalaje | 6.12 | 87.50 | 0 | 8.93 |
+| Corte | 4.85 | 62.50 | 45 | 8.68 |
+| Rolado | 13.14 | 62.50 | 55 | 25.73 |
+| Armado y punteo | 12.50 | 62.50 | 25 | 18.23 |
+| Aros de brida | 82.75 | 62.50 | 40 | 141.37 |
+| Soldadura | 25.94 | 62.50 | 45 | 46.47 |
+| Engargolado | 6.35 | 62.50 | 35 | 10.32 |
+| Barrenado | 40.00 | 62.50 | 25 | 58.33 |
+| Acabado | 6.48 | 62.50 | 20 | 8.92 |
+| Pintura | 26.94 | 62.50 | 40 | 46.02 |
+| Inspección y embalaje | 6.12 | 62.50 | 0 | 6.38 |
 
 | Concepto | MXN |
 | --- | --- |
 | Lámina (37.455 kg brutos) | 841.62 |
 | Perfil de aros (de taller y suelto) | 91.94 |
 | Tornillería | 30.83 |
-| Empaque | 31.95 |
-| Sellador | 36.53 |
+| Sellador (Sikaflex: la junta de las bridas y las juntas engargoladas) | 62.16 |
 | Flete de entrada (2 % de lámina + perfil) | 18.67 |
-| **Subtotal materiales** | **1,051.54** |
+| **Subtotal materiales** | **1,045.22** |
 | Alambre + gas + consumibles de corte + pintura | 127.87 |
-| Mano de obra directa | 185.08 |
-| Equipo (hora-máquina) | 78.81 |
-| Herramienta menor (3 % de MO) | 5.55 |
-| **COSTO DIRECTO (CD)** | **1,448.85** |
+| Mano de obra directa | 234.44 |
+| Equipo (hora-máquina) | 136.00 |
+| Herramienta menor (3 % de MO) | 7.03 |
+| **COSTO DIRECTO (CD)** | **1,550.56** |
 
 **Paso 12 · Pila de precio**
 
 | Capa | Fórmula | MXN |
 | --- | --- | --- |
-| CD |  | 1,448.85 |
-| CI de fábrica | GIF · h_MOD = 85.00 · 2.1152 | 179.79 |
-| CI de administración | 8 % · CD | 115.91 |
-| Imprevistos (riesgo MEDIO) | 4 % · (CD + CI) | 69.78 |
-| **Costo total C_T** | CD + CI + imprevistos | **1,814.34** |
-| Financiamiento | C_T · 14 % · 45/365 = C_T · 1.726 % | 31.32 |
-| **Costo base** | C_T + financiamiento | **1,845.65** |
-| **PRECIO antes de IVA** | C_base / (1 − 0.20 − 0.02) = 1,845.65 / 0.78 | **2,366.22** |
-|   ↳ utilidad (20 % del precio) |  | 473.24 |
-|   ↳ comisión de ventas (2 % del precio) |  | 47.32 |
-| IVA 16 % |  | 378.60 |
-| **Total con IVA** |  | **2,744.82** |
+| CD |  | 1,550.56 |
+| CI de fábrica | GIF · h_MOD = 85.00 · 3.7511 | 318.84 |
+| CI de administración | 8 % · CD | 124.05 |
+| Imprevistos (riesgo MEDIO) | 4 % · (CD + CI) | 79.74 |
+| **Costo total C_T** | CD + CI + imprevistos | **2,073.19** |
+| Financiamiento | C_T · 14 % · 45/365 = C_T · 1.726 % | 35.78 |
+| **Costo base** | C_T + financiamiento | **2,108.97** |
+| **PRECIO antes de IVA** | C_base / (1 − 0.20 − 0.02) = 2,108.97 / 0.78 | **2,703.81** |
+|   ↳ utilidad (20 % del precio) |  | 540.76 |
+|   ↳ comisión de ventas (2 % del precio) |  | 54.08 |
+| IVA 16 % |  | 432.61 |
+| **Total con IVA** |  | **3,136.42** |
 
 **Resultado e indicadores de control**
 
 | Indicador | Valor |
 | --- | --- |
-| Precio unitario antes de IVA | **2,366.22 MXN** |
+| Precio unitario antes de IVA | **2,703.81 MXN** |
 | Peso neto que se manda (lámina + aros, incluido el suelto) | 37.923 kg |
-| Precio por kg neto | 62.40 MXN/kg |
-| Precio por metro lineal | 788.74 MXN/m |
-| Horas de mano de obra directa (reales) | 2.115 h |
-| Margen de contribución (P − CD)/P | 38.8 % |
+| Precio por kg neto | 71.30 MXN/kg |
+| Precio por metro lineal | 901.27 MXN/m |
+| Horas de mano de obra directa (reales) | 3.751 h |
+| Margen de contribución (P − CD)/P | 42.7 % |
 | Markup sobre costo total | 30.4 % |
 | Costo de la merma en lámina | 2.996 kg · 22.47 = 67.33 MXN |
 
@@ -1473,13 +1497,13 @@ L_corte = π·D_med·(2·j·κ + 2) + 2·L_eje = 11.154 m ;  L_soldadura (chapa)
 | Lámina bruta (kg) | 37.455 | 10.435 |
 | Peso neto terminado, con aros (kg) | 37.923 | 11.812 |
 | Longitud de soldadura total (m) | 5.01 | 6.63 |
-| Horas de MOD reales (h) | 2.33 | 3.62 |
-| Costo directo CD (MXN) | 1,488.09 | 971.44 |
-| Precio antes de IVA (MXN) | 2,447.91 | 1,840.53 |
-| Precio por kg neto (MXN/kg) | 64.55 | 155.82 |
-| Horas MOD por kg neto (h/kg) | 0.061 | 0.307 |
+| Horas de MOD reales (h) | 3.96 | 5.26 |
+| Costo directo CD (MXN) | 1,577.06 | 1,027.03 |
+| Precio antes de IVA (MXN) | 2,766.83 | 2,110.56 |
+| Precio por kg neto (MXN/kg) | 72.96 | 178.68 |
+| Horas MOD por kg neto (h/kg) | 0.104 | 0.445 |
 
-**Lectura:** el área del codo es sólo 1.3 % mayor que la de un tramo recto de igual longitud de eje (F_arco = 1.0131), pero su **precio por kg neto es 2.41×** el del tramo recto y su **costo directo por m² de lámina es 2.69×**. El sobrecosto no está en el área: está en la merma (20 % vs 8 %), en el corte perfilado, en el armado (k_dif = 1.35) y en la soldadura de 4 juntas elípticas.
+**Lectura:** el área del codo es sólo 1.3 % mayor que la de un tramo recto de igual longitud de eje (F_arco = 1.0131), pero su **precio por kg neto es 2.45×** el del tramo recto y su **costo directo por m² de lámina es 2.69×**. El sobrecosto no está en el área: está en la merma (20 % vs 8 %), en el corte perfilado, en el armado (k_dif = 1.35) y en la soldadura de 4 juntas elípticas.
 
 ### 7.3 Ejemplo C — Reducción con injerto 45° sobre el cono, Ø12" → Ø10" con injerto Ø6", calibre 16
 
@@ -1551,135 +1575,171 @@ Bridas                        = 3 aros (D1, D2 y d): 1215.8 mm · 1056.2 mm · 7
 
 | Indicador | Valor |
 | --- | --- |
-| Costo directo (CD) | 710.85 MXN |
-| Precio unitario antes de IVA | **1,343.02 MXN** |
+| Costo directo (CD) | 848.36 MXN |
+| Precio unitario antes de IVA | **1,802.05 MXN** |
 | Peso neto terminado (lámina + 3 aros) | 7.915 kg |
-| Precio por kg neto | 169.69 MXN/kg |
-| Horas de mano de obra directa (reales) | 2.617 h  (k_dif armado = 1.9) |
+| Precio por kg neto | 227.68 MXN/kg |
+| Horas de mano de obra directa (reales) | 4.851 h  (k_dif armado = 1.9) |
 
 **Sensibilidad** (misma pieza, un solo cambio)
 
 | Variante | L reducción (mm) | Orificio (m²) | Precio (MXN) | vs. base |
 | --- | --- | --- | --- | --- |
-| Base: 45°, de extremo mayor a menor (hacia D2) | 247.4 | 0.0249 | 1,343.02 | — |
-| 30°, hacia D2 | 320.7 | 0.0340 | 1,413.86 | +5.3 % |
-| 45°, si se inclinara hacia D1 (`MAYOR`) | 288.7 | 0.0304 | 1,382.82 | +3.0 % |
+| Base: 45°, de extremo mayor a menor (hacia D2) | 247.4 | 0.0249 | 1,802.05 | — |
+| 30°, hacia D2 | 320.7 | 0.0340 | 1,870.86 | +3.8 % |
+| 45°, si se inclinara hacia D1 (`MAYOR`) | 288.7 | 0.0304 | 1,840.71 | +2.1 % |
 
-**Lectura:** el precio por kg neto es **2.72×** el del tramo recto del Ejemplo A, por lo mismo que el codo: merma de 28 % contra 8 %, dificultad de armado 1.9 contra 1.0 y tres bridas en una pieza chica. A 30° la silleta es más larga y el cono también; hacia el extremo menor el cono "se cierra" y la silleta resulta más corta que si el injerto mirara hacia el mayor.
+**Lectura:** el precio por kg neto es **3.19×** el del tramo recto del Ejemplo A, por lo mismo que el codo: merma de 28 % contra 8 %, dificultad de armado 1.9 contra 1.0 y tres bridas en una pieza chica. A 30° la silleta es más larga y el cono también; hacia el extremo menor el cono "se cierra" y la silleta resulta más corta que si el injerto mirara hacia el mayor.
 
-### 7.4 Caso real — la hoja de control de gastos del 6-oct-2026 (vendido en $45,710 más IVA)
+### 7.4 Caso real — la hoja de control de gastos del 6-oct-2026 (vendido en $45,710 con IVA)
 
-**El proyecto.** Ductería cal. 22 que fabricó un proveedor ($22,000 con IVA), bridas chicas de 5″, 6″ y 7″ cortadas con plasma por otro proveedor ($3,990.40 con IVA), **30 bridas de solera hechas en el taller** (22 para ducto de 11″, 6 de 10″ y 2 de 9″), soportería (7 ménsulas, 7 abrazaderas y un poste), sellador, mangueras con sus abrazaderas, y la **instalación con dos personas durante 5 días** con un viaje Querétaro–México (casetas $806 y gasolina $1,500). Otro ingeniero lo vendió en **$45,710 más IVA**; la hoja calculó un costo total de $46,539.06 y una «ganancia» de −$829.06. El proyecto completo —partidas y gastos— viene en la app como ejemplo (Compras y gastos → «Ver el ejemplo»; `src/datos/ejemplos.js`) y es el caso de referencia de `tests/caso_real.test.js`.
+**El proyecto.** Ductería cal. 22 que fabricó un proveedor ($22,000 con IVA); **30 bridas de placa de 3/16″** de 5″, 6″ y 7″ (24 + 2 + 4) que cortó con plasma el proveedor de corte (cotización del 2-oct-2026: $3,440 más IVA = $3,990.40); **30 bridas de solera hechas en el taller** (22 para ducto de 11″, 6 de 10″ y 2 de 9″) en **4 días**, pintadas con esmalte y selladas con Sikaflex (sin empaque); soportería (7 ménsulas de 650 mm hechas en 2 días, 7 abrazaderas para el ducto de 11″ y un poste); mangueras con sus abrazaderas, y la **instalación local, en Querétaro, con dos personas durante 5 días** (sin hospedaje ni comidas) más un viaje Querétaro–México (casetas $806 y gasolina $1,500). Otro ingeniero lo vendió en **$45,710 con IVA** ($39,405.17 antes de IVA); la hoja calculó un costo total de $46,539.06 y una «ganancia» de −$829.06. El proyecto completo —partidas y gastos, con las respuestas del taller del 7-oct-2026— viene en la app como ejemplo (Compras y gastos → «Ver el ejemplo»; `src/datos/ejemplos.js`) y es el caso de referencia de `tests/caso_real.test.js`.
 
-**Lo que corrige la app.** La hoja (1) restó el **costo con IVA** contra la **venta sin IVA** —el IVA de las compras con factura ($5,591.60) se acredita y no es costo— y (2) dividió los $3,500 de la semana entre 56 h y puso la hora en **$62.50**, cuando el trabajador cobra 40 h: la hora trabajada cuesta **$87.50** (la raya de bridas e instalación sube $2,400). Con las dos correcciones, lo gastado sin IVA es **$43,347.47** y la venta deja **+$2,362.53 antes de indirectos** (5.2 %); con los indirectos que estima la cotización (ilustrativos), el proyecto **pierde $6,370.86**.
+**Lo que corrige la app** (§7.4.1). La hoja restó de la venta con IVA sus compras con IVA y la raya, que no lleva IVA: no descontó el **IVA neto que se le paga al SAT** ($713.23). Además pagó 2 días de bridas en lugar de 4 y no traía los 2 días de las ménsulas ni el esmalte. Con todo, lo gastado sin IVA es **$43,277.47** contra una venta de **$39,405.17** sin IVA: el proyecto **pierde $3,872.30 antes de indirectos (−9.8 %)** y, con los indirectos que estima la cotización (ilustrativos), **$17,041.03**.
 
 **Las partidas en la app** (con las tablas de arranque):
 
 | # | Partida | Familia | Cant. | Horas | Costo directo (MXN) | Precio antes de IVA (MXN) |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | Ductería cal. 22 fabricada por proveedor | Comprado | 1 | 0.00 | 18,965.52 | 27,781.73 |
-| 2 | Bridas de 5″, 6″ y 7″ cortadas con plasma (proveedor) | Comprado | 1 | 0.00 | 3,440.00 | 5,039.10 |
-| 3 | Bridas de solera para ducto Ø11″ | Bridas sueltas | 22 | 6.38 | 2,469.52 | 4,353.36 |
-| 4 | Bridas de solera para ducto Ø10″ | Bridas sueltas | 6 | 1.71 | 642.54 | 1,138.32 |
-| 5 | Bridas de solera para ducto Ø9″ | Bridas sueltas | 2 | 0.56 | 203.86 | 363.12 |
-| 6 | Ménsulas para soportar ductos | Soportería | 7 | 2.19 | 1,050.93 | 1,791.65 |
-| 7 | Abrazaderas para fijar ductos a ménsulas | Soportería | 7 | 2.19 | 386.82 | 818.86 |
-| 8 | Poste | Soportería | 1 | 0.31 | 480.62 | 740.07 |
-| 9 | Sellador Sikaflex blanco 600 mL | Comprado | 2 | 0.00 | 791.38 | 1,159.26 |
-| 10 | Abrazadera ajustable para manguera | Comprado | 18 | 0.00 | 853.45 | 1,250.10 |
-| 11 | Manguera azul de 6″ (tramo de 5 m) | Comprado | 3 | 0.00 | 5,422.47 | 7,943.13 |
-| 12 | Instalación (2 personas, 5 días) | Instalación | 1 | 80.00 | 9,197.93 | 13,473.63 |
-|  | **Total** |  |  | **93.34** | **43,905.04** | **65,852.33** |
+| 2 | Brida de placa 3/16″ para ducto de 5″ (Ø 194/130 mm, barrenos en Ø 170 mm) | Comprado | 24 | 0.00 | 3,019.39 | 4,422.96 |
+| 3 | Brida de placa 3/16″ para ducto de 6″ (Ø 221/157 mm, barrenos en Ø 193 mm) | Comprado | 2 | 0.00 | 289.22 | 423.66 |
+| 4 | Brida de placa 3/16″ para ducto de 7″ (Ø 258/182 mm, barrenos en Ø 230 mm) | Comprado | 4 | 0.00 | 665.50 | 974.84 |
+| 5 | Bridas de solera para ducto Ø11″ | Bridas sueltas | 22 | 23.74 | 4,036.64 | 8,650.18 |
+| 6 | Bridas de solera para ducto Ø10″ | Bridas sueltas | 6 | 6.28 | 1,053.34 | 2,266.92 |
+| 7 | Bridas de solera para ducto Ø9″ | Bridas sueltas | 2 | 2.03 | 335.26 | 724.88 |
+| 8 | Ménsulas para soportar ductos (650 mm) | Soportería | 7 | 16.00 | 2,174.01 | 5,029.22 |
+| 9 | Abrazaderas para fijar los ductos a las ménsulas | Soportería | 7 | 1.75 | 294.15 | 632.66 |
+| 10 | Poste | Soportería | 1 | 0.25 | 466.99 | 712.89 |
+| 11 | Abrazadera ajustable para manguera | Comprado | 18 | 0.00 | 853.45 | 1,250.10 |
+| 12 | Manguera azul de 6″ (tramo de 5 m) | Comprado | 3 | 0.00 | 5,422.47 | 7,943.13 |
+| 13 | Instalación local en Querétaro (2 personas, 5 días) y un viaje a México | Instalación | 1 | 80.00 | 7,137.93 | 10,456.03 |
+|  | **Total** |  |  | **130.05** | **44,713.87** | **71,269.20** |
 
-**Las bridas: la regla del taller y el cálculo.** La hoja corta cada aro de π·(D + 81 mm). El cálculo da lo mismo con la fibra neutra del aro y las puntas que la roladora no curva (§3.5.1):
+**Las bridas de solera: la regla del taller y el cálculo.** La hoja corta cada aro de π·(D + 81 mm). El cálculo da lo mismo con la fibra neutra del aro y las puntas que la roladora no curva (§3.5.1):
 
 | Bridas | Ø ducto | Regla de la hoja π·(D + 81) (mm) | Cálculo: π·(D_ext + 2c) + 3 + 126 (mm) | Diferencia (mm) | Horas de taller | Precio (MXN) |
 | --- | --- | --- | --- | --- | --- | --- |
-| 22 | 11″ = 279.4 mm | 1132.2 | 1131.8 | -0.4 | 6.38 | 4,353.36 |
-| 6 | 10″ = 254.0 mm | 1052.4 | 1052.0 | -0.4 | 1.71 | 1,138.32 |
-| 2 | 9″ = 228.6 mm | 972.6 | 972.2 | -0.4 | 0.56 | 363.12 |
-| **30** |  | **33169** | **33157** |  | **8.65** | **5,854.80** |
+| 22 | 11″ = 279.4 mm | 1132.2 | 1131.8 | -0.4 | 23.74 | 8,650.18 |
+| 6 | 10″ = 254.0 mm | 1052.4 | 1052.0 | -0.4 | 6.28 | 2,266.92 |
+| 2 | 9″ = 228.6 mm | 972.6 | 972.2 | -0.4 | 2.03 | 724.88 |
+| **30** |  | **33169** | **33157** |  | **32.05** | **11,641.98** |
 
-Las 8.65 h de taller de las 30 bridas son las de los tiempos ilustrativos de T7b; la hoja pagó 2 días (16 h): es un supuesto por confirmar (§10.12).
+Las **32.05 h** de taller de las 30 bridas son los **4 días** que dijo el taller: con ellos se calibraron los tiempos de rolado y barrenado de T7b (el reparto entre los dos es un supuesto, §10.12).
+
+**Las bridas de placa del proveedor de corte** (§3.6.3): el precio de la cotización (antes de IVA), la tornillería de su media junta (con los barrenos de la regla del taller: por confirmar con el plano) y el Sikaflex sobre su círculo de barrenos:
+
+| Brida de placa 3/16″ (proveedor de corte) | Cant. | Precio sin IVA | Círculo de barrenos | Juegos de tornillo | Sikaflex (mL) | Costo directo (MXN) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Brida de placa 3/16″ para ducto de 5″ (Ø 194/130 mm, barrenos en Ø 170 mm) | 24 | 110.00 | Ø170 mm | 48 (2 por brida) | 294.8 | 3,019.39 |
+| Brida de placa 3/16″ para ducto de 6″ (Ø 221/157 mm, barrenos en Ø 193 mm) | 2 | 120.00 | Ø193 mm | 8 (4 por brida) | 27.9 | 289.22 |
+| Brida de placa 3/16″ para ducto de 7″ (Ø 258/182 mm, barrenos en Ø 230 mm) | 4 | 140.00 | Ø230 mm | 16 (4 por brida) | 66.5 | 665.50 |
+| **Total** | **30** | **3,440.00** |  | **72** | **389.2** | **3,974.11** |
 
 **La instalación, paso a paso** (§4.5):
 
 ```text
 Horas en obra       = 1 vez · 2 personas · 5 días · 8 h = 80 h   (horas reales: en obra no se aplica la eficiencia del taller)
-Mano de obra        = 80 h · 87.50 = 7,000.00 MXN   (500 por día · 7 / 40)
-Herramienta menor   = 3 % · MO = 210.00 MXN
+Mano de obra        = 80 h · 62.50 = 5,000.00 MXN   (500 por día ÷ 8 h)
+Herramienta menor   = 3 % · MO = 150.00 MXN
 Casetas             = 1 viaje · 806.00 con IVA / 1.16 = 694.83 MXN   (con factura: el IVA se acredita)
 Gasolina            = 1 viaje · 1,500.00 / 1.16 = 1,293.10 MXN
-Costo directo       = 9,197.93 MXN
+Hospedaje y comidas = 0: la instalación es local, en Querétaro
+Costo directo       = 7,137.93 MXN
 Indirectos por hora = 0.00 / h (la cuadrilla no usa la nave: `capas.gif_por_hora_instalacion`) + 8 % de administración
-Precio antes de IVA = 13,473.63 MXN
+Precio antes de IVA = 10,456.03 MXN
 ```
 
-**La soportería: las ménsulas** (§3.6.2; el largo de 1 500 mm por ménsula es un supuesto: de dos ángulos salen las 7 ménsulas):
+**La soportería** (§3.6.2; el largo de la ménsula —brazo y pierna de 650 mm— y los 2 juegos por abrazadera son supuestos que reproducen la compra):
 
 ```text
-Barra            = Ángulo 1¼" × 1/8": 260.00 con IVA → 224.14 sin IVA → 37.36/m
-Perfil           = 7 piezas · 1.50 m = 10.50 m · 37.36 / (1 − 0.05) = 412.89 MXN
-Anclajes         = 7 · 4 = 28 × Taquete de 3/8″ (16.00 con IVA → 13.79) = 386.21 MXN
-Tiempo de taller = 7 · 15 min / 60 / 0.8 = 2.188 h · 112.50/h (armado: MO + equipo) = 246.09 MXN
-Costo directo    = 1,050.93 MXN  →  precio 1,791.65 MXN
-Compra           = 2 barras de 6 m (7 piezas de 1,500 mm: 4 por barra)
+Ménsulas: barra                 = Ángulo 1¼" × 1/8": 260.00 con IVA → 224.14 sin IVA → 37.36/m
+Ménsulas: perfil                = 7 piezas · 1.30 m (brazo y pierna de 650 mm) = 9.10 m · 37.36 / (1 − 0.05) = 357.83 MXN
+Ménsulas: anclajes              = 7 · 4 = 28 × Taquete de 3/8″ (16.00 con IVA → 13.79) = 386.21 MXN
+Ménsulas: tiempo de taller      = 7 · 137.14 min reales / 60 = 16.00 h (los 2 días del taller) · (62.50 de mano de obra + 25.00 de equipo)/h = 1,399.97 MXN
+Abrazaderas: largo              = π·(D + t)/2 + 2·oreja = π·(279.4 + 3.175)/2 + 2·50 = 543.9 mm   (media vuelta al ducto de 11″ y dos orejas)
+Abrazaderas: perfil y tornillos = 7 · 0.5439 m = 3.81 m de Solera 1¼" × 1/8" = 86.37 MXN; 14 juegos (2 por abrazadera, a la ménsula) = 51.38 MXN
+Abrazaderas: tiempo de taller   = 7 · 15 min (tabla) / 60 = 1.75 h
+Compra                          = 2 ángulos (4 ménsulas por barra), 1 solera (11 abrazaderas por barra) y el poste
 ```
 
-**Lo que hay que comprar** (§5.5). La app compra lo mismo que compró el taller: **6 soleras** de 1½″ × 3/16″ (la hoja: 33.17 m ÷ 6 m = 5.53), 2 ángulos de 1¼″ × 1/8″, una solera de 1¼″ × 1/8″, un PTR y 28 taquetes. Difieren la tornillería (la app cuenta 120 juegos para las 30 bridas de solera; la hoja compró 220, porque también contó las bridas chicas), el empaque y la pintura de las bridas, que la hoja no trae (§10.12):
+**Lo que hay que comprar** (§5.5). La app compra lo mismo que compró el taller: **6 soleras** de 1½″ × 3/16″ (la hoja: 33.17 m ÷ 6 m = 5.53), 2 ángulos de 1¼″ × 1/8″, una solera de 1¼″ × 1/8″, un PTR, 28 taquetes, **220 juegos de tornillos** (206 exactos: 120 de las bridas de solera, 72 de las de placa y 14 de las abrazaderas; la hoja contó 208) y **2 Sikaflex** (1 063 mL: la junta de las 60 bridas). Lo único que la hoja no traía es el esmalte (1 L) y su diluyente:
 
 | Grupo | Concepto | Se necesita | Se compra | Precio sin IVA | Importe (MXN) | Cotizado (MXN) | Sobrante (MXN) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Barra | Solera 1½" × 3/16" (brida estándar) | 5.53 | 6 barras | 215.52 | 1,293.10 | 1,253.65 | 39.45 |
-| Barra | Ángulo 1¼" × 1/8" | 1.75 | 2 barras | 224.14 | 448.28 | 412.89 | 35.39 |
-| Barra | Solera 1¼" × 1/8" | 0.99 | 1 barra | 129.31 | 129.31 | 134.98 | — |
+| Barra | Ángulo 1¼" × 1/8" | 1.52 | 2 barras | 224.14 | 448.28 | 357.83 | 90.44 |
+| Barra | Solera 1¼" × 1/8" | 0.63 | 1 barra | 129.31 | 129.31 | 86.37 | 42.94 |
 | Barra | PTR 2" × 2" cal. 14 (6 m) | 1.00 | 1 barra | 422.41 | 422.41 | 444.65 | — |
-| Tornillería | Juego de tornillo 5/16x1-1/4 | 120 | 130 juegos | 3.67 | 477.10 | 462.42 | 14.68 |
+| Tornillería | Juego de tornillo 5/16x1-1/4 | 206 | 220 juegos | 3.67 | 807.40 | 791.25 | 16.15 |
+| Sellador | Sellador (cartucho de 600 mL) | 1.77 | 2 cartuchos | 395.69 | 791.38 | 700.88 | 90.50 |
 | Pintura | Pintura: esmalte | 0.33 | 1 L | 260.00 | 260.00 | 84.91 | 175.09 |
 | Pintura | Diluyente | 0.03 | 1 L | 70.00 | 70.00 | 2.29 | 67.71 |
-| Empaque | Empaque de neopreno | 15.38 | 15.38 m | 28.00 | 430.51 | 430.51 | — |
 | Anclaje | Taquete de 3/8″ | 28 | 28 pzas | 13.79 | 386.21 | 386.21 | — |
 | Comprado | Ductería cal. 22 fabricada por proveedor | 1 | 1 pza | 18,965.52 | 18,965.52 | 18,965.52 | — |
-| Comprado | Bridas de 5″, 6″ y 7″ cortadas con plasma (proveedor) | 1 | 1 pza | 3,440.00 | 3,440.00 | 3,440.00 | — |
-| Comprado | Sellador Sikaflex blanco 600 mL | 2 | 2 pzas | 395.69 | 791.38 | 791.38 | — |
+| Comprado | Brida de placa 3/16″ para ducto de 5″ (Ø 194/130 mm, barrenos en Ø 170 mm) | 24 | 24 pzas | 110.00 | 2,640.00 | 2,640.00 | — |
+| Comprado | Brida de placa 3/16″ para ducto de 6″ (Ø 221/157 mm, barrenos en Ø 193 mm) | 2 | 2 pzas | 120.00 | 240.00 | 240.00 | — |
+| Comprado | Brida de placa 3/16″ para ducto de 7″ (Ø 258/182 mm, barrenos en Ø 230 mm) | 4 | 4 pzas | 140.00 | 560.00 | 560.00 | — |
 | Comprado | Abrazadera ajustable para manguera | 18 | 18 pzas | 47.41 | 853.45 | 853.45 | — |
 | Comprado | Manguera azul de 6″ (tramo de 5 m) | 3 | 3 tramos | 1,807.49 | 5,422.47 | 5,422.47 | — |
-|  | **Total** |  |  |  | **33,389.74** | **33,085.32** | **332.32** |
+|  | **Total** |  |  |  | **33,289.53** | **32,789.47** | **522.29** |
 
-**Real contra cotizado** (§5.7, con los 15 renglones de la hoja capturados como gastos):
+**Real contra cotizado** (§5.7, con los 20 renglones capturados como gastos: los de la hoja, las bridas de placa como las cotizó el proveedor, la raya a $62.50 y el esmalte estimado):
 
 | Renglón del control de gastos | Cotizado (MXN) | Real (MXN) | Diferencia (MXN) | Real / cotizado |
 | --- | --- | --- | --- | --- |
-| Material | 2,963.04 | 2,891.90 | −71.14 | 98 % |
-| Consumibles | 367.36 | 0.00 | −367.36 | 0 % |
-| Mano de obra del taller | 1,167.14 | 1,400.00 | +232.86 | 120 % |
+| Material | 2,719.47 | 2,891.90 | +172.43 | 106 % |
+| Consumibles | 366.18 | 330.00 | −36.18 | 90 % |
+| Mano de obra del taller | 3,128.03 | 3,000.00 | −128.03 | 96 % |
 | Compras y trabajos de terceros | 28,681.44 | 28,681.44 | — | 100 % |
-| Soportería y anclajes | 1,378.72 | 1,386.20 | +7.48 | 101 % |
-| Mano de obra de instalación | 7,000.00 | 7,000.00 | — | 100 % |
+| Soportería y anclajes | 1,326.43 | 1,386.20 | +59.77 | 105 % |
+| Mano de obra de instalación | 5,000.00 | 5,000.00 | — | 100 % |
 | Viáticos y traslados | 1,987.93 | 1,987.93 | — | 100 % |
-| **Total** | **43,545.62** | **43,347.47** | **−198.15** | **100 %** |
+| **Total** | **43,209.49** | **43,277.47** | **+67.98** | **100 %** |
+
+Lo cotizado queda a $67.98 (0.2 %) de lo gastado. El costo directo de la cotización suma además $1,504.38 de equipo del taller, que no llega con ticket.
 
 **El resultado del proyecto:**
 
 | Concepto | MXN | Qué es |
 | --- | --- | --- |
-| Venta pactada (sin IVA) | 45,710.00 | Con IVA: 53,023.60 |
-| Gastos reales sin IVA | 43,347.47 | 15 renglones de la hoja; el IVA acreditable (5,591.60) no es costo |
-| **Utilidad antes de indirectos** | **$2,362.53** | 5.2 % de la venta: lo que la hoja llama «ganancia», con la raya a $87.50 |
-| Comisión de ventas y otros | −$914.20 | 2 % de la venta |
-| Equipo del taller (hora-máquina) | −$359.42 | Estimado de la cotización: no llega con ticket |
-| Indirectos, imprevistos y financiamiento | −$7,459.77 | Estimados con las tablas maestras (GIF $85.00/h de taller, 8 % de administración, 4 % de imprevistos): ilustrativos |
-| **Utilidad después de indirectos** | **−$6,370.86** | -13.9 % de la venta |
+| Venta pactada (sin IVA) | 39,405.17 | Se pactó con IVA: 45,710.00 ÷ 1.16; el IVA (6,304.83) es del SAT |
+| Gastos reales sin IVA | 43,277.47 | 20 renglones: los de la hoja, la raya a 62.50 por hora y el esmalte estimado; el IVA acreditable (5,644.40) no es costo |
+| **Utilidad antes de indirectos** | **−$3,872.30** | −9.8 % de la venta: lo que la hoja llama «ganancia», corregido (§7.4.1) |
+| Comisión de ventas y otros | −$788.10 | 2 % de la venta |
+| Equipo del taller (hora-máquina) | −$1,504.38 | Estimado de la cotización: no llega con ticket |
+| Indirectos, imprevistos y financiamiento | −$10,876.25 | Estimados con las tablas maestras (GIF $85.00/h de taller, 8 % de administración, 4 % de imprevistos): ilustrativos |
+| **Utilidad después de indirectos** | **−$17,041.03** | −43.2 % de la venta |
+
+#### 7.4.1 Por qué la hoja daba −$829 y la app da −$3,872
+
+| Paso | MXN | Por qué |
+| --- | --- | --- |
+| Resultado de la hoja | −$829.06 | 45,710.00 de venta (con IVA) − 46,539.06 (compras con IVA y 6,000.00 de raya) |
+| − IVA neto que se le paga al SAT | −$713.23 | De los 6,304.83 de IVA de la venta sólo se acreditan los 5,591.60 de las compras: la raya no trae IVA |
+| = La hoja, con su IVA | −$1,542.30 | Es lo mismo que la venta sin IVA (39,405.17) menos los gastos de la hoja sin IVA |
+| − 2 días más de bridas y 2 de ménsulas | −$2,000.00 | 32 h × 62.50: las bridas llevaron 4 días (la hoja pagó 2) y las ménsulas 2 (no venían) |
+| − Esmalte y diluyente | −$330.00 | No venían en la hoja; estimado: 1 L de cada uno, lo que pide la lista de compras |
+| **= Utilidad antes de indirectos** | **−$3,872.30** | La misma que da el control de gastos de la app |
+
+**La hora de $62.50.** El taller cuesta la hora como el salario del día ÷ 8 h. Pero la semana paga 7 días por 5 trabajados: cada hora trabajada cuesta $3,500 ÷ 40 h = $87.50, y eso sin prestaciones (IMSS, aguinaldo, vacaciones). En este proyecto (128 h de raya) son $3,200 más de pérdida que la hoja no ve:
+
+| Cómo se cuesta la hora | MXN por hora | Raya del proyecto (128 h) | Utilidad antes de indirectos |
+| --- | --- | --- | --- |
+| Como la calcula el taller: $500 ÷ 8 h (FSR 1.00) | 62.50 | 8,000.00 | −$3,872.30 |
+| Con los días de descanso pagados: $3,500 ÷ 40 h trabajadas (FSR 7/5 = 1.40) | 87.50 | 11,200.00 | −$7,072.30 |
+
+Para que la app lo cobre basta poner `FSR` = 1.40 en las tablas maestras (T8); con prestaciones, más.
 
 **¿En cuánto se debió vender?**
 
-| Precio | MXN sin IVA | Contra la venta de $45,710 |
-| --- | --- | --- |
-| Costo directo de la cotización | 43,905.04 | $1,804.96: la venta lo cubre |
-| Precio mínimo (utilidad cero: cubre indirectos, financiamiento y comisión) | 52,413.08 | −$6,703.08: faltaron 6,703.08 (14.7 %) |
-| Precio calculado (20 % de utilidad sobre el precio) | 65,852.33 | −$20,142.33 (-30.6 %) |
+| Precio | MXN sin IVA | Con IVA | Contra la venta (39,405.17 sin IVA) |
+| --- | --- | --- | --- |
+| Costo directo de la cotización | 44,713.87 | 51,868.09 | faltaron 5,308.69 (13.5 % de la venta) |
+| Precio mínimo (utilidad cero: cubre indirectos, financiamiento y comisión) | 56,724.61 | 65,800.55 | faltaron 17,319.44 (44.0 % de la venta) |
+| Precio calculado (20 % de utilidad sobre el precio) | 71,269.20 | 82,672.27 | faltaron 31,864.03 (80.9 % de la venta) |
 
-La venta pagó el costo directo con $1,804.96 de sobra, pero no los indirectos: le faltaron **$6,703.08 (14.7 %)** para el precio mínimo con los indirectos ilustrativos de las tablas. La hoja proponía vender en $58,173.83 (+25 % sobre un costo con IVA); con 20 % de utilidad sobre el precio, la app calcula **$65,852.33**. Cuánto de esa diferencia es real depende de los indirectos del taller, que hoy son ilustrativos (§10.1).
+La venta no pagó ni el costo directo: le faltaron $5,308.69. Para el precio mínimo, con los indirectos ilustrativos de las tablas, faltaron **$17,319.44 (44 % de la venta)**, y con 20 % de utilidad sobre el precio la app calcula **$71,269.20 más IVA ($82,672.27)**. La hoja proponía $58,173.83 antes de impuestos (25 % sobre su costo con IVA) y $67,481.64 con IVA. Cuánto de esa diferencia es real depende de los indirectos del taller, que hoy son ilustrativos (§10.1).
 
 ---
 
@@ -1702,7 +1762,7 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 | Entidad | Campos clave | Notas |
 | --- | --- | --- |
 | `Maestros` | `version_id`, `vigente_desde`, tablas T1–T9, lista de precios del proveedor (T3b, con fecha) y `precios` con vigencia/moneda | Inmutable una vez usada en una cotización. |
-| `Cotizacion` | `id`, cliente, proyecto, fecha, `vigencia_dias`, moneda, `riesgo_default`, `servicio_default`, `parametros` (§5.4), `venta_pactada` (§5.6), `piezas_enteras` (§5.5), `maestros_version_id`, estado | La vigencia protege contra la volatilidad del acero. |
+| `Cotizacion` | `id`, cliente, proyecto, fecha, `vigencia_dias`, moneda, `riesgo_default`, `servicio_default`, `parametros` (§5.4), `venta_pactada` y `venta_pactada_con_iva` (§5.6), `piezas_enteras` (§5.5), `maestros_version_id`, estado | La vigencia protege contra la volatilidad del acero. |
 | `Partida` | `cotizacion_id`, `n`, `familia`, parámetros (JSON de §2.1), `cantidad` | |
 | `ResultadoPartida` | QTO, costos por capa, precio unitario e importe, indicadores, advertencias | Se puede recalcular con otra versión de precios sin tocar el QTO. |
 | `Gasto` | `cotizacion_id`, fecha, concepto, categoría (§5.7), cantidad, precio unitario, `iva_incluido`, `con_factura` | Lo real del proyecto: su costo sin el IVA acreditable se compara con lo cotizado. |
@@ -1746,12 +1806,12 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 
 - **Vector de referencia (*golden test*):** el Ejemplo A de §7.1. `tests/ejemplo_recto.test.js` lo recalcula **de forma independiente** con aritmética directa, línea por línea, y lo compara contra el motor.
 - **Oráculos geométricos independientes:** codo, reducción excéntrica, transición, injerto simple (distancia media de silleta y área del orificio por fuerza bruta) y reducción con injerto (silleta sobre el cono por bisección, polilínea y rejilla; ensamble recalculado línea por línea) se comparan contra mallas 3D y promedios numéricos de fuerza bruta (`tests/geometria.test.js`). **Toda familia nueva debe traer su oráculo independiente.**
-- **Lista del proveedor y mano de obra** (`tests/proveedor.test.js`): la lista reproduce al centavo los precios sin IVA de la factura; kg por hoja y por barra y $/kg recalculados desde las medidas; qué renglón usa el cálculo (hoja estándar, calibre sin cotizar, placa, inoxidable); IVA incluido o no; un precio inválido cae a la tabla; el salario es por día y la hora trabajada cuesta salario × días pagados ÷ (días trabajados × horas por día) × FSR ($87.50); un parche guardado con la jornada de antes pasa a la jornada nueva y un salario por hora de la versión anterior se descarta.
+- **Lista del proveedor y mano de obra** (`tests/proveedor.test.js`): la lista reproduce al centavo los precios sin IVA de la factura; kg por hoja y por barra y $/kg recalculados desde las medidas; qué renglón usa el cálculo (hoja estándar, calibre sin cotizar, placa, inoxidable); IVA incluido o no; un precio inválido cae a la tabla; el salario es por día y la hora cuesta salario ÷ horas por día × FSR ($62.50; con FSR 1.40, $87.50); un parche guardado con la jornada de antes pasa a horas por día, y los días de la semana y el salario por hora de versiones anteriores se descartan.
 - **Parámetros de la cotización** (`tests/parametros.test.js`): cada parámetro recalculado desde `C_base` (margen, comisión, administración, días y tasa de cobro, IVA); descuento con IVA sobre el neto; utilidad real y su forma cerrada; valores inválidos que se ignoran con aviso; las tablas maestras no se mutan; la vista previa de una partida coincide con la lista; y los campos del encabezado en las pruebas de interfaz (sección 19).
 - **Armado por yardas** (`tests/geometria.test.js`, `tests/motor.test.js`, `tests/ejemplo_recto.test.js`): los casos del taller (3 yardas por pieza, el extremo del ajuste sin brida de taller, a ±25 mm, ajuste solo, otro máximo de yardas por pieza); la distribución se contrasta contra un **oráculo que arma el tramo pieza por pieza con un lazo** en 4 000 largos y anchos al azar, en los tres modos del extremo libre (más invariantes: sólo la última pieza trae el ajuste, ninguna pasa de 3 yardas, lo que se corta es el largo pedido ±tolerancia); cantidades físicas (anillos, corte a lo ancho, juntas, extremos con brida, junta soldada si las tablas lo piden); **la brida suelta** (qué se le hace al aro en taller —se rola, se barrena, se le suelda el cierre y se pinta, con las mismas horas y la misma pintura que a uno de taller— y qué no —no se arma, no lleva filete al ducto ni sellador—; el material completo; el peso y los drivers por kilo y por metro de soldadura; las operaciones omitidas; con `ESPIGA` o `LISO` no hay aros; sigue a las tablas y a la partida); el **ancho de yarda de la cotización** (lo heredan sólo los tramos rectos; la partida manda; vacío, 0 o inválido se ignoran); la conversión del `ajuste_sin_brida` sí/no de la versión anterior; y el Ejemplo A recalculado de forma independiente —con su aro suelto— en los tres modos.
 - **Pintura** (`tests/motor.test.js`, `tests/robustez.test.js`): la matriz material × instalación × partida (acero al carbón interior/exterior, galvanizado sólo en las bridas, inoxidable sin pintura, sistema elegido en la partida, dos caras del ducto, unión de espiga sin aros, aro suelto) con **superficie, litros de cada mano, minutos y costo recalculados a mano** desde las tablas; la instalación heredada de la cotización y la de la partida; los valores que no existen; las tablas de pintura (ubicación por omisión, manos y sistemas de cada material); y la migración de la pintura por defecto de una versión anterior.
 - **Robustez** (`tests/robustez.test.js`): 640 partidas válidas al azar con semilla fija de todas las familias (sin excepciones ni `NaN`, pila de precio cerrada, cantidades independientes de los precios, ida y vuelta por JSON); cada campo numérico de cada familia corrompido con `NaN`, `±Infinity`, texto, listas, objetos y booleanos (siempre se rechaza); medidas en cero, negativas, «casi cero» y de `1e12` (se rechazan sin agotar memoria); vacíos opcionales; enumeraciones y listas; maestros con ceros, negativos, tablas de velocidad rotas o secciones ausentes (error que nombra la ruta); `cotizar()` con cotizaciones y partidas mal formadas (nunca lanza); y `sanearParche` contra parches dañados y `__proto__`. Las secciones 20 de `tests/e2e/ui.e2e.js` repiten lo visible: almacenamiento dañado, números ilegibles en el formulario, importaciones hostiles, tablas con ceros, almacenamiento bloqueado o lleno, fecha local y pantalla de 320 px.
-- **Hoja de control de gastos** (`tests/compras_gastos.test.js`, `tests/caso_real.test.js`, sección 24 de `tests/e2e/ui.e2e.js`): el acomodo en barras contra la cota inferior en 2 000 casos al azar y contra el óptimo por fuerza bruta en 300; bridas sueltas, instalación con viáticos (con y sin factura, indirectos propios), soportería y artículos del catálogo con y sin IVA, **recalculados a mano** desde las tablas; la lista de compras (hojas, barras, tornillos por decena, cartuchos y litros enteros; el sobrante nunca negativo); la partida automática del sobrante; la venta pactada; el costo de cada gasto según IVA y factura; el reparto de lo cotizado por categoría (que, con el equipo, suma el costo directo); y **el proyecto real**: la app compra las mismas 6 soleras, 2 ángulos, la solera chica, el PTR y los 28 taquetes de la hoja, su costo directo queda a menos de 2 % de lo gastado sin IVA, y el resultado de la venta reproduce el de la hoja corregida. En el navegador: las familias nuevas, el catálogo en las tablas maestras, la lista y el sobrante, la venta pactada, la captura de gastos (IVA, factura, renglones inválidos, deshacer, «estimado»), el ejemplo con Deshacer, la persistencia y el celular.
+- **Hoja de control de gastos** (`tests/compras_gastos.test.js`, `tests/caso_real.test.js`, sección 24 de `tests/e2e/ui.e2e.js`): el acomodo en barras contra la cota inferior en 2 000 casos al azar y contra el óptimo por fuerza bruta en 300; bridas sueltas, instalación con viáticos (con y sin factura, indirectos propios), soportería y artículos del catálogo con y sin IVA, **recalculados a mano** desde las tablas; la lista de compras (hojas, barras, tornillos por decena, cartuchos y litros enteros; el sobrante nunca negativo); la partida automática del sobrante; la venta pactada; el costo de cada gasto según IVA y factura; el reparto de lo cotizado por categoría (que, con el equipo, suma el costo directo); y **el proyecto real**: la app compra las mismas 6 soleras, 2 ángulos, la solera chica, el PTR y los 28 taquetes de la hoja, los 220 juegos de tornillos y los 2 Sikaflex de la hoja; lo cotizado queda a menos de 1 % de lo gastado sin IVA; las bridas de solera suman los 4 días del taller y las ménsulas sus 2, y el resultado con la venta con IVA se concilia, paso a paso, con el −$829.06 de la hoja. En el navegador: las familias nuevas, el catálogo en las tablas maestras, la lista y el sobrante, la venta pactada, la captura de gastos (IVA, factura, renglones inválidos, deshacer, «estimado»), el ejemplo con Deshacer, la persistencia y el celular.
 - **Pruebas de política:** separación cantidades/precios, identidades de la pila (`P·(1 − u − c − o) = C_base`), cargo mínimo, subcontratos, validaciones, uniones, materiales (`tests/motor.test.js`).
 - **Estándar de bridas del taller** (`tests/motor.test.js`): la solera de 1½" × 3/16" pesa `b·t·ρ`; el taller usa la misma brida (barreno Ø3/8", tornillo 5/16" × 1¼") en todos los diámetros; `L_aro = π·(D_ext + b) + holgura + puntas`, a menos de 1 mm de la regla del taller π·(D + 81 mm); nº de barrenos múltiplo de 4 por paso; cada aro se valoriza con el precio de su propio perfil y el tornillo con el suyo; el cierre del aro se suelda a tope al espesor de la solera; marco rectangular; y `ESPIGA` no genera aros ni barrenos.
 - **Persistencia de maestros** (`tests/util.test.js`): `mezclar(base, diferencia(base, actual))` reconstruye lo editado y los valores de arranque nuevos no quedan enmascarados.
@@ -1766,8 +1826,8 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 | Criterio | Cumplimiento | Dónde |
 | --- | --- | --- |
 | ¿Están claramente definidas las fórmulas para convertir diámetros y longitudes en peso (kg) de lámina? | Sí: `D_med = D_int + e` → `B = π·D_med + a_costura` → `A_neta = B·L` → `m_neta = A_neta·ρ·e/1000` → `m_bruta = m_neta/(1 − φ)`; por familia para accesorios. | §3.1–3.4 · Pasos 1–4 del Ejemplo A |
-| ¿Se incluyó la lógica para calcular bridas, tornillería y selladores? | Sí: aro de solera 1½" × 3/16" (estándar del taller) con longitud por centroide, barreno Ø3/8" y tornillo 5/16" × 1¼" como datos del perfil, nº de barrenos por paso con redondeo a múltiplos de 4, cierre del aro al espesor de la solera, empaque, sellador por clase SMACNA A/B/C, espiga y sus fijaciones. | §3.5 · Pasos 5–7 del Ejemplo A |
-| ¿El ejemplo práctico se resuelve paso a paso sin saltarse factores de merma? | Sí: Paso 5 aplica φ = 8 % a la lámina y 5 % al perfil; sellador 15 %, tornillería 5 %, empaque 5 %, pintura por eficiencia de transferencia y gas por pre/post-flujo. | §7.1 |
+| ¿Se incluyó la lógica para calcular bridas, tornillería y selladores? | Sí: aro de solera 1½" × 3/16" (estándar del taller) con longitud por centroide, barreno Ø3/8" y tornillo 5/16" × 1¼" como datos del perfil, nº de barrenos por paso con redondeo a múltiplos de 4, cierre del aro al espesor de la solera, junta con cordón de Sikaflex (o empaque), sellador por clase SMACNA A/B/C, espiga y sus fijaciones. | §3.5 · Pasos 5–7 del Ejemplo A |
+| ¿El ejemplo práctico se resuelve paso a paso sin saltarse factores de merma? | Sí: Paso 5 aplica φ = 8 % a la lámina y 5 % al perfil; sellador 15 % (también el cordón de la junta), tornillería 5 %, pintura por eficiencia de transferencia y gas por pre/post-flujo. | §7.1 |
 | No asumir precios estáticos | Todos los precios son variables `precio_*` (T3) o renglones de la lista del proveedor (T3b); ninguna fórmula contiene un precio. | §2.2 · §5 |
 | Factor de merma obligatorio | `φ` por familia + override por partida + modo de anidado opcional. | §3.3 · T6 |
 | Sin código extenso | Fórmulas y pseudocódigo; el código vive aparte en `src/`. | §6 |
@@ -1789,7 +1849,7 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 | Salario por día (hoy $500, dato del taller), jornada, FSR, `GIF_por_hora_MOD` | Nómina real y contabilidad de costos | Anual / trimestral |
 | Catálogo de compras (T3c) y viáticos | Tickets y facturas de cada proyecto (el control de gastos los junta) | Por proyecto |
 | Tabla `servicios` (calibre mínimo) | Norma interna / SMACNA / ACGIH aplicable | Al adoptar la norma |
-| Datos de detalle del estándar de bridas (paso entre barrenos, soldadura del aro, empaque, posición del barreno) | Confirmar con el taller los supuestos de §10.4 | Una vez, y al cambiar el estándar |
+| Datos de detalle del estándar de bridas (paso entre barrenos, soldadura del aro, cordón de la junta, posición del barreno) | Confirmar con el taller los supuestos de §10.4 | Una vez, y al cambiar el estándar |
 
 **Lazo de retroalimentación:** al cerrar cada orden se registran horas y kg reales (`Calibracion`); la desviación sistemática por operación o familia ajusta velocidades, φ y `k_dif`. Meta operativa: desviación de horas ≤ ±15 % y de peso bruto ≤ ±5 % por familia.
 
@@ -1813,14 +1873,14 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 
 ### 10.4 Supuestos del estándar de bridas por confirmar con el taller
 
-El taller definió tres datos: **solera 1½" × 3/16", barreno Ø3/8" y tornillo 5/16" × 1¼", en todos los ductos.** El resto del modelo de la brida se **supuso** y se edita en los maestros (T4 y T5); conviene confirmarlo, porque mueve tornillería, empaque y soldadura:
+El taller definió tres datos: **solera 1½" × 3/16", barreno Ø3/8" y tornillo 5/16" × 1¼", en todos los ductos.** El resto del modelo de la brida se **supuso** y se edita en los maestros (T4 y T5); conviene confirmarlo, porque mueve tornillería, junta y soldadura:
 
 | Supuesto | Valor usado | Dónde se cambia | Efecto si es distinto |
 | --- | --- | --- | --- |
-| Paso máximo entre barrenos | 150 mm (≈ 6"); barrenos por brida = múltiplo de 4, mínimo 4 | `uniones.BRIDADO.paso_tornillo_mm` | Más barrenos: más tornillería, barrenado y empaque. |
-| Posición del barreno | Al centro del ancho de la solera (g = 19.05 mm) | `perfiles.SOL38x4.8.gramil_mm` | Cambia el círculo de barrenos, el empaque y el nº de barrenos. |
+| Paso máximo entre barrenos | 150 mm (≈ 6"); barrenos por brida = múltiplo de 4, mínimo 4 | `uniones.BRIDADO.paso_tornillo_mm` | Más barrenos: más tornillería y barrenado. |
+| Posición del barreno | Al centro del ancho de la solera (g = 19.05 mm) | `perfiles.SOL38x4.8.gramil_mm` | Cambia el círculo de barrenos, el cordón de la junta y el nº de barrenos. |
 | Soldadura del aro | Filete continuo exterior aro–ducto (`f_cont` = 1.0) y cierre a tope de una sección (b) | `uniones.BRIDADO.f_cont_soldadura_aro` | Un cordón intermitente (p. ej. 0.5) baja soldadura y consumibles, pero la junta deja de ser hermética sin sellador. |
-| Empaque | Cinta de neopreno 1½" × 1/8" sobre el círculo de barrenos, traslape 5 % | `precio_m_empaque_neopreno` · `f_traslape_empaque` | Si el taller sella sólo con sellador, poner el precio del empaque en 0. |
+| Junta de la brida | **Confirmado (7-oct-2026): Sikaflex en lugar del empaque**, un cordón de 40 mL por metro de círculo de barrenos (el grosor del cordón es supuesto) | `uniones.BRIDADO.junta` · `ml_sellador_junta_m` (y, con `EMPAQUE`, `precio_m_empaque_neopreno` · `f_traslape_empaque`) | Con empaque de neopreno, elegir `EMPAQUE`: la junta lleva la cinta y el cordón de la clase. |
 | Juego de tornillería | Tornillo 5/16" × 1¼" + tuerca + 2 rondanas, con 5 % de reserva | `precio_juego_tornillo_5_16_x_1_1_4` · `f_reserva_tornilleria` | Si la tornillería se compra por piezas, sumar el precio de cada pieza al juego. |
 
 ### 10.5 Supuestos de injertos y codos por confirmar con el taller
@@ -1838,7 +1898,7 @@ El taller definió: *injerto simple* (antes ramal en ángulo); *reducción con i
 
 ### 10.6 Supuestos de la lista del proveedor por confirmar
 
-Datos que dio el taller: los trabajadores ganan **$500 por día, sin utilidades y ya con prestaciones** (FSR = 1.00); las barras de ángulo y solera se consideran de **6 m**; el proveedor de acero cotiza hojas y barras por pieza (cotizaciones y factura del 30-sep-2026). Lo demás se **supuso** y se edita en las tablas maestras:
+Datos que dio el taller: los trabajadores ganan **$500 por día, sin utilidades ni prestaciones**, y la hora se cuesta como $500 ÷ 8 h = $62.50 (FSR = 1.00; ver §10.12); las barras de ángulo y solera se consideran de **6 m**; el proveedor de acero cotiza hojas y barras por pieza (cotizaciones y factura del 30-sep-2026). Lo demás se **supuso** y se edita en las tablas maestras:
 
 | Supuesto | Valor usado | Dónde se cambia | Efecto si es distinto |
 | --- | --- | --- | --- |
@@ -1873,13 +1933,13 @@ Los límites de T10 se **supusieron**: son los de un taller de ducto de colecci�
 
 ### 10.9 Supuestos del armado por yardas por confirmar
 
-Lo que describió el taller: se rolan yardas de 914 ó 1 220 mm (el ancho de la lámina; **lo elige el ingeniero que diseña**); se engargolan hasta 3 en una pieza con bridas en ambos extremos; lo que falta son 2 yardas y un tramo de ajuste, y la pieza que trae menos de una yarda en un lado va sin brida en ese extremo para ponerla en campo ajustando la distancia; y, **de la brida de ese extremo, el taller manda suelto el aro con sus tornillos y su empaque** para instalarlos en obra. Lo demás se **supuso** y se cambia en las tablas (`proceso.armado_yardas`), en el encabezado de la cotización o en la partida:
+Lo que describió el taller: se rolan yardas de 914 ó 1 220 mm (el ancho de la lámina; **lo elige el ingeniero que diseña**); se engargolan hasta 3 en una pieza con bridas en ambos extremos; lo que falta son 2 yardas y un tramo de ajuste, y la pieza que trae menos de una yarda en un lado va sin brida en ese extremo para ponerla en campo ajustando la distancia; y, **de la brida de ese extremo, el taller manda suelto el aro con sus tornillos y el material de su junta** para instalarlos en obra. Lo demás se **supuso** y se cambia en las tablas (`proceso.armado_yardas`), en el encabezado de la cotización o en la partida:
 
 | Supuesto | Valor usado | Dónde se cambia | Efecto si es distinto |
 | --- | --- | --- | --- |
 | Qué cuenta en «hasta 3 yardas» | El tramo de ajuste cuenta como una: la última pieza es a lo más «2 yardas + ajuste» | `yardas_por_pieza_max` | Si el ajuste no contara, una pieza podría ser «3 yardas + ajuste» y 3 m en yardas de 914 serían una pieza con una brida (no 2 piezas y 3 bridas). |
 | Cómo se reparte lo que falta | Greedy: primero piezas de 3 yardas; lo que sobra va en una última pieza (yardas completas + ajuste engargolados). Si sobra sólo el ajuste, es una pieza aparte con una brida | — (`distribuirYardas`) | Otro reparto (por ejemplo piezas más parejas) cambia el número de piezas, no el de anillos ni de bridas. |
-| Brida del extremo del ajuste | **Brida suelta** por omisión: el taller manda el aro **terminado** —rolado, con el cierre soldado, barrenado y pintado— con sus tornillos y su empaque, **sin soldarlo al ducto** (se suelda en obra donde se corta el tramo). Se cobra su material (solera con la merma de barra, tornillería, empaque y flete) y esas operaciones; **no** se cobra el armado del aro al ducto ni el filete aro–ducto, ni el sellador de su junta (se sella en obra) | `extremo_ajuste_defecto` (tablas) y `extremo_ajuste` (partida): `SUELTA`, `SIN_BRIDA` o `CON_BRIDA` | `SIN_BRIDA`: la brida no está en el precio. `CON_BRIDA`: se arma y se suelda al ducto en taller y se sella su junta (cuánto cambia el precio, en la tabla de §3.2). **Por confirmar:** si el taller también manda el sellador de esa junta, hay que sumarlo (unos pesos por brida). |
+| Brida del extremo del ajuste | **Brida suelta** por omisión: el taller manda el aro **terminado** —rolado, con el cierre soldado, barrenado y pintado— con sus tornillos y el material de su junta, **sin soldarlo al ducto** (se suelda en obra donde se corta el tramo). Se cobra su material (solera con la merma de barra, tornillería, medio cordón de Sikaflex y flete) y esas operaciones; **no** se cobra el armado del aro al ducto ni el filete aro–ducto | `extremo_ajuste_defecto` (tablas) y `extremo_ajuste` (partida): `SUELTA`, `SIN_BRIDA` o `CON_BRIDA` | `SIN_BRIDA`: la brida no está en el precio. `CON_BRIDA`: se arma y se suelda al ducto en taller (cuánto cambia el precio, en la tabla de §3.2). |
 | Quién elige el ancho de la yarda | El ingeniero que diseña, una vez para toda la cotización (encabezado) o partida por partida; si nadie elige, 1 220 mm | `cotizacion.yarda_mm`, `yarda_mm` de la partida, `yarda_defecto_mm` | Todas las partidas de la cotización cambian de armado a la vez; la que trae su propio ancho no cambia. |
 | Anchos de yarda | 914 y 1 220 mm | `yardas_mm` | Con 914 mm hay más anillos y más piezas por metro: sube el rolado, el engargolado y las bridas. |
 | Tolerancia del ajuste | 25 mm | `ajuste_tolerancia_mm` | Un sobrante menor se toma por yardas completas. |
@@ -1919,19 +1979,21 @@ La ayuda explica **cómo calcula este cotizador**; no sustituye al criterio del 
 
 ### 10.12 Supuestos de la hoja de control de gastos por confirmar
 
-Lo que dijo el taller: el trabajador gana **$500 por día sin utilidades**; la venta fue **más IVA** y los precios del proveedor **traían IVA**; las puntas de la solera **no se rolan** (por eso π·(D + 81 mm)). Lo demás se **supuso** al reproducir la hoja (§7.4) y se cambia en las tablas o en las partidas:
+Lo que dijo el taller (6 y 7 de octubre de 2026): el trabajador gana **$500 por día** ($3,500 a la semana ÷ 7) **sin utilidades ni prestaciones**, y la hora se cuesta como **$500 ÷ 8 h = $62.50**; la venta fue **con IVA** y los precios del proveedor **traían IVA**; las puntas de la solera **no se rolan** (por eso π·(D + 81 mm)); las 30 bridas de solera llevan **4 días** (sobre todo por el rolado y el barrenado); el empaque se sustituyó por **Sikaflex** y las bridas **sí llevan esmalte**; las ménsulas llevan **2 días** y son de **máximo 650 mm**; las abrazaderas son para el ducto de mayor diámetro (**11″**); la instalación es **local, en Querétaro** (sin hospedaje ni comidas), y las bridas chicas son **30 bridas de placa** de 3/16″ (24 de 5″, 2 de 6″ y 4 de 7″) de la cotización del proveedor de corte. Lo demás se **supuso** al reproducir la hoja (§7.4) y se cambia en las tablas o en las partidas:
 
 | Supuesto | Valor usado | Dónde se cambia | Efecto si es distinto |
 | --- | --- | --- | --- |
-| Horas de taller de las bridas | Las de los tiempos ilustrativos (T7b): **8.65 h** para las 30 bridas; la hoja pagó 2 días (16 h) | `proceso.aros`, `proceso.barrenado`, velocidades de soldadura | Si las 16 h son lo normal, la mano de obra de cada brida casi se duplica: cronometrar una tanda. |
-| Tornillería de las bridas chicas | La app cuenta 120 juegos (media junta de 8 barrenos en cada brida de solera); la hoja: 208 exactos y 220 comprados. La diferencia (88 = 22 × 4) sugiere **22 bridas chicas de plasma** | Una partida `COMPRADO` con sus tornillos, o un artículo «juego de tornillo» en T3c | Si las bridas chicas llevan tornillos del taller, hay que cotizarlos aparte (≈ $3.67 el juego). |
-| Empaque y pintura de las bridas | La app cotiza empaque de neopreno ($430.51) y esmalte en las bridas del galvanizado (T7d); la hoja no trae ni uno ni otro | `precio_m_empaque_neopreno`, `materiales.GALVANIZADO.pintura_bridas`, o `omitir_operaciones` | Si no se usaron, poner el empaque en 0 o pedir «sin pintura» en la partida. |
-| Fabricación de la soportería | 15 min de taller por pieza a la tarifa de armado (T7e); la hoja no pagó horas aparte | `proceso.soportes.t_fab_pieza_min`, o `min_pieza` | Si se hizo dentro de los 2 días de las bridas, poner 0 para no cobrarla dos veces. |
-| Largo de las piezas de soportería | Ménsula 1 500 mm (de dos ángulos salen las 7) y abrazadera 850 mm (de una solera salen las 7) | `largo_pieza_mm` de cada partida | Otro largo cambia cuántas barras se compran. |
-| Indirectos, equipo y financiamiento | Ilustrativos (GIF $85/h de taller, 8 % de administración, 4 % de imprevistos, equipo por hora): con ellos el proyecto pierde $6,370.86 | `capas.*`, `mano_obra.operaciones.*.equipo_h` | Con los indirectos reales del taller el resultado puede ser otro: es el dato que más mueve el «después de indirectos». |
-| Prestaciones del salario | $500 por día ya incluye IMSS y prestaciones (FSR = 1.00) | `mano_obra.FSR` | Si no las incluye, FSR ≈ 1.3–1.6: la hora sube a $114–$140. |
-| Hospedaje y comidas | La hoja no trae (2 personas, 5 días, un solo viaje): se supuso que regresaban a diario o que no se pagaron | `noches`, `hospedaje_noche`, `comida_dia` de la instalación | Si se pagaron, sumar comidas (sin factura el IVA es costo) y hospedaje. |
-| Sellador | Sikaflex blanco ($459 con IVA); el gris cuesta $359 | `articulo_id` de la partida | $100 menos por cartucho con el gris. |
+| La hora, sin días de descanso ni prestaciones | FSR = 1.00: $62.50 la hora, como la calcula el taller | `mano_obra.FSR` | La semana paga 7 días por 5 trabajados: con FSR = 1.40 la hora es $87.50 (en este proyecto, $3,200 más de raya); con prestaciones, más (§7.4.1). |
+| Reparto de los 4 días de las bridas | Rolado: 10 min por aro + 19 min por metro de solera; barrenado: 2 min por barreno. Dan 32.05 h para las 30 | `proceso.aros`, `proceso.barrenado` | El total ya es el del taller; el reparto mueve el precio de bridas de otro diámetro o con otro número de barrenos. |
+| Barrenos de las bridas de placa | Los de la regla del taller: 4 en la de 5″ y 8 en las de 6″ y 7″ (2, 4 y 4 juegos por brida: 72) | `tornillos_pieza` de los artículos `BRIDA_PLACA_*` (T3c) | Con las abrazaderas la app da 206 juegos exactos y compra 220, como la hoja (208 y 220). Otro número de barrenos cambia los juegos. |
+| Tornillos de las abrazaderas | 2 juegos por abrazadera (sus orejas a la ménsula): 14 | `tornillos_pieza` de la partida | Sin ellos, 192 juegos exactos y se comprarían 210. |
+| Largo de la ménsula | 1 300 mm de ángulo por ménsula (brazo y pierna de 650 mm): de dos ángulos salen las 7, como se compró | `largo_pieza_mm` de la partida | Si la ménsula es una sola pieza de 650 mm, las 7 salen de un ángulo. |
+| Abrazadera | De media vuelta para el ducto de 11″, con dos orejas de 50 mm: 543.9 mm de solera 1¼″ × 1/8″ | `abrazadera_D_mm` de la partida y `proceso.soportes.oreja_abrazadera_mm` | Otra forma cambia el largo; las 7 salen de una solera mientras cada una mida hasta 857 mm. |
+| Tiempo de las abrazaderas y el poste | El de la tabla (15 min por pieza: 2 h), aparte de los 2 días de las ménsulas | `min_pieza` de cada partida | Si se hicieron dentro de esos 2 días, repartir las 16 h entre ménsulas y abrazaderas. |
+| Cordón de Sikaflex de la junta | 40 mL por metro de círculo de barrenos (+15 % de merma): 1 063 mL para las 60 bridas, 2 cartuchos | `herrajes.uniones.BRIDADO.ml_sellador_junta_m` | Un cordón más grueso pide más cartuchos. |
+| Esmalte de las bridas de placa | No se pintan (se compran cortadas); las de solera, sí | Una partida aparte | Si también se pintaron, sumar su esmalte. |
+| Esmalte en los gastos | Estimado: 1 L de esmalte ($260) y 1 L de diluyente ($70) antes de IVA, lo que pide la lista de compras; la hoja no lo traía | El renglón del control de gastos | Capturar lo que de verdad se compró. |
+| Viaje Querétaro–México | Casetas $806 y gasolina $1,500, como viático de la instalación | `viajes`, `casetas_viaje`, `gasolina_viaje` | Si fue para recoger el ducto o las bridas, es flete: el total no cambia, sólo su renglón. |
+| Indirectos, equipo y financiamiento | Ilustrativos (GIF $85/h de taller, 8 % de administración, 4 % de imprevistos, equipo por hora): con ellos el proyecto pierde $17,041.03 | `capas.*`, `mano_obra.operaciones.*.equipo_h` | Con los indirectos reales del taller el resultado puede ser otro: es el dato que más mueve el «después de indirectos». |
 | Peso del PTR 2″ × 2″ cal. 14 | 2.91 kg/m, calculado de la sección (el proveedor no lo da) | `proveedor.barras.PTR_2X2_C14.kg_m` | Sólo cambia el peso que se manda, no el costo. |
-| Bridas chicas de plasma | Como un artículo comprado de $3,990.40 con IVA (precio global de la hoja) | La partida `COMPRADO` | Si el taller las corta con su plasma, se cotizan como piezas propias (corte CNC + barrenado). |
-| Categorías del control de gastos | Los renglones de la hoja se capturaron en la categoría que les corresponde (tornillería, soleras y sellador: material; ángulos, PTR y taquetes: soportería; ducto, bridas chicas, mangueras y abrazaderas: compras a terceros) | `categoria` de cada gasto y de cada artículo de T3c | Sólo cambia en qué renglón se compara; el total no cambia. |
+| Categorías del control de gastos | Los renglones se capturaron en la categoría que les corresponde (tornillería, soleras y Sikaflex: material; ángulos, PTR y taquetes: soportería; ducto, bridas de placa, mangueras y abrazaderas: compras a terceros; esmalte: consumibles) | `categoria` de cada gasto y de cada artículo de T3c | Sólo cambia en qué renglón se compara; el total no cambia. |

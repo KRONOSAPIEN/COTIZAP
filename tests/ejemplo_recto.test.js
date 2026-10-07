@@ -7,11 +7,12 @@
  * Armado por yardas de 4 ft (1 220 mm): 3 000 mm = 2 yardas completas + un tramo de ajuste de 560 mm, engargolados en una
  * sola pieza. El extremo del ajuste no lleva brida de taller (se corta en campo): la pieza lleva UNA brida fabricada y, por
  * omisión, el taller manda SUELTO el aro del otro extremo, terminado (rolado, con el cierre soldado, barrenado y pintado) y
- * con sus tornillos y su empaque, sin soldarlo al ducto (se suelda en obra).
+ * con sus tornillos y su media junta de Sikaflex, sin soldarlo al ducto (se suelda en obra). La junta de las bridas se sella
+ * con un cordón de Sikaflex sobre el círculo de barrenos (el taller ya no usa empaque de neopreno).
  *
  * El oráculo recalcula TODO paso a paso con aritmética directa (sin llamar a las funciones del motor)
  * y compara contra la salida del motor. Los valores monetarios dependen de las tablas maestras
- * (mano de obra a $500 por día = $87.50 por hora trabajada, lista del proveedor, valores ilustrativos): si se cambian, este
+ * (mano de obra a $500 por día ÷ 8 h = $62.50 la hora, lista del proveedor, valores ilustrativos): si se cambian, este
  * vector debe regenerarse.
  */
 const test = require('node:test');
@@ -62,7 +63,7 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   assert.equal(L_capa, 3000);
   const n_juntas = n_anillos - 1;               // juntas engargoladas entre los anillos de la pieza
   const n_bridas = 1;                           // brida de taller: la pieza trae el ajuste y su extremo libre no la lleva…
-  const n_sueltas = 1;                          // …se manda suelta (por omisión): aro terminado, tornillos y empaque, sin unirlo al ducto
+  const n_sueltas = 1;                          // …se manda suelta (por omisión): aro terminado, tornillos y su junta, sin unirlo al ducto
   assert.equal(r.geometria.n_piezas, 1);
   assert.equal(r.geometria.n_virolas, n_anillos);
   assert.equal(r.geometria.extremos.length, n_bridas);
@@ -112,15 +113,21 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   const juntas_asignadas = (n_bridas + n_sueltas) * 0.5;
   const costo_tornilleria = n_tornillos * juntas_asignadas * 1.05 * P.precio_juego_tornillo_5_16_x_1_1_4;
 
-  /* Paso 8 · empaque (media junta por brida, de taller o suelta · perímetro de tornillos · 1.05) */
-  const L_emp = (juntas_asignadas * P_perno * 1.05) / 1000;
-  const costo_empaque = L_emp * P.precio_m_empaque_neopreno;
+  /* Paso 8 · junta de la brida: Sikaflex en lugar del empaque (media junta por brida, de taller o suelta · círculo de barrenos ·
+     40 mL por metro + 15 % de merma); no hay empaque */
+  const L_junta = (juntas_asignadas * P_perno) / 1000;
+  casi(r.qto.her.L_junta_sellador_m, L_junta);
+  assert.equal(r.qto.her.L_empaque_m, 0);
+  const V_junta = L_junta * 40 * 1.15;
+  const costo_empaque = 0;
 
-  /* Paso 9 · sellador clase C: media junta por brida de taller (la suelta se sella en obra) + las juntas engargoladas entre yardas (también son transversales) */
+  /* Paso 9 · sellador clase C: las juntas engargoladas entre yardas (también son transversales). La junta de bridas ya la sella su
+     cordón de Sikaflex: no se le suma el de la clase */
   const L_eng_circ = (n_juntas * P_med) / 1000;
-  const L_sel = (n_bridas * 0.5 * PI * D_ext) / 1000 + L_eng_circ;
+  const L_sel = L_eng_circ;
   casi(r.qto.her.L_sellado_m, L_sel);
-  const V_sel = L_sel * 20 * 1.15;
+  const V_sel = L_sel * 20 * 1.15 + V_junta;
+  casi(r.qto.her.V_sellador_ml, V_sel);
   const costo_sellador = V_sel * (P.precio_cartucho_sellador / 600); // cartucho de 600 mL
 
   /* Paso 10 · flete de entrada sobre lámina y perfil (también el del aro suelto) */
@@ -145,7 +152,7 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   const v_rol = interp([[0.6, 8], [1.0, 7], [1.5, 6], [2.0, 5], [3.0, 3.5], [4.5, 2.5]], e);
   const t_rolado = n_anillos * 3.0 + (3 * 1 * (L_capa / 1000)) / v_rol;
   const t_armado = 1.0 * (1 * 6.0 + 0 * 0 + n_bridas * 4.0);
-  const t_aros = n_aros_hechos * (4.0 + 2.5 * (L_aro / 1000));  // se rolan todos los aros; sólo los de taller se arman al ducto (t_armado)
+  const t_aros = n_aros_hechos * (10.0 + 19.0 * (L_aro / 1000));  // se rolan todos los aros (tiempos del taller: 30 bridas en 4 días); sólo los de taller se arman al ducto (t_armado)
   const tablaVs = [[0.6, 0.9], [1.0, 0.7], [1.5, 0.5], [2.0, 0.42], [3.0, 0.32], [4.5, 0.24]];
   const v_sold = interp(tablaVs, e) * 1.0;
   const v_cierre = interp(tablaVs, esp) * 1.0;   // el cierre se suelda en el espesor de la solera
@@ -154,7 +161,7 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   // engargolado: la costura longitudinal es a tope (soldada), así que sólo las 2 juntas entre yardas
   const v_eng = interp([[0.5, 3.0], [1.0, 2.5], [1.5, 1.8], [2.0, 1.2]], e);
   const t_eng = n_juntas * 2.0 + L_eng_circ / v_eng;
-  const t_barren = n_aros_hechos * n_tornillos * 0.35;  // el aro suelto también sale barrenado
+  const t_barren = n_aros_hechos * n_tornillos * 2.0;  // el aro suelto también sale barrenado (2 min por barreno)
   const t_acab = 0.25 * t_sold;
   const A_aro_pint = ((PI / 2) * ((D_ext + 2 * ancho) ** 2 - D_ext ** 2) + PI * (D_ext + 2 * ancho) * esp) / 1e6;
   const A_pint = (PI * D_ext * L_capa) / 1e6 + n_aros_hechos * A_aro_pint;  // y pintado
@@ -178,11 +185,11 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   const costo_pintura = litros * P.precio_L_primario + litros * 0.1 * P.precio_L_diluyente;
 
   /* Paso 14 · mano de obra y equipo (η = 0.80) */
-  // los trabajadores ganan $500 por día (ya con prestaciones: FSR = 1.00); la semana paga 7 días y se trabajan 5 de 8 h:
-  // la hora trabajada cuesta 500 × 7 ÷ 40 = $87.50
+  // los trabajadores ganan $500 por día ($3,500 a la semana ÷ 7), sin utilidades ni prestaciones; el taller cuesta la hora como
+  // el salario del día ÷ 8 h = $62.50 (FSR = 1.00)
   const FSR = 1.0;
-  const hora = (500 * 7) / (5 * 8);
-  assert.equal(hora, 87.5);
+  const hora = 500 / 8;
+  assert.equal(hora, 62.5);
   const tar = (eq) => ({ mo: hora * FSR, eq });
   const ops = {
     corte: [t_corte, tar(45)], rolado: [t_rolado, tar(55)], armado: [t_armado, tar(25)], aros: [t_aros, tar(40)],
@@ -223,9 +230,9 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
 
 /* Los tres modos del extremo del ajuste: el vector de cada uno (CD, C_T y precio con el mismo método del documento). */
 const MODOS = {
-  SIN_BRIDA: { n_aros: 1, n_sueltos: 0, horas: 1.885, CD: 1337.6, C_T: 1669.05, precio: 2176.74 },
-  SUELTA: { n_aros: 1, n_sueltos: 1, horas: 2.115, CD: 1448.85, C_T: 1814.34, precio: 2366.22 },
-  CON_BRIDA: { n_aros: 2, n_sueltos: 0, horas: 2.325, CD: 1488.09, C_T: 1876.97, precio: 2447.91 },
+  SIN_BRIDA: { n_aros: 1, n_sueltos: 0, horas: 2.703, CD: 1363.48, C_T: 1770.42, precio: 2308.94 },
+  SUELTA: { n_aros: 1, n_sueltos: 1, horas: 3.751, CD: 1550.56, C_T: 2073.19, precio: 2703.81 },
+  CON_BRIDA: { n_aros: 2, n_sueltos: 0, horas: 3.961, CD: 1577.06, C_T: 2121.51, precio: 2766.83 },
 };
 
 test('Ejemplo A — el extremo del ajuste: sin brida, brida suelta (por omisión) o brida de taller', () => {
@@ -249,11 +256,11 @@ test('Ejemplo A — el extremo del ajuste: sin brida, brida suelta (por omisión
   // la brida de taller trae dos aros; la suelta, uno de taller y uno suelto (el mismo aro)
   casi(con.qto.her.m_aros_neta_kg, 2 * sin.qto.her.m_aros_neta_kg, 1e-12);
   casi(suelta.qto.her.m_aros_sueltos_neta_kg, sin.qto.her.m_aros_neta_kg, 1e-12);
-  // el material es el mismo que el de la brida de taller: perfil, tornillería y empaque (el sellador no: la junta se sella en obra)
+  // el material es el mismo que el de la brida de taller: perfil, tornillería y el cordón de Sikaflex de su junta
   casi(suelta.costos.materiales.perfiles, con.costos.materiales.perfiles, 1e-12);
   casi(suelta.costos.materiales.tornilleria, con.costos.materiales.tornilleria, 1e-12);
   casi(suelta.costos.materiales.empaque, con.costos.materiales.empaque, 1e-12);
-  casi(suelta.costos.materiales.sellador, sin.costos.materiales.sellador, 1e-12);
+  casi(suelta.costos.materiales.sellador, con.costos.materiales.sellador, 1e-12, 'la de taller tampoco suma el cordón de la clase C en esa junta');
   // el aro suelto sale terminado: se rola, se barrena, se pinta y se le suelda el cierre, igual que el de taller…
   const h = (x, op) => x.costos.horas_std[op];
   ['aros', 'barrenado', 'pintura', 'qc_embalaje'].forEach((op) => casi(h(suelta, op), h(con, op), 1e-12, op));
@@ -285,10 +292,10 @@ const GOLDEN = {
   n_aros_sueltos: 1,
   L_aro_mm: 1215.8,
   n_tornillos: 8,
-  horas_mod_reales: 2.115,
-  CD: 1448.85,
-  C_T: 1814.34,
-  precio_unitario: 2366.22,
+  horas_mod_reales: 3.751,
+  CD: 1550.56,
+  C_T: 2073.19,
+  precio_unitario: 2703.81,
 };
 
 test('Ejemplo A — vector de referencia (valores redondeados que cita el documento)', () => {

@@ -2,7 +2,7 @@
 
 Cotizador para ducterías de lámina (colección de polvo y control ambiental). Calcula el desarrollo geométrico de cada pieza, el peso con merma, los herrajes de unión, las horas de taller, los consumibles y la pila de precio completa: costo directo → indirectos → imprevistos → financiamiento → utilidad.
 
-> ⚠ **Sólo son reales la mano de obra ($500 por día: $87.50 por hora trabajada), la lámina y los perfiles de la lista del proveedor (cotizaciones y factura del 30-sep-2026) y los artículos del catálogo de compras (hoja de control de gastos del 6-oct-2026).** Los demás precios, tarifas, velocidades y tiempos (consumibles, equipo, indirectos, utilidad) son ILUSTRATIVOS: sirven para que todo funcione desde el primer minuto y como vector de prueba. Antes de cotizar a un cliente hay que sustituirlos por los reales (ver [Calibración](docs/arquitectura-cotizador-ducterias.md#10-calibración-límites-conocidos-y-siguientes-pasos)). Ninguna fórmula contiene un precio: todas leen variables como `precio_m3_gas_argon` o la lista del proveedor, editables en la app.
+> ⚠ **Sólo son reales la mano de obra ($500 por día: $62.50 la hora, el salario del día ÷ 8 h), la lámina y los perfiles de la lista del proveedor (cotizaciones y factura del 30-sep-2026), los artículos del catálogo de compras (hoja de control de gastos del 6-oct-2026 y cotización del proveedor de corte del 2-oct-2026) y los tiempos de rolado y barrenado de las bridas (30 bridas en 4 días).** Los demás precios, tarifas, velocidades y tiempos (consumibles, equipo, indirectos, utilidad) son ILUSTRATIVOS: sirven para que todo funcione desde el primer minuto y como vector de prueba. Antes de cotizar a un cliente hay que sustituirlos por los reales (ver [Calibración](docs/arquitectura-cotizador-ducterias.md#10-calibración-límites-conocidos-y-siguientes-pasos)). Ninguna fórmula contiene un precio: todas leen variables como `precio_m3_gas_argon` o la lista del proveedor, editables en la app.
 
 ## Qué incluye
 
@@ -45,13 +45,13 @@ const r = cotizarPartida({
   D_mm: 304.8, L_mm: 3000, tipo_union: 'BRIDADO', cantidad: 1,
 }, M);
 
-console.log(r.precio.unitario);            // 2387.71 MXN (hora trabajada a $87.50; una brida de taller, el aro suelto del extremo del ajuste y pintura de interior)
+console.log(r.precio.unitario);            // 2725.29 MXN (hora a $62.50; una brida de taller, el aro suelto del extremo del ajuste, Sikaflex en la junta y pintura de interior)
 console.log(r.peso.neto_total_kg);         // 37.923 kg (lámina + aro de brida + aro suelto)
 console.log(r.pila);                       // CD, CI, imprevistos, financiamiento, utilidad…
 console.log(r.qto);                        // cantidades físicas, sin precios
 ```
 
-`cotizar({ riesgo, servicio, partidas, venta_pactada, piezas_enteras }, M)` cotiza varias partidas y suma IVA; su resultado trae también la lista de compras (`compras`), el precio mínimo y, si hay venta pactada, lo que deja (`totales.venta`). `require('./src/motor/gastos').resumen(resultado, gastos)` compara los gastos reales con lo cotizado. Una partida con datos inválidos devuelve sus errores (`{ ok: false, errores }`) sin tumbar a las demás, y `cotizar` no lanza aunque la cotización o sus partidas vengan mal formadas. `cotizarPartida` lanza `ErrorValidacion` con la lista de mensajes.
+`cotizar({ riesgo, servicio, partidas, venta_pactada, venta_pactada_con_iva, piezas_enteras }, M)` cotiza varias partidas y suma IVA; su resultado trae también la lista de compras (`compras`), el precio mínimo y, si hay venta pactada, lo que deja (`totales.venta`). `require('./src/motor/gastos').resumen(resultado, gastos)` compara los gastos reales con lo cotizado. Una partida con datos inválidos devuelve sus errores (`{ ok: false, errores }`) sin tumbar a las demás, y `cotizar` no lanza aunque la cotización o sus partidas vengan mal formadas. `cotizarPartida` lanza `ErrorValidacion` con la lista de mensajes.
 
 ## Dónde se guardan los precios
 
@@ -70,7 +70,7 @@ Cada cambio en **Tablas maestras** (lista del proveedor, precios, tarifas, tiemp
 
 ## Mano de obra y precios del proveedor
 
-- **Mano de obra:** los trabajadores ganan **$500 por día, sin utilidades y ya con prestaciones** (FSR = 1.00). La semana paga 7 días por 5 de 8 h trabajadas ($3,500 por 40 h), así que **la hora trabajada cuesta $87.50**: salario por día × días pagados ÷ (días trabajados × horas por día) × FSR. El salario de cada operación y la jornada están en *Tablas maestras → Mano de obra y equipo* (el FSR queda por si algún día el salario se captura sin prestaciones).
+- **Mano de obra:** los trabajadores ganan **$500 por día** ($3,500 a la semana ÷ 7), **sin utilidades ni prestaciones**, y el taller cuesta la hora como **el salario del día ÷ 8 h = $62.50** (FSR = 1.00): salario por día ÷ horas por día × FSR. El salario de cada operación, la jornada (8 h) y el FSR están en *Tablas maestras → Mano de obra y equipo*. **Ojo:** la semana paga 7 días por 5 trabajados, así que cada hora trabajada cuesta $3,500 ÷ 40 h = $87.50 sin prestaciones; para cobrarlo, FSR = 7/5 = 1.40 ([§4.1](docs/arquitectura-cotizador-ducterias.md#41-tiempos-estándar-por-operación)).
 - **Lista de precios del proveedor** (primer grupo de *Tablas maestras*): hojas y barras **por pieza y con IVA incluido**, tal como las cotiza el proveedor (lámina galvanizada 4 × 10 cal. 22 = $920, cal. 24 = $700, la factura del 30-sep-2026, etc.). El cotizador las convierte a **$/kg sin IVA** con los kg de la pieza y las usa para la lámina (mismo material y calibre) y para los aros (barra del perfil); lo que no está cotizado usa el precio por kg de respaldo. Cada renglón muestra su precio sin IVA, sus kg, su $/kg y si el cálculo lo usa; el desglose de cada partida dice de dónde salió el precio de su lámina y de sus aros.
 - Quedan cuatro supuestos por confirmar con el proveedor (IVA incluido en sus precios, calibres sin cotizar, lámina por fracción de hoja, placa 3 × 8): [§10.6 del documento](docs/arquitectura-cotizador-ducterias.md#106-supuestos-de-la-lista-del-proveedor-por-confirmar). Las barras de ángulo y solera se consideran de 6 m.
 
@@ -92,12 +92,12 @@ El encabezado de la cotización lleva los parámetros comerciales que se ajustan
 
 ## Compras y gastos del proyecto
 
-La pestaña **Compras y gastos** nació de una hoja de control de gastos real: un proyecto que otro ingeniero vendió en **$45,710 más IVA** y que terminó con pocas pérdidas. La app lo trae como ejemplo (*Ver el ejemplo*) y el [documento lo resuelve en §7.4](docs/arquitectura-cotizador-ducterias.md#74-caso-real--la-hoja-de-control-de-gastos-del-6-oct-2026-vendido-en-45710-más-iva).
+La pestaña **Compras y gastos** nació de una hoja de control de gastos real: un proyecto que otro ingeniero vendió en **$45,710 con IVA** y que terminó con pérdidas. La app lo trae como ejemplo (*Ver el ejemplo*) y el [documento lo resuelve en §7.4](docs/arquitectura-cotizador-ducterias.md#74-caso-real--la-hoja-de-control-de-gastos-del-6-oct-2026-vendido-en-45710-con-iva).
 
-- **Venta y precio mínimo.** Capture la **venta pactada** (sin IVA) y una regla de tres zonas dice si **pierde** (no cubre el costo directo), si **cubre el costo directo pero no los indirectos**, o si **gana** (arriba del precio mínimo, que cubre indirectos, financiamiento y comisión con utilidad cero). Los totales de la cotización repiten el resultado.
+- **Venta y precio mínimo.** Capture la **venta pactada** (sin IVA o, marcando *El importe ya incluye IVA*, con IVA: el margen se mide sin él) y una regla de tres zonas dice si **pierde** (no cubre el costo directo), si **cubre el costo directo pero no los indirectos**, o si **gana** (arriba del precio mínimo, que cubre indirectos, financiamiento y comisión con utilidad cero). Los totales de la cotización repiten el resultado.
 - **Lista de compras en piezas enteras.** Junta lo que piden todas las partidas y lo redondea a lo que se compra: hojas y barras completas (los aros y las piezas de soportería se acomodan en barras de 6 m), tornillos por decena, cartuchos y envases enteros. Cada renglón dice cuánto se necesita, cuánto se compra, lo que ya cobran las partidas y el **sobrante**, que se puede **cobrar en la cotización** como una partida automática. Se copia como CSV.
 - **Control de gastos.** Capture cada ticket o factura como viene: si el precio **trae IVA** y si hay **factura** (con factura el IVA se acredita y no es costo; sin factura sí lo es; la raya no lleva IVA). La lista de compras se puede usar como base: cada compra, la mano de obra y los viáticos llegan como renglones *estimado* para cambiar su precio por el real. La comparación por categoría (material, consumibles, mano de obra, compras a terceros, soportería, instalación, viáticos) dice en qué se gastó de más, y el resultado del proyecto da la utilidad **antes** y **después** de indirectos y el IVA acreditable.
-- **Lo que había que corregir en la hoja.** Restó costos **con IVA** contra la venta **sin IVA** ($5,591.60 de IVA acreditable que no es costo) y puso la hora en $62.50 (3,500 ÷ 56 h) en vez de $87.50 (3,500 ÷ 40 h). Corregida: se gastaron **$43,347.47** sin IVA y la venta dejó **+$2,362.53 antes de indirectos** (5.2 %); con los indirectos ilustrativos de las tablas, el proyecto pierde $6,370.86 y le faltaron $6,703.08 para el precio mínimo.
+- **Lo que había que corregir en la hoja.** Restó de la venta con IVA sus compras con IVA y la raya, que no lleva IVA: no descontó los **$713.23 de IVA neto** que se le pagan al SAT. Además pagó 2 días de bridas en vez de 4 y no traía los 2 días de las ménsulas ni el esmalte. Corregida: la venta es **$39,405.17** sin IVA, se gastaron **$43,277.47** y el proyecto **perdió $3,872.30 antes de indirectos** (−9.8 %), contra los −$829.06 de la hoja. La app compra lo mismo que el taller (6 soleras, 2 ángulos, 1 solera chica, 1 PTR, 28 taquetes, 220 juegos de tornillos y 2 Sikaflex) y lo cotizado queda a 0.2 % de lo gastado.
 
 ## Datos que el cotizador no acepta
 
@@ -131,9 +131,9 @@ El taller no rola un tramo de 3 m de una pieza: rola **yardas**, anillos del **a
 
 | Opción | Qué cotiza | Ejemplo A (3 m, Ø12″) |
 | --- | --- | --- |
-| **Brida suelta** (predeterminada) | El taller manda el **aro terminado** (rolado, con el cierre soldado, barrenado y pintado), con sus **tornillos y empaque**, **sin soldarlo al ducto**: se suelda en obra. Se cobra su material y esas operaciones; no el armado al ducto, el filete aro–ducto ni el sellador de su junta | $2,366.22 |
-| Sin brida | Nada: la brida de ese extremo no está en el precio | $2,176.74 |
-| Brida de taller | Se fabrica y se suelda en taller, como en los demás extremos | $2,447.91 |
+| **Brida suelta** (predeterminada) | El taller manda el **aro terminado** (rolado, con el cierre soldado, barrenado y pintado), con sus **tornillos y el material de su junta**, **sin soldarlo al ducto**: se suelda en obra. Se cobra su material y esas operaciones; no el armado al ducto ni el filete aro–ducto | $2,703.81 |
+| Sin brida | Nada: la brida de ese extremo no está en el precio | $2,308.94 |
+| Brida de taller | Se fabrica y se suelda en taller, como en los demás extremos | $2,766.83 |
 
 Cada yarda se **rola por separado** (tiempo fijo por anillo), las juntas entre yardas son **engargolado** (con sellador), cada plantilla de una yarda sale con un solo tajo a lo ancho de la hoja y el precio de la lámina se busca con ese ancho de hoja. El desglose muestra el armado con un diagrama (anillos, bridas de taller, el extremo libre y su aro suelto), la tabla de piezas y el aro suelto en los herrajes. Los parámetros están en *Tablas maestras → Proceso de fabricación → armado yardas*; el documento explica la regla ([§3.2](docs/arquitectura-cotizador-ducterias.md#32-tramo-recto-armado-por-yardas)), la brida suelta ([§3.5.7](docs/arquitectura-cotizador-ducterias.md#357-brida-suelta-extremo-libre-del-tramo-de-ajuste)) y sus supuestos por confirmar ([§10.9](docs/arquitectura-cotizador-ducterias.md#109-supuestos-del-armado-por-yardas-por-confirmar)). Una cotización guardada con la opción anterior (*sí/no* para la brida del ajuste) se convierte sola: *sí* = sin brida, *no* = brida de taller.
 
@@ -168,7 +168,9 @@ Todos los ductos se unen con **bridas de solera 1½" × 3/16", barreno Ø3/8" y 
 
 Cada aro se corta con las **puntas que la roladora no curva** (126 mm por aro, `proceso.aros.puntas_rolado_mm`): así el cálculo da la regla con que el taller corta la solera, π·(D + 81 mm), a menos de 1 mm.
 
-Cinco detalles se **supusieron** y conviene confirmarlos con el taller (se editan en las tablas maestras): paso máximo entre barrenos (150 mm), posición del barreno (al centro de la solera), soldadura continua aro–ducto, empaque de neopreno 1½" × 1/8" y juego de tornillería (tornillo + tuerca + 2 rondanas). Ver [§10.4 del documento](docs/arquitectura-cotizador-ducterias.md#104-supuestos-del-estándar-de-bridas-por-confirmar-con-el-taller).
+La **junta** se sella con un **cordón de Sikaflex** sobre el círculo de barrenos (40 mL por metro), en lugar del empaque de neopreno; ese cordón también es el sello de la junta transversal. El empaque sigue disponible en las tablas (*junta* = `EMPAQUE`). Los tiempos de rolado y barrenado se calibraron con el taller: 30 bridas en 4 días.
+
+Cuatro detalles se **supusieron** y conviene confirmarlos con el taller (se editan en las tablas maestras): paso máximo entre barrenos (150 mm), posición del barreno (al centro de la solera), soldadura continua aro–ducto y juego de tornillería (tornillo + tuerca + 2 rondanas). Ver [§10.4 del documento](docs/arquitectura-cotizador-ducterias.md#104-supuestos-del-estándar-de-bridas-por-confirmar-con-el-taller).
 
 ## Familias de pieza
 
@@ -182,9 +184,9 @@ Cinco detalles se **supusieron** y conviene confirmarlos con el taller (se edita
 | Reducción con injerto, a 30° o 45° | el injerto va **sobre el cono** y siempre de extremo mayor a menor (inclinado hacia D2): la intersección cilindro–cono se resuelve numéricamente (silleta, orificio y soldadura); el largo de la reducción sale solo (el mínimo que aloja la silleta con 25 mm de holgura) o se captura | exacta (verificada contra cálculo independiente por fuerza bruta); merma y dificultad por calibrar |
 | Personalizada | área desarrollada desde CAD | la que traiga el CAD |
 | Bridas sueltas | sólo aros terminados (rolados, cerrados, barrenados y pintados) para el ducto de otro, sin lámina | la del aro de taller |
-| Soportería | piezas cortadas de una barra de la lista (ménsulas, abrazaderas, postes), con anclajes del catálogo, tornillos y minutos de taller | — |
-| Comprado | precio de compra o artículo del catálogo; un precio con IVA se cuesta sin IVA | — |
-| Instalación | cuadrilla en obra (personas × días × horas a $87.50) y viáticos (casetas, gasolina, hospedaje, comidas, otros; con o sin factura) | — |
+| Soportería | piezas cortadas de una barra de la lista (ménsulas, abrazaderas —por el diámetro del ducto—, postes), con anclajes del catálogo, tornillos y minutos reales de taller | — |
+| Comprado | precio de compra o artículo del catálogo; un precio con IVA se cuesta sin IVA; lo que se atornilla como brida (las bridas de placa del proveedor de corte) lleva su tornillería y su Sikaflex | — |
+| Instalación | cuadrilla en obra (personas × días × horas a $62.50) y viáticos (casetas, gasolina, hospedaje, comidas, otros; con o sin factura) | — |
 
 **Ángulos del taller.** Todo injerto (simple o en la reducción) es de **30° o 45°** y los codos son de **30°, 45°, 60° o 90°**. En la captura son listas desplegables; el motor además rechaza cualquier otro ángulo con un mensaje claro (una cotización anterior con un ángulo distinto se abre mostrándolo como *no permitido* hasta corregirlo). Las listas están en las tablas maestras (`proceso.angulos_injerto_deg`, `proceso.angulos_codo_deg`), no en el código.
 
@@ -208,6 +210,6 @@ scripts/construir.js                       empaquetado a un solo HTML
 - Transiciones sólo centradas; ducto espiral, collarines y campanas se capturan como pieza *personalizada* o *comprada*.
 - El anidado de hojas está descrito en el documento pero no implementado: la merma es un porcentaje por familia (editable por partida).
 - Fuera de alcance: flete a obra, renta de andamios y grúas (se capturan como *otros gastos de obra* de la instalación o como comprado).
-- La hoja de control de gastos dejó doce supuestos por confirmar (horas de las bridas, tornillos de las bridas chicas, empaque y pintura de las bridas, indirectos reales…): [§10.12](docs/arquitectura-cotizador-ducterias.md#1012-supuestos-de-la-hoja-de-control-de-gastos-por-confirmar).
+- La hoja de control de gastos deja supuestos por confirmar (la hora sin días de descanso ni prestaciones, los barrenos de las bridas de placa, el largo de la ménsula, la abrazadera, el cordón de Sikaflex, el viaje a México, los indirectos reales…): [§10.12](docs/arquitectura-cotizador-ducterias.md#1012-supuestos-de-la-hoja-de-control-de-gastos-por-confirmar).
 
 La lista completa y el plan de calibración están en el [documento de arquitectura, §10](docs/arquitectura-cotizador-ducterias.md#10-calibración-límites-conocidos-y-siguientes-pasos).

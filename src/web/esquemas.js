@@ -46,7 +46,7 @@
   W.OPC = {
     forma: [['REDONDA', 'Redondo'], ['RECTANGULAR', 'Rectangular']],
     ref_diametro: [['INTERIOR', 'Interior (nominal)'], ['EXTERIOR', 'Exterior']],
-    tipo_union: [['BRIDADO', 'Bridado · aros, tornillos y empaque'], ['ESPIGA', 'Espiga · macho–hembra'], ['LISO', 'Extremos lisos']],
+    tipo_union: [['BRIDADO', 'Bridado · aros, tornillos y junta'], ['ESPIGA', 'Espiga · macho–hembra'], ['LISO', 'Extremos lisos']],
     clase_sellado: [['C', 'Clase C · juntas transversales'], ['B', 'Clase B · + costuras longitudinales'], ['A', 'Clase A · + penetraciones'], ['NINGUNA', 'Sin sellador']],
     // Pintura: en blanco manda la regla del taller (según el material y dónde va instalado el ducto); un sistema elegido vale para todo lo que se pinta
     pintura: [['', 'Según material e instalación'], ['NINGUNA', 'Sin pintura'], ['ESMALTE', 'Sólo pintura (esmalte)'], ['PRIMARIO', 'Sólo primario'], ['PRIMARIO_ESMALTE', 'Primario + pintura (esmalte)']],
@@ -58,7 +58,7 @@
     tipo_costura: [['A_TOPE', 'Soldada a tope'], ['TRASLAPE', 'Soldada a traslape'], ['PITTSBURGH', 'Engargolado Pittsburgh']],
     excentrica: [['NO', 'Concéntrica'], ['CARA_PLANA', 'Excéntrica · cara plana']],
     // Extremo libre del tramo de ajuste (el de las tablas maestras se ofrece aparte, como «Predeterminado»)
-    ajuste: [['SUELTA', 'Brida suelta (aro terminado, tornillos y empaque)'], ['SIN_BRIDA', 'Sin brida (fuera de este precio)'], ['CON_BRIDA', 'Brida de taller en ambos extremos']],
+    ajuste: [['SUELTA', 'Brida suelta (aro terminado, tornillos y junta)'], ['SIN_BRIDA', 'Sin brida (fuera de este precio)'], ['CON_BRIDA', 'Brida de taller en ambos extremos']],
     driver: [['PIEZA', 'Por pieza'], ['KG_NETO', 'Por kg neto'], ['KG_BRUTO', 'Por kg bruto'], ['M2_NETO', 'Por m² de lámina'], ['M_CORTE', 'Por m de corte'], ['M_SOLDADURA', 'Por m de soldadura']],
     iva_compra: [['', 'Automático: el del catálogo (un precio capturado, antes de IVA)'], ['true', 'Sí: el precio trae IVA (se le quita)'], ['false', 'No: el precio es antes de IVA']],
     factura: [['true', 'Con factura'], ['false', 'Sin factura']],
@@ -152,6 +152,14 @@
       },
       { id: 'iva_incluido', etiqueta: 'El precio trae IVA', tipo: 'select', opciones: 'iva_compra', booleano: true, defecto: '' },
       { id: 'peso_kg', etiqueta: 'Peso unitario', tipo: 'num', unidad: 'kg', defecto: 0, min: 0, opcional: true },
+      {
+        id: 'tornillos_pieza', etiqueta: 'Juegos de tornillo por pieza', tipo: 'int', min: 0, paso: 1, opcional: true,
+        ayuda: 'Si se atornilla como brida: la mitad de sus barrenos. Vacío = los del artículo',
+      },
+      {
+        id: 'circulo_barrenos_mm', etiqueta: 'Círculo de barrenos', tipo: 'num', unidad: 'mm', min: 0, paso: 1, opcional: true,
+        ayuda: 'Si se atornilla como brida: con él se calcula el Sikaflex de su junta. Vacío = el del artículo',
+      },
     ],
     BRIDA: [ // aros terminados (rolados, cerrados, barrenados y pintados) que se mandan sueltos: la medida es la del ducto en que van
       { id: 'forma', etiqueta: 'Sección del ducto', tipo: 'select', opciones: 'forma', defecto: 'REDONDA' },
@@ -161,13 +169,20 @@
     ],
     SOPORTE: [ // ménsulas, abrazaderas y postes cortados de una barra de la lista del proveedor
       { id: 'barra_id', etiqueta: 'Barra de la que se cortan', tipo: 'select', opciones: 'barras', defecto: 'ANG_1_1_4X1_8' },
-      { id: 'largo_pieza_mm', etiqueta: 'Largo de barra por pieza', tipo: 'dim', eje: 'long', defecto: 1500, ayuda: 'Lo que se corta de la barra para una pieza (una ménsula, una abrazadera, un poste)' },
+      {
+        id: 'largo_pieza_mm', etiqueta: 'Largo de barra por pieza', tipo: 'dim', eje: 'long', defecto: 1300, opcional: true,
+        ayuda: 'Lo que se corta de la barra para una pieza (una ménsula, una abrazadera, un poste). Vacío en una abrazadera = sale del diámetro',
+      },
+      {
+        id: 'abrazadera_D_mm', etiqueta: 'Abrazadera: diámetro del ducto', tipo: 'dim', opcional: true,
+        ayuda: 'Si la pieza es una abrazadera de media vuelta: su largo sale de π × (D + espesor) ÷ 2 más las dos orejas',
+      },
       { id: 'anclajes_pieza', etiqueta: 'Anclajes por pieza', tipo: 'int', defecto: 0, min: 0, paso: 1 },
       { id: 'articulo_anclaje', etiqueta: 'Anclaje', tipo: 'select', opciones: 'anclajes', defecto: '', visible: (v) => Number(v.anclajes_pieza) > 0 },
       { id: 'tornillos_pieza', etiqueta: 'Tornillos por pieza', tipo: 'int', defecto: 0, min: 0, paso: 1 },
       {
-        id: 'min_pieza', etiqueta: 'Minutos de taller por pieza', tipo: 'num', unidad: 'min', opcional: true, min: 0.1, paso: 1,
-        ayuda: 'Corte, doblez, barreno y punteo. Vacío = el de las tablas maestras',
+        id: 'min_pieza', etiqueta: 'Minutos reales de taller por pieza', tipo: 'num', unidad: 'min', opcional: true, min: 0.1, paso: 'any',
+        ayuda: 'Lo que de verdad tarda (corte, doblez, barreno y punteo), sin eficiencia. Vacío = el de las tablas maestras',
       },
     ],
     INSTALACION: [ // la cuadrilla en obra (horas reales a la tarifa de «instalación») y sus viáticos
@@ -300,12 +315,16 @@
         const art = p.articulo_id && M && M.compras.articulos[p.articulo_id];
         const precio = p.precio_compra_unitario !== undefined && p.precio_compra_unitario !== '' ? Number(p.precio_compra_unitario) : (art ? art.precio : 0);
         const iva = p.iva_incluido !== undefined && p.iva_incluido !== '' ? p.iva_incluido === true || p.iva_incluido === 'true' : !!(art && p.precio_compra_unitario === undefined && art.iva_incluido);
-        return `${W.mxn(precio || 0)} de compra${iva ? ' con IVA' : ''}${art ? ` por ${art.unidad}` : ''}`;
+        const juegos = p.tornillos_pieza !== undefined && p.tornillos_pieza !== '' ? Number(p.tornillos_pieza) : (art && art.tornillos_pieza) || 0;
+        return `${W.mxn(precio || 0)} de compra${iva ? ' con IVA' : ''}${art ? ` por ${art.unidad}` : ''}${juegos > 0 ? ` · ${plural(juegos, 'juego', 'juegos')} de tornillo` : ''}`;
       }
       case 'BRIDA':
         return p.forma === 'RECTANGULAR' ? `marco para ducto ${s(p.a_mm)} × ${s(p.b_mm)}` : `aro para ducto ${d(p.D_mm)}`;
-      case 'SOPORTE':
-        return `${de((m) => m.proveedor.barras, p.barra_id)} · ${l(p.largo_pieza_mm)} por pieza${Number(p.anclajes_pieza) > 0 ? ` · ${plural(p.anclajes_pieza, 'anclaje', 'anclajes')}` : ''}`;
+      case 'SOPORTE': {
+        const largo = p.largo_pieza_mm !== undefined && p.largo_pieza_mm !== '' ? `${l(p.largo_pieza_mm)} por pieza`
+          : Number(p.abrazadera_D_mm) > 0 ? `abrazadera para ducto ${d(p.abrazadera_D_mm)}` : 'sin largo';
+        return `${de((m) => m.proveedor.barras, p.barra_id)} · ${largo}${Number(p.anclajes_pieza) > 0 ? ` · ${plural(p.anclajes_pieza, 'anclaje', 'anclajes')}` : ''}`;
+      }
       case 'INSTALACION':
         return `${plural(p.personas, 'persona', 'personas')} × ${plural(p.dias, 'día', 'días')}${Number(p.viajes) > 0 ? ` · ${plural(p.viajes, 'viaje', 'viajes')}` : ''}`;
       default:

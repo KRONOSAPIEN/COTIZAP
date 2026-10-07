@@ -135,10 +135,11 @@
     }
     if (p.familia === 'SOPORTE') {
       if (!p.barra_id) errores.push('Falta la barra de la que se cortan las piezas (de la lista del proveedor).');
-      if (p.largo_pieza_mm === undefined) errores.push('Falta el largo de barra que lleva cada pieza.');
+      if (p.largo_pieza_mm === undefined && !(p.abrazadera_D_mm > 0)) errores.push('Falta el largo de barra que lleva cada pieza (o el diámetro del ducto que abraza, si es abrazadera).');
       const b = p.barra_id ? PROV.barra(M, p.barra_id) : null;
       if (p.barra_id && !b) errores.push(`La barra «${p.barra_id}» no tiene precio o largo válidos en la lista del proveedor.`);
-      if (b && p.largo_pieza_mm > b.largo_mm) errores.push(`Cada pieza lleva ${p.largo_pieza_mm} mm y la barra mide ${b.largo_mm} mm: una pieza no sale de una sola barra.`);
+      const L = b ? largoPiezaSoporte(p, M) : undefined;
+      if (b && L > b.largo_mm) errores.push(`Cada pieza lleva ${U.redondear(L, 1)} mm y la barra mide ${b.largo_mm} mm: una pieza no sale de una sola barra.`);
       return { p, errores, advertencias };
     }
     if (p.familia === 'BRIDA' && p.tipo_union !== undefined && p.tipo_union !== 'BRIDADO') errores.push('Una partida de bridas sueltas sólo lleva unión bridada.');
@@ -216,9 +217,20 @@
     return costos;
   }
 
+  /** El tornillo de las bridas del taller (el del perfil estándar): el que llevan las piezas compradas que se atornillan. */
+  function tornilloBridas(M) {
+    const sel = M.herrajes.seleccion_perfil;
+    const id = Array.isArray(sel) && sel.length ? sel[sel.length - 1].perfil : null;
+    const perfil = id ? M.herrajes.perfiles[id] : null;
+    return perfil && perfil.tornillo ? perfil.tornillo : M.proceso.soportes.tornillo;
+  }
+
   /**
    * Artículo comprado: su precio (el capturado, o el del catálogo de compras si se eligió un artículo) por la cantidad.
-   * Si el precio trae IVA se le quita (`compras.iva_pct`): el costo es sin IVA, como todo lo demás.
+   * Si el precio trae IVA se le quita (`compras.iva_pct`): el costo es sin IVA, como todo lo demás. Si se atornilla (una brida
+   * de placa que corta un proveedor), lleva `tornillos_pieza` juegos de la tornillería de las bridas, con su reserva, y con el
+   * diámetro de su círculo de barrenos (`circulo_barrenos_mm`) el material de su media junta, igual que una brida de solera:
+   * el cordón de Sikaflex sobre ese círculo (o el empaque, según `herrajes › uniones › BRIDADO › junta`).
    */
   function cotizarComprado(p, M) {
     const art = p.articulo_id ? M.compras.articulos[p.articulo_id] : null;
@@ -226,13 +238,33 @@
     const precio = capturado ? p.precio_compra_unitario : art.precio;
     const iva_incluido = p.iva_incluido !== undefined ? p.iva_incluido : (!capturado && art ? art.iva_incluido : false);
     const unitario_sin_iva = sinIvaCompras(M, precio, iva_incluido);
-    const costos = armarCostos({ materiales: { compra: unitario_sin_iva * p.cantidad } }, 0);
+    const tornillos_pieza = p.tornillos_pieza !== undefined ? p.tornillos_pieza : (art && art.tornillos_pieza) || 0;
+    const tornillo = tornilloBridas(M);
+    const reserva = M.herrajes.uniones.BRIDADO.f_reserva_tornilleria;
+    const precio_tornillo = tornillos_pieza > 0 ? PRE.precioDe(M, M.herrajes.tornillo_precio_ref[tornillo]) : 0;
+    const materiales = { compra: unitario_sin_iva * p.cantidad };
+    if (tornillos_pieza > 0) materiales.tornilleria = p.cantidad * tornillos_pieza * (1 + reserva) * precio_tornillo;
+    // la media junta de cada pieza (la otra mitad es de la pieza con que se une), sobre su círculo de barrenos
+    const circulo = p.circulo_barrenos_mm !== undefined ? p.circulo_barrenos_mm : (art && art.circulo_barrenos_mm) || 0;
+    const B = M.herrajes.uniones.BRIDADO;
+    const junta = circulo > 0 ? ((B.junta || 'EMPAQUE') === 'SELLADOR' ? 'SELLADOR' : 'EMPAQUE') : null;
+    const L_media_m = circulo > 0 ? (0.5 * Math.PI * circulo) / 1000 : 0;
+    const S = M.herrajes.sellador;
+    const V_sellador_ml = junta === 'SELLADOR' ? L_media_m * B.ml_sellador_junta_m * (1 + S.f_merma) : 0;
+    const L_empaque_m = junta === 'EMPAQUE' ? L_media_m * (1 + B.f_traslape_empaque) : 0;
+    if (V_sellador_ml > 0) materiales.sellador = p.cantidad * V_sellador_ml * (PRE.precioDe(M, S.precio_cartucho_ref) / S.cartucho_ml);
+    if (L_empaque_m > 0) materiales.empaque = p.cantidad * L_empaque_m * PRE.precioDe(M, M.herrajes.empaque.precio_ref);
+    const costos = armarCostos({ materiales }, 0);
     const capas = PRE.pila(costos.CD, 0, p.riesgo, M);
     const cierre = cerrarPrecio(p, costos, capas, M, {});
     return {
       ok: true, entrada: p, familia: 'COMPRADO', descripcion: p.descripcion || (art && art.descripcion) || FAMILIAS.COMPRADO, advertencias: [],
       // categoria: el renglón del control de gastos donde cae (la del artículo; lo que no es del catálogo, compra a terceros)
-      compra: { articulo_id: p.articulo_id, unidad: art ? art.unidad : 'pza', precio, iva_incluido, unitario_sin_iva, categoria: (art && art.categoria) || 'PROVEEDOR' },
+      compra: {
+        articulo_id: p.articulo_id, unidad: art ? art.unidad : 'pza', precio, iva_incluido, unitario_sin_iva, categoria: (art && art.categoria) || 'PROVEEDOR',
+        tornillos_pieza, tornillos: p.cantidad * tornillos_pieza, tornillo, precio_tornillo, reserva_tornillos: reserva,
+        circulo_barrenos_mm: circulo, junta, V_sellador_ml, L_empaque_m, // la junta, por pieza
+      },
       peso: { neto_unitario_kg: p.peso_kg || 0, neto_total_kg: (p.peso_kg || 0) * p.cantidad },
       ...cierre,
     };
@@ -274,24 +306,44 @@
     };
   }
 
+  /** Espesor de una barra de la lista (el capturado o el de su perfil); 0 si no se sabe (un PTR con sólo kg/m). */
+  function espesorBarra(M, id) {
+    const r = M.proveedor.barras[id] || {};
+    if (r.esp_mm > 0) return r.esp_mm;
+    const perfil = r.perfil ? M.herrajes.perfiles[r.perfil] : null;
+    return perfil && perfil.esp_mm > 0 ? perfil.esp_mm : 0;
+  }
+
+  /**
+   * Largo de barra de una pieza de soportería: el capturado o, en una abrazadera de media vuelta para un ducto de diámetro D,
+   * media circunferencia en la fibra neutra de la solera más sus dos orejas: π·(D + t)/2 + 2·oreja.
+   */
+  function largoPiezaSoporte(p, M) {
+    if (p.largo_pieza_mm !== undefined) return p.largo_pieza_mm;
+    const t = espesorBarra(M, p.barra_id);
+    return (Math.PI * (p.abrazadera_D_mm + t)) / 2 + 2 * M.proceso.soportes.oreja_abrazadera_mm;
+  }
+
   /**
    * Soportería (ménsulas, abrazaderas, postes): piezas cortadas de una barra de la lista del proveedor, con sus anclajes y su
-   * tornillería, y los minutos de taller de cada pieza (corte, doblez, barreno y punteo, a la tarifa de armado y con la
-   * eficiencia del taller). El perfil se paga por la fracción de barra que usa cada pieza, con la merma de perfil; la lista
-   * de compras dice cuántas barras completas hay que comprar.
+   * tornillería, y los minutos REALES de taller de cada pieza (corte, doblez, barreno, punteo y soldadura, a la tarifa de armado:
+   * lo que dice el taller que tarda, sin la eficiencia). El perfil se paga por la fracción de barra que usa cada pieza, con la
+   * merma de perfil; la lista de compras dice cuántas barras completas hay que comprar. Una abrazadera se puede pedir por el
+   * diámetro del ducto que abraza (`abrazadera_D_mm`): su largo sale solo.
    */
   function cotizarSoporte(p, M) {
     const n = p.cantidad;
     const S = M.proceso.soportes;
     const b = PROV.barra(M, p.barra_id);
+    const largo = largoPiezaSoporte(p, M);
     const art_id = p.articulo_anclaje || S.anclaje_defecto;
     const art = M.compras.articulos[art_id];
     const anclaje_unit = sinIvaCompras(M, art.precio, art.iva_incluido);
     const tornillo = S.tornillo;
     const precio_tornillo = PRE.precioDe(M, M.herrajes.tornillo_precio_ref[tornillo]);
-    const L_m = (n * p.largo_pieza_mm) / 1000;
+    const L_m = (n * largo) / 1000;
     const minutos = p.min_pieza > 0 ? p.min_pieza : S.t_fab_pieza_min;
-    const horas = (n * minutos) / 60 / M.proceso.eficiencia_taller;
+    const horas = (n * minutos) / 60;
     const tar = MO.tarifa(M, 'armado');
     const mo = horas * tar.mo_h;
     const costos = armarCostos({
@@ -305,11 +357,12 @@
     }, horas);
     const capas = PRE.pila(costos.CD, horas, p.riesgo, M);
     const cierre = cerrarPrecio(p, costos, capas, M, {});
-    const kg_pieza = b.kg_m === null ? 0 : (b.kg_m * p.largo_pieza_mm) / 1000;
+    const kg_pieza = b.kg_m === null ? 0 : (b.kg_m * largo) / 1000;
     return {
       ok: true, entrada: p, familia: 'SOPORTE', descripcion: p.descripcion || FAMILIAS.SOPORTE, advertencias: [],
       soporte: {
-        barra: b, L_total_m: L_m, minutos_pieza: minutos, horas, articulo_anclaje: art_id, anclaje: { ...art, unitario_sin_iva: anclaje_unit },
+        barra: b, largo_pieza_mm: largo, largo_calculado: p.largo_pieza_mm === undefined, L_total_m: L_m, minutos_pieza: minutos, horas,
+        articulo_anclaje: art_id, anclaje: { ...art, unitario_sin_iva: anclaje_unit },
         anclajes: n * (p.anclajes_pieza || 0), tornillo, tornillos: n * (p.tornillos_pieza || 0), precio_tornillo,
       },
       peso: { neto_unitario_kg: kg_pieza, neto_total_kg: kg_pieza * n },
@@ -319,7 +372,7 @@
 
   // Las secciones de las tablas de las que depende cada familia que no es de lámina (las de lámina dependen de todas)
   const SECCIONES_FAMILIA = {
-    COMPRADO: ['capas', 'compras'],
+    COMPRADO: ['capas', 'compras', 'herrajes', 'precios'],
     INSTALACION: ['capas', 'compras', 'mano_obra'],
     SOPORTE: ['capas', 'compras', 'mano_obra', 'proveedor', 'merma', 'precios', 'herrajes', 'proceso'],
   };
@@ -404,14 +457,17 @@
   }
 
   /**
-   * Venta pactada de la cotización (MXN sin IVA, lo que se acordó con el cliente): con ella se mide el margen real. Vacío = no
-   * hay. Un valor inválido se ignora y se avisa. Devuelve { venta, aviso }.
+   * Venta pactada de la cotización (lo que se acordó con el cliente): con ella se mide el margen real. Se captura como se pactó,
+   * sin IVA o, con `venta_pactada_con_iva`, con el IVA incluido (se le quita con el IVA de la cotización). Vacío = no hay. Un
+   * valor inválido se ignora y se avisa. Devuelve { capturada, con_iva, venta (sin IVA), aviso }.
    */
-  function ventaPactada(cot) {
+  function ventaPactada(cot, iva_pct) {
     if (sinValor(cot.venta_pactada)) return {};
     const v = typeof cot.venta_pactada === 'number' || typeof cot.venta_pactada === 'string' ? VAL.aNumero(cot.venta_pactada) : NaN;
-    if (Number.isFinite(v) && v >= 0 && v <= 1e10) return { venta: v };
-    return { aviso: `Venta pactada: «${String(cot.venta_pactada)}» no es un importe válido; se ignora.` };
+    if (!(Number.isFinite(v) && v >= 0 && v <= 1e10)) return { aviso: `Venta pactada: «${String(cot.venta_pactada)}» no es un importe válido; se ignora.` };
+    const con_iva = cot.venta_pactada_con_iva === true;
+    const iva = Number.isFinite(iva_pct) && iva_pct >= 0 ? iva_pct : 0;
+    return { capturada: v, con_iva, venta: con_iva ? v / (1 + iva) : v };
   }
 
   /**
@@ -480,7 +536,7 @@
     const utilidad = ok.reduce((s, f) => s + f.precio.importe * (1 - ef.descuento_pct) * (1 - C.comision_ventas_pct_precio - C.otros_pct_precio) - f.pila.C_base, 0);
     const C_base_total = ok.reduce((s, f) => s + f.pila.C_base, 0);
     const neto_ventas = 1 - C.comision_ventas_pct_precio - C.otros_pct_precio;
-    const vp = ventaPactada(c);
+    const vp = ventaPactada(c, C.iva_pct);
     const avisos = [...ef.avisos];
     if (yarda.aviso) avisos.push(yarda.aviso);
     if (vp.aviso) avisos.push(vp.aviso);
@@ -508,7 +564,9 @@
         C_base_total,
         precio_minimo: C_base_total / neto_ventas, // vender por debajo de esto (sin IVA) es perder: no cubre costo, indirectos ni comisión
         venta: vp.venta === undefined ? null : {
-          pactada: vp.venta,
+          pactada: vp.venta, // sin IVA
+          capturada: vp.capturada, // como se capturó (con IVA si con_iva)
+          con_iva: vp.con_iva,
           precio_calculado: subtotal_neto,
           diferencia: vp.venta - subtotal_neto,
           utilidad: vp.venta * neto_ventas - C_base_total,

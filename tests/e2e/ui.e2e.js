@@ -611,7 +611,7 @@ const ok = (cond, msg) => {
     await abrirCostos('Tramo galvanizado cal. 22');
     ok(/\$1,000\.00 con IVA/.test(await p.locator('#detalle').innerText()), 'el desglose de la partida refleja el precio nuevo al instante');
 
-    // mano de obra: $500 por día; la jornada (7 días pagados por 5 de 8 h) lo convierte en $87.50 por hora trabajada
+    // mano de obra: $500 por día; como lo calcula el taller, la hora es el salario del día ÷ 8 h = $62.50
     await p.click('#tab-maestros');
     await p.fill('#maestros-buscar', 'salario_diario');
     ok(await p.locator('input#m_mano_obra__operaciones__corte__salario_diario').inputValue() === '500', 'los trabajadores ganan $500 por día');
@@ -619,16 +619,17 @@ const ok = (cond, msg) => {
     ok(await p.locator('input#m_mano_obra__operaciones__instalacion__salario_diario').count() === 1, 'también la cuadrilla de instalación');
     ok(await p.locator('[id*="salario_hora"], [id*="jornada_h"]').count() === 0, 'ya no hay salario por hora ni la jornada de antes');
     await p.fill('#maestros-buscar', 'jornada');
-    ok(await p.locator('input#m_mano_obra__jornada__dias_pagados_semana').inputValue() === '7' && await p.locator('input#m_mano_obra__jornada__dias_trabajados_semana').inputValue() === '5'
-      && await p.locator('input#m_mano_obra__jornada__horas_dia').inputValue() === '8', 'la jornada: la semana paga 7 días y se trabajan 5 de 8 h');
-    ok(await estadoApp(p, () => window.COTIZAP.manoObra.tarifa(window.COTIZAP.web.estadoApp.M, 'corte').mo_h) === 87.5, 'la hora trabajada cuesta $87.50 ($3,500 ÷ 40 h)');
+    ok(await p.locator('input#m_mano_obra__jornada__horas_dia').inputValue() === '8' && await p.locator('[id*="dias_pagados"], [id*="dias_trabajados"]').count() === 0, 'la jornada: 8 h por día (sin días pagados ni trabajados)');
+    ok(await estadoApp(p, () => window.COTIZAP.manoObra.tarifa(window.COTIZAP.web.estadoApp.M, 'corte').mo_h) === 62.5, 'la hora cuesta $62.50 ($500 ÷ 8 h)');
+    await p.fill('#maestros-buscar', 'FSR');
+    ok(await p.locator('input#m_mano_obra__FSR').inputValue() === '1', 'el FSR arranca en 1.00 (la hora sin los días de descanso ni las prestaciones)');
     await p.context().close();
 
     // un parche guardado con la jornada de antes pasa a la jornada nueva; el salario por hora de la versión anterior se descarta
     const pv = await nuevaPagina({}, async (ctx) => {
       await ctx.addInitScript(() => {
         if (!window.localStorage.getItem('__sembrado_mo')) {
-          window.localStorage.setItem('cotizap.maestros.v2', JSON.stringify({ mano_obra: { FSR: 1.6, jornada_h: 9, operaciones: { corte: { salario_diario: 700, salario_hora: 550 } } } }));
+          window.localStorage.setItem('cotizap.maestros.v2', JSON.stringify({ mano_obra: { FSR: 1.6, jornada_h: 9, jornada: { dias_pagados_semana: 7, dias_trabajados_semana: 5 }, operaciones: { corte: { salario_diario: 700, salario_hora: 550 } } } }));
           window.localStorage.setItem('cotizap.maestros.migrado_v1', 'true');
           window.localStorage.setItem('__sembrado_mo', '1');
         }
@@ -636,10 +637,10 @@ const ok = (cond, msg) => {
     });
     const mo = await estadoApp(pv, () => {
       const M = window.COTIZAP.web.estadoApp.M;
-      return { vieja: M.mano_obra.jornada_h, horas: M.mano_obra.jornada.horas_dia, diario: M.mano_obra.operaciones.corte.salario_diario, hora: M.mano_obra.operaciones.corte.salario_hora, fsr: M.mano_obra.FSR, mo_h: window.COTIZAP.manoObra.tarifa(M, 'corte').mo_h };
+      return { vieja: M.mano_obra.jornada_h, horas: M.mano_obra.jornada.horas_dia, dias: Object.keys(M.mano_obra.jornada).join(','), diario: M.mano_obra.operaciones.corte.salario_diario, hora: M.mano_obra.operaciones.corte.salario_hora, fsr: M.mano_obra.FSR, mo_h: window.COTIZAP.manoObra.tarifa(M, 'corte').mo_h };
     });
-    ok(mo.vieja === undefined && mo.horas === 9 && mo.diario === 700 && mo.hora === undefined && mo.fsr === 1.6 && Math.abs(mo.mo_h - (700 * 7) / (5 * 9) * 1.6) < 1e-9,
-      'un parche anterior: la jornada de 9 h pasa a «horas por día», se respetan el salario diario y el FSR editados y se descarta el salario por hora');
+    ok(mo.vieja === undefined && mo.horas === 9 && mo.dias === 'horas_dia' && mo.diario === 700 && mo.hora === undefined && mo.fsr === 1.6 && Math.abs(mo.mo_h - (700 / 9) * 1.6) < 1e-9,
+      'un parche anterior: la jornada de 9 h pasa a «horas por día», se descartan los días de la semana y el salario por hora, y se respetan el salario diario y el FSR editados');
     await pv.context().close();
   }
 
@@ -948,7 +949,7 @@ const ok = (cond, msg) => {
     ok(await p.locator('.arm-fig svg.arm rect.arm-brida').count() === 1 && await p.locator('.arm-fig svg.arm line.arm-libre').count() === 1 && await p.locator('.arm-fig svg.arm rect.arm-suelta').count() === 1, 'una brida de taller, el extremo libre del ajuste y, aparte, su aro suelto');
     ok((await textosSvg()).includes('brida suelta'), 'el diagrama rotula «brida suelta»');
     const fig = await p.locator('.arm-fig').innerText();
-    ok(/no suelda la brida al ducto, manda suelto el aro terminado \(rolado, con el cierre soldado, barrenado y pintado\) con sus tornillos y su empaque, para soldarlo en obra/.test(fig), 'explica que el aro sale terminado (rolado, cierre soldado, barrenado y pintado) con sus tornillos y su empaque, y se suelda en obra');
+    ok(/no suelda la brida al ducto, manda suelto el aro terminado \(rolado, con el cierre soldado, barrenado y pintado\) con sus tornillos y el material de su junta, para soldarlo en obra/.test(fig), 'explica que el aro sale terminado (rolado, cierre soldado, barrenado y pintado) con sus tornillos y el material de su junta, y se suelda en obra');
     ok(/1 \+ 1 suelta/.test(fig), 'la tabla de piezas cuenta «1 + 1 suelta»');
     ok(/Caben 3 plantillas por hoja \(una por yarda/.test(await p.locator('.hoja-fig').innerText()), 'la hoja es del ancho de la yarda: caben 3 plantillas de Ø12″ a lo largo');
     ok(await p.locator('.hoja-fig svg rect.hoja-pieza').count() === 3, 'y se dibujan las 3');
@@ -977,7 +978,7 @@ const ok = (cond, msg) => {
     // la partida: «Según la cotización», o su propio ancho
     await editar(p, 0);
     ok((await p.locator('#f_yarda_mm option').allInnerTexts()).join('|') === 'Según la cotización · 914 mm · 3 ft|914 mm · 3 ft|1,220 mm · 4 ft', 'la partida ofrece «Según la cotización · 914 mm · 3 ft» y los dos anchos');
-    ok((await p.locator('#f_extremo_ajuste option').allInnerTexts()).join('|') === 'Predeterminado · Brida suelta (aro terminado, tornillos y empaque)|Brida suelta (aro terminado, tornillos y empaque)|Sin brida (fuera de este precio)|Brida de taller en ambos extremos', 'y el extremo del ajuste: lo predeterminado (brida suelta), brida suelta, sin brida o brida de taller');
+    ok((await p.locator('#f_extremo_ajuste option').allInnerTexts()).join('|') === 'Predeterminado · Brida suelta (aro terminado, tornillos y junta)|Brida suelta (aro terminado, tornillos y junta)|Sin brida (fuera de este precio)|Brida de taller en ambos extremos', 'y el extremo del ajuste: lo predeterminado (brida suelta), brida suelta, sin brida o brida de taller');
     ok(await p.locator('#f_ajuste_sin_brida').count() === 0 && await p.locator('#f_L_max_pieza_mm').count() === 0, 'ya no están «Tramo de ajuste» (sí/no) ni «Longitud máx. por pieza»');
     ok(/3 yardas y ajuste de 258 mm/.test(await p.locator('#dlg-prev').innerText()), 'la vista previa usa el ancho de la cotización: «3 yardas y ajuste de 258 mm»');
     await p.selectOption('#f_yarda_mm', '1220');
@@ -1064,7 +1065,7 @@ const ok = (cond, msg) => {
     ok(await p.locator('input#m_proceso__armado_yardas__yarda_defecto_mm').inputValue() === '1220' && await p.locator('input#m_proceso__armado_yardas__yardas_por_pieza_max').inputValue() === '3'
       && await p.locator('input#m_proceso__armado_yardas__ajuste_tolerancia_mm').inputValue() === '25', 'las tablas traen el armado: yarda 1 220 mm, 3 yardas por pieza y tolerancia 25 mm');
     const ea = p.locator('select#m_proceso__armado_yardas__extremo_ajuste_defecto');
-    ok(await ea.inputValue() === 'SUELTA' && (await ea.locator('option').allInnerTexts()).join('|') === 'Brida suelta (aro terminado, tornillos y empaque)|Sin brida (fuera de este precio)|Brida de taller en ambos extremos', 'el extremo del ajuste por omisión se elige de una lista: brida suelta (la de arranque), sin brida o brida de taller');
+    ok(await ea.inputValue() === 'SUELTA' && (await ea.locator('option').allInnerTexts()).join('|') === 'Brida suelta (aro terminado, tornillos y junta)|Sin brida (fuera de este precio)|Brida de taller en ambos extremos', 'el extremo del ajuste por omisión se elige de una lista: brida suelta (la de arranque), sin brida o brida de taller');
     const jy = p.locator('select#m_proceso__armado_yardas__junta_entre_yardas');
     ok(await jy.inputValue() === 'PITTSBURGH' && (await jy.locator('option').allInnerTexts()).join('|') === 'Soldada a tope|Soldada a traslape|Engargolado Pittsburgh', 'y la junta entre yardas, de la lista de costuras: engargolado Pittsburgh');
     const lista = await p.locator('input[id^="m_proceso__armado_yardas__yardas_mm"]').evaluateAll((es) => es.map((e) => e.value));
@@ -1513,7 +1514,7 @@ const ok = (cond, msg) => {
       while (Date.now() < fin) { if (await R(fn)) return true; await p.waitForTimeout(60); }
       return false;
     };
-    const HORA = (500 * 7) / (5 * 8);
+    const HORA = 500 / 8; // $62.50: el salario del día ÷ 8 h
 
     // a) el selector ofrece las familias nuevas y cada una calcula con sus valores de arranque
     await p.click('#btn-nueva');
@@ -1532,9 +1533,14 @@ const ok = (cond, msg) => {
     // b) artículo comprado del catálogo: toma su precio, su descripción y si trae IVA
     await p.click('#btn-agregar');
     await p.click('.fam:has(span:text-is("Comprado"))');
+    await p.selectOption('#f_articulo_id', 'BRIDA_PLACA_5');
+    await p.waitForTimeout(80);
+    ok(await p.getAttribute('#f_precio_compra_unitario', 'placeholder') === '110' && await p.getAttribute('#f_tornillos_pieza', 'placeholder') === '2' && await p.getAttribute('#f_circulo_barrenos_mm', 'placeholder') === '170',
+      'una brida de placa del catálogo sugiere su precio ($110), sus juegos de tornillo (2) y su círculo de barrenos (170 mm)');
     await p.selectOption('#f_articulo_id', 'ABRAZADERA_MANGUERA');
     await p.waitForTimeout(80);
     ok(await p.inputValue('#f_precio_compra_unitario') === '' && await p.getAttribute('#f_precio_compra_unitario', 'placeholder') === '55', 'al elegir un artículo el precio queda vacío y se sugiere el del catálogo ($55)');
+    ok(await p.getAttribute('#f_tornillos_pieza', 'placeholder') === '0' && await p.getAttribute('#f_circulo_barrenos_mm', 'placeholder') === '0', 'y lo que no se atornilla no sugiere tornillos ni junta');
     await p.fill('#f_cantidad', '18');
     await p.click('#dlg-guardar');
     await p.waitForTimeout(100);
@@ -1544,7 +1550,7 @@ const ok = (cond, msg) => {
     await p.locator('#lista-partidas .partida').nth(1).click();
     ok(/Del catálogo de compras/.test(await p.locator('#detalle').innerText()) && /Compras y trabajos de terceros/.test(await p.locator('#detalle').innerText()), 'el desglose dice de dónde sale el precio y su renglón del control de gastos');
 
-    // c) instalación con viáticos: horas reales a $87.50, casetas y gasolina sin el IVA que se acredita
+    // c) instalación con viáticos: horas reales a $62.50, casetas y gasolina sin el IVA que se acredita
     await p.click('#btn-agregar');
     await p.click('.fam:has(span:text-is("Instalación"))');
     ok(/Veces/.test(await p.locator('label[for="f_cantidad"]').innerText()) && /con IVA, como en el ticket/i.test(await p.locator('#dlg-campos').innerText()), 'la cantidad son visitas y los viáticos se capturan con IVA');
@@ -1558,9 +1564,10 @@ const ok = (cond, msg) => {
     await p.click('#dlg-guardar');
     await p.waitForTimeout(100);
     const ins = await R(() => window.COTIZAP.web.estadoApp.res.partidas[2].costos);
-    ok(Math.abs(ins.h_MOD - 80) < 1e-9 && Math.abs(ins.CD - (80 * HORA * 1.03 + (806 + 1500) / 1.16)) < 1e-6, 'instalación: 2 personas × 5 días × 8 h a $87.50 + casetas y gasolina sin IVA');
+    ok(Math.abs(ins.h_MOD - 80) < 1e-9 && Math.abs(ins.CD - (80 * HORA * 1.03 + (806 + 1500) / 1.16)) < 1e-6, 'instalación: 2 personas × 5 días × 8 h a $62.50 + casetas y gasolina sin IVA');
     await p.locator('#lista-partidas .partida').nth(2).click();
     ok(/Cuadrilla y viáticos/.test(await p.locator('#detalle').innerText()) && /sin IVA \(con factura\)/.test(await p.locator('#detalle').innerText()), 'el desglose muestra la cuadrilla y la base de cada viático');
+    ok(/\$62\.50\s*salario por día ÷ 8 h/.test(await p.locator('#detalle').innerText()), 'y el costo por hora: el salario por día ÷ 8 h = $62.50');
 
     // d) soportería: piezas de una barra de la lista, anclajes del catálogo
     await p.click('#btn-agregar');
@@ -1573,6 +1580,22 @@ const ok = (cond, msg) => {
     await p.waitForTimeout(100);
     await p.locator('#lista-partidas .partida').nth(3).click();
     ok(/Pieza, barra y anclajes/.test(await p.locator('#detalle').innerText()) && /28 × Taquete/.test(await p.locator('#detalle').innerText()), 'el desglose de la soportería dice barra, metros y anclajes');
+    ok(/min reales por pieza/.test(await p.locator('#detalle').innerText()), 'y que los minutos de taller son reales (sin eficiencia)');
+    // una abrazadera se pide por el diámetro del ducto: su largo sale solo
+    await p.click('#btn-agregar');
+    await p.click('.fam:has(span:text-is("Soportería"))');
+    await p.selectOption('#f_barra_id', 'SOL_1_1_4X1_8');
+    await p.fill('#f_largo_pieza_mm', '');
+    await p.fill('#f_abrazadera_D_mm', '11');
+    await p.fill('#f_cantidad', '7');
+    ok(/3\.81 m de Solera 1¼/.test(await p.locator('#dlg-prev').innerText()) && await p.locator('#dlg-prev .errores').count() === 0, 'sin largo, la vista previa ya calcula la solera de las 7 abrazaderas (3.81 m) sin errores');
+    await p.click('#dlg-guardar');
+    await p.waitForTimeout(100);
+    const abz = await R(() => window.COTIZAP.web.estadoApp.res.partidas[4].soporte);
+    ok(Math.abs(abz.largo_pieza_mm - ((Math.PI * (279.4 + 3.175)) / 2 + 100)) < 1e-9 && abz.largo_calculado === true, `el largo de cada abrazadera sale de π × (D + t) ÷ 2 + 2 orejas: ${abz.largo_pieza_mm.toFixed(1)} mm`);
+    ok(/abrazadera para ducto Ø11/.test(await p.locator('#lista-partidas .partida').nth(4).innerText()), 'la lista de partidas dice «abrazadera para ducto Ø11″»');
+    await p.locator('#lista-partidas .partida').nth(4).click();
+    ok(/abrazadera de media vuelta/.test(await p.locator('#detalle').innerText()), 'el desglose lo explica');
 
     // e) lista de compras en piezas enteras y el sobrante como partida automática
     await p.click('#tab-compras');
@@ -1585,7 +1608,7 @@ const ok = (cond, msg) => {
     await p.check('#cg_piezas_enteras');
     ok(await esperar(() => window.COTIZAP.web.estadoApp.res.automaticas.length === 1), 'cobrar el sobrante agrega una partida automática');
     const auto = await R(() => { const r = window.COTIZAP.web.estadoApp.res; return { imp: r.automaticas[0].precio.importe, sub: r.totales.subtotal, n: r.totales.n_partidas_ok }; });
-    ok(Math.abs(auto.sub - subSin - auto.imp) < 0.011 && auto.n === 4, 'el subtotal sube lo de esa partida y no cuenta como partida del usuario');
+    ok(Math.abs(auto.sub - subSin - auto.imp) < 0.011 && auto.n === 5, 'el subtotal sube lo de esa partida y no cuenta como partida del usuario');
     await p.click('#tab-cotizacion');
     ok(await p.locator('#lista-partidas .partida-auto').count() === 1 && /Automática/.test(await p.locator('#lista-partidas .partida-auto').innerText()), 'en la cotización se ve la partida automática');
     ok(/material sobrante/i.test(await p.locator('#totales').innerText()), 'y los totales dicen que incluyen el sobrante');
@@ -1608,6 +1631,18 @@ const ok = (cond, msg) => {
     await p.click('#tab-cotizacion');
     ok(await p.locator('#totales .venta-res.venta-adv').count() === 1, 'los totales de la cotización muestran la venta pactada en amarillo (cubre el costo directo, no los indirectos)');
     await p.click('#tab-compras');
+    // la misma cifra, pero con IVA: el margen se mide con la venta sin IVA
+    ok(await p.locator('#cg_venta_sufijo').innerText() === 'MXN sin IVA' && !(await p.locator('#cg_venta_con_iva').isChecked()), 'por omisión la venta se captura sin IVA');
+    await p.check('#cg_venta_con_iva');
+    ok(await esperar(() => window.COTIZAP.web.estadoApp.res.totales.venta.con_iva === true), 'marcar «ya incluye IVA» recalcula');
+    const Vi = await R(() => window.COTIZAP.web.estadoApp.res.totales.venta);
+    ok(Math.abs(Vi.pactada - venta / 1.16) < 1e-6 && Vi.capturada === venta && Math.abs(Vi.total - venta) < 0.006, 'con IVA: la venta antes de IVA es lo capturado ÷ 1.16 y el total con IVA es lo capturado');
+    ok(await p.locator('#cg_venta_sufijo').innerText() === 'MXN con IVA' && /Se capturó con IVA/.test(await p.locator('#cg-resultado').innerText()), 'la captura y el resultado dicen que la venta trae IVA');
+    await p.click('#tab-cotizacion');
+    ok(/con IVA/.test(await p.locator('#totales .venta-res').innerText()) && /Antes de IVA son/.test(await p.locator('#totales .venta-res').innerText()), 'los totales muestran la venta con IVA y la cifra antes de IVA');
+    await p.click('#tab-compras');
+    await p.uncheck('#cg_venta_con_iva');
+    ok(await esperar(() => window.COTIZAP.web.estadoApp.res.totales.venta.con_iva === false && window.COTIZAP.web.estadoApp.cot.venta_pactada_con_iva === undefined), 'y desmarcarlo la regresa a sin IVA');
 
     // g) captura de gastos: agregar, categoría, costo sin IVA, quitar y deshacer
     ok(/Todavía no hay gastos/.test(await p.locator('#cg-captura').innerText()), 'sin gastos, la captura lo dice');
@@ -1677,10 +1712,13 @@ const ok = (cond, msg) => {
     const previa = await R(() => window.COTIZAP.web.estadoApp.cot.partidas.length);
     await p.click('#cg-ejemplo');
     await p.waitForTimeout(200);
-    const ej = await R(() => { const E = window.COTIZAP.web.estadoApp; return { n: E.cot.partidas.length, g: E.cot.gastos.length, v: E.res.totales.venta.pactada, err: E.res.totales.n_partidas_error }; });
-    ok(ej.n === 12 && ej.g === 15 && ej.v === 45710 && ej.err === 0, 'el ejemplo trae las 12 partidas y los 15 gastos de la hoja, vendido en $45,710');
+    const ej = await R(() => { const E = window.COTIZAP.web.estadoApp; const V = E.res.totales.venta; return { n: E.cot.partidas.length, g: E.cot.gastos.length, v: V.capturada, iva: V.con_iva, err: E.res.totales.n_partidas_error }; });
+    ok(ej.n === 13 && ej.g === 20 && ej.v === 45710 && ej.iva === true && ej.err === 0, 'el ejemplo trae las 13 partidas y los 20 gastos, vendido en $45,710 con IVA');
+    ok(await p.locator('#cg_venta_con_iva').isChecked() && await p.locator('#cg_venta_sufijo').innerText() === 'MXN con IVA', 'la casilla «ya incluye IVA» viene marcada');
     const cmpEj = await p.locator('#cg-comparacion').innerText();
-    ok(/\$43,347\.47/.test(cmpEj) && /\$2,362\.53/.test(cmpEj) && /5\.2 %/.test(cmpEj), 'gastos reales $43,347.47 y utilidad antes de indirectos $2,362.53 (5.2 %), como en la hoja con la raya a $87.50');
+    ok(/\$39,405\.17/.test(cmpEj) && /\$43,277\.47/.test(cmpEj) && /\$3,872\.30/.test(cmpEj) && /9\.8 %/.test(cmpEj), 'venta sin IVA $39,405.17, gastos reales $43,277.47 y pérdida antes de indirectos de $3,872.30 (−9.8 %), con la raya a $62.50');
+    const listaEj = await R(() => { const L = window.COTIZAP.web.estadoApp.res.compras; return { t: L.tornillos[0].compra, s: L.sellador[0].compra, e: L.empaque.length }; });
+    ok(listaEj.t === 220 && listaEj.s === 2 && listaEj.e === 0, 'su lista de compras pide los 220 juegos de tornillos y los 2 Sikaflex que se compraron, sin empaque');
     await p.click('.toast:has-text("Ejemplo abierto") button:has-text("Deshacer")');
     await p.waitForTimeout(150);
     ok(await R(() => window.COTIZAP.web.estadoApp.cot.partidas.length) === previa, 'Deshacer regresa la cotización anterior');

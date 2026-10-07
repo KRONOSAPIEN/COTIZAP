@@ -18,17 +18,16 @@
   const OPERACIONES = ['corte', 'rolado', 'armado', 'aros', 'soldadura', 'engargolado', 'barrenado', 'acabado', 'pintura', 'qc_embalaje'];
 
   /**
-   * Costo de una hora trabajada de la operación. El taller paga por día y la semana paga más días de los que se trabajan
-   * (el séptimo día): salario_hora = salario_diario × días pagados ÷ (días trabajados × horas por día); con $500 por día,
-   * 7 días pagados y 5 de 8 h trabajados, $87.50. mo_h = salario_hora · FSR (el factor de salario real suma las prestaciones;
-   * con FSR = 1 el salario ya es el costo).
+   * Costo de una hora de la operación, como lo calcula el taller: salario_hora = salario_diario ÷ horas por día ($500 ÷ 8 =
+   * $62.50, sin utilidades ni prestaciones). mo_h = salario_hora · FSR: el factor de salario real suma lo que se paga y no se
+   * trabaja (la semana paga 7 días por 5 trabajados: 7/5) y las prestaciones; con FSR = 1, la hora es el salario del día ÷ 8.
    */
   function tarifa(M, op) {
     const o = M.mano_obra.operaciones[op];
     if (!o) throw new U.ErrorValidacion([`Operación sin tarifa: ${op}`]);
     if (!(Number(o.salario_diario) >= 0)) throw new U.ErrorValidacion([`Falta el salario por día de la operación «${op}» en las tablas maestras.`]);
     const J = M.mano_obra.jornada;
-    const salario_hora = (o.salario_diario * J.dias_pagados_semana) / (J.dias_trabajados_semana * J.horas_dia);
+    const salario_hora = o.salario_diario / J.horas_dia;
     const mo_h = salario_hora * M.mano_obra.FSR;
     return { salario_hora, mo_h, equipo_h: o.equipo_h, total_h: mo_h + o.equipo_h };
   }

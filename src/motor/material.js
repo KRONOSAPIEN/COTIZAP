@@ -104,13 +104,17 @@
 
   /**
    * Herrajes de unión por unidad de partida.
-   *   BRIDADO: aros (solera o ángulo) + tornillería + empaque (+ sellador según clase). Toda brida sale de taller como aro
-   *            terminado (rolado, con el cierre soldado, barrenado y pintado). Las de taller (`PF.extremos`) además se arman y se
-   *            sueldan al ducto; las SUELTAS (`PF.extremos_sueltos`) no se unen al ducto: se mandan con sus tornillos y su empaque
-   *            para soldarlas en obra donde se corta el tramo.
+   *   BRIDADO: aros (solera o ángulo) + tornillería + la junta de la cara de la brida (+ sellador según clase). Toda brida sale de
+   *            taller como aro terminado (rolado, con el cierre soldado, barrenado y pintado). Las de taller (`PF.extremos`) además
+   *            se arman y se sueldan al ducto; las SUELTAS (`PF.extremos_sueltos`) no se unen al ducto: se mandan con sus tornillos
+   *            y el material de su junta para soldarlas en obra donde se corta el tramo.
+   *            La junta (`uniones.BRIDADO.junta`) es SELLADOR —el taller pone Sikaflex en lugar del empaque: un cordón de
+   *            `ml_sellador_junta_m` mL por metro sobre el círculo de barrenos, que es también el sello de la junta transversal (no
+   *            se suma el cordón de la clase C en esa junta)— o EMPAQUE (cinta de neopreno, y aparte el cordón de la clase).
    *   ESPIGA : prolongación macho + fijaciones + sellador.
    *   LISO   : sin herraje.
-   * Cada junta se comparte entre dos extremos: se asigna 0.5 junta de tornillería, empaque y sellador por extremo.
+   * Cada junta se comparte entre dos extremos: se asigna 0.5 junta de tornillería, de cordón de la junta (o empaque) y de sellador
+   * por extremo.
    */
   function herrajes(PF, p, mat, e, M) {
     const tipo = p.tipo_union || 'BRIDADO';
@@ -134,7 +138,10 @@
       n_tornillos_asignados: 0,
       n_barrenos: 0,
       n_juntas_asignadas: 0,
+      junta: null, // con qué se sella la cara de la brida: SELLADOR o EMPAQUE (sólo BRIDADO)
       L_empaque_m: 0,
+      L_junta_sellador_m: 0, // cordón de sellador sobre el círculo de barrenos, en lugar del empaque
+      V_sellador_junta_ml: 0,
       L_sellado_m: 0,
       V_sellador_ml: 0,
       n_espigas: 0,
@@ -147,10 +154,13 @@
 
     if (tipo === 'BRIDADO') {
       const holgura = M.proceso.aros.holgura_corte_mm;
+      const conSellador = (U_.junta || 'EMPAQUE') === 'SELLADOR';
+      out.junta = conSellador ? 'SELLADOR' : 'EMPAQUE';
       // Una brida del extremo `ext`. Toda brida se fabrica como aro terminado —se rola la solera, se suelda el cierre del aro, se
-      // barrena y se pinta— y lleva su media junta de tornillería y empaque. La de taller además se arma y se suelda al ducto y
-      // sella su media junta. La SUELTA sale igual de terminada pero no se une al ducto (ahí se corta y se ajusta en campo): sin
-      // ajuste, sin filete aro–ducto y sin sellador (la junta se sella en obra).
+      // barrena y se pinta— y lleva el material de su media junta: tornillería y cordón de Sikaflex (o empaque). La de taller
+      // además se arma y se suelda al ducto y, con empaque, sella su media junta con el cordón de la clase. La SUELTA sale igual
+      // de terminada pero no se une al ducto (ahí se corta y se ajusta en campo): sin ajuste, sin filete aro–ducto y sin el cordón
+      // de la clase (la junta se arma en obra).
       const brida = (ext, suelta) => {
         const dim_mayor = ext.forma === 'REDONDA' ? ext.D_ext_mm : Math.max(ext.a_ext_mm, ext.b_ext_mm);
         const perfil = seleccionarPerfil(M, dim_mayor, p.perfil_id);
@@ -166,11 +176,15 @@
           m_aro_kg: m_aro, m_aro_bruta_kg: m_aro / (1 - M.merma.PERFIL), c_centroide_mm: perfil.c_centroide_mm, gramil_mm: perfil.gramil_mm, peso_kg_m: perfil.peso_kg_m,
           suelta,
         };
-        // Material de la junta que lleva toda brida: media tornillería y medio empaque (la otra mitad es del extremo con que se une)
+        // Material de la junta que lleva toda brida: media tornillería y medio cordón de la junta o medio empaque (la otra mitad es
+        // del extremo con que se une)
         out.tornillos_por_tipo[perfil.tornillo] = (out.tornillos_por_tipo[perfil.tornillo] || 0) + 0.5 * n_tornillos;
         out.n_tornillos_asignados += 0.5 * n_tornillos;
         out.n_juntas_asignadas += 0.5;
-        if (p.usa_empaque !== false) out.L_empaque_m += (0.5 * g.P_perno_mm * (1 + U_.f_traslape_empaque)) / 1000;
+        if (p.usa_empaque !== false) {
+          if (conSellador) out.L_junta_sellador_m += (0.5 * g.P_perno_mm) / 1000;
+          else out.L_empaque_m += (0.5 * g.P_perno_mm * (1 + U_.f_traslape_empaque)) / 1000;
+        }
         // Fabricación del aro (toda brida): barrenos, cierre soldado del aro y pintura
         out.n_barrenos += n_tornillos;
         out.sold_aros.cierres.push({ L_m: g.L_cierre_mm / 1000, esp_mm: perfil.esp_mm });
@@ -186,7 +200,8 @@
         out.n_aros += 1;
         out.L_aros_m += L_aro_m;
         out.m_aros_neta_kg += m_aro;
-        if (clase !== 'NINGUNA') out.L_sellado_m += (0.5 * ext.P_ext_mm) / 1000;
+        // con la junta de sellador, ese cordón ya sella la junta transversal: no se suma el de la clase C
+        if (clase !== 'NINGUNA' && !(conSellador && p.usa_empaque !== false)) out.L_sellado_m += (0.5 * ext.P_ext_mm) / 1000;
         out.sold_aros.filete_m += (U_.f_cont_soldadura_aro * ext.P_ext_mm) / 1000;
       };
       PF.extremos.forEach((ext) => brida(ext, false));
@@ -213,7 +228,8 @@
     if (clase === 'B' || clase === 'A') out.L_sellado_m += PF.engargolado_long_m;
     if (clase === 'A') out.L_sellado_m += p.L_penetraciones_m || 0;
     const S = M.herrajes.sellador;
-    out.V_sellador_ml = out.L_sellado_m * S.ml_por_m * (1 + S.f_merma);
+    if (out.L_junta_sellador_m > 0) out.V_sellador_junta_ml = out.L_junta_sellador_m * U_.ml_sellador_junta_m * (1 + S.f_merma);
+    out.V_sellador_ml = out.L_sellado_m * S.ml_por_m * (1 + S.f_merma) + out.V_sellador_junta_ml;
     return out;
   }
 

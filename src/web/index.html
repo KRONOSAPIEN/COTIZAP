@@ -101,8 +101,9 @@
       <div class="cg-bloque-cab"><h3 id="cg-venta-tit">Venta y precio mínimo</h3></div>
       <div class="campo cg-venta-campo" id="cg-venta-campo">
         <label for="cg_venta_pactada">Venta pactada con el cliente</label>
-        <div class="ctl"><input id="cg_venta_pactada" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Sin venta pactada" aria-describedby="cg_venta_nota"><span class="sufijo">MXN sin IVA</span></div>
-        <div class="ayuda" id="cg_venta_nota">Lo que se acordó con el cliente, antes de IVA. Vacío: se mide con el precio calculado.</div>
+        <div class="ctl"><input id="cg_venta_pactada" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Sin venta pactada" aria-describedby="cg_venta_nota"><span class="sufijo" id="cg_venta_sufijo">MXN sin IVA</span></div>
+        <label class="check cg-check"><input type="checkbox" id="cg_venta_con_iva"> El importe ya incluye IVA</label>
+        <div class="ayuda" id="cg_venta_nota">Lo que se acordó con el cliente. Si ya trae IVA, márquelo: el margen se mide antes de IVA. Vacío: se mide con el precio calculado.</div>
       </div>
       <div id="cg-resultado"></div>
     </section>

@@ -104,7 +104,7 @@ test('Cantidades múltiples: sin setup el precio unitario no cambia; con corte C
   // Ahorro exacto: P(10) = 10·P(1) − 9·ΔP_setup, con ΔP_setup = K·[(1+adm)·CD_setup + GIF·h_setup]
   const K = ((1 + 0.04) * (1 + (0.14 * 45) / 365)) / (1 - 0.2 - 0.02);
   const h_setup = M.proceso.corte.t_prog_cnc_min / M.proceso.eficiencia_taller / 60;
-  const mo_h = ((500 * 7) / (5 * 8)) * 1.0; // $500 por día, 7 días pagados por 5 de 8 h trabajados: $87.50 la hora (FSR = 1.00)
+  const mo_h = (500 / 8) * 1.0; // $500 por día ÷ 8 h: $62.50 la hora (FSR = 1.00)
   const CD_setup = h_setup * (mo_h + 45) + 0.03 * h_setup * mo_h;
   const dP_setup = K * ((1 + 0.08) * CD_setup + 85 * h_setup);
   casi(c10.pila.precio, c1.pila.precio * 10 - 9 * dP_setup, 1e-9);
@@ -803,14 +803,28 @@ test('Brida suelta (por omisión): el aro sale terminado de taller (rolado, cier
   casi(her.L_sellado_m, sin.qto.her.L_sellado_m, 1e-12);
   casi(her.L_aros_m, sin.qto.her.L_aros_m, 1e-12);
 
-  // El material de su junta: el aro, la media tornillería y el medio empaque de ese extremo, y el flete de entrada
+  // El material de su junta: el aro, la media tornillería y el medio cordón de Sikaflex de ese extremo (en lugar del empaque), y
+  // el flete de entrada
   casi(her.n_tornillos_asignados, con.qto.her.n_tornillos_asignados, 1e-12);
-  casi(her.L_empaque_m, con.qto.her.L_empaque_m, 1e-12);
+  assert.equal(her.junta, 'SELLADOR');
+  assert.equal(her.L_empaque_m, 0, 'el empaque se sustituyó por el cordón de Sikaflex');
+  casi(her.L_junta_sellador_m, con.qto.her.L_junta_sellador_m, 1e-12);
+  casi(her.L_junta_sellador_m - sin.qto.her.L_junta_sellador_m, her.aros_sueltos[0].P_perno_mm / 2000, 1e-12, 'medio cordón sobre el círculo de barrenos');
   casi(suelta.costos.materiales.perfiles, con.costos.materiales.perfiles, 1e-12);
   casi(suelta.costos.materiales.tornilleria, con.costos.materiales.tornilleria, 1e-12);
-  casi(suelta.costos.materiales.empaque, con.costos.materiales.empaque, 1e-12);
-  casi(suelta.costos.materiales.sellador, sin.costos.materiales.sellador, 1e-12);
+  assert.equal(suelta.costos.materiales.empaque, 0);
+  casi(suelta.costos.materiales.sellador, con.costos.materiales.sellador, 1e-12, 'el cordón de la junta: la de taller tampoco suma el de la clase C en esa junta');
+  assert.ok(suelta.costos.materiales.sellador > sin.costos.materiales.sellador);
   casi(suelta.costos.materiales.flete, con.costos.materiales.flete, 1e-12, 'el flete va sobre lámina y perfiles: también sobre el aro suelto');
+  // Con la junta de empaque (tablas maestras): el medio empaque del extremo suelto, y su junta se sella en obra (sin cordón de la clase)
+  const Memp = crearMaestros({ herrajes: { uniones: { BRIDADO: { junta: 'EMPAQUE' } } } });
+  const [sinE, conE, sueltaE] = ['SIN_BRIDA', 'CON_BRIDA', null].map((x) => C.cotizarPartida(x ? { ...rectoYardas, extremo_ajuste: x } : rectoYardas, Memp));
+  assert.equal(sueltaE.qto.her.junta, 'EMPAQUE');
+  assert.equal(sueltaE.qto.her.L_junta_sellador_m, 0);
+  casi(sueltaE.qto.her.L_empaque_m, conE.qto.her.L_empaque_m, 1e-12);
+  casi(sueltaE.costos.materiales.empaque, conE.costos.materiales.empaque, 1e-12);
+  casi(sueltaE.costos.materiales.sellador, sinE.costos.materiales.sellador, 1e-12, 'la junta del extremo suelto se sella en obra');
+  assert.ok(conE.costos.materiales.sellador > sueltaE.costos.materiales.sellador, 'la de taller sí sella su media junta');
 
   // Se inspecciona y se embala todo lo que se manda
   casi(T(suelta, 'qc_embalaje'), T(con, 'qc_embalaje'), 1e-12);
@@ -840,9 +854,11 @@ test('Brida suelta (por omisión): el aro sale terminado de taller (rolado, cier
 });
 
 test('Brida suelta: sigue las demás opciones de la unión (sin empaque, perfil de ángulo, unión de espiga, tablas maestras)', () => {
-  // sin empaque: tampoco va el empaque del extremo suelto
+  // sin material de junta: tampoco va el cordón de Sikaflex (ni el empaque) del extremo suelto
   const sinEmp = C.cotizarPartida({ ...rectoYardas, usa_empaque: false }, M);
   assert.equal(sinEmp.qto.her.L_empaque_m, 0);
+  assert.equal(sinEmp.qto.her.L_junta_sellador_m, 0);
+  assert.equal(sinEmp.qto.her.V_sellador_junta_ml, 0);
   assert.equal(sinEmp.qto.her.aros_sueltos.length, 1);
   // perfil de ángulo: el aro suelto es del mismo perfil que el de taller y se valoriza con su precio
   const ang = C.cotizarPartida({ ...rectoYardas, perfil_id: 'L38x4.8' }, M);
@@ -902,14 +918,30 @@ test('Yardas: cada una se rola aparte y las juntas entre ellas se engargolan (m�
   casi(por914.qto.tmp.detalle.n_hojas_eq / por1220.qto.tmp.detalle.n_hojas_eq, 1220 / 914, 1e-12);
 });
 
-test('Sellado clase C: también se sellan las juntas engargoladas entre yardas (son transversales); NINGUNA no sella nada', () => {
-  const sel = (clase, yarda) => C.cotizarPartida({ ...rectoYardas, extremo_ajuste: 'CON_BRIDA', yarda_mm: yarda, clase_sellado: clase }, M).qto.her.L_sellado_m;
+test('Sellado clase C: también se sellan las juntas engargoladas entre yardas (son transversales); la junta de bridas la sella su cordón de Sikaflex; NINGUNA no sella nada', () => {
+  const her = (clase, yarda, Mx = M, extra = {}) => C.cotizarPartida({ ...rectoYardas, extremo_ajuste: 'CON_BRIDA', yarda_mm: yarda, clase_sellado: clase, ...extra }, Mx).qto.her;
+  const sel = (clase, yarda, Mx, extra) => her(clase, yarda, Mx, extra).L_sellado_m;
   const P_med = Math.PI * (304.8 + 0.0598 * 25.4);
   const D_ext = 304.8 + 2 * 0.0598 * 25.4;
-  casi(sel('C', 1220), (1 * Math.PI * D_ext) / 1000 + (2 * P_med) / 1000, 1e-12, '1 junta de bridas + 2 juntas engargoladas');
-  // con yardas de 914 el ajuste es una pieza aparte (con brida en ambos extremos): una junta de bridas más, las engargoladas son las mismas
-  casi(sel('C', 914) - sel('C', 1220), (Math.PI * D_ext) / 1000, 1e-12);
+  const P_perno = Math.PI * (D_ext + 2 * 19.05); // círculo de barrenos de la solera de 1½″ (gramil 19.05 mm)
+  // la junta de bridas ya la sella el cordón de la junta (Sikaflex en lugar del empaque): la clase C sólo suma las engargoladas
+  casi(sel('C', 1220), (2 * P_med) / 1000, 1e-12, '2 juntas engargoladas');
+  casi(her('C', 1220).L_junta_sellador_m, (2 * 0.5 * P_perno) / 1000, 1e-12, 'media junta por cada una de las 2 bridas');
+  casi(her('C', 1220).V_sellador_junta_ml, (P_perno / 1000) * 40 * 1.15, 1e-12, '40 mL por metro + 15 % de merma');
+  casi(her('C', 1220).V_sellador_ml, ((2 * P_med) / 1000) * 20 * 1.15 + (P_perno / 1000) * 40 * 1.15, 1e-12);
+  // con yardas de 914 el ajuste es una pieza aparte (con brida en ambos extremos): una junta de bridas más, con su cordón
+  casi(sel('C', 914), sel('C', 1220), 1e-12, 'las engargoladas son las mismas');
+  casi(her('C', 914).L_junta_sellador_m - her('C', 1220).L_junta_sellador_m, P_perno / 1000, 1e-12);
+  // el cordón de la junta va aunque la clase sea NINGUNA (es el sello de la cara de la brida, lo que hacía el empaque)
   assert.equal(sel('NINGUNA', 1220), 0);
+  casi(her('NINGUNA', 1220).L_junta_sellador_m, P_perno / 1000, 1e-12);
+  // con la junta de empaque (tablas maestras), la junta de bridas lleva además el cordón de la clase C sobre el perímetro
+  const Memp = crearMaestros({ herrajes: { uniones: { BRIDADO: { junta: 'EMPAQUE' } } } });
+  casi(sel('C', 1220, Memp), (1 * Math.PI * D_ext) / 1000 + (2 * P_med) / 1000, 1e-12, '1 junta de bridas + 2 juntas engargoladas');
+  casi(sel('C', 914, Memp) - sel('C', 1220, Memp), (Math.PI * D_ext) / 1000, 1e-12);
+  assert.equal(her('C', 1220, Memp).L_junta_sellador_m, 0);
+  // sin material de junta, la junta de bridas vuelve a sellarse con el cordón de la clase
+  casi(sel('C', 1220, M, { usa_empaque: false }), sel('C', 1220, Memp), 1e-12);
   // la costura longitudinal soldada a tope no se sella; con Pittsburgh se suma desde la clase B
   const B = (tc) => C.cotizarPartida({ ...rectoYardas, extremo_ajuste: 'CON_BRIDA', clase_sellado: 'B', tipo_costura: tc }, M).qto.her.L_sellado_m;
   casi(B('PITTSBURGH') - B('A_TOPE'), 3.0, 1e-12);

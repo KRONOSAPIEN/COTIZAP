@@ -76,11 +76,11 @@
       W.tile('Costo directo', W.mxn(CD), 'material, mano de obra, compras y viáticos'),
       W.tile('Precio mínimo', W.mxn(T.precio_minimo), 'cubre indirectos, financiamiento y comisión; utilidad cero'),
       W.tile('Precio calculado', W.mxn(T.subtotal_neto), `con ${W.pct(util, 0)} de utilidad${T.descuento > 0 ? ' y el descuento' : ''}`),
-      V ? W.tile('Venta pactada', W.mxn(V.pactada), `${V.diferencia >= 0 ? '+' : '−'}${W.mxn(Math.abs(V.diferencia))} contra lo calculado`, 'tile-principal') : null,
+      V ? W.tile('Venta pactada', W.mxn(V.pactada), `${V.con_iva ? `antes de IVA (${W.mxn(V.capturada)} con IVA) · ` : ''}${V.diferencia >= 0 ? '+' : '−'}${W.mxn(Math.abs(V.diferencia))} contra lo calculado`, 'tile-principal') : null,
       V ? W.tile('Utilidad con la venta', W.mxn(V.utilidad), `${W.num(V.margen_pct * 100, 1)} % de la venta`, V.utilidad < 0 ? 'tile-adv' : '')
         : W.tile('Utilidad calculada', W.mxn(T.utilidad), `${W.num(T.margen_real_pct * 100, 1)} % del precio`));
     let juicio;
-    if (!V) juicio = 'Sin venta pactada: el resultado se mide con el precio calculado. Capture arriba lo que se acordó con el cliente (antes de IVA) para ver lo que de verdad deja.';
+    if (!V) juicio = 'Sin venta pactada: el resultado se mide con el precio calculado. Capture arriba lo que se acordó con el cliente (y si ya trae IVA) para ver lo que de verdad deja.';
     else if (V.utilidad >= 0) juicio = `La venta cubre todo el costo (directo, indirectos, financiamiento y comisión) y deja ${W.mxn(V.utilidad)} de utilidad.`;
     else if (V.cubre_costo_directo) juicio = `La venta cubre el costo directo, pero le faltan ${W.mxn(T.precio_minimo - V.pactada)} para llegar al precio mínimo: no paga sus indirectos, el financiamiento ni la comisión.`;
     else juicio = `La venta no alcanza ni el costo directo: faltan ${W.mxn(CD - V.pactada)} sólo para pagar material, mano de obra, compras y viáticos.`;
@@ -88,7 +88,9 @@
       regla(CD, T.precio_minimo, T.subtotal_neto, V ? V.pactada : null),
       tiles,
       h('p', { class: `nota${V && V.utilidad < 0 ? ' nota-adv' : ''}` }, W.icono(V && V.utilidad < 0 ? 'aviso' : 'info'), juicio),
-      V ? h('p', { class: 'nota' }, `Con IVA (${W.pct(T.iva_pct, 0)}), la venta pactada factura ${W.mxn(V.total)}.`) : null);
+      V ? h('p', { class: 'nota' }, V.con_iva
+        ? `Se capturó con IVA: ${W.mxn(V.capturada)} ÷ (1 + ${W.pct(T.iva_pct, 0)}) = ${W.mxn(V.pactada)} antes de IVA. El IVA (${W.mxn(V.iva)}) es del SAT: no es venta.`
+        : `Con IVA (${W.pct(T.iva_pct, 0)}), la venta pactada factura ${W.mxn(V.total)}.`) : null);
   }
 
   /* ================================================================== */
@@ -255,7 +257,7 @@
       R.errores.length ? h('ul', { class: 'avisos' }, R.errores.slice(0, 6).map((e) => h('li', null, W.icono('aviso'), h('span', null, e)))) : null,
       h('h4', { class: 'cg-sub' }, 'Resultado del proyecto'),
       h('div', { class: 'tiles' },
-        W.tile(Rs.venta_es_pactada ? 'Venta pactada' : 'Venta (precio calculado)', W.mxn(Rs.venta), 'sin IVA'),
+        W.tile(Rs.venta_es_pactada ? 'Venta pactada' : 'Venta (precio calculado)', W.mxn(Rs.venta), Rs.venta_es_pactada && T.venta && T.venta.con_iva ? `sin IVA · ${W.mxn(T.venta.capturada)} con IVA` : 'sin IVA'),
         W.tile('Gastos reales', W.mxn(tot.real), `${tot.n_gastos} ${tot.n_gastos === 1 ? 'gasto' : 'gastos'} sin el IVA acreditable`),
         W.tile('Utilidad antes de indirectos', W.mxn(Rs.utilidad_antes_indirectos), `${W.num(Rs.margen_antes_indirectos_pct * 100, 1)} % · venta − gastos`, Rs.utilidad_antes_indirectos < 0 ? 'tile-adv' : ''),
         W.tile('Equipo, indirectos y comisión', W.mxn(estimados), 'estimados por la cotización (no se capturan)'),
@@ -409,13 +411,18 @@
 
   /** Abre el proyecto de ejemplo (el de la hoja de control de gastos) en lugar de la cotización actual; se puede deshacer. */
   function verEjemplo() {
-    W.abrirCotizacion(C.ejemplos.casoControlGastos(), 'Ejemplo abierto: un proyecto vendido en $45,710 + IVA con sus gastos reales');
+    W.abrirCotizacion(C.ejemplos.casoControlGastos(), 'Ejemplo abierto: un proyecto vendido en $45,710 con IVA y sus gastos reales');
   }
 
   /* ================================================================== */
   /* Entrada: venta pactada y piezas enteras                            */
   /* ================================================================== */
   function sincronizarVenta() {
+    const conIva = E().cot.venta_pactada_con_iva === true;
+    const chk = $('#cg_venta_con_iva');
+    if (chk && document.activeElement !== chk) chk.checked = conIva;
+    const suf = $('#cg_venta_sufijo');
+    if (suf) suf.textContent = conIva ? 'MXN con IVA' : 'MXN sin IVA';
     const el = $('#cg_venta_pactada');
     if (!el || document.activeElement === el) return;
     const v = E().cot.venta_pactada;
@@ -450,6 +457,11 @@
     enlazado = true;
     $('#cg_venta_pactada').addEventListener('input', editarVenta);
     $('#cg_venta_pactada').addEventListener('blur', sincronizarVenta);
+    $('#cg_venta_con_iva').addEventListener('change', (ev) => {
+      if (ev.target.checked) E().cot.venta_pactada_con_iva = true; else delete E().cot.venta_pactada_con_iva;
+      W.persistir();
+      W.render();
+    });
     $('#cg_piezas_enteras').addEventListener('change', (ev) => {
       if (ev.target.checked) E().cot.piezas_enteras = true; else delete E().cot.piezas_enteras;
       W.persistir();

@@ -115,6 +115,8 @@
     COMPRADO: () => ({
       precio_compra_unitario: real('Costo de compra unitario', 0, 1e8, 'MXN'),
       peso_kg: real('Peso unitario', 0, 1e6, 'kg'),
+      tornillos_pieza: entero('Juegos de tornillería por pieza', 0, 1000),
+      circulo_barrenos_mm: dim('Diámetro del círculo de barrenos', { cero: true }),
     }),
     BRIDA: (p) => ({ ...medidas(p) }),
     INSTALACION: () => ({
@@ -131,6 +133,7 @@
     }),
     SOPORTE: () => ({
       largo_pieza_mm: largo('Largo de barra por pieza'),
+      abrazadera_D_mm: dim('Diámetro del ducto que abraza', { cero: true }),
       anclajes_pieza: entero('Anclajes por pieza', 0, 100),
       tornillos_pieza: entero('Tornillos por pieza', 0, 100),
       min_pieza: real('Minutos de taller por pieza', 0.1, 10000, 'min', { cero: true }),
@@ -332,7 +335,7 @@
     'herrajes.uniones.BRIDADO.paso_tornillo_mm', 'herrajes.uniones.BRIDADO.multiplo_tornillos', 'herrajes.uniones.ESPIGA.paso_fijacion_mm',
     'herrajes.sellador.cartucho_ml', 'herrajes.perfiles.*.ancho_mm', 'herrajes.perfiles.*.esp_mm',
     'materiales.*.densidad_kg_m3', 'mano_obra.FSR',
-    'mano_obra.jornada.dias_pagados_semana', 'mano_obra.jornada.dias_trabajados_semana', 'mano_obra.jornada.horas_dia',
+    'mano_obra.jornada.horas_dia',
     'compras.tornillos_multiplo', 'compras.pintura_envase_L',
   ];
   // Tablas espesor → velocidad ([[espesor, m/min], …]) y espesores por calibre: cada celda > 0 (se revisan con su propio mensaje).
@@ -468,14 +471,16 @@
       }
     }
 
-    // La jornada: días de la semana (1 a 7) y horas de un día (hasta 24)
+    // La jornada: las horas de un día (hasta 24)
     if (quiere('mano_obra')) {
       const J = M.mano_obra.jornada;
-      if (!esObjeto(J)) agregar(['mano_obra', 'jornada'], 'falta la jornada (días pagados y trabajados por semana, horas por día)');
-      else {
-        ['dias_pagados_semana', 'dias_trabajados_semana'].forEach((k) => { if (typeof J[k] === 'number' && J[k] > 7) agregar(['mano_obra', 'jornada', k], `una semana tiene 7 días (vale ${J[k]})`); });
-        if (typeof J.horas_dia === 'number' && J.horas_dia > 24) agregar(['mano_obra', 'jornada', 'horas_dia'], `un día tiene 24 horas (vale ${J.horas_dia})`);
-      }
+      if (!esObjeto(J)) agregar(['mano_obra', 'jornada'], 'falta la jornada (horas por día)');
+      else if (typeof J.horas_dia === 'number' && J.horas_dia > 24) agregar(['mano_obra', 'jornada', 'horas_dia'], `un día tiene 24 horas (vale ${J.horas_dia})`);
+    }
+    // La junta de la brida: con sellador (Sikaflex) o con empaque de neopreno
+    if (quiere('herrajes')) {
+      const B = M.herrajes.uniones && M.herrajes.uniones.BRIDADO;
+      if (esObjeto(B) && B.junta !== undefined && !['SELLADOR', 'EMPAQUE'].includes(B.junta)) agregar(['herrajes', 'uniones', 'BRIDADO', 'junta'], `debe ser SELLADOR o EMPAQUE; vale ${texto(B.junta)}`);
     }
     // Soportería: el anclaje por omisión es un artículo del catálogo y el tornillo uno con precio
     if (quiere('proceso') && !esObjeto(M.proceso.soportes)) agregar(['proceso', 'soportes'], 'falta la tabla de la soportería');
@@ -495,6 +500,12 @@
           const a = K.articulos[id];
           if (!esObjeto(a) || typeof a.precio !== 'number') agregar(['compras', 'articulos', id], 'cada artículo lleva descripción, unidad, precio y si el precio trae IVA');
           else if (typeof a.iva_incluido !== 'boolean') agregar(['compras', 'articulos', id, 'iva_incluido'], 'debe ser sí o no');
+          else if (a.tornillos_pieza !== undefined && !(Number.isInteger(a.tornillos_pieza) && a.tornillos_pieza >= 0 && a.tornillos_pieza <= 1000)) {
+            agregar(['compras', 'articulos', id, 'tornillos_pieza'], `debe ser un número entero de juegos, de 0 a 1 000 (vale ${texto(a.tornillos_pieza)})`);
+          }
+          else if (a.circulo_barrenos_mm !== undefined && !(typeof a.circulo_barrenos_mm === 'number' && a.circulo_barrenos_mm >= 0 && a.circulo_barrenos_mm <= 5000)) {
+            agregar(['compras', 'articulos', id, 'circulo_barrenos_mm'], `debe ser un diámetro de 0 a 5 000 mm (vale ${texto(a.circulo_barrenos_mm)})`);
+          }
           else if (a.categoria !== undefined && !tiene(GAS.CATEGORIAS, a.categoria)) {
             agregar(['compras', 'articulos', id, 'categoria'], `debe ser una categoría del control de gastos (${Object.keys(GAS.CATEGORIAS).join(', ')}); vale ${texto(a.categoria)}`);
           }

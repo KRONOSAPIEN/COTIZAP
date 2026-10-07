@@ -59,7 +59,7 @@
         P({ familia: 'REDUCCION_INJERTO', descripcion: 'Reducción con injerto 45° Ø12″ → Ø10″ + Ø6″', D1_mm: 304.8, D2_mm: 254, d_mm: 152.4, beta_deg: 45 }),
         P({ familia: 'TRANSICION', descripcion: 'Transición Ø12″ → 400 × 300 mm', D_mm: 304.8, a_mm: 400, b_mm: 300 }),
         { id: idNuevo(), familia: 'COMPRADO', descripcion: 'Compuerta de guillotina Ø12″ (compra)', precio_compra_unitario: 1850, peso_kg: 9, cantidad: 1 },
-        { id: idNuevo(), familia: 'SOPORTE', descripcion: 'Ménsulas de ángulo 1¼″ para el ducto', barra_id: 'ANG_1_1_4X1_8', largo_pieza_mm: 1500, anclajes_pieza: 4, cantidad: 6 },
+        { id: idNuevo(), familia: 'SOPORTE', descripcion: 'Ménsulas de ángulo 1¼″ (brazo y pierna de 650 mm)', barra_id: 'ANG_1_1_4X1_8', largo_pieza_mm: 1300, anclajes_pieza: 4, cantidad: 6 },
         { id: idNuevo(), familia: 'INSTALACION', descripcion: 'Instalación en obra (2 personas, 2 días)', personas: 2, dias: 2, viajes: 1, gasolina_viaje: 600, comida_dia: 200, cantidad: 1 },
       ],
     };
@@ -97,7 +97,7 @@
       const guardada = estado.cot;
       estado.cot = cotizacionValida({
         ...cotizacionEjemplo(),
-        ...Object.fromEntries(['unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'ubicacion', 'fecha', 'vigencia_dias', 'parametros', 'yarda_mm', 'venta_pactada', 'piezas_enteras', 'gastos'].filter((k) => guardada[k] !== undefined).map((k) => [k, guardada[k]])),
+        ...Object.fromEntries(['unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'ubicacion', 'fecha', 'vigencia_dias', 'parametros', 'yarda_mm', 'venta_pactada', 'venta_pactada_con_iva', 'piezas_enteras', 'gastos'].filter((k) => guardada[k] !== undefined).map((k) => [k, guardada[k]])),
       }, estado.M);
     }
     estado.sel = estado.cot.partidas.length ? estado.cot.partidas[0].id : null;
@@ -159,9 +159,11 @@
     // Ancho de la yarda de la cotización: sólo vale uno dentro de los límites de las tablas (vacío o inválido = el de las tablas)
     const yarda = C.cotizador.yardaDeCotizacion(cot, M).yarda_mm;
     if (yarda === undefined) delete cot.yarda_mm; else cot.yarda_mm = yarda;
-    // Venta pactada con el cliente (MXN sin IVA): sólo un importe válido (vacío o inválido = no hay); cobrar el sobrante, sólo sí/no
-    const venta = C.cotizador.ventaPactada(cot).venta;
+    // Venta pactada con el cliente, como se capturó (con IVA sólo si se marcó): sólo un importe válido (vacío o inválido = no hay);
+    // cobrar el sobrante, sólo sí/no
+    const venta = C.cotizador.ventaPactada(cot).capturada;
     if (venta === undefined) delete cot.venta_pactada; else cot.venta_pactada = venta;
+    if (venta === undefined || cot.venta_pactada_con_iva !== true) delete cot.venta_pactada_con_iva;
     if (cot.piezas_enteras !== true) delete cot.piezas_enteras;
     const vistosG = new Set();
     cot.gastos = (Array.isArray(c.gastos) ? c.gastos : []).filter(esObjeto).slice(0, 5000).map((g) => {
@@ -217,7 +219,7 @@
     const cot = estado.cot;
     return {
       riesgo: cot.riesgo, servicio: cot.servicio, ubicacion: cot.ubicacion, parametros: cot.parametros, yarda_mm: cot.yarda_mm,
-      venta_pactada: cot.venta_pactada, piezas_enteras: cot.piezas_enteras === true, partidas: cot.partidas,
+      venta_pactada: cot.venta_pactada, venta_pactada_con_iva: cot.venta_pactada_con_iva === true, piezas_enteras: cot.piezas_enteras === true, partidas: cot.partidas,
     };
   };
 
@@ -645,9 +647,9 @@
     return h('div', { class: clase, role: 'note' },
       h('div', { class: 'venta-res-cab' },
         h('span', { class: 'venta-res-et' }, 'Venta pactada'),
-        h('strong', null, `${W.mxn(V.pactada)} + IVA`),
+        h('strong', null, V.con_iva ? `${W.mxn(V.capturada)} con IVA` : `${W.mxn(V.pactada)} + IVA`),
         h('button', { type: 'button', class: 'btn-texto', onclick: () => irPestana('compras') }, 'Compras y gastos')),
-      h('p', null, `Utilidad ${W.mxn(V.utilidad)} (${W.num(V.margen_pct * 100, 1)} %): ${juicio}. Precio calculado ${W.mxn(V.precio_calculado)} (${V.diferencia >= 0 ? '+' : '−'}${W.mxn(Math.abs(V.diferencia))}).`));
+      h('p', null, `${V.con_iva ? `Antes de IVA son ${W.mxn(V.pactada)}. ` : ''}Utilidad ${W.mxn(V.utilidad)} (${W.num(V.margen_pct * 100, 1)} %): ${juicio}. Precio calculado ${W.mxn(V.precio_calculado)} (${V.diferencia >= 0 ? '+' : '−'}${W.mxn(Math.abs(V.diferencia))}).`));
   }
 
   /* ================================================================== */
@@ -789,7 +791,7 @@
     const notas = [];
     notas.push(`Yardas de ${W.num(arm.yarda_mm, 0)} mm (el ancho de la hoja): cada una se rola por separado y se engargolan hasta ${estado.M.proceso.armado_yardas.yardas_por_pieza_max} por pieza; las piezas llevan brida de taller en ambos extremos.`);
     if (arm.extremo_libre && arm.modo === 'SUELTA') {
-      notas.push(`El tramo de ajuste (${W.num(arm.ajuste_mm, 0)} mm, menos de una yarda) lleva brida de taller sólo en el extremo de las yardas. El otro extremo se corta y se ajusta en campo: ahí el taller no suelda la brida al ducto, manda suelto el aro terminado (rolado, con el cierre soldado, barrenado y pintado) con sus tornillos y su empaque, para soldarlo en obra.`);
+      notas.push(`El tramo de ajuste (${W.num(arm.ajuste_mm, 0)} mm, menos de una yarda) lleva brida de taller sólo en el extremo de las yardas. El otro extremo se corta y se ajusta en campo: ahí el taller no suelda la brida al ducto, manda suelto el aro terminado (rolado, con el cierre soldado, barrenado y pintado) con sus tornillos y el material de su junta, para soldarlo en obra.`);
     } else if (arm.extremo_libre) {
       notas.push(`El tramo de ajuste (${W.num(arm.ajuste_mm, 0)} mm, menos de una yarda) va sin brida en su extremo libre para cortarlo y ponerlo en campo: la brida y la junta de ese extremo no están en este precio.`);
     } else if (arm.ajuste_mm > 0) {
@@ -878,10 +880,13 @@
       kvs.append(
         kv('Juegos de tornillería (asignados)', W.num(her.n_tornillos_asignados, 1)),
         kv('Barrenos', String(her.n_barrenos)),
-        kv('Empaque', W.num(her.L_empaque_m, 3), 'm'));
+        her.junta === 'SELLADOR'
+          ? kv('Junta: cordón de Sikaflex sobre los barrenos', `${W.num(her.L_junta_sellador_m, 3)} m · ${W.num(her.V_sellador_junta_ml, 1)}`, 'mL')
+          : kv('Junta: empaque', W.num(her.L_empaque_m, 3), 'm'));
     }
     if (her.n_espigas) kvs.append(kv('Espigas', String(her.n_espigas)), kv('Fijaciones', String(her.n_fijaciones)), kv('Lámina extra de espiga', W.num(her.A_espiga_m2, 4), 'm²'));
-    kvs.append(kv('Sellado', `${W.num(her.L_sellado_m, 3)} m · ${W.num(her.V_sellador_ml, 1)}`, 'mL'));
+    kvs.append(kv(her.junta === 'SELLADOR' ? 'Sellado de la clase (sin las juntas de bridas)' : 'Sellado', `${W.num(her.L_sellado_m, 3)} m`),
+      kv('Sellador en total', W.num(her.V_sellador_ml, 1), 'mL'));
     const cons = h('dl', { class: 'kvs' },
       kv('Depósito de soldadura', W.num(con.soldadura.m_depositado_g, 1), 'g'),
       kv('Alambre / varilla', W.num(con.soldadura.kg_alambre, 4), 'kg'),
@@ -963,6 +968,11 @@
   }
 
   const NOMBRE_CAT = (k) => (C.gastos.CATEGORIAS[k] || k).split(':')[0];
+  /** El tornillo como se lee en el taller (5/16″ × 1¼″), del perfil que lo usa; si ninguno lo usa, su clave. */
+  const descTornillo = (clave) => {
+    const p = Object.values(estado.res.maestros.herrajes.perfiles).find((x) => x && x.tornillo === clave && x.tornillo_desc);
+    return p ? p.tornillo_desc : clave;
+  };
 
   /** Lo comprado: de dónde sale el precio, si traía IVA y en qué renglón del control de gastos cae. */
   function detalleCompra(f) {
@@ -975,9 +985,14 @@
         kv('Precio de compra', `${W.mxn(k.precio)} ${k.iva_incluido ? 'con IVA' : 'antes de IVA'}`, `por ${k.unidad}`),
         kv('Origen del precio', f.entrada.precio_compra_unitario !== undefined ? 'Capturado en la partida' : 'Del catálogo de compras'),
         kv('Costo sin IVA', W.mxn(k.unitario_sin_iva), `por ${k.unidad}`),
-        kv(`Costo de ${W.num(n, 0)} × ${k.unidad}`, W.mxn(f.costos.CD)),
-        kv('Renglón del control de gastos', NOMBRE_CAT(k.categoria))),
+        kv(`Compra de ${W.num(n, 0)} × ${k.unidad}`, W.mxn(f.costos.materiales.compra)),
+        k.tornillos > 0 ? kv('Tornillería', W.mxn(f.costos.materiales.tornilleria), `${W.num(k.tornillos, 0)} juegos de ${descTornillo(k.tornillo)} + ${W.pct(k.reserva_tornillos, 0)} de reserva`) : null,
+        k.junta === 'SELLADOR' ? kv('Junta: Sikaflex sobre los barrenos', W.mxn(f.costos.materiales.sellador), `Ø${W.num(k.circulo_barrenos_mm, 0)} mm · ${W.num(k.V_sellador_ml, 1)} mL por pieza`) : null,
+        k.junta === 'EMPAQUE' ? kv('Junta: empaque sobre los barrenos', W.mxn(f.costos.materiales.empaque), `Ø${W.num(k.circulo_barrenos_mm, 0)} mm · ${W.num(k.L_empaque_m, 3)} m por pieza`) : null,
+        kv('Costo directo', W.mxn(f.costos.CD)),
+        kv('Renglón del control de gastos', `${NOMBRE_CAT(k.categoria)}${k.tornillos > 0 || k.junta ? ' (su tornillería y su junta, en material)' : ''}`)),
       k.iva_incluido ? h('p', { class: 'nota' }, `Al precio se le quita el IVA (${W.pct(estado.res.maestros.compras.iva_pct, 0)}): se acredita, no es costo.`) : null,
+      k.tornillos > 0 || k.junta ? h('p', { class: 'nota' }, 'Se atornilla como brida: lleva la mitad de la tornillería y del material de la junta (la otra mitad es de la pieza con que se une).') : null,
     ];
   }
 
@@ -1004,7 +1019,7 @@
     return {
       perfil: `${W.num(s.L_total_m, 3)} m × ${W.mxn(s.barra.precio_m)}/m ÷ (1 − merma ${W.pct(estado.res.maestros.merma.PERFIL, 0)})`,
       anclajes: `${s.anclajes} × ${W.mxn(s.anclaje.unitario_sin_iva)} (${s.anclaje.descripcion})`,
-      tornilleria: `${s.tornillos} juegos ${s.tornillo} × ${W.mxn(s.precio_tornillo)}`,
+      tornilleria: `${s.tornillos} juegos de ${descTornillo(s.tornillo)} × ${W.mxn(s.precio_tornillo)}`,
     };
   }
 
@@ -1020,7 +1035,7 @@
       h('dl', { class: 'kvs' },
         kv('Cuadrilla', `${e.personas} ${e.personas === 1 ? 'persona' : 'personas'} × ${W.num(e.dias, 1)} ${e.dias === 1 ? 'día' : 'días'} × ${W.num(I.horas_dia, 1)} h${e.cantidad > 1 ? ` × ${e.cantidad} veces` : ''}`),
         kv('Horas en obra', W.num(I.horas, 2), 'h'),
-        kv('Costo por hora', W.mxn(I.tarifa.mo_h), `salario por día × ${J.dias_pagados_semana} ÷ ${W.num(J.dias_trabajados_semana * J.horas_dia, 0)} h`),
+        kv('Costo por hora', W.mxn(I.tarifa.mo_h), `salario por día ÷ ${W.num(J.horas_dia, Number.isInteger(J.horas_dia) ? 0 : 1)} h${estado.res.maestros.mano_obra.FSR !== 1 ? ` × FSR ${W.num(estado.res.maestros.mano_obra.FSR, 2)}` : ''}`),
         kv('Mano de obra de instalación', W.mxn(f.costos.subtotales.mano_obra)),
         kv('Viáticos', W.mxn(f.costos.subtotales.viaticos))),
       tabla([{ t: 'Viático' }, { t: 'Base' }, { t: 'Costo', num: true }],
@@ -1039,13 +1054,13 @@
       h('dl', { class: 'kvs' },
         kv('Barra', `${b.descripcion} · ${W.num(b.largo_mm / 1000, 2)} m`, `${W.mxn(b.precio)} → ${W.mxn(b.sin_iva)} sin IVA`),
         kv('Precio por metro', W.mxn(b.precio_m), 'sin IVA'),
-        kv('Largo por pieza', W.num(e.largo_pieza_mm, 0), 'mm'),
+        kv('Largo por pieza', W.num(s.largo_pieza_mm, 0), s.largo_calculado ? `mm · abrazadera de media vuelta para Ø${W.num(e.abrazadera_D_mm, 1)} mm con dos orejas` : 'mm'),
         kv('Barra que usan las piezas', W.num(s.L_total_m, 3), 'm'),
         kv('Anclajes', s.anclajes ? `${s.anclajes} × ${s.anclaje.descripcion}` : 'Ninguno'),
-        kv('Tornillería', s.tornillos ? `${s.tornillos} juegos ${s.tornillo}` : 'Ninguna'),
-        kv('Tiempo de taller', `${W.num(s.minutos_pieza, 1)} min por pieza → ${W.num(s.horas, 2)} h reales`),
+        kv('Tornillería', s.tornillos ? `${s.tornillos} juegos de ${descTornillo(s.tornillo)}` : 'Ninguna'),
+        kv('Tiempo de taller', `${W.num(s.minutos_pieza, 2)} min reales por pieza → ${W.num(s.horas, 2)} h`),
         kv('Peso', W.num(f.peso.neto_total_kg, 2), 'kg')),
-      h('p', { class: 'nota' }, 'Cada pieza paga la fracción de barra que usa, con la merma de perfil. Cuántas barras completas hay que comprar lo dice la lista de compras (pestaña Compras y gastos).'),
+      h('p', { class: 'nota' }, 'Cada pieza paga la fracción de barra que usa, con la merma de perfil. Cuántas barras completas hay que comprar lo dice la lista de compras (pestaña Compras y gastos). Los minutos son reales (lo que tarda el taller): no se les aplica la eficiencia.'),
     ];
   }
 
@@ -1102,10 +1117,10 @@
         seccion('Costo directo por concepto', detalleCostos(f), false, W.mxn(f.costos.CD)));
       return;
     }
-    if (p.familia === 'BRIDA') { // sólo aros: no hay lámina; lo que importa son los aros, su tornillería y su empaque
+    if (p.familia === 'BRIDA') { // sólo aros: no hay lámina; lo que importa son los aros, su tornillería y su junta
       const a = f.qto.her.aros_sueltos[0];
       reemplazar(cont, cab, detalleResumen(f),
-        seccion('Aros, tornillería y empaque', detalleHerrajes(f), true, a ? `${W.num(a.L_aro_mm, 0)} mm de solera por aro` : ''),
+        seccion('Aros, tornillería y junta', detalleHerrajes(f), true, a ? `${W.num(a.L_aro_mm, 0)} mm de solera por aro` : ''),
         seccion('Pila de precio', detallePila(f), true, W.mxn(f.precio.total_sin_redondeo)),
         seccion('Tiempos de fabricación', detalleTiempos(f), false, `${W.num(f.costos.h_MOD, 2)} h`),
         seccion('Costo directo por concepto', detalleCostos(f), false, W.mxn(f.costos.CD)));
@@ -1333,6 +1348,14 @@
       if (iva) iva.value = '';
     }
     precio.placeholder = a ? String(a.precio) : '';
+    const torn = $('#f_tornillos_pieza');
+    const circ = $('#f_circulo_barrenos_mm');
+    if (limpiar && a) {
+      if (torn) torn.value = '';
+      if (circ) circ.value = '';
+    }
+    if (torn) torn.placeholder = String((a && a.tornillos_pieza) || 0);
+    if (circ) circ.placeholder = String((a && a.circulo_barrenos_mm) || 0);
     const desc = $('#f_descripcion');
     if (desc) desc.placeholder = a ? a.descripcion : '';
   }

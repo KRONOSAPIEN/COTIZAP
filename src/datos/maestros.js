@@ -25,9 +25,9 @@
 
   const base = {
     meta: {
-      version: '1.6.0',
+      version: '1.7.0',
       moneda: 'MXN',
-      aviso: 'Mano de obra y lámina/perfiles del proveedor son reales; el resto son valores ilustrativos. Revisar antes de cotizar.',
+      aviso: 'Mano de obra, lámina y perfiles del proveedor y catálogo de compras son reales; el resto son valores ilustrativos. Revisar antes de cotizar.',
     },
 
     /* ------------------------------------------------------------------ */
@@ -307,9 +307,11 @@
       },
 
       // puntas_rolado_mm: tramo recto que la roladora no curva en las dos puntas de la solera y se corta; con la holgura de corte
-      // reproduce la regla del taller para cortar la solera de un aro redondo, π × (D + 81 mm) (no aplica a marcos rectangulares)
-      aros: { t_fijo_aro_min: 4.0, t_roll_aro_min_m: 2.5, holgura_corte_mm: 3.0, puntas_rolado_mm: 126 },
-      barrenado: { t_barreno_min: 0.35 },
+      // reproduce la regla del taller para cortar la solera de un aro redondo, π × (D + 81 mm) (no aplica a marcos rectangulares).
+      // Tiempos calibrados con el taller (7-oct-2026): 30 bridas de solera (22 de 11″, 6 de 10″ y 2 de 9″) llevan 4 días (32 h), sobre
+      // todo por el rolado de canto y el barrenado; el reparto entre los dos es un supuesto
+      aros: { t_fijo_aro_min: 10.0, t_roll_aro_min_m: 19.0, holgura_corte_mm: 3.0, puntas_rolado_mm: 126 },
+      barrenado: { t_barreno_min: 2.0 },
       engargolado: { t_fijo_pieza_min: 2.0, v_m_min: [[0.5, 3.0], [1.0, 2.5], [1.5, 1.8], [2.0, 1.2]] },
 
       soldadura: {
@@ -341,9 +343,10 @@
 
       qc: { t_fijo_min: 3.0, k_manejo_min_kg: 0.05 },
 
-      // Soportería (ménsulas, abrazaderas, postes): minutos de taller por pieza (corte, doblez, barreno y punteo) si la partida no los dice
-      // anclaje_defecto: artículo del catálogo de compras que fija cada pieza; tornillo: el juego que la une (de herrajes.tornillo_precio_ref)
-      soportes: { t_fab_pieza_min: 15.0, anclaje_defecto: 'TAQUETE_3_8', tornillo: '5/16x1-1/4' },
+      // Soportería (ménsulas, abrazaderas, postes): minutos REALES de taller por pieza (corte, doblez, barreno y punteo) si la partida
+      // no los dice; anclaje_defecto: artículo del catálogo de compras que fija cada pieza; tornillo: el juego que la une (de
+      // herrajes.tornillo_precio_ref); oreja_abrazadera_mm: cada una de las dos orejas con que una abrazadera de media vuelta se atornilla
+      soportes: { t_fab_pieza_min: 15.0, anclaje_defecto: 'TAQUETE_3_8', tornillo: '5/16x1-1/4', oreja_abrazadera_mm: 50 },
     },
 
     /* ------------------------------------------------------------------ */
@@ -390,10 +393,14 @@
         '5/16x1-1/4': 'precio_juego_tornillo_5_16_x_1_1_4', M8: 'precio_juego_tornillo_m8', M10: 'precio_juego_tornillo_m10', M12: 'precio_juego_tornillo_m12',
       },
       uniones: {
+        // junta: con qué se sella la cara de la brida. SELLADOR (el taller usa Sikaflex en lugar del empaque de neopreno): un cordón
+        // de ml_sellador_junta_m mL por metro sobre el círculo de barrenos, que también es el sello de la junta transversal (clase C);
+        // EMPAQUE: cinta de neopreno (herrajes.empaque) y, aparte, el cordón de sellador de la clase de sellado
         BRIDADO: {
-          nombre: 'Bridado (aro de solera + tornillería + empaque)',
+          nombre: 'Bridado (aro de solera + tornillería + sellador en la junta)',
           paso_tornillo_mm: 150, n_min_tornillos: 4, multiplo_tornillos: 4,
           f_reserva_tornilleria: 0.05, f_traslape_empaque: 0.05, f_cont_soldadura_aro: 1.0,
+          junta: 'SELLADOR', ml_sellador_junta_m: 40,
         },
         ESPIGA: {
           nombre: 'Espiga (macho-hembra con fijación y sellador)',
@@ -408,16 +415,18 @@
 
     /* ------------------------------------------------------------------ */
     /* TARIFAS DE OPERACIÓN                                               */
-    /* El taller paga por DÍA: $500 (dato del taller, sin utilidad; ya    */
-    /* trae las prestaciones: FSR = 1.00). La semana paga 7 días          */
-    /* ($3,500) y se trabajan 5 de 8 h, así que la hora trabajada cuesta  */
-    /*   salario_hora = salario_diario × días pagados ÷ (días trabajados × horas por día) = 500 × 7 ÷ 40 = $87.50
+    /* El taller paga por DÍA: $500 ($3,500 a la semana ÷ 7 días; dato   */
+    /* del taller, sin utilidades ni prestaciones) y cuesta la hora así:  */
+    /*   salario_hora = salario_diario ÷ horas por día = 500 ÷ 8 = $62.50 */
     /*   mo_h         = salario_hora × FSR                                */
+    /* FSR = 1.00 porque así lo calcula el taller. Para cobrar en cada    */
+    /* hora lo que se paga y no se trabaja (7 días por 5) y las           */
+    /* prestaciones de ley, el FSR sube (7/5 = 1.40 sólo por los días).   */
     /* `instalacion` es la cuadrilla que monta en obra (familia INSTALACION). */
     /* ------------------------------------------------------------------ */
     mano_obra: {
       FSR: 1.0,
-      jornada: { dias_pagados_semana: 7, dias_trabajados_semana: 5, horas_dia: 8 },
+      jornada: { horas_dia: 8 },
       operaciones: {
         corte: { salario_diario: 500, equipo_h: 45 },
         rolado: { salario_diario: 500, equipo_h: 55 },
@@ -453,6 +462,13 @@
         CARRETILLA_EMBALADA: { descripcion: 'Carretilla embalada', unidad: 'pza', precio: 172.41, iva_incluido: false, categoria: 'SOPORTERIA' },
         SIKAFLEX_BLANCO_600: { descripcion: 'Sellador Sikaflex blanco 600 mL', unidad: 'pza', precio: 459, iva_incluido: true, categoria: 'MATERIAL' },
         SIKAFLEX_GRIS_600: { descripcion: 'Sellador Sikaflex gris 600 mL', unidad: 'pza', precio: 359, iva_incluido: true, categoria: 'MATERIAL' },
+        // Bridas de placa de 3/16″ cortadas con plasma por el proveedor de corte (cotización del 2-oct-2026, antes de IVA; barrenos de
+        // 9.5 mm = 3/8″, para el tornillo de 5/16″). tornillos_pieza: juegos de tornillería que lleva cada una (media junta de los
+        // barrenos de la regla del taller: 4, 8 y 8; confirmar con el plano). circulo_barrenos_mm: con él se calcula el cordón de
+        // Sikaflex de su media junta, igual que en las bridas de solera
+        BRIDA_PLACA_5: { descripcion: 'Brida de placa 3/16″ para ducto de 5″ (Ø 194/130 mm, barrenos en Ø 170 mm)', unidad: 'pza', precio: 110, iva_incluido: false, categoria: 'PROVEEDOR', tornillos_pieza: 2, circulo_barrenos_mm: 170 },
+        BRIDA_PLACA_6: { descripcion: 'Brida de placa 3/16″ para ducto de 6″ (Ø 221/157 mm, barrenos en Ø 193 mm)', unidad: 'pza', precio: 120, iva_incluido: false, categoria: 'PROVEEDOR', tornillos_pieza: 4, circulo_barrenos_mm: 193 },
+        BRIDA_PLACA_7: { descripcion: 'Brida de placa 3/16″ para ducto de 7″ (Ø 258/182 mm, barrenos en Ø 230 mm)', unidad: 'pza', precio: 140, iva_incluido: false, categoria: 'PROVEEDOR', tornillos_pieza: 4, circulo_barrenos_mm: 230 },
       },
       // Al comprar piezas enteras (lista de compras): la tornillería se compra en múltiplos de esto, la pintura en envases de
       // este tamaño; las hojas y las barras completas
@@ -540,9 +556,10 @@
 
   /**
    * Pone al día un parche guardado por una versión anterior, para que nada quede como un campo suelto y sin efecto:
-   *   · mano de obra: el salario es por DÍA (salario_diario) con una jornada (días pagados, días trabajados, horas por día).
+   *   · mano de obra: el salario es por DÍA (salario_diario) y la hora es el día entre las horas por día (jornada.horas_dia).
    *     El «salario por hora» de la versión 1.5 se capturó con el valor del día ($500 por hora): se descarta y rige el
-   *     salario diario. El salario diario y las horas por día de las versiones anteriores a la 1.5 se conservan;
+   *     salario diario. El salario diario y las horas por día de las versiones anteriores a la 1.5 se conservan; los días
+   *     pagados y trabajados por semana de la 1.6 se descartan (el taller cuesta la hora como el día entre 8 h);
    *   · la longitud máxima por pieza (ahora el tramo recto se arma por yardas);
    *   · la pintura por defecto de cada material (ahora un sistema para el ducto y otro para las bridas, según la ubicación);
    *   · el cartucho de sellador de 300 mL (ahora el de 600 mL, con otro nombre de precio).
@@ -573,6 +590,11 @@
     if (esObj(mo)) {
       if (typeof mo.jornada_h === 'number' && !(esObj(mo.jornada) && 'horas_dia' in mo.jornada)) mo.jornada = { ...(esObj(mo.jornada) ? mo.jornada : {}), horas_dia: mo.jornada_h };
       delete mo.jornada_h;
+      if (esObj(mo.jornada)) {
+        delete mo.jornada.dias_pagados_semana;
+        delete mo.jornada.dias_trabajados_semana;
+        vaciar(mo, 'jornada');
+      }
       const ops = mo.operaciones;
       if (esObj(ops)) {
         Object.keys(ops).forEach((k) => {

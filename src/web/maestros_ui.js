@@ -98,6 +98,7 @@
     ['proceso.injerto_inclinado_hacia', () => [['MENOR', 'MENOR (de mayor a menor)'], ['MAYOR', 'MAYOR']]],
     ['herrajes.perfiles.*.tipo', () => [['SOLERA', 'Solera (barra plana)'], ['ANGULO', 'Ángulo']]],
     ['herrajes.perfiles.*.tornillo', () => claves(W.estadoApp.M.herrajes.tornillo_precio_ref)],
+    ['herrajes.uniones.BRIDADO.junta', () => [['SELLADOR', 'Sikaflex: cordón sobre los barrenos'], ['EMPAQUE', 'Empaque de neopreno (y el cordón de la clase)']]],
     ['proceso.costuras.*.soldada', () => [['true', 'Sí'], ['false', 'No']]],
     ['compras.articulos.*.iva_incluido', () => [['true', 'Sí: el precio ya trae IVA'], ['false', 'No: el precio es antes de IVA']]],
     ['compras.articulos.*.categoria', () => Object.keys(C.gastos.CATEGORIAS).map((k) => [k, C.gastos.CATEGORIAS[k]])],

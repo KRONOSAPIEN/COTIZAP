@@ -89,13 +89,33 @@
         comprados.push({
           descripcion: f.descripcion, cantidad: n, unidad: f.compra.unidad, unitario_sin_iva: f.compra.unitario_sin_iva, importe: f.costos.materiales.compra, categoria: f.compra.categoria || 'PROVEEDOR',
         });
+        // lo comprado que se atornilla (una brida de placa) trae sus juegos de tornillería, con la reserva de las bridas
+        if (f.compra.tornillos > 0) {
+          const t = tornillos.get(f.compra.tornillo) || { tipo: f.compra.tornillo, exactos: 0, con_reserva: 0, precio: f.compra.precio_tornillo, costo_cotizado: 0 };
+          t.exactos += f.compra.tornillos;
+          t.con_reserva += f.compra.tornillos * (1 + f.compra.reserva_tornillos);
+          t.costo_cotizado += f.costos.materiales.tornilleria;
+          tornillos.set(f.compra.tornillo, t);
+        }
+        // y el material de su junta: el cordón de Sikaflex (o el empaque) sobre su círculo de barrenos
+        if (f.compra.V_sellador_ml > 0) {
+          const S = M.herrajes.sellador;
+          sellador = sellador || { ml: 0, cartucho_ml: S.cartucho_ml, cartucho_sin_iva: PRE.precioDe(M, S.precio_cartucho_ref), costo_cotizado: 0 };
+          sellador.ml += n * f.compra.V_sellador_ml;
+          sellador.costo_cotizado += f.costos.materiales.sellador;
+        }
+        if (f.compra.L_empaque_m > 0) {
+          empaque = empaque || { m: 0, costo: 0 };
+          empaque.m += n * f.compra.L_empaque_m;
+          empaque.costo += f.costos.materiales.empaque;
+        }
         return;
       }
       if (f.familia === 'INSTALACION') return;
       if (f.familia === 'SOPORTE') {
         const s = f.soporte;
         const g = grupoBarra(s.barra.id, { id: s.barra.id, descripcion: s.barra.descripcion, largo_mm: s.barra.largo_mm, pieza_sin_iva: s.barra.sin_iva }, 'SOPORTE');
-        for (let i = 0; i < n; i += 1) g.piezas.push(f.entrada.largo_pieza_mm);
+        for (let i = 0; i < n; i += 1) g.piezas.push(s.largo_pieza_mm);
         g.costo_cotizado += f.costos.materiales.perfil;
         if (s.anclajes > 0) {
           const a = anclajes.get(s.articulo_anclaje) || { id: s.articulo_anclaje, descripcion: s.anclaje.descripcion, unidad: s.anclaje.unidad, unitario_sin_iva: s.anclaje.unitario_sin_iva, cantidad: 0, costo: 0 };
