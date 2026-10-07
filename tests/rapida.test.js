@@ -22,7 +22,8 @@ test('Oráculo: ducto de 11″ y 40 m en lámina galvanizada cal. 22 de 4 × 10 
   const e = 0.0336 * 25.4;
   const B = Math.PI * (279.4 + e) + 32; // perímetro medio + holgura del Pittsburgh (el galvanizado se engargola)
   cerca(r.plantilla_mm, B, 1e-6, 'plantilla');
-  assert.equal(r.yardas, Math.ceil(40000 / 1219)); // 33 yardas de 1.219 m
+  assert.equal(r.yarda_mm, 1220, 'sin elegirla, la yarda de las tablas: 4 ft');
+  assert.equal(r.yardas, Math.ceil(40000 / 1220)); // 33 yardas de 1.22 m
   assert.equal(r.yardas_por_hoja, Math.floor(3048 / B)); // 3 por hoja
   assert.equal(r.hojas, 11);
   const hoja = 920 / 1.16;
@@ -73,7 +74,7 @@ test('Hojas: más metros o más diámetro nunca piden menos hojas; la plantilla 
   previo = 0;
   [76.2, 127, 203.2, 279.4, 457.2, 609.6, 914.4, 1219.2].forEach((D) => { const n = R.cotizar({ D_mm: D, L_m: 20 }, M).hojas; assert.ok(n >= previo, `${D} mm`); previo = n; });
   // 1 200 mm: plantilla de ~3 805 mm > 3 048 → por yarda una hoja completa y un retazo de ~757 mm (4 retazos por hoja)
-  const g = R.cotizar({ D_mm: 1200, L_m: 10 }, M);
+  const g = R.cotizar({ D_mm: 1200, L_m: 10, yarda_mm: 1219 }, M);
   assert.equal(g.yardas, 9);
   assert.equal(g.hojas, 9 + Math.ceil(9 / 4));
   assert.equal(g.advertencias.length, 1);
@@ -92,8 +93,9 @@ test('Otra lámina: la hoja elegida cambia el precio y el tamaño; sólo se ofre
   assert.ok(!ids.some((id) => /PLACA/.test(id)));
   const c24 = R.cotizar({ D_mm: 279.4, L_m: 40, hoja_id: 'GALV_C24_4X10' }, M);
   cerca(c24.hoja.sin_iva, 700 / 1.16, 1e-9);
-  const negra = R.cotizar({ D_mm: 279.4, L_m: 40, hoja_id: 'NEGRA_C12_3X10' }, M);
+  const negra = R.cotizar({ D_mm: 279.4, L_m: 40, hoja_id: 'NEGRA_C12_3X10', yarda_mm: 914 }, M);
   assert.equal(negra.yardas, Math.ceil(40000 / 914)); // yardas de 3 ft
+  assert.equal(negra.yardas_por_hoja, 3);
   assert.equal(negra.costura, 'A_TOPE');
   cerca(negra.holgura_mm, M.proceso.costuras.A_TOPE.allowance_mm, 1e-9, 'la costura soldada a tope no lleva la holgura del Pittsburgh');
 });
@@ -125,4 +127,64 @@ test('Las tablas de arranque están sanas y una tabla rápida rota no bloquea la
   const M2 = crearMaestros({ rapida: { factor_lamina: 'tres', bridas_por_metros: [{ hasta_m: 50, importe: 6000 }] } });
   assert.equal(M2.rapida.factor_lamina, 3);
   assert.deepEqual(M2.rapida.bridas_por_metros, [{ hasta_m: 50, importe: 6000 }]);
+});
+
+test('Yarda de 3 o 4 ft: con la hoja de 4 × 10 ft la de 3 ft deja una franja de sobrante; con la de 3 × 10 ft la ocupa entera', () => {
+  const M = crearMaestros();
+  const de4 = R.cotizar({ D_mm: 279.4, L_m: 40, yarda_mm: 1220 }, M);
+  const de3 = R.cotizar({ D_mm: 279.4, L_m: 40, yarda_mm: 914 }, M);
+  assert.equal(de3.yardas, Math.ceil(40000 / 914)); // 44 yardas de 3 ft
+  assert.equal(de3.yardas_por_hoja, 3);
+  assert.equal(de3.hojas, Math.ceil(44 / 3));
+  assert.equal(de3.hoja.id, 'GALV_C22_4X10', 'en galvanizado sólo hay hoja de 4 ft en la lista');
+  assert.ok(de3.total > de4.total && de3.aprovechamiento < de4.aprovechamiento);
+  // si el proveedor tiene la hoja de 3 × 10 ft del mismo material y calibre, la yarda de 3 ft la toma sola
+  M.proveedor.hojas.GALV_C22_3X10 = { descripcion: 'Lámina galvanizada 3 × 10 ft · cal. 22', material: 'GALVANIZADO', calibre: 22, esp_mm: 0, ancho_mm: 914, largo_mm: 3048, precio: 700 };
+  const con3 = R.cotizar({ D_mm: 279.4, L_m: 40, yarda_mm: 914 }, M);
+  assert.equal(con3.hoja.id, 'GALV_C22_3X10');
+  assert.equal(con3.yardas_por_hoja, 3);
+  assert.ok(con3.aprovechamiento > 0.85);
+  assert.equal(R.cotizar({ D_mm: 279.4, L_m: 40, yarda_mm: 1220 }, M).hoja.id, 'GALV_C22_4X10', 'la de 4 ft sigue en la hoja de 4 ft');
+  assert.equal(R.cotizar({ D_mm: 279.4, L_m: 40, yarda_mm: 914, hoja_id: 'GALV_C22_4X10' }, M).hoja.id, 'GALV_C22_4X10', 'la lámina elegida manda');
+  // la yarda que no cabe en la hoja, o fuera de los límites, es error
+  assert.throws(() => R.cotizar({ D_mm: 279.4, L_m: 40, yarda_mm: 100 }, M), /yarda debe ser de 300 a 2000 mm/);
+  assert.deepEqual(R.yardas(M), [914, 1220]);
+});
+
+test('Acomodo: las plantillas no se enciman, caen dentro de la hoja y nadie acomoda más que el área', () => {
+  const casos = [[1219, 3048, 1220, 912], [1219, 3048, 914, 912], [1219, 3048, 914, 274], [1219, 3048, 1220, 434], [914, 3048, 914, 1471], [1219, 2438, 914, 640], [1219, 3048, 914, 3300]];
+  casos.forEach(([A, L, Y, B]) => {
+    const a = R.acomodo(A, L, Y, B);
+    assert.equal(a.n, a.piezas.length);
+    const tol = 3;
+    a.piezas.forEach((p, i) => {
+      assert.ok(p.x >= -1e-9 && p.y >= -1e-9 && p.x + p.w <= L + tol && p.y + p.h <= A + tol, `${A}×${L} ${Y}×${B}: pieza ${i} fuera de la hoja`);
+      assert.ok((p.girada ? [p.w, p.h] : [p.h, p.w]).every((v, k) => Math.abs(v - [Y, B][k]) < 1e-9), 'cada pieza mide yarda × plantilla');
+      a.piezas.slice(i + 1).forEach((q) => {
+        const cruza = p.x < q.x + q.w - 1e-6 && q.x < p.x + p.w - 1e-6 && p.y < q.y + q.h - 1e-6 && q.y < p.y + p.h - 1e-6;
+        assert.ok(!cruza, `${A}×${L} ${Y}×${B}: piezas encimadas`);
+      });
+    });
+    assert.ok(a.n * Y * B <= (A + tol) * (L + tol), 'no más plantillas que el área');
+    // nunca peor que todas derechas o todas giradas
+    const rej = (w, h) => Math.floor((L + tol) / w) * Math.floor((A + tol) / h);
+    assert.ok(a.n >= rej(B, Y) && a.n >= rej(Y, B));
+  });
+  // 3″ con yarda de 3 ft en la hoja de 4 × 10: 11 derechas y una franja de 3 giradas en el sobrante
+  const mixto = R.acomodo(1219, 3048, 914, 274);
+  assert.equal(mixto.n, 14);
+  assert.equal(mixto.forma, 'MIXTO');
+  assert.equal(R.acomodo(1219, 3048, 914, 3300).n, 0, 'la plantilla más larga que la hoja no se acomoda');
+});
+
+test('Plazo: los días de fabricación e instalación se informan y no cambian el precio', () => {
+  const M = crearMaestros();
+  const sin = R.cotizar({ D_mm: 279.4, L_m: 40 }, M);
+  assert.equal(sin.plazo, null);
+  const con = R.cotizar({ D_mm: 279.4, L_m: 40, dias_fabricacion: 5, dias_instalacion: 2.5 }, M);
+  assert.deepEqual(con.plazo, { fabricacion: 5, instalacion: 2.5, total: 7.5 });
+  assert.equal(con.total, sin.total);
+  assert.deepEqual(R.cotizar({ D_mm: 279.4, L_m: 40, dias_instalacion: 3 }, M).plazo, { fabricacion: 0, instalacion: 3, total: 3 });
+  assert.throws(() => R.cotizar({ D_mm: 279.4, L_m: 40, dias_fabricacion: -1 }, M), /días de fabricación deben ser de 0 a 365/);
+  assert.throws(() => R.cotizar({ D_mm: 279.4, L_m: 40, dias_instalacion: NaN }, M), /días de instalación/);
 });

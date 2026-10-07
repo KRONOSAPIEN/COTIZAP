@@ -1913,7 +1913,30 @@ const ok = (cond, msg) => {
     const d = await desglose();
     ok(/Lámina: 11 hojas × \$793\.10/.test(d) && /\$8,724\.14/.test(d) && /Lámina × 3\s+Cubre/.test(d) && /\$26,172\.41/.test(d) && /Por 40 m: hasta 40 m\.\s+\$5,000\.00/.test(d)
       && /Utilidad 20 %[\s\S]*\$6,234\.48/.test(d) && /IVA 16 %\s+\$5,985\.10/.test(d), 'el desglose: 11 hojas × $793.10, × 3, bridas $5,000 (hasta 40 m), utilidad 20 % sobre el costo e IVA');
-    ok(/33 yardas de 1\.22 m/.test(d) && /3 yardas de 11″/.test(d), 'dice cómo salen las hojas: 33 yardas de 1.22 m, 3 por hoja');
+    ok(/33 yardas de 4 ft/.test(d) && /3 yardas de 11″/.test(d), 'dice cómo salen las hojas: 33 yardas de 4 ft, 3 por lámina');
+
+    // la lámina dibujada: sus 3 yardas numeradas, el sobrante y la tira con las 11 láminas
+    ok(await p.locator('#r_yarda input[value="1220"]').isChecked() && !(await p.locator('#r_yarda input[value="914"]').isChecked()), 'la yarda arranca en 4 ft (la de las tablas)');
+    ok(await p.locator('.lam-svg .lam-yarda').count() === 3 && (await p.locator('.lam-svg .lam-num').allTextContents()).join(',') === '1,2,3' && await p.locator('.lam-svg').getAttribute('role') === 'img',
+      'el dibujo de una lámina muestra sus 3 yardas numeradas (y es una imagen con su descripción)');
+    ok(await p.locator('.lam-tira li').count() === 11 && await p.locator('.lam-tira li.lam-parcial').count() === 0 && /Se aprovecha el 90 %/.test(await p.locator('#rapida-acomodo').innerText()), 'la tira trae las 11 láminas, todas con 3 yardas; se aprovecha el 90 %');
+    await p.locator('#r_yarda input[value="914"]').check();
+    const de3 = await p.locator('#rapida-acomodo').innerText();
+    ok(/44 yardas ÷ 3 = 15 láminas; la última lleva 2 yardas/.test(de3) && await p.locator('.lam-tira li').count() === 15 && await p.locator('.lam-tira li.lam-parcial').count() === 1 && await total() !== '$43,392.00',
+      'con yardas de 3 ft: 44 yardas, 15 láminas (la última con 2) y otro precio');
+    await p.fill('#r_diam', '3');
+    ok(/14 yardas \(11 a lo ancho y 3 a lo largo de la lámina\)/.test(await p.locator('#rapida-acomodo').innerText()) && await p.locator('.lam-svg .lam-girada').count() === 3 && /a lo largo de la lámina/.test(await p.locator('.lam-leyenda').innerText()),
+      'de 3″ con yardas de 3 ft: 14 por lámina, con una franja girada en el sobrante (y su leyenda)');
+    await p.fill('#r_diam', '11');
+    await p.locator('#r_yarda input[value="1220"]').check();
+
+    // el plazo: días de fabricación e instalación, sin cambiar el precio
+    await p.fill('#r_dias_fab', '5');
+    await p.fill('#r_dias_ins', '3');
+    ok(await p.locator('#rapida-plazo').innerText() === 'Plazo: 5 días de fabricación + 3 días de instalación = 8 días' && await total() === '$43,392.00', 'el plazo: 5 días de fabricación + 3 de instalación = 8 días, y el precio no cambia');
+    await p.fill('#r_dias_ins', '-2');
+    ok(/días de instalación deben ser de 0 a 365/.test(await p.locator('#rapida-resultado').innerText()), 'días inválidos: lo dice');
+    await p.fill('#r_dias_ins', '3');
 
     // b) los rangos de bridas y el tope de la tabla
     await p.fill('#r_metros', '41');
@@ -1952,9 +1975,9 @@ const ok = (cond, msg) => {
     await p.reload();
     await p.waitForSelector('#lista-partidas .partida');
     await p.click('#tab-rapida');
-    ok(await p.inputValue('#r_diam') === '279.4' && await p.inputValue('#r_metros') === '40', 'lo capturado se recuerda al volver a abrir');
+    ok(await p.inputValue('#r_diam') === '279.4' && await p.inputValue('#r_metros') === '40' && await p.inputValue('#r_dias_fab') === '5' && await p.locator('#r_yarda input[value="1220"]').isChecked(), 'lo capturado (también la yarda y los días) se recuerda al volver a abrir');
     await p.click('#rapida-limpiar');
-    ok(await p.inputValue('#r_diam') === '' && /Capture el diámetro/.test(await p.locator('#rapida-resultado').innerText()), '«Limpiar» deja la cotización rápida en blanco');
+    ok(await p.inputValue('#r_diam') === '' && await p.inputValue('#r_dias_fab') === '' && /Capture el diámetro/.test(await p.locator('#rapida-resultado').innerText()), '«Limpiar» deja la cotización rápida en blanco');
     await p.context().close();
 
     // e) en el celular: cinco pestañas en dos renglones y sin desplazamiento horizontal
@@ -1965,6 +1988,8 @@ const ok = (cond, msg) => {
     const cajas = await m.locator('.tabs [role="tab"]').evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { y: Math.round(r.top), w: r.width, cabe: e.scrollWidth <= e.clientWidth + 1 }; }));
     ok(cajas.length === 5 && new Set(cajas.map((c) => c.y)).size === 2 && cajas.every((c) => c.cabe) && await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
       'en 320 px: las cinco pestañas en dos renglones, cada texto cabe, y nada se sale de la pantalla');
+    const lam = await m.locator('.lam-svg').boundingBox();
+    ok(lam && lam.width > 200 && lam.x >= 0 && lam.x + lam.width <= 321, 'en 320 px la lámina dibujada cabe a lo ancho');
     await m.context().close();
   }
 

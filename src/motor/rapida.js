@@ -12,11 +12,15 @@
  * Bridas por metros: el primer renglón de `bridas_por_metros` cuyo «hasta m» alcanza los metros (hasta 40 m, $5,000; de 40 a
  * 80 m, $12,000; de 80 a 120 m, $18,000). Más metros que el último renglón no tienen precio de bridas: es error.
  *
- * Cómo se cuentan las hojas. Cada yarda del ducto es un anillo que se corta a lo ancho de la hoja (la yarda es el ancho de la
- * hoja, como en el tramo recto) y su plantilla mide el perímetro medio más la holgura de la costura del material:
+ * Cómo se cuentan las hojas. El ducto se arma de yardas de 3 o 4 ft (la yarda es el largo de cada anillo); la plantilla de una
+ * yarda es un rectángulo de yarda × B, con B el perímetro medio más la holgura de la costura del material:
  *   B = π · (D + e) + holgura        (el diámetro es el interior, como en las partidas)
- *   yardas = ⌈ metros ÷ ancho de la hoja ⌉,   yardas por hoja = ⌊ largo de la hoja ÷ B ⌋,   hojas = ⌈ yardas ÷ yardas por hoja ⌉
- * Si la plantilla es más larga que la hoja, cada yarda lleva hojas completas y un retazo; los retazos se acomodan juntos.
+ *   yardas = ⌈ metros ÷ yarda ⌉,   hojas = ⌈ yardas ÷ yardas por hoja ⌉
+ * Las yardas por hoja salen de acomodar las plantillas en la hoja con cortes de guillotina (`acomodo`): todas derechas (la
+ * yarda a lo ancho de la hoja, como en el tramo recto), todas giradas, o una franja de cada una. El acomodo trae el
+ * rectángulo de cada plantilla para dibujar la hoja. Si la plantilla no cabe en la hoja de ninguna forma, cada yarda lleva
+ * hojas completas y un retazo, y los retazos se acomodan juntos.
+ * Los días de fabricación y de instalación sólo informan el plazo: no suman costo (el factor ya cubre la fabricación).
  * Pura: no muta nada; lanza ErrorValidacion con mensajes legibles.
  */
 (function (root, factory) {
@@ -30,7 +34,9 @@
   'use strict';
 
   const EPS = 1e-6;
+  const HOLGURA_MM = 3; // una yarda de 1 220 mm cabe en la hoja de 4 ft (1 219 mm): son la misma medida
   const finito = (x) => typeof x === 'number' && Number.isFinite(x);
+  const cuantas = (disponible, medida) => (medida > 0 ? Math.max(0, Math.floor((disponible + HOLGURA_MM) / medida + EPS)) : 0);
 
   /** Las hojas de la lista del proveedor con que se puede cotizar (con precio y kg calculables): [{ id, descripcion, … }]. */
   function hojas(M) {
@@ -38,6 +44,12 @@
     return Object.keys(H)
       .filter((id) => H[id] && Number(H[id].calibre) > 0 && M.materiales[H[id].material] && PROV.convertir(M, H[id].precio, PROV.kgHoja(M, H[id]))) // lámina, no placa
       .map((id) => ({ id, descripcion: H[id].descripcion || id, material: H[id].material, calibre: H[id].calibre, ancho_mm: H[id].ancho_mm, largo_mm: H[id].largo_mm }));
+  }
+
+  /** Los largos de yarda que se ofrecen: los de las tablas (3 ft = 914 mm y 4 ft = 1 220 mm). */
+  function yardas(M) {
+    const AY = M.proceso && M.proceso.armado_yardas;
+    return (AY && Array.isArray(AY.yardas_mm) ? AY.yardas_mm : [914, 1220]).filter((y) => finito(y) && y > 0);
   }
 
   /** El renglón de bridas por metros que toca a `L_m` (o null si los metros pasan del último). */
@@ -49,8 +61,78 @@
   }
 
   /**
-   * entrada: { D_mm, L_m, hoja_id?, utilidad_pct? }  (utilidad en fracción: 0.20)
-   * Devuelve el desglose: hoja, plantilla, yardas, hojas, lámina, factor, bridas, costo, utilidad, precio, IVA y total.
+   * La hoja con que se cotiza: la elegida; si no, la de las tablas o, si el proveedor tiene una del mismo material y calibre
+   * cuyo ancho es la yarda (la de 3 × 10 ft para yardas de 3 ft), ésa.
+   */
+  function hojaPara(M, hoja_id, yarda) {
+    const H = (M.proveedor && M.proveedor.hojas) || {};
+    if (hoja_id) return hoja_id;
+    const base = H[M.rapida.hoja_defecto];
+    if (!base || !finito(yarda)) return M.rapida.hoja_defecto;
+    if (Math.abs(base.ancho_mm - yarda) <= HOLGURA_MM) return M.rapida.hoja_defecto;
+    const otra = hojas(M).find((x) => x.material === base.material && Number(x.calibre) === Number(base.calibre) && Math.abs(x.ancho_mm - yarda) <= HOLGURA_MM);
+    return otra ? otra.id : M.rapida.hoja_defecto;
+  }
+
+  /**
+   * Acomodo de plantillas de yarda × B en una hoja de ancho × largo, con cortes de guillotina. Coordenadas de la hoja: x a lo
+   * largo (0 … largo), y a lo ancho (0 … ancho). Una plantilla DERECHA lleva la yarda a lo ancho de la hoja (w = B en x,
+   * h = yarda en y), como en el tramo recto; GIRADA, al revés. Se prueban: todas derechas, todas giradas, y una franja de
+   * columnas o de renglones de una orientación con el resto de la hoja de la otra (o de la misma). Gana la que da más
+   * plantillas; a igualdad, la más simple (todas derechas, luego todas giradas).
+   * Devuelve { n, piezas: [{ x, y, w, h, girada }], forma: 'DERECHAS' | 'GIRADAS' | 'MIXTO' }.
+   */
+  function acomodo(ancho, largo, yarda, B) {
+    const ori = [{ w: B, h: yarda, girada: false }, { w: yarda, h: B, girada: true }];
+    const rejilla = (x0, y0, L, A, o) => {
+      const nx = cuantas(L, o.w);
+      const ny = cuantas(A, o.h);
+      const piezas = [];
+      for (let i = 0; i < nx; i += 1) for (let j = 0; j < ny; j += 1) piezas.push({ x: x0 + i * o.w, y: y0 + j * o.h, w: o.w, h: o.h, girada: o.girada });
+      return piezas;
+    };
+    const mejorRejilla = (x0, y0, L, A) => {
+      const a = rejilla(x0, y0, L, A, ori[0]);
+      const b = rejilla(x0, y0, L, A, ori[1]);
+      return b.length > a.length ? b : a;
+    };
+    const candidatos = [
+      { forma: 'DERECHAS', piezas: rejilla(0, 0, largo, ancho, ori[0]) },
+      { forma: 'GIRADAS', piezas: rejilla(0, 0, largo, ancho, ori[1]) },
+    ];
+    ori.forEach((o) => {
+      // m columnas de esta orientación a lo largo y el resto del largo con la mejor rejilla
+      const ny = cuantas(ancho, o.h);
+      if (ny > 0) {
+        for (let m = 1; m <= cuantas(largo, o.w); m += 1) {
+          const usado = m * o.w;
+          candidatos.push({ forma: 'MIXTO', piezas: [...rejilla(0, 0, usado, ancho, o), ...mejorRejilla(usado, 0, Math.max(0, largo - usado), ancho)] });
+        }
+      }
+      // k renglones de esta orientación a lo ancho y el resto del ancho con la mejor rejilla
+      const nx = cuantas(largo, o.w);
+      if (nx > 0) {
+        for (let k = 1; k <= cuantas(ancho, o.h); k += 1) {
+          const usado = k * o.h;
+          candidatos.push({ forma: 'MIXTO', piezas: [...rejilla(0, 0, largo, usado, o), ...mejorRejilla(0, usado, largo, Math.max(0, ancho - usado))] });
+        }
+      }
+    });
+    const mejor = candidatos.reduce((a, c) => (c.piezas.length > a.piezas.length ? c : a), candidatos[0]);
+    const todas = mejor.piezas.every((p) => p.girada) ? 'GIRADAS' : mejor.piezas.every((p) => !p.girada) ? 'DERECHAS' : 'MIXTO';
+    return { n: mejor.piezas.length, piezas: mejor.piezas, forma: mejor.piezas.length ? todas : 'NINGUNA' };
+  }
+
+  const leerDias = (v, nombre, errores) => {
+    if (v === undefined || v === null || v === '') return null;
+    const n = Number(v);
+    if (!finito(n) || n < 0 || n > 365) { errores.push(`Los días de ${nombre} deben ser de 0 a 365.`); return null; }
+    return n;
+  };
+
+  /**
+   * entrada: { D_mm, L_m, yarda_mm?, hoja_id?, utilidad_pct?, dias_fabricacion?, dias_instalacion? }  (utilidad en fracción: 0.20)
+   * Devuelve el desglose: hoja, plantilla, acomodo, yardas, hojas, lámina, factor, bridas, costo, utilidad, precio, IVA, total y plazo.
    */
   function cotizar(entrada, M) {
     // las tablas de las que depende: su propia tabla, la lista del proveedor, los materiales y calibres, la costura y el IVA
@@ -67,13 +149,20 @@
     else if (finito(lim.seccion_max_mm) && D > lim.seccion_max_mm) errores.push(`El diámetro no puede pasar de ${lim.seccion_max_mm} mm.`);
     if (!finito(L_m) || !(L_m > 0)) errores.push('Capture los metros hasta el punto más alejado.');
     else if (L_m > 100000) errores.push('Los metros no pueden pasar de 100 000.');
-    const hoja_id = e0.hoja_id || R.hoja_defecto;
+    const AY = M.proceso.armado_yardas || {};
+    const Y = e0.yarda_mm === undefined || e0.yarda_mm === null || e0.yarda_mm === '' ? AY.yarda_defecto_mm : Number(e0.yarda_mm);
+    if (!finito(Y) || !(Y > 0)) errores.push('El largo de la yarda debe ser mayor que 0.');
+    else if ((finito(lim.yarda_min_mm) && Y < lim.yarda_min_mm) || (finito(lim.yarda_max_mm) && Y > lim.yarda_max_mm)) errores.push(`La yarda debe ser de ${lim.yarda_min_mm} a ${lim.yarda_max_mm} mm.`);
+    const hoja_id = hojaPara(M, e0.hoja_id, Y);
     const H = M.proveedor && M.proveedor.hojas && M.proveedor.hojas[hoja_id];
     const precio = H ? PROV.convertir(M, H.precio, PROV.kgHoja(M, H)) : null;
     if (!H) errores.push(`La lámina «${hoja_id}» no está en la lista del proveedor.`);
     else if (!precio) errores.push(`La lámina «${H.descripcion || hoja_id}» no tiene precio o medidas válidas en la lista del proveedor.`);
+    else if (finito(Y) && Y > Math.max(H.ancho_mm, H.largo_mm) + HOLGURA_MM) errores.push(`Una yarda de ${Math.round(Y)} mm no cabe en la lámina de ${Math.round(H.ancho_mm)} × ${Math.round(H.largo_mm)} mm.`);
     const u = e0.utilidad_pct === undefined || e0.utilidad_pct === null || e0.utilidad_pct === '' ? R.utilidad_pct : Number(e0.utilidad_pct);
     if (!finito(u) || u < 0 || u > 10) errores.push('La utilidad debe ser de 0 % a 1 000 %.');
+    const diasFab = leerDias(e0.dias_fabricacion, 'fabricación', errores);
+    const diasIns = leerDias(e0.dias_instalacion, 'instalación', errores);
     const factor = R.factor_lamina;
     const iva = M.capas.iva_pct;
     const bridas = finito(L_m) && L_m > 0 ? bridasPara(M, L_m) : null;
@@ -90,44 +179,43 @@
     const costura = M.proceso.costuras[mat.costura] || M.proceso.costuras.A_TOPE || { allowance_mm: 0 };
     const holgura = costura.allowance_mm || 0;
     const B = Math.PI * d.D_med + holgura;
-    const Y = Number(H.ancho_mm);
+    const W = Number(H.ancho_mm);
     const Lh = Number(H.largo_mm);
-    const yardas = Math.ceil(L_m * 1000 / Y - EPS);
+    const n_yardas = Math.ceil((L_m * 1000) / Y - EPS);
+    const aco = acomodo(W, Lh, Y, B);
+    const advertencias = [];
     let n_hojas;
-    let por_hoja;
-    if (B <= Lh + EPS) {
-      por_hoja = Math.floor(Lh / B + EPS);
-      n_hojas = Math.ceil(yardas / por_hoja - EPS);
-    } else {
-      // cada yarda lleva hojas completas y un retazo; los retazos se acomodan juntos
+    if (aco.n > 0) n_hojas = Math.ceil(n_yardas / aco.n - EPS);
+    else {
+      // la plantilla no cabe en la hoja: cada yarda lleva hojas completas a lo largo y un retazo; los retazos se acomodan juntos
       const completas = Math.floor(B / Lh + EPS);
       const retazo = B - completas * Lh;
-      por_hoja = 0;
-      n_hojas = yardas * completas + (retazo > 1 ? Math.ceil(yardas / Math.floor(Lh / retazo + EPS) - EPS) : 0);
+      n_hojas = n_yardas * completas + (retazo > 1 ? Math.ceil(n_yardas / Math.max(1, cuantas(Lh, retazo)) - EPS) : 0);
+      advertencias.push(`La plantilla de cada yarda (${Math.round(B)} mm) es más larga que la lámina (${Math.round(Lh)} mm): cada yarda sale de varias piezas.`);
     }
+    const ultima = aco.n > 0 ? n_yardas - (n_hojas - 1) * aco.n : 0; // yardas que lleva la última hoja
     const lamina = n_hojas * precio.sin_iva;
     const lamina_factor = lamina * factor;
     const costo = lamina_factor + bridas.importe;
     const utilidad = costo * u;
     const precio_neto = costo + utilidad;
     const iva_monto = precio_neto * iva;
-    const advertencias = [];
-    if (B > Lh + EPS) advertencias.push(`La plantilla de cada yarda (${Math.round(B)} mm) es más larga que la hoja (${Math.round(Lh)} mm): cada yarda sale de varias piezas.`);
-    const aprovechado = (B * yardas * Y) / (n_hojas * Y * Lh);
+    const aprovechado = Math.min(1, (B * Y * n_yardas) / (n_hojas * W * Lh));
     return {
-      entrada: { D_mm: D, L_m, hoja_id, utilidad_pct: u },
+      entrada: { D_mm: D, L_m, yarda_mm: Y, hoja_id, utilidad_pct: u, dias_fabricacion: diasFab, dias_instalacion: diasIns },
       hoja: {
-        id: hoja_id, descripcion: H.descripcion || hoja_id, material: H.material, calibre: H.calibre, ancho_mm: Y, largo_mm: Lh,
+        id: hoja_id, descripcion: H.descripcion || hoja_id, material: H.material, calibre: H.calibre, ancho_mm: W, largo_mm: Lh,
         espesor_mm: e, precio: precio.precio, sin_iva: precio.sin_iva, kg: precio.kg,
       },
-      plantilla_mm: B, holgura_mm: holgura, costura: mat.costura, D_med_mm: d.D_med,
-      yardas, yardas_por_hoja: por_hoja, hojas: n_hojas, aprovechamiento: aprovechado, kg: n_hojas * precio.kg,
+      plantilla_mm: B, holgura_mm: holgura, costura: mat.costura, D_med_mm: d.D_med, yarda_mm: Y,
+      acomodo: aco, yardas: n_yardas, yardas_por_hoja: aco.n, yardas_ultima_hoja: ultima, hojas: n_hojas, aprovechamiento: aprovechado, kg: n_hojas * precio.kg,
       lamina, factor, lamina_factor,
       bridas,
       costo, utilidad_pct: u, utilidad, precio: precio_neto, iva_pct: iva, iva: iva_monto, total: precio_neto + iva_monto,
+      plazo: diasFab === null && diasIns === null ? null : { fabricacion: diasFab || 0, instalacion: diasIns || 0, total: (diasFab || 0) + (diasIns || 0) },
       advertencias,
     };
   }
 
-  return { cotizar, hojas, bridasPara };
+  return { cotizar, hojas, yardas, bridasPara, acomodo, hojaPara };
 }));

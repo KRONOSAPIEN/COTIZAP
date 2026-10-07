@@ -103,10 +103,16 @@
     </div>
     <div class="rapida">
       <form class="datos rapida-datos" id="rapida-form" aria-label="Datos de la cotización rápida" novalidate>
+        <div class="datos-sub">Ducto</div>
         <div class="campo"><label for="r_diam">Diámetro máximo (<span id="r_diam_unidad">pulgadas</span>)</label><input id="r_diam" type="text" inputmode="decimal" autocomplete="off" placeholder="p. ej. 11"></div>
         <div class="campo"><label for="r_metros">Metros hasta el punto más alejado</label><input id="r_metros" type="text" inputmode="decimal" autocomplete="off" placeholder="p. ej. 40"></div>
+        <fieldset class="campo campo-segmentos"><legend>Largo de la yarda</legend><div class="segmentos" id="r_yarda"></div></fieldset>
+        <div class="datos-sub">Lámina y precio</div>
         <div class="campo"><label for="r_hoja">Lámina</label><select id="r_hoja"></select></div>
         <div class="campo"><label for="r_utilidad">Utilidad (% sobre el costo)</label><input id="r_utilidad" type="text" inputmode="decimal" autocomplete="off"></div>
+        <div class="datos-sub">Plazo <span class="datos-sub-nota">Para el cliente: no suma al precio.</span></div>
+        <div class="campo"><label for="r_dias_fab">Días de fabricación</label><input id="r_dias_fab" type="text" inputmode="decimal" autocomplete="off" placeholder="p. ej. 5"></div>
+        <div class="campo"><label for="r_dias_ins">Días de instalación</label><input id="r_dias_ins" type="text" inputmode="decimal" autocomplete="off" placeholder="p. ej. 3"></div>
       </form>
       <div id="rapida-resultado" class="rapida-res" aria-live="polite"></div>
     </div>

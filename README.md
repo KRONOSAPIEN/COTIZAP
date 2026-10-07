@@ -94,12 +94,14 @@ El encabezado de la cotización lleva los parámetros comerciales que se ajustan
 
 Para dar un precio en minutos, la pestaña **Cotización rápida** (*Rápida* en pantallas angostas) pide sólo el **diámetro máximo** y los **metros hasta el punto más alejado**, y aplica la regla del taller:
 
-1. Cuenta las **hojas enteras** de lámina para esos metros a ese diámetro. Cada yarda es el ancho de la hoja y su plantilla, el perímetro más la holgura del engargolado. Con la galvanizada cal. 22 de 4 × 10 ft, cada hoja da 3 yardas de 11″.
+1. Cuenta las **hojas enteras** de lámina para esos metros a ese diámetro, con **yardas de 3 o 4 ft** (se elige). La plantilla de cada yarda es su largo por el perímetro más la holgura del engargolado; se acomodan en la hoja a lo ancho, a lo largo o mezcladas, lo que dé más. Con la galvanizada cal. 22 de 4 × 10 ft, cada hoja da 3 yardas de 11″.
 2. Multiplica el costo de esas hojas (sin IVA, de la lista del proveedor) **por 3**.
 3. Suma las **bridas según los metros**: hasta 40 m, $5,000; de 40 a 80 m, $12,000; de 80 a 120 m, $18,000.
 4. Suma la **utilidad** sobre ese costo (20 % de arranque; se cambia en la pestaña) y luego el **IVA**.
 
-Ejemplo: 11″ y 40 m son 33 yardas, 11 hojas ($8,724.14), × 3 = $26,172.41, más $5,000 de bridas, más 20 % y el IVA: **$43,392.00**. La lámina se elige de la lista del proveedor. El factor, los rangos de bridas, la utilidad y la lámina de arranque están en *Tablas maestras › Cotización rápida*. Más de 120 m no tiene precio de bridas: agregue un renglón. La regla y sus supuestos están en el [documento, §5.8](docs/arquitectura-cotizador-ducterias.md#58-cotización-rápida) y [§10.14](docs/arquitectura-cotizador-ducterias.md#1014-supuestos-de-la-cotización-rápida-por-confirmar).
+Ejemplo: 11″ y 40 m con yardas de 4 ft son 33 yardas, 11 hojas ($8,724.14), × 3 = $26,172.41, más $5,000 de bridas, más 20 % y el IVA: **$43,392.00**. Con yardas de 3 ft son 44 yardas y 15 hojas: **$56,640.00**.
+
+La pestaña **dibuja una lámina** a escala con sus yardas numeradas y el sobrante rayado, y una tira con todas las láminas y cuántas yardas lleva cada una; dice qué tanto se aprovecha la hoja. Tiene además un apartado de **plazo**: los días de fabricación y de instalación se muestran junto al total y no cambian el precio. La lámina se elige de la lista del proveedor. El factor, los rangos de bridas, la utilidad y la lámina de arranque están en *Tablas maestras › Cotización rápida*. Más de 120 m no tiene precio de bridas: agregue un renglón. La regla y sus supuestos están en el [documento, §5.8](docs/arquitectura-cotizador-ducterias.md#58-cotización-rápida) y [§10.14](docs/arquitectura-cotizador-ducterias.md#1014-supuestos-de-la-cotización-rápida-por-confirmar).
 
 ## Compras y gastos del proyecto
 

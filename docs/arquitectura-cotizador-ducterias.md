@@ -1321,26 +1321,34 @@ Para dar un precio en minutos, sin capturar pieza por pieza, el taller usa una r
 
 ```text
 B          = π · (D + e) + holgura de la costura del material       # plantilla de una yarda (D interior; galvanizado: Pittsburgh, 32 mm)
-yardas     = ⌈ metros ÷ ancho de la hoja ⌉                          # la yarda es el ancho de la hoja, como en el tramo recto (§3.2)
-por_hoja   = ⌊ largo de la hoja ÷ B ⌋ ;  hojas = ⌈ yardas ÷ por_hoja ⌉
-             (si B > largo de la hoja: cada yarda lleva hojas completas y un retazo; los retazos se acomodan juntos)
+yardas     = ⌈ metros ÷ yarda ⌉                                     # yarda de 3 ft (914 mm) o 4 ft (1 220 mm), a elegir
+por_hoja   = acomodo de plantillas yarda × B en la hoja (abajo) ;  hojas = ⌈ yardas ÷ por_hoja ⌉
+             (si la plantilla no cabe de ninguna forma: cada yarda lleva hojas completas y un retazo; los retazos se acomodan juntos)
 lámina     = hojas × precio de la hoja sin IVA                       # lista del proveedor (T3b)
 costo      = lámina × factor_lamina + bridas(metros)                 # el primer renglón de «bridas por metros» que alcanza
 precio     = costo × (1 + utilidad)                                  # la utilidad se SUMA sobre el costo (no es % del precio)
 total      = precio × (1 + IVA)                                      # el IVA de la pila de precio (T9)
 ```
 
+**La yarda: 3 o 4 ft.** Se elige en la pestaña (los largos son los de T7c, `proceso.armado_yardas.yardas_mm`; sin elegir, `yarda_defecto_mm`, 4 ft). Sin elegir lámina, se usa la de T11 o, si el proveedor tiene una del mismo material y calibre **cuyo ancho es la yarda** (la de 3 × 10 ft para yardas de 3 ft), ésa. Una yarda de 1,220 mm cabe en la hoja de 4 ft (1,219 mm): se acepta una diferencia de 3 mm.
+
+**El acomodo.** Las plantillas (yarda × B) se acomodan en la hoja con cortes de guillotina, y se queda el que da más: todas **a lo ancho** (la yarda a lo ancho de la hoja, como en el tramo recto), todas **a lo largo**, o una franja de un tipo y el resto del otro. Así, con yardas de 3 ft en la hoja de 4 × 10 ft, en la franja de 1 ft que sobra caben plantillas giradas si el ducto es chico (3″: 11 + 3 = 14 por hoja). La pestaña lo dibuja: una lámina a escala con sus yardas numeradas y el sobrante rayado, y una tira con todas las láminas y cuántas yardas lleva cada una (la última, las que falten). También dice qué fracción de la lámina se aprovecha.
+
 Con la lámina galvanizada cal. 22 de 4 × 10 ft ($920 con IVA = $793.10 sin IVA) y la utilidad de arranque:
 
-| Diámetro | Metros | Yardas (1.22 m) | Yardas por hoja | Hojas | Lámina sin IVA | Lámina × 3 | Bridas | Costo | Utilidad 20 % | Antes de IVA | Total con IVA |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 11″ | 40 | 33 | 3 | 11 | 8,724.14 | 26,172.41 | 5,000.00 | 31,172.41 | 6,234.48 | 37,406.90 | **43,392.00** |
-| 11″ | 41 | 34 | 3 | 12 | 9,517.24 | 28,551.72 | 12,000.00 | 40,551.72 | 8,110.34 | 48,662.07 | **56,448.00** |
-| 6″ | 60 | 50 | 5 | 10 | 7,931.03 | 23,793.10 | 12,000.00 | 35,793.10 | 7,158.62 | 42,951.72 | **49,824.00** |
-| 11″ | 100 | 83 | 3 | 28 | 22,206.90 | 66,620.69 | 18,000.00 | 84,620.69 | 16,924.14 | 101,544.83 | **117,792.00** |
-| 18″ | 80 | 66 | 2 | 33 | 26,172.41 | 78,517.24 | 12,000.00 | 90,517.24 | 18,103.45 | 108,620.69 | **126,000.00** |
+| Diámetro | Metros | Yarda | Yardas | Por lámina | Láminas | Aprovechamiento | Lámina sin IVA | Lámina × 3 | Bridas | Costo | Utilidad 20 % | Total con IVA |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 11″ | 40 | 4 ft | 33 | 3 | 11 | 90 % | 8,724.14 | 26,172.41 | 5,000.00 | 31,172.41 | 6,234.48 | **43,392.00** |
+| 11″ | 40 | 3 ft | 44 | 3 | 15 | 66 % | 11,896.55 | 35,689.66 | 5,000.00 | 40,689.66 | 8,137.93 | **56,640.00** |
+| 11″ | 41 | 4 ft | 34 | 3 | 12 | 85 % | 9,517.24 | 28,551.72 | 12,000.00 | 40,551.72 | 8,110.34 | **56,448.00** |
+| 6″ | 60 | 4 ft | 50 | 5 | 10 | 84 % | 7,931.03 | 23,793.10 | 12,000.00 | 35,793.10 | 7,158.62 | **49,824.00** |
+| 3″ | 40 | 3 ft | 44 | 14 (mixto) | 4 | 74 % | 3,172.41 | 9,517.24 | 5,000.00 | 14,517.24 | 2,903.45 | **20,208.00** |
+| 11″ | 100 | 4 ft | 82 | 3 | 28 | 88 % | 22,206.90 | 66,620.69 | 18,000.00 | 84,620.69 | 16,924.14 | **117,792.00** |
+| 18″ | 80 | 4 ft | 66 | 2 | 33 | 97 % | 26,172.41 | 78,517.24 | 12,000.00 | 90,517.24 | 18,103.45 | **126,000.00** |
 
-Para 11″ y 40 m: la plantilla de una yarda mide π × (279.4 + 0.85) + 32 = 912 mm, así que cada hoja de 3,048 mm da 3 yardas; 40 m son 33 yardas de 1.219 m, es decir, 11 hojas. La utilidad capturada en la pestaña vale sólo para esa cotización rápida; vacía, se usa la de T11. El diámetro se captura en la unidad de la cotización (pulgadas o mm) y lo capturado se recuerda en el navegador. Más metros que el último renglón de las bridas no tienen precio: la app lo dice y no da un total.
+Para 11″ y 40 m con yardas de 4 ft: la plantilla de una yarda mide π × (279.4 + 0.85) + 32 = 912 mm, así que cada hoja de 3,048 mm da 3 yardas; 40 m son 33 yardas, es decir, 11 hojas. Con yardas de 3 ft son 44 yardas: la hoja de 4 ft también da 3 (una franja de 305 mm se desperdicia), así que salen 15 hojas.
+
+**El plazo.** La pestaña tiene un apartado para los **días de fabricación** y los **días de instalación** (de 0 a 365, admite medios días); se muestran junto al total («5 días de fabricación + 3 días de instalación = 8 días») y **no cambian el precio**: la fabricación ya la cubre el factor. La utilidad capturada en la pestaña vale sólo para esa cotización rápida; vacía, se usa la de T11. El diámetro se captura en la unidad de la cotización (pulgadas o mm) y lo capturado se recuerda en el navegador. Más metros que el último renglón de las bridas no tienen precio: la app lo dice y no da un total.
 
 Es una **estimación**: todo el sistema al diámetro mayor, en ductos rectos, sin aprovechar retazos entre yardas, y lo demás (codos, reducciones, mano de obra, soportería, instalación) cubierto por el factor. Para un precio fino se capturan las partidas.
 
@@ -2236,4 +2244,6 @@ Los planos de pedido del 30-sep-2026 confirmaron el gramil (24 mm), los barrenos
 | Importes de las bridas por metros | Antes de IVA | T11 (`bridas_por_metros`) | Si ya traen IVA, el total baja 16 % de ese importe. |
 | Más de 120 m | Sin precio: la app pide agregar un renglón | T11 | — |
 | La hoja y la yarda | Galvanizada cal. 22 de 4 × 10 ft; la yarda es su ancho (1.22 m), como en el tramo recto | T11 (`hoja_defecto`) o la pestaña | Con yardas de 3 ft (hoja de 3 × 10 ft) salen otras hojas: elegirla en la pestaña si está en la lista del proveedor. |
-| Retazos | No se aprovechan entre yardas (cada hoja da yardas completas) | §5.8 | Si el taller usa los retazos para codos o reducciones, cuenta menos hojas: el factor ya lo cubre. |
+| Retazos | No se aprovechan entre láminas; en una lámina, el acomodo de guillotina mete las que quepan (incluso giradas) | §5.8 | Si el taller usa los retazos para codos o reducciones, cuenta menos hojas: el factor ya lo cubre. |
+| Yarda de 3 ft en galvanizado | La lista del proveedor sólo trae la galvanizada de 4 × 10 ft: se corta la yarda de 3 ft de ella y se desperdicia una franja de 1 ft | Lista del proveedor (T3b): agregar la de 3 × 10 ft | Con la hoja de 3 × 10 ft (si se compra), la yarda de 3 ft la toma sola y salen menos hojas. |
+| Días de fabricación e instalación | Sólo informan el plazo; no suman costo | §5.8 | Si la instalación debe cobrarse (cuadrilla × días), hay que agregarla: hoy no está en la regla. |
