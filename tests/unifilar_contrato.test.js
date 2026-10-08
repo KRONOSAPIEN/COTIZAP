@@ -89,7 +89,7 @@ test('La red es un árbol consistente: identificadores únicos, referencias que 
   const { nodos, aristas, textos } = CASO.red;
   const ids = [...nodos, ...aristas, ...textos, ...CASO.equipos, ...CASO.ductos_rectos, ...CASO.accesorios, ...CASO.elementos_union, ...CASO.soportes, ...CASO.alertas_ambiguedad].map((x) => x.id);
   assert.equal(new Set(ids).size, ids.length, 'identificadores únicos');
-  const existe = new Set([...ids, 'metadatos']); // «metadatos»: el material y el calibre de todo el croquis
+  const existe = new Set([...ids, ...CASO.red.cotas_totales.map((c) => c.id), 'metadatos']); // «metadatos»: el material y el calibre de todo el croquis
   const N = new Map(nodos.map((n) => [n.id, n]));
   aristas.forEach((a) => {
     assert.ok(N.has(a.nodo_a) && N.has(a.nodo_b), `${a.id}: nodos`);

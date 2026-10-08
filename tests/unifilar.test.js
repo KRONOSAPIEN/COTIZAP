@@ -28,8 +28,9 @@ function planta(nodos, aristas, equipos, extra) {
       nodos: nodos.map(([id, x, y]) => ({ id, tipo: 'VERTICE', pos_px: { x, y } })),
       aristas: aristas.map(([id, a, b, d, m]) => ({ id, nodo_a: a, nodo_b: b, diametro: med(d, 'in'), longitud_cota: med(m, 'm') })),
       textos: (extra && extra.textos) || [],
+      cotas_totales: (extra && extra.cotas) || [],
     },
-    equipos: equipos.map(([id, tipo, nodo_id, conexion]) => ({ id, tipo, nombre: id, nodo_id, conexion })),
+    equipos: equipos.map(([id, tipo, nodo_id, conexion, boca]) => ({ id, tipo, nombre: id, nodo_id, conexion, boca_diametro: boca ? { ...med(boca, 'in'), confianza: 0.9 } : null })),
   };
 }
 
@@ -70,7 +71,7 @@ test('El caso de prueba: las reglas dan las piezas, las longitudes netas y las a
   const bom = despiezar(lecturaEjemplo());
   assert.equal(bom.resumen.estado, 'PRELIMINAR');
   assert.deepEqual(codigos(bom, 'CONFIRMAR'), ['COTA_ILEGIBLE', 'ANGULO_DERIVACION_NO_PERMITIDO', 'ORIENTACION_AMBIGUA', 'CONEXION_EQUIPO']);
-  assert.deepEqual(codigos(bom, 'ADVERTENCIA'), ['MANGUERA_SIN_LARGO', 'MANGUERA_SIN_LARGO', 'CALIBRE_BAJO_TABLA']);
+  assert.deepEqual(codigos(bom, 'ADVERTENCIA'), ['LECTURA_DUDOSA', 'MANGUERA_SIN_LARGO', 'MANGUERA_SIN_LARGO', 'CALIBRE_BAJO_TABLA']);
   assert.deepEqual(codigos(bom, 'BLOQUEANTE'), []);
   assert.deepEqual(bom.ductos_rectos.map((d) => d.longitud_neta_mm), [2542.8, 3919.6, 1389.5, 3301.8, 950, 1777.6, 2326.3, 1373.7]);
   assert.deepEqual(bom.accesorios.map((a) => `${a.id} ${a.nodo_id}`), ['CODO-001 N-002', 'RINJ-001 N-003', 'INJ-001 N-005', 'RED-001 N-007', 'CODO-002 N-008']);
@@ -124,7 +125,7 @@ test('Respuestas: cada una quita su pregunta, queda como respondida (con su cont
   assert.equal(tramos.partidas_compradas.find((c) => c.articulo_id === 'MANGUERA_6').cantidad, 3);
 
   const todo = despiezar(L, {
-    'A-005': { longitud_m: 1.6 }, 'N-005': { angulo_deg: 30 }, 'A-008': { posicion: 'HORIZONTAL' }, 'EQ-01': { boca_in: 12 },
+    'A-005': { longitud_m: 1.6, diametro_in: 5 }, 'N-005': { angulo_deg: 30 }, 'A-008': { posicion: 'HORIZONTAL' }, 'EQ-01': { boca_in: 12 },
     'EQ-02': { manguera_tramos: 1 }, 'EQ-03': { manguera_tramos: 1 }, metadatos: { calibre: 22 },
   });
   assert.equal(todo.resumen.estado, 'DEFINITIVA');
@@ -231,8 +232,72 @@ test('Un ramal mayor que su tronco bloquea (la pieza no se fabrica) y un tramo c
     [['N-1', 0, 0], ['N-2', 400, 0], ['N-3', 400, -200], ['N-4', 800, -200]],
     [['A-1', 'N-1', 'N-2', 12, 2], ['A-2', 'N-2', 'N-3', 12, 1.0], ['A-3', 'N-3', 'N-4', 12, 2]],
     [['COL', 'COLECTOR', 'N-1', 'BRIDA_EQUIPO'], ['M1', 'MAQUINA', 'N-4', 'BRIDA_TALLER']])).lectura);
-  assert.equal(ducto(justo, 'A-2').longitud_neta_mm, 85.6);
+  // 85.6 mm entre dos codos: se pegan con una unión (sin bridas en esas caras) o, si se responde, tramo corto
   assert.ok(codigos(justo, 'CONFIRMAR').includes('ACCESORIOS_ENCIMADOS'));
+  assert.equal(ducto(justo, 'A-2'), undefined, 'pegados: no hay tramo');
+  assert.deepEqual(justo.accesorios.map((x) => x.partida_cotizap.extremos_sin_brida), [['B'], ['A']]);
+  const union = justo.elementos_union.find((j) => j.tipo === 'UNION_ENGARGOLADA');
+  assert.deepEqual([union.piezas, union.aros, union.partida_cotizap.familia], [['CODO-001', 'CODO-002'], 0, 'UNION']);
+  const ps = UF.aPartidas(justo);
+  assert.ok(ps.some((p) => p.unifilar_id === 'UNION-CODO-001-CODO-002'));
+  const res = C.cotizar({ partidas: ps }, M);
+  assert.equal(res.partidas.filter((f) => !f.ok).length, 0);
+  const aros = res.partidas.filter((f) => f.qto && f.qto.her).reduce((x, f) => x + f.qto.her.n_aros + f.qto.her.aros_sueltos.length, 0);
+  assert.equal(aros, justo.resumen.conteo.aros, 'los aros del despiece son los que cobra el motor, sin las bridas de las caras pegadas');
+  const tramo = despiezar(UF.leer(planta(
+    [['N-1', 0, 0], ['N-2', 400, 0], ['N-3', 400, -200], ['N-4', 800, -200]],
+    [['A-1', 'N-1', 'N-2', 12, 2], ['A-2', 'N-2', 'N-3', 12, 1.0], ['A-3', 'N-3', 'N-4', 12, 2]],
+    [['COL', 'COLECTOR', 'N-1', 'BRIDA_EQUIPO'], ['M1', 'MAQUINA', 'N-4', 'BRIDA_TALLER']])).lectura, { 'A-2': { encimado: 'TRAMO' } });
+  assert.equal(ducto(tramo, 'A-2').longitud_neta_mm, 85.6);
+  assert.ok(!codigos(tramo).includes('ACCESORIOS_ENCIMADOS'));
+});
+
+test('Cadenas de cotas: la parcial que falta sale de la total; si no cuadran, se avisa', () => {
+  const red = (m2, total) => planta(
+    [['N-1', 0, 0], ['N-2', 300, 0], ['N-3', 700, 0], ['N-4', 1000, 0]],
+    [['A-1', 'N-1', 'N-2', 12, 2], ['A-2', 'N-2', 'N-3', 12, m2], ['A-3', 'N-3', 'N-4', 12, 1.5]],
+    [['COL', 'COLECTOR', 'N-1', 'BRIDA_EQUIPO', 12], ['M1', 'MAQUINA', 'N-4', 'BRIDA_TALLER']],
+    { cotas: [{ id: 'CT-001', aristas: ['A-1', 'A-2', 'A-3'], longitud: { valor: total, unidad: 'm', origen: 'OCR', confianza: 0.95, texto_id: null } }] });
+  const b = despiezar(UF.leer(red(null, 6.5)).lectura);
+  const a2 = b.red.aristas.find((a) => a.id === 'A-2');
+  assert.deepEqual([a2.longitud_cota.valor, a2.longitud_cota.origen], [3, 'INFERIDO']);
+  const info = b.alertas_ambiguedad.find((a) => a.codigo === 'COTA_FALTANTE');
+  assert.equal(info.severidad, 'INFO');
+  assert.match(info.decision_tomada, /cota total CT-001 \(6\.5 m\) menos las demás parciales \(3\.5 m\): 3 m/);
+  assert.equal(b.resumen.estado, 'DEFINITIVA');
+  assert.deepEqual(codigos(despiezar(UF.leer(red(2.2, 6.5)).lectura), 'ADVERTENCIA').filter((c) => c === 'COTAS_NO_CUADRAN'), ['COTAS_NO_CUADRAN']);
+  assert.ok(!codigos(despiezar(UF.leer(red(3.0, 6.5)).lectura)).includes('COTAS_NO_CUADRAN'));
+  // una cota total sobre aristas que no existen no se acepta
+  const mala = red(3, 6.5);
+  mala.red.cotas_totales[0].aristas = ['A-1', 'A-9'];
+  assert.ok(UF.leer(mala).errores.some((e) => /CT-001/.test(e)));
+});
+
+test('Lecturas dudosas, boca anotada, reducción de más de la mitad y la nota «BAJA»', () => {
+  // confianza 0.5–0.7: CONFIRMAR; 0.7–0.9: ADVERTENCIA; 0.9 o más: nada
+  const conf = (c) => {
+    const x = planta([['N-1', 0, 0], ['N-2', 400, 0]], [['A-1', 'N-1', 'N-2', 8, 2]], [['COL', 'COLECTOR', 'N-1', 'BRIDA_EQUIPO', 8], ['M1', 'MAQUINA', 'N-2', 'BRIDA_TALLER']]);
+    x.red.aristas[0].diametro.confianza = c;
+    return despiezar(UF.leer(x).lectura).alertas_ambiguedad.filter((a) => a.codigo === 'LECTURA_DUDOSA').map((a) => a.severidad);
+  };
+  assert.deepEqual([conf(0.6), conf(0.8), conf(0.95)], [['CONFIRMAR'], ['ADVERTENCIA'], []]);
+  // la boca anotada se usa (y se pide confirmar los barrenos); si es mayor que el ducto, va una reducción
+  const boca = despiezar(UF.leer(planta([['N-1', 0, 0], ['N-2', 400, 0], ['N-3', 800, 0]], [['A-1', 'N-1', 'N-2', 12, 2], ['A-2', 'N-2', 'N-3', 5, 2]],
+    [['COL', 'COLECTOR', 'N-1', 'BRIDA_EQUIPO', 14], ['M1', 'MAQUINA', 'N-3', 'BRIDA_TALLER']])).lectura);
+  const con = boca.alertas_ambiguedad.find((a) => a.codigo === 'CONEXION_EQUIPO');
+  assert.deepEqual([con.severidad, con.respuesta.propuesta], ['ADVERTENCIA', 14]);
+  assert.ok(boca.accesorios.some((x) => x.nodo_id === 'N-1' && x.diametro_entrada_in === 14 && x.diametro_salida_in === 12));
+  // de 12″ a 5″ es más de la mitad: se avisa (suele ser una mala lectura)
+  const grande = boca.alertas_ambiguedad.find((a) => a.codigo === 'REDUCCION_GRANDE');
+  assert.deepEqual([grande.severidad, grande.respuesta.elemento, grande.respuesta.propuesta], ['ADVERTENCIA', 'A-2', 5]);
+  // «BAJA» junto al tramo dibujado vertical: manda la nota (codo de 90° y tramo vertical) y se pregunta
+  const x = clonar(EJEMPLO);
+  x.red.textos.push({ id: 'T-026', contenido_crudo: 'BAJA', contenido_normalizado: 'BAJA', tipo: 'NOTA', bbox_px: { x: 2290, y: 560, w: 60, h: 30 }, confianza_ocr: 0.9, asociado_a: 'A-008' });
+  const baja = despiezar(UF.leer(x).lectura);
+  assert.equal(baja.accesorios.find((a) => a.id === 'CODO-002').partida_cotizap.theta_deg, 90);
+  assert.equal(ducto(baja, 'A-008').posicion, 'VERTICAL');
+  const o = baja.alertas_ambiguedad.find((a) => a.codigo === 'ORIENTACION_AMBIGUA');
+  assert.deepEqual([o.severidad, o.respuesta.propuesta], ['CONFIRMAR', 'VERTICAL']);
 });
 
 test('aPartidas: tramos, accesorios, soportes y compras, cada una con su pieza; todas se cotizan', () => {

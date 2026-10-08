@@ -12,11 +12,12 @@
     "red": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["nodos", "aristas", "textos"],
+      "required": ["nodos", "aristas", "textos", "cotas_totales"],
       "properties": {
         "nodos": { "type": "array", "items": { "$ref": "#/$defs/nodo" } },
         "aristas": { "type": "array", "items": { "$ref": "#/$defs/arista" } },
-        "textos": { "type": "array", "items": { "$ref": "#/$defs/texto" } }
+        "textos": { "type": "array", "items": { "$ref": "#/$defs/texto" } },
+        "cotas_totales": { "type": "array", "description": "Cotas que abarcan varios tramos seguidos (cadenas de cotas): la parcial que falta sale por diferencia.", "items": { "$ref": "#/$defs/cota_total" } }
       }
     },
     "equipos": { "type": "array", "items": { "$ref": "#/$defs/equipo" } },
@@ -138,10 +139,20 @@
         "asociado_a": { "type": ["string", "null"], "description": "La arista, el nodo o el equipo al que se asoció; null = global o sin asociar." }
       }
     },
+    "cota_total": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "aristas", "longitud"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^CT-[0-9]{3}$" },
+        "aristas": { "type": "array", "description": "Dos o más aristas seguidas que abarca la cota.", "items": { "$ref": "#/$defs/id_red" } },
+        "longitud": { "$ref": "#/$defs/medida" }
+      }
+    },
     "equipo": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "tipo", "nombre", "nodo_id", "conexion", "texto_id", "confianza"],
+      "required": ["id", "tipo", "nombre", "nodo_id", "conexion", "texto_id", "confianza", "boca_diametro"],
       "properties": {
         "id": { "type": "string", "pattern": "^EQ-[0-9]{2}$" },
         "tipo": { "type": "string", "enum": ["COLECTOR", "MAQUINA", "CAMPANA", "COMPUERTA", "VENTILADOR", "OTRO"] },
@@ -149,7 +160,8 @@
         "nodo_id": { "$ref": "#/$defs/id_red" },
         "conexion": { "type": "string", "enum": ["BRIDA_EQUIPO", "BRIDA_TALLER", "MANGUERA", "LISO"] },
         "texto_id": { "type": ["string", "null"] },
-        "confianza": { "$ref": "#/$defs/confianza" }
+        "confianza": { "$ref": "#/$defs/confianza" },
+        "boca_diametro": { "anyOf": [{ "$ref": "#/$defs/medida" }, { "type": "null" }], "description": "El diámetro de la boca del equipo si está anotado; null si no." }
       }
     },
     "partida_cotizap": {
@@ -225,11 +237,11 @@
     "elemento_union": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "tipo", "nodo_id", "piezas", "diametro_in", "aros", "aros_sueltos", "perfil", "solera_por_aro_mm", "barrenos_por_aro", "tornillos_juegos", "tornillo", "sellador_ml", "abrazaderas_manguera", "incluido_en_partidas", "origen", "articulo_manguera"],
+      "required": ["id", "tipo", "nodo_id", "piezas", "diametro_in", "aros", "aros_sueltos", "perfil", "solera_por_aro_mm", "barrenos_por_aro", "tornillos_juegos", "tornillo", "sellador_ml", "abrazaderas_manguera", "incluido_en_partidas", "origen", "articulo_manguera", "partida_cotizap"],
       "properties": {
         "id": { "type": "string", "pattern": "^JNT-[0-9]{3}$" },
         "tipo": { "type": "string", "enum": ["JUNTA_BRIDADA", "JUNTA_EQUIPO", "JUNTA_MANGUERA", "UNION_ENGARGOLADA"] },
-        "nodo_id": { "type": ["string", "null"], "description": "null = junta interna de un tramo (entre piezas de hasta 3 yardas)." },
+        "nodo_id": { "type": ["string", "null"], "description": "null = junta interna de un tramo (entre piezas de hasta 3 yardas) o unión de dos accesorios pegados (sin tramo entre ellos)." },
         "piezas": { "type": "array", "items": { "type": "string" } },
         "diametro_in": { "type": "number", "minimum": 1 },
         "aros": { "type": "integer", "minimum": 0 },
@@ -243,7 +255,8 @@
         "abrazaderas_manguera": { "type": "integer", "minimum": 0 },
         "incluido_en_partidas": { "type": "string", "enum": ["COMPLETO", "MEDIA_JUNTA", "NO"], "description": "Qué parte de la junta ya cobran las partidas (cada brida lleva media junta)." },
         "origen": { "type": "string", "enum": ["NODO", "ARMADO_YARDAS"] },
-        "articulo_manguera": { "type": ["string", "null"] }
+        "articulo_manguera": { "type": ["string", "null"] },
+        "partida_cotizap": { "anyOf": [{ "$ref": "#/$defs/partida_cotizap" }, { "type": "null" }], "description": "Sólo la unión de accesorios pegados: su partida de armado de piezas (familia UNION). Las juntas ya las cobran las partidas de las piezas." }
       }
     },
     "soporte": {
@@ -283,7 +296,7 @@
             "COTA_ILEGIBLE", "COTA_FALTANTE", "DIAMETRO_FALTANTE", "DIAMETRO_INFERIDO", "DIAMETRO_INCONSISTENTE", "ANGULO_INFERIDO", "ANGULO_NO_PERMITIDO",
             "ANGULO_DERIVACION_NO_PERMITIDO", "DERIVACION_CONTRA_FLUJO", "ORIENTACION_AMBIGUA", "TRANSICION_INSERTADA", "ACCESORIOS_ENCIMADOS", "CONEXION_EQUIPO",
             "MANGUERA_SIN_LARGO", "CALIBRE_BAJO_TABLA", "CALIBRE_FALTANTE", "MATERIAL_FALTANTE", "TEXTO_SIN_ASOCIAR", "ASOCIACION_AMBIGUA", "TRAZO_SIN_CONECTAR",
-            "CRUCE_SIN_NODO", "CICLO_EN_RED", "PANTALON_RETIRADO", "SIN_COLECTOR"
+            "CRUCE_SIN_NODO", "CICLO_EN_RED", "PANTALON_RETIRADO", "SIN_COLECTOR", "LECTURA_DUDOSA", "COTAS_NO_CUADRAN", "REDUCCION_GRANDE"
           ]
         },
         "referencias": { "type": "array", "items": { "type": "string" } },
@@ -302,7 +315,7 @@
       "properties": {
         "tipo": { "type": "string", "enum": ["NUMERO", "OPCIONES", "ACEPTAR"] },
         "elemento": { "type": "string" },
-        "campo": { "type": "string", "enum": ["longitud_m", "diametro_in", "angulo_deg", "posicion", "boca_in", "manguera_tramos", "calibre", "material", "aceptado"] },
+        "campo": { "type": "string", "enum": ["longitud_m", "diametro_in", "angulo_deg", "posicion", "boca_in", "manguera_tramos", "calibre", "material", "aceptado", "encimado"] },
         "unidad": { "type": ["string", "null"] },
         "opciones": {
           "type": "array",

@@ -122,6 +122,7 @@
         "ducto_id": "DUCT-008"
       }
     ],
+    "cotas_totales": [{ "id": "CT-001", "aristas": ["A-004", "A-006", "A-007"], "longitud": { "valor": 8.1, "unidad": "m", "origen": "OCR", "confianza": 0.9, "texto_id": "T-025" } }],
     "textos": [
       { "id": "T-001", "contenido_crudo": "Ø12\"", "contenido_normalizado": "12", "tipo": "DIAMETRO", "bbox_px": { "x": 380, "y": 1560, "w": 92, "h": 40 }, "confianza_ocr": 0.96, "asociado_a": "A-001" },
       { "id": "T-002", "contenido_crudo": "L=3.0m", "contenido_normalizado": "3.0", "tipo": "LONGITUD", "bbox_px": { "x": 300, "y": 1630, "w": 120, "h": 38 }, "confianza_ocr": 0.94, "asociado_a": "A-001" },
@@ -146,14 +147,15 @@
       { "id": "T-021", "contenido_crudo": "MANG 5\"", "contenido_normalizado": "MANGUERA 5", "tipo": "NOTA", "bbox_px": { "x": 1300, "y": 925, "w": 130, "h": 36 }, "confianza_ocr": 0.87, "asociado_a": "EQ-03" },
       { "id": "T-022", "contenido_crudo": "CAMPANA", "contenido_normalizado": "CAMPANA", "tipo": "EQUIPO", "bbox_px": { "x": 2220, "y": 700, "w": 150, "h": 40 }, "confianza_ocr": 0.95, "asociado_a": "EQ-04" },
       { "id": "T-023", "contenido_crudo": "GALV CAL 22", "contenido_normalizado": "GALVANIZADO 22", "tipo": "CALIBRE", "bbox_px": { "x": 120, "y": 120, "w": 230, "h": 44 }, "confianza_ocr": 0.93, "asociado_a": null },
-      { "id": "T-024", "contenido_crudo": "x", "contenido_normalizado": null, "tipo": "ILEGIBLE", "bbox_px": { "x": 1820, "y": 1500, "w": 22, "h": 22 }, "confianza_ocr": 0.3, "asociado_a": null }
+      { "id": "T-024", "contenido_crudo": "x", "contenido_normalizado": null, "tipo": "ILEGIBLE", "bbox_px": { "x": 1820, "y": 1500, "w": 22, "h": 22 }, "confianza_ocr": 0.3, "asociado_a": null },
+      { "id": "T-025", "contenido_crudo": "8.1 m", "contenido_normalizado": "8.1", "tipo": "LONGITUD", "bbox_px": { "x": 1700, "y": 470, "w": 96, "h": 36 }, "confianza_ocr": 0.9, "asociado_a": "CT-001" }
     ]
   },
   "equipos": [
-    { "id": "EQ-01", "tipo": "COLECTOR", "nombre": "Colector de polvo", "nodo_id": "N-001", "conexion": "BRIDA_EQUIPO", "texto_id": "T-017", "confianza": 0.97 },
-    { "id": "EQ-02", "tipo": "MAQUINA", "nombre": "Máquina A", "nodo_id": "N-004", "conexion": "MANGUERA", "texto_id": "T-018", "confianza": 0.92 },
-    { "id": "EQ-03", "tipo": "MAQUINA", "nombre": "Máquina B", "nodo_id": "N-006", "conexion": "MANGUERA", "texto_id": "T-020", "confianza": 0.91 },
-    { "id": "EQ-04", "tipo": "CAMPANA", "nombre": "Campana", "nodo_id": "N-009", "conexion": "BRIDA_TALLER", "texto_id": "T-022", "confianza": 0.95 }
+    { "id": "EQ-01", "tipo": "COLECTOR", "nombre": "Colector de polvo", "nodo_id": "N-001", "conexion": "BRIDA_EQUIPO", "texto_id": "T-017", "confianza": 0.97, "boca_diametro": null },
+    { "id": "EQ-02", "tipo": "MAQUINA", "nombre": "Máquina A", "nodo_id": "N-004", "conexion": "MANGUERA", "texto_id": "T-018", "confianza": 0.92, "boca_diametro": null },
+    { "id": "EQ-03", "tipo": "MAQUINA", "nombre": "Máquina B", "nodo_id": "N-006", "conexion": "MANGUERA", "texto_id": "T-020", "confianza": 0.91, "boca_diametro": null },
+    { "id": "EQ-04", "tipo": "CAMPANA", "nombre": "Campana", "nodo_id": "N-009", "conexion": "BRIDA_TALLER", "texto_id": "T-022", "confianza": 0.95, "boca_diametro": null }
   ],
   "ductos_rectos": [
     {
@@ -441,7 +443,8 @@
       "abrazaderas_manguera": 0,
       "incluido_en_partidas": "COMPLETO",
       "origen": "NODO",
-      "articulo_manguera": null
+      "articulo_manguera": null,
+      "partida_cotizap": null
     },
     {
       "id": "JNT-002",
@@ -460,7 +463,8 @@
       "abrazaderas_manguera": 0,
       "incluido_en_partidas": "COMPLETO",
       "origen": "NODO",
-      "articulo_manguera": null
+      "articulo_manguera": null,
+      "partida_cotizap": null
     },
     {
       "id": "JNT-003",
@@ -479,7 +483,8 @@
       "abrazaderas_manguera": 0,
       "incluido_en_partidas": "COMPLETO",
       "origen": "NODO",
-      "articulo_manguera": null
+      "articulo_manguera": null,
+      "partida_cotizap": null
     },
     {
       "id": "JNT-004",
@@ -498,7 +503,8 @@
       "abrazaderas_manguera": 0,
       "incluido_en_partidas": "COMPLETO",
       "origen": "NODO",
-      "articulo_manguera": null
+      "articulo_manguera": null,
+      "partida_cotizap": null
     },
     {
       "id": "JNT-005",
@@ -517,7 +523,8 @@
       "abrazaderas_manguera": 0,
       "incluido_en_partidas": "COMPLETO",
       "origen": "NODO",
-      "articulo_manguera": null
+      "articulo_manguera": null,
+      "partida_cotizap": null
     },
     {
       "id": "JNT-006",
@@ -536,7 +543,8 @@
       "abrazaderas_manguera": 0,
       "incluido_en_partidas": "COMPLETO",
       "origen": "NODO",
-      "articulo_manguera": null
+      "articulo_manguera": null,
+      "partida_cotizap": null
     },
     {
       "id": "JNT-007",
@@ -555,7 +563,8 @@
       "abrazaderas_manguera": 0,
       "incluido_en_partidas": "COMPLETO",
       "origen": "NODO",
-      "articulo_manguera": null
+      "articulo_manguera": null,
+      "partida_cotizap": null
     },
     {
       "id": "JNT-008",
@@ -574,7 +583,8 @@
       "abrazaderas_manguera": 0,
       "incluido_en_partidas": "COMPLETO",
       "origen": "NODO",
-      "articulo_manguera": null
+      "articulo_manguera": null,
+      "partida_cotizap": null
     },
     {
       "id": "JNT-009",
@@ -593,7 +603,8 @@
       "abrazaderas_manguera": 0,
       "incluido_en_partidas": "COMPLETO",
       "origen": "NODO",
-      "articulo_manguera": null
+      "articulo_manguera": null,
+      "partida_cotizap": null
     },
     {
       "id": "JNT-010",
@@ -612,7 +623,8 @@
       "abrazaderas_manguera": 0,
       "incluido_en_partidas": "COMPLETO",
       "origen": "NODO",
-      "articulo_manguera": null
+      "articulo_manguera": null,
+      "partida_cotizap": null
     },
     {
       "id": "JNT-011",
@@ -631,7 +643,8 @@
       "abrazaderas_manguera": 0,
       "incluido_en_partidas": "COMPLETO",
       "origen": "NODO",
-      "articulo_manguera": null
+      "articulo_manguera": null,
+      "partida_cotizap": null
     },
     {
       "id": "JNT-012",
@@ -650,7 +663,8 @@
       "abrazaderas_manguera": 0,
       "incluido_en_partidas": "COMPLETO",
       "origen": "NODO",
-      "articulo_manguera": null
+      "articulo_manguera": null,
+      "partida_cotizap": null
     },
     {
       "id": "JNT-013",
@@ -669,7 +683,8 @@
       "abrazaderas_manguera": 0,
       "incluido_en_partidas": "MEDIA_JUNTA",
       "origen": "NODO",
-      "articulo_manguera": null
+      "articulo_manguera": null,
+      "partida_cotizap": null
     },
     {
       "id": "JNT-014",
@@ -688,7 +703,8 @@
       "abrazaderas_manguera": 0,
       "incluido_en_partidas": "MEDIA_JUNTA",
       "origen": "NODO",
-      "articulo_manguera": null
+      "articulo_manguera": null,
+      "partida_cotizap": null
     },
     {
       "id": "JNT-015",
@@ -707,7 +723,8 @@
       "abrazaderas_manguera": 0,
       "incluido_en_partidas": "COMPLETO",
       "origen": "ARMADO_YARDAS",
-      "articulo_manguera": null
+      "articulo_manguera": null,
+      "partida_cotizap": null
     },
     {
       "id": "JNT-016",
@@ -726,7 +743,8 @@
       "abrazaderas_manguera": 0,
       "incluido_en_partidas": "COMPLETO",
       "origen": "ARMADO_YARDAS",
-      "articulo_manguera": null
+      "articulo_manguera": null,
+      "partida_cotizap": null
     },
     {
       "id": "JNT-017",
@@ -745,7 +763,8 @@
       "abrazaderas_manguera": 2,
       "incluido_en_partidas": "NO",
       "origen": "NODO",
-      "articulo_manguera": "MANGUERA_6"
+      "articulo_manguera": "MANGUERA_6",
+      "partida_cotizap": null
     },
     {
       "id": "JNT-018",
@@ -764,7 +783,8 @@
       "abrazaderas_manguera": 2,
       "incluido_en_partidas": "NO",
       "origen": "NODO",
-      "articulo_manguera": "MANGUERA_5"
+      "articulo_manguera": "MANGUERA_5",
+      "partida_cotizap": null
     }
   ],
   "soportes": [
@@ -870,6 +890,17 @@
     {
       "id": "ALR-005",
       "severidad": "ADVERTENCIA",
+      "codigo": "LECTURA_DUDOSA",
+      "referencias": ["A-005", "T-010", "DUCT-005"],
+      "mensaje": "El diámetro del tramo a «Máquina B» (A-005) se leyó «5\"» con confianza 0.88.",
+      "decision_tomada": "Se usa 5″.",
+      "pregunta": "¿Cuál es el diámetro del tramo a «Máquina B» (A-005)?",
+      "respuesta": { "tipo": "NUMERO", "elemento": "A-005", "campo": "diametro_in", "unidad": "in", "opciones": [], "propuesta": 5 },
+      "resuelta": false
+    },
+    {
+      "id": "ALR-006",
+      "severidad": "ADVERTENCIA",
       "codigo": "MANGUERA_SIN_LARGO",
       "referencias": ["EQ-02", "JNT-017"],
       "mensaje": "La manguera a «Máquina A» no trae largo.",
@@ -879,7 +910,7 @@
       "resuelta": false
     },
     {
-      "id": "ALR-006",
+      "id": "ALR-007",
       "severidad": "ADVERTENCIA",
       "codigo": "MANGUERA_SIN_LARGO",
       "referencias": ["EQ-03", "JNT-018"],
@@ -890,7 +921,7 @@
       "resuelta": false
     },
     {
-      "id": "ALR-007",
+      "id": "ALR-008",
       "severidad": "ADVERTENCIA",
       "codigo": "CALIBRE_BAJO_TABLA",
       "referencias": ["metadatos", "T-023"],
@@ -919,7 +950,7 @@
       "resuelta": false
     },
     {
-      "id": "ALR-008",
+      "id": "ALR-009",
       "severidad": "INFO",
       "codigo": "DIAMETRO_INFERIDO",
       "referencias": ["A-006", "DUCT-006"],
@@ -930,7 +961,7 @@
       "resuelta": false
     },
     {
-      "id": "ALR-009",
+      "id": "ALR-010",
       "severidad": "INFO",
       "codigo": "DIAMETRO_INFERIDO",
       "referencias": ["A-008", "DUCT-008"],
@@ -941,7 +972,7 @@
       "resuelta": false
     },
     {
-      "id": "ALR-010",
+      "id": "ALR-011",
       "severidad": "INFO",
       "codigo": "ANGULO_INFERIDO",
       "referencias": ["N-002", "CODO-001"],
@@ -959,7 +990,7 @@
       "resuelta": false
     },
     {
-      "id": "ALR-011",
+      "id": "ALR-012",
       "severidad": "INFO",
       "codigo": "TRANSICION_INSERTADA",
       "referencias": ["N-007", "RED-001"],
@@ -969,7 +1000,7 @@
       "respuesta": null,
       "resuelta": false
     },
-    { "id": "ALR-012", "severidad": "INFO", "codigo": "TEXTO_SIN_ASOCIAR", "referencias": ["T-024"], "mensaje": "«x» sin significado claro (lectura 0.3).", "decision_tomada": "No está junto a ninguna arista ni nodo: se descarta.", "pregunta": null, "respuesta": null, "resuelta": false }
+    { "id": "ALR-013", "severidad": "INFO", "codigo": "TEXTO_SIN_ASOCIAR", "referencias": ["T-024"], "mensaje": "«x» sin significado claro (lectura 0.3).", "decision_tomada": "No está junto a ninguna arista ni nodo: se descarta.", "pregunta": null, "respuesta": null, "resuelta": false }
   ],
   "resumen": {
     "estado": "PRELIMINAR",
@@ -979,7 +1010,7 @@
     "punto_mas_alejado": "N-009",
     "longitud_al_punto_mas_alejado_m": 17.1,
     "conteo": { "ductos_rectos": 8, "accesorios": 5, "juntas_bridadas": 14, "juntas_equipo": 2, "juntas_manguera": 2, "aros": 30, "aros_sueltos": 6, "tornillos_juegos": 116, "sellador_ml": 588.3, "menulas": 14 },
-    "alertas": { "BLOQUEANTE": 0, "CONFIRMAR": 4, "ADVERTENCIA": 3, "INFO": 5 },
+    "alertas": { "BLOQUEANTE": 0, "CONFIRMAR": 4, "ADVERTENCIA": 4, "INFO": 5 },
     "cotizacion_rapida": { "D_mm": 304.8, "L_m": 17.1, "yarda_mm": 914.4, "menulas": 14, "mangueras_tramos": 2 }
   }
 }

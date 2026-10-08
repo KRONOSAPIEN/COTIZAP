@@ -4,8 +4,8 @@
  * reglas (motor/unifilar.js) la convierten en el despiece del caso de prueba (docs/ejemplos/unifilar-caso-prueba.json).
  *
  * Un isométrico a mano alzada: colector, subida de 12″, derivación de 6″ a 45° a la máquina A, tronco de 10″, una T a 90° con
- * un ramal de 5″ cuya cota no se lee a la máquina B, un cambio de 10″ a 8″ sin accesorio dibujado y un codo de 45° a una
- * campana. Sin datos de ningún cliente.
+ * un ramal de 5″ cuya cota no se lee a la máquina B, un cambio de 10″ a 8″ sin accesorio dibujado, un codo de 45° a una
+ * campana y una cota total del tronco que cuadra con sus parciales. Sin datos de ningún cliente.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -88,13 +88,18 @@
         texto('T-022', 'CAMPANA', 'CAMPANA', 'EQUIPO', [2220, 700, 150, 40], 0.95, 'EQ-04'),
         texto('T-023', 'GALV CAL 22', 'GALVANIZADO 22', 'CALIBRE', [120, 120, 230, 44], 0.93, null),
         texto('T-024', 'x', null, 'ILEGIBLE', [1820, 1500, 22, 22], 0.30, null),
+        texto('T-025', '8.1 m', '8.1', 'LONGITUD', [1700, 470, 96, 36], 0.90, 'CT-001'),
+      ],
+      // una cota total sobre el tronco de 10″ y 8″ (de N-003 a N-008): cuadra con las parciales (3.6 + 2.0 + 2.5 m)
+      cotas_totales: [
+        { id: 'CT-001', aristas: ['A-004', 'A-006', 'A-007'], longitud: med(8.1, 'm', 'OCR', 0.90, 'T-025') },
       ],
     },
     equipos: [
-      { id: 'EQ-01', tipo: 'COLECTOR', nombre: 'Colector de polvo', nodo_id: 'N-001', conexion: 'BRIDA_EQUIPO', texto_id: 'T-017', confianza: 0.97 },
-      { id: 'EQ-02', tipo: 'MAQUINA', nombre: 'Máquina A', nodo_id: 'N-004', conexion: 'MANGUERA', texto_id: 'T-018', confianza: 0.92 },
-      { id: 'EQ-03', tipo: 'MAQUINA', nombre: 'Máquina B', nodo_id: 'N-006', conexion: 'MANGUERA', texto_id: 'T-020', confianza: 0.91 },
-      { id: 'EQ-04', tipo: 'CAMPANA', nombre: 'Campana', nodo_id: 'N-009', conexion: 'BRIDA_TALLER', texto_id: 'T-022', confianza: 0.95 },
+      { id: 'EQ-01', tipo: 'COLECTOR', nombre: 'Colector de polvo', nodo_id: 'N-001', conexion: 'BRIDA_EQUIPO', texto_id: 'T-017', confianza: 0.97, boca_diametro: null },
+      { id: 'EQ-02', tipo: 'MAQUINA', nombre: 'Máquina A', nodo_id: 'N-004', conexion: 'MANGUERA', texto_id: 'T-018', confianza: 0.92, boca_diametro: null },
+      { id: 'EQ-03', tipo: 'MAQUINA', nombre: 'Máquina B', nodo_id: 'N-006', conexion: 'MANGUERA', texto_id: 'T-020', confianza: 0.91, boca_diametro: null },
+      { id: 'EQ-04', tipo: 'CAMPANA', nombre: 'Campana', nodo_id: 'N-009', conexion: 'BRIDA_TALLER', texto_id: 'T-022', confianza: 0.95, boca_diametro: null },
     ],
     alertas_ambiguedad: [],
   };

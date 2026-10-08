@@ -33,7 +33,8 @@
   const COMERCIALES_IN = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24];
   const SEVERIDADES = ['BLOQUEANTE', 'CONFIRMAR', 'ADVERTENCIA', 'INFO'];
   const CONF_MIN = 0.5; // por debajo, el dato leído no se usa
-  const CONF_DUDA = 0.7; // entre CONF_MIN y esto, se usa y se pregunta
+  const CONF_DUDA = 0.7; // entre CONF_MIN y esto, se usa y se pregunta (CONFIRMAR)
+  const CONF_SEGURA = 0.9; // entre CONF_DUDA y esto, se usa y se avisa (ADVERTENCIA)
   const COLINEAL_DEG = 10;
   const SNAP_DEG = 7.5;
   const NETA_MIN_MM = 150;
@@ -42,7 +43,9 @@
   // Lo que una regla puso en un despiece anterior: al volver a leerlo se descarta y se vuelve a calcular
   const ORIGENES_DE_REGLA = ['INFERIDO', 'ESCALA', 'DEFECTO_TALLER'];
   /** Lo que el ingeniero puede contestar: respuestas[elemento][campo]. */
-  const CAMPOS = ['longitud_m', 'diametro_in', 'angulo_deg', 'posicion', 'boca_in', 'manguera_tramos', 'calibre', 'material', 'aceptado'];
+  const CAMPOS = ['longitud_m', 'diametro_in', 'angulo_deg', 'posicion', 'boca_in', 'manguera_tramos', 'calibre', 'material', 'aceptado', 'encimado'];
+  // Una nota junto a un tramo que dice que es vertical
+  const NOTA_VERTICAL = /\b(SUBE|BAJA|BAJADA|SUBIDA)\b/i;
 
   const r1 = (x) => Math.round(x * 10) / 10;
   const r2 = (x) => Math.round(x * 100) / 100;
@@ -73,19 +76,27 @@
     const equipos = Array.isArray(j.equipos) ? j.equipos.filter(esObjeto) : [];
     if (!nodos.length || !aristas.length) errores.push('La red no trae nodos o aristas.');
     if (nodos.length > 2000 || aristas.length > 2000 || textos.length > 5000) errores.push('La red es demasiado grande (más de 2 000 nodos o aristas).');
+    const cadenas = Array.isArray(j.red.cotas_totales) ? j.red.cotas_totales.filter(esObjeto) : [];
     const ids = new Set();
     const repetido = (id, que) => {
-      if (typeof id !== 'string' || !id) { errores.push(`Un ${que} no trae identificador.`); return; }
+      if (typeof id !== 'string' || !id) { errores.push(`Falta el identificador de ${que}.`); return; }
       if (ids.has(id)) errores.push(`El identificador «${id}» está repetido.`);
       ids.add(id);
     };
     nodos.forEach((n) => {
-      repetido(n.id, 'nodo');
+      repetido(n.id, 'un nodo');
       if (!esObjeto(n.pos_px) || !finito(n.pos_px.x) || !finito(n.pos_px.y)) errores.push(`El nodo ${n.id} no trae su posición (pos_px).`);
     });
-    aristas.forEach((a) => repetido(a.id, 'arista'));
-    equipos.forEach((e) => repetido(e.id, 'equipo'));
-    textos.forEach((t) => repetido(t.id, 'texto'));
+    aristas.forEach((a) => repetido(a.id, 'una arista'));
+    equipos.forEach((e) => repetido(e.id, 'un equipo'));
+    textos.forEach((t) => repetido(t.id, 'un texto'));
+    cadenas.forEach((c) => repetido(c.id, 'una cota total'));
+    const aristaIds = new Set(aristas.map((a) => a.id));
+    cadenas.forEach((c) => {
+      if (!Array.isArray(c.aristas) || c.aristas.length < 2 || new Set(c.aristas).size !== c.aristas.length || c.aristas.some((x) => !aristaIds.has(x))) {
+        errores.push(`La cota total ${c.id} debe abarcar dos o más aristas distintas que existan.`);
+      }
+    });
     const nodoIds = new Set(nodos.map((n) => n.id));
     aristas.forEach((a) => {
       if (!nodoIds.has(a.nodo_a) || !nodoIds.has(a.nodo_b)) errores.push(`La arista ${a.id} une nodos que no existen (${a.nodo_a}, ${a.nodo_b}).`);
@@ -132,6 +143,8 @@
           angulo_pantalla_deg: finito(a.angulo_pantalla_deg) ? a.angulo_pantalla_deg : 0,
           diametro: medida(a.diametro, 'in'), longitud_cota: medida(a.longitud_cota, 'm'), ducto_id: null,
         })),
+        // una cota que abarca varios tramos seguidos: la parcial que falta sale por diferencia
+        cotas_totales: cadenas.map((c) => ({ id: c.id, aristas: [...c.aristas], longitud: medida(c.longitud, 'm') })),
         textos: textos.map((t) => ({
           id: t.id, contenido_crudo: typeof t.contenido_crudo === 'string' ? t.contenido_crudo : '',
           contenido_normalizado: typeof t.contenido_normalizado === 'string' ? t.contenido_normalizado : null,
@@ -145,6 +158,7 @@
         nombre: typeof e.nombre === 'string' ? e.nombre : e.id, nodo_id: e.nodo_id,
         conexion: ['BRIDA_EQUIPO', 'BRIDA_TALLER', 'MANGUERA', 'LISO'].includes(e.conexion) ? e.conexion : 'BRIDA_EQUIPO',
         texto_id: typeof e.texto_id === 'string' ? e.texto_id : null, confianza: finito(e.confianza) ? e.confianza : 1,
+        boca_diametro: esObjeto(e.boca_diametro) ? medida(e.boca_diametro, 'in') : null,
       })),
       alertas_ambiguedad: (Array.isArray(j.alertas_ambiguedad) ? j.alertas_ambiguedad : []).filter((a) => esObjeto(a) && ALERTAS_DE_LECTURA.includes(a.codigo)),
     };
@@ -206,6 +220,13 @@
     const resuelta = (codigo, referencias, mensaje, respuesta) => alertas.push({ severidad: 'INFO', codigo, referencias, mensaje, decision_tomada: 'Respondido por el ingeniero.', pregunta: null, respuesta, resuelta: true });
     const pregunta = (tipo, elemento, campo, unidad, opciones, propuesta) => ({ tipo, elemento, campo, unidad: unidad || null, opciones: opciones || [], propuesta: propuesta === undefined ? null : propuesta });
     const opcionesAngulo = (lista) => lista.map((v) => ({ valor: v, texto: `${v}°` }));
+    const crudo = (m) => { const t = m && m.texto_id ? textos.find((x) => x.id === m.texto_id) : null; return t ? `«${t.contenido_crudo}» ` : ''; };
+    /** Un dato leído con confianza de 0.5 a 0.9 se usa y se pregunta: CONFIRMAR por debajo de 0.7, ADVERTENCIA arriba. */
+    const dudosa = (m, referencias, que, decision, preguntaTxt, respuesta) => {
+      if (m.origen === 'USUARIO' || m.confianza >= CONF_SEGURA) return;
+      alerta(m.confianza < CONF_DUDA ? 'CONFIRMAR' : 'ADVERTENCIA', 'LECTURA_DUDOSA', [...referencias, m.texto_id].filter(Boolean),
+        `${que} se leyó ${crudo(m)}con confianza ${m.confianza}.`, decision, preguntaTxt, respuesta);
+    };
 
     const salida = (estadoForzado) => armarSalida(L, M, { alertas, estadoForzado, piezas: null });
 
@@ -252,6 +273,9 @@
       const t = textos.find((x) => x.tipo === 'ANGULO' && x.asociado_a === nid && x.confianza_ocr >= CONF_MIN && finito(parseFloat(x.contenido_normalizado)));
       return t ? { valor: parseFloat(t.contenido_normalizado), texto: t } : null;
     };
+    const notaVertical = (aid) => textos.find((t) => t.asociado_a === aid && t.confianza_ocr >= CONF_MIN && NOTA_VERTICAL.test(`${t.contenido_normalizado || ''} ${t.contenido_crudo || ''}`));
+    // la confianza de un ángulo anotado, como medida (para avisar si es dudoso)
+    const comoMedida = (t) => ({ valor: parseFloat(t.contenido_normalizado), origen: 'OCR', confianza: t.confianza_ocr, texto_id: t.id });
 
     // --- 2. material y calibre
     const matR = resp('metadatos', 'material');
@@ -307,10 +331,7 @@
         const d = comercial(enMm ? m.valor / IN : m.valor);
         D.set(a.id, d);
         a.diametro = { ...m, valor: d, unidad: 'in' };
-        if (m.confianza < CONF_DUDA) {
-          alerta('CONFIRMAR', 'DIAMETRO_INCONSISTENTE', [a.id, m.texto_id].filter(Boolean), `El diámetro del ${T(a.id, false)} se leyó con poca seguridad (${m.confianza}).`, `Se usa ${pulgadas(d)}.`, `¿Cuál es el diámetro del ${T(a.id, false)}?`,
-            pregunta('NUMERO', a.id, 'diametro_in', 'in', [], d));
-        }
+        dudosa(m, [a.id], `El diámetro del ${T(a.id, false)}`, `Se usa ${pulgadas(d)}.`, `¿Cuál es el diámetro del ${T(a.id, false)}?`, pregunta('NUMERO', a.id, 'diametro_in', 'in', [], d));
       }
     });
     // el tronco de cada derivación: el hijo colineal con la arista hacia el colector
@@ -376,10 +397,40 @@
         resuelta('COTA_ILEGIBLE', [a.id], `Cota del ${T(a.id)}: ${r} m.`, pregunta('NUMERO', a.id, 'longitud_m', 'm', [], r));
       } else if (finito(m.valor) && m.valor > 0 && m.confianza >= CONF_MIN) {
         Lmm.set(a.id, aMm(m));
-        if (m.confianza < CONF_DUDA) {
-          alerta('CONFIRMAR', 'COTA_ILEGIBLE', [a.id, m.texto_id].filter(Boolean), `La cota del ${T(a.id)} se leyó con poca seguridad (${m.confianza}).`, `Se usa ${r2(aMm(m) / 1000)} m.`, `¿Cuánto mide el ${T(a.id)}?`,
-            pregunta('NUMERO', a.id, 'longitud_m', 'm', [], r2(aMm(m) / 1000)));
+        dudosa(m, [a.id], `La cota del ${T(a.id)}`, `Se usa ${r2(aMm(m) / 1000)} m.`, `¿Cuánto mide el ${T(a.id)}?`, pregunta('NUMERO', a.id, 'longitud_m', 'm', [], r2(aMm(m) / 1000)));
+      }
+    });
+    // lo que se dice de una cota que falta: ilegible (hay un texto que no se lee) o faltante
+    const sinCota = (a) => {
+      const ilegible = textos.find((t) => t.asociado_a === a.id && t.tipo === 'ILEGIBLE');
+      return {
+        codigo: ilegible || a.longitud_cota.texto_id ? 'COTA_ILEGIBLE' : 'COTA_FALTANTE',
+        refs: [a.id, ilegible ? ilegible.id : a.longitud_cota.texto_id].filter(Boolean),
+        que: ilegible ? `La cota del ${T(a.id)} dice «${ilegible.contenido_crudo}» (lectura ${ilegible.confianza_ocr}).` : `El ${T(a.id)} no trae cota.`,
+      };
+    };
+    // cadenas de cotas: una cota total que abarca varios tramos; la única parcial que falta sale por diferencia
+    (L.red.cotas_totales || []).forEach((c) => {
+      const tot = c.longitud;
+      if (!(finito(tot.valor) && tot.valor > 0 && tot.confianza >= CONF_MIN)) return;
+      const totMm = aMm(tot);
+      const faltan = c.aristas.filter((aid) => !Lmm.has(aid));
+      const suma = c.aristas.filter((aid) => Lmm.has(aid)).reduce((x, aid) => x + Lmm.get(aid), 0);
+      const refsC = [c.id, ...c.aristas, tot.texto_id].filter(Boolean);
+      if (faltan.length === 1) {
+        const a = A.get(faltan[0]);
+        const dif = Math.round(totMm - suma);
+        const sc = sinCota(a);
+        if (dif >= 100) {
+          Lmm.set(a.id, dif);
+          a.longitud_cota = { valor: dif / 1000, unidad: 'm', origen: 'INFERIDO', confianza: 0.8, texto_id: a.longitud_cota.texto_id };
+          alerta('INFO', sc.codigo, [...sc.refs, c.id], sc.que, `Sale de la cota total ${c.id} (${r2(totMm / 1000)} m) menos las demás parciales (${r2(suma / 1000)} m): ${dif / 1000} m.`, null,
+            pregunta('NUMERO', a.id, 'longitud_m', 'm', [], dif / 1000));
+        } else {
+          alerta('ADVERTENCIA', 'COTAS_NO_CUADRAN', refsC, `Las parciales de la cota total ${c.id} ya suman ${r2(suma / 1000)} m de ${r2(totMm / 1000)} m: no queda para el ${T(a.id)}.`, 'No se usa la total: se estima por escala si se puede.', null);
         }
+      } else if (!faltan.length && Math.abs(suma - totMm) > Math.max(50, 0.02 * totMm)) {
+        alerta('ADVERTENCIA', 'COTAS_NO_CUADRAN', refsC, `Las parciales de la cota total ${c.id} suman ${r2(suma / 1000)} m y la total dice ${r2(totMm / 1000)} m.`, 'Se cotizan las parciales.', null);
       }
     });
     const refs = aristas.filter((a) => Lmm.has(a.id) && (a.longitud_cota.confianza >= CONF_DUDA) && (!iso || enEje(a)))
@@ -388,10 +439,7 @@
     const dispersion = escala ? Math.sqrt(refs.reduce((s, x) => s + (x - escala) ** 2, 0) / refs.length) / escala : Infinity;
     aristas.forEach((a) => {
       if (Lmm.has(a.id)) return;
-      const ilegible = textos.find((t) => t.asociado_a === a.id && t.tipo === 'ILEGIBLE');
-      const codigo = ilegible || a.longitud_cota.texto_id ? 'COTA_ILEGIBLE' : 'COTA_FALTANTE';
-      const refsTxt = [a.id, ilegible ? ilegible.id : a.longitud_cota.texto_id].filter(Boolean);
-      const que = ilegible ? `La cota del ${T(a.id)} dice «${ilegible.contenido_crudo}» (lectura ${ilegible.confianza_ocr}).` : `El ${T(a.id)} no trae cota.`;
+      const { codigo, refs: refsTxt, que } = sinCota(a);
       if (escala && dispersion <= 0.25 && (!iso || enEje(a))) {
         const est = Math.max(100, Math.round(largoPx(vector(N.get(a.nodo_a), N.get(a.nodo_b))) / escala / 100) * 100);
         Lmm.set(a.id, est);
@@ -413,7 +461,7 @@
     const cotizarAcc = (p) => COT.cotizarPartida({ ...base, ...p }, M);
     aristas.forEach((a) => {
       const r = resp(a.id, 'posicion');
-      piezas.posicion.set(a.id, r === 'VERTICAL' || r === 'HORIZONTAL' ? r : (a.eje_iso === 'Z' || (md.vista === 'ELEVACION' && a.orientacion_pantalla === 'VERTICAL') ? 'VERTICAL' : 'HORIZONTAL'));
+      piezas.posicion.set(a.id, r === 'VERTICAL' || r === 'HORIZONTAL' ? r : (a.eje_iso === 'Z' || notaVertical(a.id) || (md.vista === 'ELEVACION' && a.orientacion_pantalla === 'VERTICAL') ? 'VERTICAL' : 'HORIZONTAL'));
     });
 
     function agregarReduccion(nid, aMayor, aMenor, D1, D2, todoEnMenor) {
@@ -426,6 +474,10 @@
           id, tipo: 'REDUCCION', nodo_id: nid, aristas: [aMayor, aMenor].filter(Boolean), diametro_entrada_in: D1, diametro_salida_in: D2, d_ramal_in: null, angulo: null, k_R: null, gajos: null, excentrica: false,
           partida_cotizap: { ...base, familia: 'REDUCCION', D1_mm: r1(D1 * IN), D2_mm: r1(D2 * IN), excentrica: 'NO' },
         });
+        if (D2 / D1 < 0.5 && A.get(aMenor).diametro.origen !== 'USUARIO') {
+          alerta('ADVERTENCIA', 'REDUCCION_GRANDE', [nid, id, aMenor], `La reducción de ${pulgadas(D1)} a ${pulgadas(D2)} en ${nid} es de más de la mitad.`, 'Suele ser una derivación o un diámetro mal leído; se cotiza como está.',
+            `¿El ${T(aMenor, false)} es de ${pulgadas(D2)}?`, pregunta('NUMERO', aMenor, 'diametro_in', 'in', [], D2));
+        }
         return { id, L: Lr };
       } catch (err) { errorMotor([nid], err); return null; }
     }
@@ -497,7 +549,7 @@
           if (!ANG_CODO.includes(ann.valor)) {
             alerta('CONFIRMAR', 'ANGULO_NO_PERMITIDO', [nid, ann.texto.id], `El codo en ${nid} está anotado a ${ann.valor}°.`, `El taller hace codos a ${ANG_CODO.join('°, ')}°: se usa ${theta}°.`, `¿De cuántos grados es el codo en ${nid}?`,
               pregunta('OPCIONES', nid, 'angulo_deg', 'deg', opcionesAngulo(ANG_CODO), theta));
-          }
+          } else dudosa(comoMedida(ann.texto), [nid], `El ángulo del codo en ${nid}`, `Se usa ${theta}°.`, `¿De cuántos grados es el codo en ${nid}?`, pregunta('OPCIONES', nid, 'angulo_deg', 'deg', opcionesAngulo(ANG_CODO), theta));
           // la cota contradice los ejes: una de las aristas «verticales» es en realidad una diagonal en planta
           const vertical = [ap, ah].find((x) => x.eje_iso === 'Z' || x.orientacion_pantalla === 'VERTICAL');
           if (ejes && !colineal && theta !== 90 && vertical) {
@@ -508,6 +560,13 @@
             } else if (resp(vertical.id, 'posicion') === 'HORIZONTAL') {
               piezas.posicion.set(vertical.id, 'HORIZONTAL');
               resuelta('ORIENTACION_AMBIGUA', [vertical.id, nid], `El ${T(vertical.id)} es horizontal: codo de ${theta}°.`, opcionesPos('HORIZONTAL'));
+            } else if (notaVertical(vertical.id)) {
+              // la nota «SUBE/BAJA» contradice la cota del codo: manda la nota (bajada a 90°) y se pregunta
+              const nv = notaVertical(vertical.id);
+              piezas.posicion.set(vertical.id, 'VERTICAL');
+              alerta('CONFIRMAR', 'ORIENTACION_AMBIGUA', [vertical.id, nid, nv.id], `El ${T(vertical.id)} lleva la nota «${nv.contenido_crudo}», pero el codo está anotado a ${ann.valor}°.`,
+                'Manda la nota: es una bajada y el codo se cotiza a 90°.', `¿El ${T(vertical.id)} es horizontal (codo de ${theta}°) o baja (codo de 90°)?`, opcionesPos('VERTICAL'));
+              theta = 90; ang = conAngulo(90, 'INFERIDO', 0.6, nv);
             } else {
               piezas.posicion.set(vertical.id, 'HORIZONTAL');
               alerta('CONFIRMAR', 'ORIENTACION_AMBIGUA', [vertical.id, nid], `El ${T(vertical.id)} se dibujó vertical en la hoja.`,
@@ -567,7 +626,7 @@
           if (!ANG_INJ.includes(ann.valor)) {
             alerta('CONFIRMAR', 'ANGULO_DERIVACION_NO_PERMITIDO', [nid, ann.texto.id], `La derivación en ${nid} está anotada a ${ann.valor}°.`, `El taller sólo hace injertos a ${ANG_INJ.join('° o ')}°: se usa ${beta}°.`, `¿A cuántos grados va el injerto en ${nid}?`,
               pregunta('OPCIONES', nid, 'angulo_deg', 'deg', opcionesAngulo(ANG_INJ), beta));
-          }
+          } else dudosa(comoMedida(ann.texto), [nid], `El ángulo del injerto en ${nid}`, `Se usa ${beta}°.`, `¿A cuántos grados va el injerto en ${nid}?`, pregunta('OPCIONES', nid, 'angulo_deg', 'deg', opcionesAngulo(ANG_INJ), beta));
         } else {
           const ejes = iso && enEje(at) && enEje(ar);
           const phi = iso ? null : anguloEntre(dir(nid, troncoHijo), dir(nid, ramal));
@@ -651,16 +710,22 @@
       else {
         extremoDe.set(n.id, 'BRIDA_EQUIPO');
         if (e.conexion === 'BRIDA_EQUIPO') {
-          const boca = Number(resp(e.id, 'boca_in'));
-          if (finito(boca) && boca > 0) {
-            resuelta('CONEXION_EQUIPO', [e.id], `«${e.nombre}»: boca de ${pulgadas(boca)}.`, pregunta('NUMERO', e.id, 'boca_in', 'in', [], boca));
-            if (Math.abs(boca - Dd) > 1e-9) {
-              const red = agregarReduccion(n.id, null, aid, Math.max(boca, Dd), Math.min(boca, Dd), true);
-              if (red) alerta('INFO', 'TRANSICION_INSERTADA', [e.id, red.id], `La boca de «${e.nombre}» (${pulgadas(boca)}) no es del diámetro del ducto (${pulgadas(Dd)}).`, `Se agregó una reducción de ${r1(red.L)} mm en la conexión.`);
-            }
+          const bocaR = Number(resp(e.id, 'boca_in'));
+          const bm = e.boca_diametro;
+          const bocaLeida = bm && finito(bm.valor) && bm.valor > 0 && bm.confianza >= CONF_MIN ? comercial(bm.unidad === 'mm' ? bm.valor / IN : bm.valor) : null;
+          const boca = finito(bocaR) && bocaR > 0 ? bocaR : bocaLeida;
+          if (finito(bocaR) && bocaR > 0) resuelta('CONEXION_EQUIPO', [e.id], `«${e.nombre}»: boca de ${pulgadas(bocaR)}.`, pregunta('NUMERO', e.id, 'boca_in', 'in', [], bocaR));
+          else if (bocaLeida) {
+            // anotada en el croquis: el diámetro se usa; el patrón de barrenos lo dice el equipo
+            alerta('ADVERTENCIA', 'CONEXION_EQUIPO', [e.id, n.id, bm.texto_id].filter(Boolean), `La boca de «${e.nombre}» está anotada de ${pulgadas(bocaLeida)}.`, 'Se usa; confirme con el equipo su patrón de barrenos (la otra media junta la pone el equipo).',
+              `¿Se confirma la boca de ${pulgadas(bocaLeida)} de «${e.nombre}»?`, pregunta('NUMERO', e.id, 'boca_in', 'in', [], bocaLeida));
           } else {
             alerta('CONFIRMAR', 'CONEXION_EQUIPO', [e.id, n.id], `La boca de «${e.nombre}» no trae medida ni barrenos.`, `Se supone boca de ${pulgadas(Dd)} con brida compatible; la otra media junta la pone el equipo.`, `¿De qué diámetro es la boca de «${e.nombre}»? (confirme también su patrón de barrenos)`,
               pregunta('NUMERO', e.id, 'boca_in', 'in', [], Dd));
+          }
+          if (boca && Math.abs(boca - Dd) > 1e-9) {
+            const red = agregarReduccion(n.id, null, aid, Math.max(boca, Dd), Math.min(boca, Dd), true);
+            if (red) alerta('INFO', 'TRANSICION_INSERTADA', [e.id, red.id], `La boca de «${e.nombre}» (${pulgadas(boca)}) no es del diámetro del ducto (${pulgadas(Dd)}).`, `Se agregó una reducción de ${r1(red.L)} mm en la conexión.`);
           }
         }
       }
@@ -668,6 +733,9 @@
 
     // --- 7. tramos rectos: longitud neta y armado por yardas
     const ductos = [];
+    const uniones = []; // accesorios pegados sin tramo entre ellos
+    const engargolado = !((M.proceso.costuras || {})[M.materiales[material].costura] || {}).soldada;
+    const comoUnion = engargolado ? 'unión engargolada' : 'unión soldada';
     aristas.forEach((a, i) => {
       const id = id3('DUCT', i + 1); // por el orden de las aristas: no cambia al responder
       if (!D.has(a.id) || !Lmm.has(a.id)) return;
@@ -678,7 +746,23 @@
         alerta('BLOQUEANTE', 'ACCESORIOS_ENCIMADOS', [a.id, ...desc.map((x) => x.accesorio_id)], `Los accesorios del ${T(a.id)} ocupan más que su cota (${r2(cota / 1000)} m).`, 'No queda tramo recto: la cota o los accesorios están mal.', `¿Cuánto mide el ${T(a.id)}?`, pregunta('NUMERO', a.id, 'longitud_m', 'm', [], null));
         return;
       }
-      if (neta < NETA_MIN_MM) {
+      // dos accesorios con menos de 150 mm entre ellos: se pegan (sin bridas en esa cara) o se fabrica el tramo corto
+      const entre = [...new Set(desc.map((x) => x.accesorio_id))].map((idAcc) => piezas.acc.find((x) => x.id === idAcc)).filter(Boolean);
+      if (neta < NETA_MIN_MM && entre.length === 2) {
+        const r = resp(a.id, 'encimado');
+        const opciones = [{ valor: 'UNION', texto: `Pegar los accesorios (${comoUnion})` }, { valor: 'TRAMO', texto: `Tramo corto de ${neta} mm con bridas` }];
+        const pegar = r !== 'TRAMO';
+        if (r === 'UNION' || r === 'TRAMO') {
+          resuelta('ACCESORIOS_ENCIMADOS', [a.id], pegar ? `${entre[0].id} y ${entre[1].id} se pegan (${comoUnion}).` : `Tramo corto de ${neta} mm entre ${entre[0].id} y ${entre[1].id}.`, pregunta('OPCIONES', a.id, 'encimado', null, opciones, r));
+        } else {
+          alerta('CONFIRMAR', 'ACCESORIOS_ENCIMADOS', [a.id, entre[0].id, entre[1].id], `Entre ${entre[0].id} y ${entre[1].id} sólo quedan ${neta} mm de tramo recto en el ${T(a.id)}.`,
+            `Se pegan con una ${comoUnion}, sin bridas en esas caras; el recorrido queda ${neta} mm más corto que la cota.`, '¿Se pegan los accesorios o se fabrica el tramo corto?', pregunta('OPCIONES', a.id, 'encimado', null, opciones, 'UNION'));
+        }
+        if (pegar) {
+          uniones.push({ arista: a.id, D: D.get(a.id), accesorios: entre, neta });
+          return;
+        }
+      } else if (neta < NETA_MIN_MM) {
         if (resp(a.id, 'aceptado')) resuelta('ACCESORIOS_ENCIMADOS', [a.id], `Tramo corto aceptado: ${T(a.id)}.`, pregunta('ACEPTAR', a.id, 'aceptado', null, [], true));
         else alerta('CONFIRMAR', 'ACCESORIOS_ENCIMADOS', [a.id], `Al ${T(a.id)} sólo le quedan ${neta} mm de tramo recto.`, 'Se fabrica el tramo corto entre los accesorios.', '¿Se acepta el tramo corto?', pregunta('ACEPTAR', a.id, 'aceptado', null, [], true));
       }
@@ -698,7 +782,26 @@
       });
     });
 
-    return armarSalida(L, M, { alertas, piezas, ductos, compras, D, extremoDe, base });
+    // los accesorios pegados pierden la brida de la cara que se une, y la unión es una partida «armado de piezas»
+    const extremoDeAcc = (x, aid) => {
+      const i = x.aristas.indexOf(aid);
+      if (x.tipo === 'CODO') return i === 0 ? 'A' : 'B';
+      if (x.tipo === 'INJERTO') return ['tronco_1', 'tronco_2', 'injerto'][i];
+      if (x.tipo === 'REDUCCION_INJERTO') return i === 2 ? 'injerto' : (D.get(aid) >= x.diametro_entrada_in - 1e-9 ? 'D1' : 'D2');
+      if (x.tipo === 'REDUCCION') return D.get(aid) >= x.diametro_entrada_in - 1e-9 ? 'D1' : 'D2';
+      return null;
+    };
+    uniones.forEach((u) => {
+      u.accesorios.forEach((x) => {
+        const ext = extremoDeAcc(x, u.arista);
+        if (!ext) return;
+        const lista = new Set([...(x.partida_cotizap.extremos_sin_brida || []), ext]);
+        x.partida_cotizap.extremos_sin_brida = [...lista];
+      });
+      u.partida = { ...base, familia: 'UNION', D_mm: r1(u.D * IN), n_uniones: 1, tipo_union: 'LISO' };
+    });
+
+    return armarSalida(L, M, { alertas, piezas, ductos, compras, uniones, D, extremoDe, base });
   }
 
   /* ------------------------------------------------------------------ uniones, soportes, resumen */
@@ -722,7 +825,7 @@
         elementos.push({
           id: id3('JNT', elementos.length + 1), tipo, nodo_id, piezas, diametro_in: Din, aros: nAros, aros_sueltos: sueltos, perfil: 'SOL_1_1_2X3_16',
           solera_por_aro_mm: r1(a.L_aro_mm), barrenos_por_aro: a.n_tornillos, tornillos_juegos: a.n_tornillos, tornillo: a.tornillo_desc,
-          sellador_ml: r1((a.P_perno_mm / 1000) * mlJunta), abrazaderas_manguera: 0, incluido_en_partidas: tipo === 'JUNTA_BRIDADA' ? 'COMPLETO' : 'MEDIA_JUNTA', origen, articulo_manguera: null,
+          sellador_ml: r1((a.P_perno_mm / 1000) * mlJunta), abrazaderas_manguera: 0, incluido_en_partidas: tipo === 'JUNTA_BRIDADA' ? 'COMPLETO' : 'MEDIA_JUNTA', origen, articulo_manguera: null, partida_cotizap: null,
         });
       };
       const ductoDe = (aid) => ductos.find((d) => d.arista_id === aid);
@@ -750,6 +853,12 @@
         const d = ductoDe(L.red.nodos.find((n) => n.id === e.nodo_id).aristas[0]);
         if (d) junta('JUNTA_EQUIPO', e.nodo_id, [d.id, e.id], d.diametro_in, 1, sueltoEn(d, e.nodo_id), 'NODO');
       });
+      // accesorios pegados: la unión entre ellos (sin aros: la cobra su partida de armado de piezas)
+      (ctx.uniones || []).forEach((u) => elementos.push({
+        id: id3('JNT', elementos.length + 1), tipo: 'UNION_ENGARGOLADA', nodo_id: null, piezas: u.accesorios.map((x) => x.id), diametro_in: u.D, aros: 0, aros_sueltos: 0, perfil: null,
+        solera_por_aro_mm: null, barrenos_por_aro: null, tornillos_juegos: 0, tornillo: null, sellador_ml: 0, abrazaderas_manguera: 0, incluido_en_partidas: 'COMPLETO', origen: 'NODO', articulo_manguera: null,
+        partida_cotizap: u.partida,
+      }));
       // dentro de los tramos: entre sus piezas de hasta 3 yardas
       ductos.forEach((d) => { for (let k = 0; k < d.armado.juntas_internas; k += 1) junta('JUNTA_BRIDADA', null, [d.id, d.id], d.diametro_in, 2, 0, 'ARMADO_YARDAS'); });
       // mangueras: extremo liso, el tramo del catálogo y una abrazadera en cada punta
@@ -758,10 +867,11 @@
         elementos.push({
           id: id3('JNT', elementos.length + 1), tipo: 'JUNTA_MANGUERA', nodo_id: c.nodo, piezas: [d ? d.id : c.arista, c.equipo.id], diametro_in: c.D, aros: 0, aros_sueltos: 0, perfil: null,
           solera_por_aro_mm: null, barrenos_por_aro: null, tornillos_juegos: 0, tornillo: null, sellador_ml: 0, abrazaderas_manguera: 2, incluido_en_partidas: 'NO', origen: 'NODO', articulo_manguera: c.articulo,
+          partida_cotizap: null,
         });
       });
       // soportes: la regla del taller sobre las partidas del ducto, y una abrazadera por ménsula del diámetro que sostiene
-      const partidas = [...ductos.map((d) => d.partida_cotizap), ...acc.map((x) => x.partida_cotizap)];
+      const partidas = [...ductos.map((d) => d.partida_cotizap), ...acc.map((x) => x.partida_cotizap), ...(ctx.uniones || []).map((u) => u.partida)];
       if (partidas.length) {
         const res = COT.cotizar({ yarda_mm: L.metadatos.yarda_mm, partidas }, M);
         const conteo = SOP.contar(res.partidas, M);
@@ -873,6 +983,7 @@
     return [
       ...bom.ductos_rectos.map((d) => marca(d.partida_cotizap, d.id)),
       ...bom.accesorios.map((a) => marca(a.partida_cotizap, a.id)),
+      ...bom.elementos_union.filter((j) => j.partida_cotizap).map((j) => marca(j.partida_cotizap, `UNION-${j.piezas.join('-')}`)),
       ...bom.soportes.map((s) => marca(s.partida_cotizap, s.id)),
       ...bom.partidas_compradas.map((c) => marca(c, `COMPRA-${c.articulo_id}`)),
     ];

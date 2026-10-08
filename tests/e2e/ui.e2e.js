@@ -2326,6 +2326,102 @@ const ok = (cond, msg) => {
     await p.context().close();
   }
 
+  console.log('33) Leer la foto del croquis con Claude (capacidad sample simulada): lectura, re-lectura de lo dudoso y dibujo sobre la foto');
+  {
+    // un window.claude de mentira con `sample`: devuelve la lectura del ejemplo llevada al tamaño de la hoja enviada
+    const conSample = (ctx) => ctx.addInitScript(() => {
+      window.__llamadas = [];
+      window.__modoSample = 'normal';
+      const json = async (input, opts) => {
+        const imgs = [].concat(opts.images || []);
+        const dims = await Promise.all(imgs.map(async (b) => { const x = await createImageBitmap(b); return [x.width, x.height]; }));
+        window.__llamadas.push({ relee: /recortes ampliados/.test(input), imagenes: imgs.length, dims, tier: opts.modelTier });
+        const modo = window.__modoSample;
+        if (modo === 'lento') {
+          await new Promise((ok, no) => {
+            const t = setTimeout(ok, 8000);
+            opts.signal.addEventListener('abort', () => { clearTimeout(t); no({ code: 'cancelled', message: '' }); });
+          });
+        }
+        if (modo === 'not_granted') throw { code: 'not_granted', message: 'no' };
+        if (modo === 'invalid_json') throw { code: 'invalid_json', message: 'no', text: 'Aquí va la lectura: {"red": ' };
+        if (/recortes ampliados/.test(input)) {
+          return [{ texto_id: 'T-011', contenido_crudo: '1.6 m', contenido_normalizado: '1.6', tipo: 'LONGITUD', confianza_ocr: 0.86 },
+            { texto_id: 'T-010', contenido_crudo: '5"', contenido_normalizado: '5', tipo: 'DIAMETRO', confianza_ocr: 0.8 }];
+        }
+        if (opts.onText) opts.onText({ text: '{"version":"1.0"', delta: '{"version":"1.0"' });
+        const W = Number(/la hoja completa, (\d+) ×/.exec(input)[1]);
+        const k = W / 2576;
+        const L = JSON.parse(JSON.stringify(window.COTIZAP.unifilarEjemplo));
+        L.red.nodos.forEach((n) => { n.pos_px = { x: n.pos_px.x * k, y: n.pos_px.y * k }; });
+        L.red.textos.forEach((t) => { t.bbox_px = { x: t.bbox_px.x * k, y: t.bbox_px.y * k, w: t.bbox_px.w * k, h: t.bbox_px.h * k }; });
+        delete L.metadatos.fuente;
+        return L;
+      };
+      const sample = Object.assign(async () => ({ text: '', truncated: false }), {
+        json,
+        limits: async () => ({ maxPromptBytes: 262144, images: { maxCount: 5, maxInputBytes: 20000000, mediaTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] } }),
+      });
+      window.claude = { use: async (n) => (n === 'sample' ? sample : null) };
+    });
+    // sin la capacidad (el archivo suelto): no hay botón de foto, sólo la indicación
+    const sola = await nuevaPagina();
+    await sola.click('#btn-unifilar');
+    ok(await sola.locator('#uf-foto').count() === 0 && /abra COTIZAP publicada en claude\.ai/.test(await sola.locator('.uf-sin-foto').innerText()), 'sin la capacidad no se ofrece leer la foto: se explica dónde sí');
+    await sola.context().close();
+
+    const p = await nuevaPagina({}, conSample);
+    const R = (fn, arg) => p.evaluate(fn, arg);
+    // una «foto» de 4032 × 3024 hecha en la página
+    const png = Buffer.from(await R(() => {
+      const c = document.createElement('canvas');
+      c.width = 4032; c.height = 3024;
+      const g = c.getContext('2d');
+      g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+      g.strokeStyle = '#123'; g.lineWidth = 12; g.beginPath(); g.moveTo(650, 2880); g.lineTo(650, 2200); g.lineTo(3500, 550); g.stroke();
+      return c.toDataURL('image/png').split(',')[1];
+    }), 'base64');
+    const subir = () => p.setInputFiles('#uf-foto', { name: 'croquis.png', mimeType: 'image/png', buffer: png });
+    await p.click('#btn-nueva');
+    await p.click('#btn-unifilar');
+    await p.waitForSelector('#uf-foto', { state: 'attached' });
+    ok(/Leer la foto del croquis/i.test(await p.locator('.uf-foto').innerText()), 'en la página publicada se ofrece leer la foto');
+    await subir();
+    await p.waitForSelector('.uf-preguntas', { timeout: 20000 });
+    const ll = await R(() => window.__llamadas);
+    ok(ll.length === 2 && !ll[0].relee && ll[0].imagenes === 5 && ll[0].tier === 'complex', 'una llamada con la hoja y 4 recortes (modelo más capaz)');
+    ok(JSON.stringify(ll[0].dims[0]) === '[1238,928]' && ll[0].dims.every(([w, h]) => w * h <= 1150000), 'la hoja va a 1238 × 928 px y ninguna imagen pasa de 1.15 MP');
+    ok(ll[1].relee && ll[1].imagenes === 2, 'y otra que relee los 2 textos dudosos en recortes ampliados');
+    ok(/T-011: «1\.\? m» \(0\.41\) → «1\.6 m» \(0\.86\)/.test(await p.locator('.uf-nota-lectura').innerText()), 'dice qué se releyó: la cota «1.? m» ahora se lee 1.6 m');
+    ok(await p.locator('.uf-preguntas .uf-alerta').count() === 3 && await p.locator('.uf-preguntas [data-codigo="COTA_ILEGIBLE"]').count() === 0, 'la cota ya no se pregunta: quedan 3 preguntas');
+    ok(await p.locator('.uf-g-dibujo[open] .uf-dibujo-foto canvas').count() === 1 && await p.locator('.uf-dibujo svg line').count() === 8, 'la lectura se dibuja sobre la foto: 8 aristas');
+    ok(/A-005 · 5″ · 1\.6 m/.test(await p.locator('.uf-dibujo svg').textContent()), 'cada arista con su diámetro y su cota');
+    await p.click('#uf-agregar');
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.partidas.find((x) => x.unifilar_id === 'DUCT-005').L_mm) === 1250, 'las partidas salen de lo leído: el tramo de 5″ con 1.6 m queda en 1 250 mm');
+
+    // errores: JSON que no sirve, permiso negado y detener a medias
+    await p.click('#aviso-unifilar-abrir');
+    await p.click('#uf-otra');
+    await R(() => { window.__modoSample = 'invalid_json'; });
+    await subir();
+    await p.waitForSelector('.uf-errores');
+    ok(/no salió en el formato esperado/.test(await p.locator('.uf-errores').innerText()) && /Aquí va la lectura/.test(await p.inputValue('#uf-texto')), 'si no sale JSON, lo dice y deja el texto para revisarlo');
+    await R(() => { window.__modoSample = 'lento'; });
+    await subir();
+    await p.waitForSelector('#uf-detener');
+    const leyendo = await p.waitForFunction(() => /Claude está leyendo el croquis/.test((document.querySelector('.uf-progreso') || {}).innerText || ''), null, { timeout: 5000 }).then(() => true, () => false);
+    ok(leyendo, 'mientras lee, dice qué está haciendo');
+    await p.click('#uf-detener');
+    await p.waitForSelector('#uf-foto', { state: 'attached' });
+    ok(await p.locator('.uf-errores').count() === 0, '«Detener» vuelve al inicio sin error');
+    await R(() => { window.__modoSample = 'not_granted'; });
+    await subir();
+    await p.waitForSelector('.uf-errores');
+    ok(/no puede pedirle a Claude/.test(await p.locator('.uf-errores').innerText()) && await p.locator('#uf-foto').count() === 0, 'sin permiso, se deja de ofrecer leer la foto');
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.partidas.filter((x) => x.unifilar_id).length) === 22, 'nada de eso tocó las partidas ya importadas');
+    await p.context().close();
+  }
+
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

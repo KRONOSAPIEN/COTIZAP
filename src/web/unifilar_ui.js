@@ -1,12 +1,15 @@
 /**
  * COTIZAP · web/unifilar_ui.js — «Importar unifilar» en la cotización detallada (docs/vision-unifilares.md §10).
  *
- * Recibe la lectura de un croquis unifilar en JSON (la que entrega la etapa de visión, o un despiece completo), corre las
- * reglas del taller (motor/unifilar.js) y muestra el resumen, las preguntas y las piezas. Las partidas se agregan a la
+ * Recibe la lectura de un croquis unifilar: la FOTO, que lee Claude desde la página publicada (capacidad `sample`, con la
+ * cuenta de quien la usa; motor/unifilar_vision.js arma las imágenes y las instrucciones y vuelve a leer en recortes
+ * ampliados lo dudoso), o el JSON de la lectura (o de un despiece completo). Corre las reglas del taller (motor/unifilar.js)
+ * y muestra el resumen, las preguntas, el dibujo de la lectura sobre la foto y las piezas. Las partidas se agregan a la
  * cotización con el identificador de su pieza (`unifilar_id`); cada respuesta del ingeniero vuelve a correr las reglas y, si
  * las partidas ya están en la cotización, las reemplaza.
  *
- * Lo importado vive en la cotización: estado.cot.unifilar = { lectura, respuestas, importado }.
+ * Lo importado vive en la cotización: estado.cot.unifilar = { lectura, respuestas, importado }. La foto no se guarda: sólo
+ * dura mientras la página está abierta.
  * Depende de app.js (W.estadoApp, W.recalcular, W.toast, W.tituloPartida, W.idNuevo, W.copiarTexto).
  */
 (function (root) {
@@ -19,16 +22,18 @@
 
   const E = () => W.estadoApp;
   const UF = () => C.unifilar;
+  const V = () => C.unifilarVision;
   const MAX_TEXTO = 5e6; // caracteres: una lectura real pesa decenas de kB
+  const NS = 'http://www.w3.org/2000/svg';
 
   const SEVERIDAD = { BLOQUEANTE: 'Bloquea', CONFIRMAR: 'Por confirmar', ADVERTENCIA: 'Aviso', INFO: 'Nota' };
   const CODIGO = {
     COTA_ILEGIBLE: 'Cota ilegible', COTA_FALTANTE: 'Cota faltante', DIAMETRO_FALTANTE: 'Diámetro faltante', DIAMETRO_INFERIDO: 'Diámetro heredado',
     DIAMETRO_INCONSISTENTE: 'Diámetro dudoso', ANGULO_INFERIDO: 'Ángulo del codo', ANGULO_NO_PERMITIDO: 'Ángulo del codo', ANGULO_DERIVACION_NO_PERMITIDO: 'Ángulo del injerto',
-    DERIVACION_CONTRA_FLUJO: 'Contra el flujo', ORIENTACION_AMBIGUA: 'Orientación', TRANSICION_INSERTADA: 'Reducción insertada', ACCESORIOS_ENCIMADOS: 'Tramo corto',
+    DERIVACION_CONTRA_FLUJO: 'Contra el flujo', ORIENTACION_AMBIGUA: 'Orientación', TRANSICION_INSERTADA: 'Reducción insertada', ACCESORIOS_ENCIMADOS: 'Accesorios encimados',
     CONEXION_EQUIPO: 'Boca del equipo', MANGUERA_SIN_LARGO: 'Manguera', CALIBRE_BAJO_TABLA: 'Calibre', CALIBRE_FALTANTE: 'Calibre', MATERIAL_FALTANTE: 'Material',
     TEXTO_SIN_ASOCIAR: 'Texto suelto', ASOCIACION_AMBIGUA: 'Texto ambiguo', TRAZO_SIN_CONECTAR: 'Trazo suelto', CRUCE_SIN_NODO: 'Cruce', CICLO_EN_RED: 'Ciclo en la red',
-    PANTALON_RETIRADO: 'Pantalón', SIN_COLECTOR: 'Colector',
+    PANTALON_RETIRADO: 'Pantalón', SIN_COLECTOR: 'Colector', LECTURA_DUDOSA: 'Lectura dudosa', COTAS_NO_CUADRAN: 'Cotas que no cuadran', REDUCCION_GRANDE: 'Reducción grande',
   };
   const ESTADO = {
     DEFINITIVA: ['Definitiva', 'Todo está leído o respondido: el despiece sirve para el pedido.'],
@@ -42,6 +47,14 @@
   let vista = 'revision';
   let errores = [];
   let nota = '';
+  let textoCarga = ''; // lo pegado en «pegar o cargar»: se conserva al volver a pintar
+  /** Pedirle a Claude que lea la foto: sólo en la página publicada en claude.ai, si la vista puede mandar imágenes. */
+  let sample = null;
+  let limites = null;
+  let lectura = { activa: false };
+  /** La última foto leída (sólo en memoria): para dibujar la lectura encima. */
+  let foto = null;
+  let notaLectura = '';
 
   const guardada = () => E().cot.unifilar || null;
   const fuente = () => borrador || guardada();
@@ -132,8 +145,29 @@
     }
   }
 
+  function bloqueFoto() {
+    if (!sample) {
+      return h('p', { class: 'uf-ayuda uf-sin-foto' }, 'Para que Claude lea la foto del croquis, abra COTIZAP publicada en claude.ai: ahí la lee con su cuenta. Aquí puede pegar la lectura en JSON.');
+    }
+    const entrada = h('input', { id: 'uf-foto', type: 'file', accept: limites.images.mediaTypes.join(',') });
+    entrada.addEventListener('change', (ev) => { const f = ev.target.files[0]; ev.target.value = ''; if (f) leerFoto(f); });
+    return h('section', { class: 'uf-foto', 'aria-labelledby': 'uf-tit-foto' },
+      h('h3', { id: 'uf-tit-foto' }, 'Leer la foto del croquis'),
+      h('p', { class: 'uf-ayuda' }, 'Claude la lee con su cuenta de claude.ai (la primera vez pide permiso) y tarda de 1 a 3 minutos; luego vuelve a leer en recortes ampliados lo que quedó dudoso. ',
+        'Lo que lea pasa por las mismas reglas y preguntas. Mejor una foto de frente, con buena luz y sólo el croquis.'),
+      lectura.activa
+        ? h('div', { class: 'uf-progreso', role: 'status' },
+          h('span', { class: 'uf-girando', 'aria-hidden': 'true' }),
+          h('span', { id: 'uf-progreso-txt' }, lectura.fase),
+          h('span', { class: 'uf-progreso-det', id: 'uf-progreso-det' }, lectura.detalle || ''),
+          h('button', { type: 'button', class: 'btn btn-sec', id: 'uf-detener', onclick: () => { if (lectura.ctl) lectura.ctl.abort(); } }, 'Detener'))
+        : h('label', { class: 'btn btn-primario archivo' }, 'Escoger la foto', entrada));
+  }
+
   function pintarCarga(cuerpo, pie) {
     const area = h('textarea', { id: 'uf-texto', rows: '12', spellcheck: 'false', 'aria-label': 'Lectura del unifilar en JSON', placeholder: '{ "version": "1.0", "metadatos": { … }, "red": { "nodos": […], "aristas": […], "textos": […] }, "equipos": […] }' });
+    area.value = textoCarga;
+    area.addEventListener('input', () => { textoCarga = area.value; });
     const archivo = h('input', { id: 'uf-archivo', type: 'file', accept: '.json,application/json' });
     archivo.addEventListener('change', (ev) => {
       const f = ev.target.files[0];
@@ -145,14 +179,17 @@
       lector.readAsText(f);
     });
     W.reemplazar(cuerpo,
-      h('p', { class: 'uf-ayuda' }, 'Pegue la lectura del croquis en JSON —la que entrega la etapa de visión (docs/vision-unifilares.md) o un despiece completo— o cárguela de un archivo. ',
-        'Las reglas del taller sacan los tramos, los accesorios, las uniones y los soportes; lo que el croquis no dice, lo pregunta.'),
-      area,
       errores.length ? h('div', { class: 'uf-errores', role: 'alert' }, h('strong', null, 'No se pudo leer:'), h('ul', null, errores.map((e) => h('li', null, e)))) : null,
-      h('div', { class: 'io-acc' },
-        h('button', { type: 'button', class: 'btn btn-primario', id: 'uf-leer', onclick: () => leerTexto($('#uf-texto').value) }, 'Leer el unifilar'),
-        h('label', { class: 'btn btn-sec archivo' }, 'Cargar archivo', archivo),
-        h('button', { type: 'button', class: 'btn btn-sec', id: 'uf-ejemplo', onclick: probarEjemplo }, 'Probar con el ejemplo')));
+      bloqueFoto(),
+      h('section', { class: 'uf-json', 'aria-labelledby': 'uf-tit-json' },
+        h('h3', { id: 'uf-tit-json' }, 'O pegar la lectura en JSON'),
+        h('p', { class: 'uf-ayuda' }, 'La que entrega la etapa de visión (docs/vision-unifilares.md) o un despiece completo, pegada o de un archivo. ',
+          'Las reglas del taller sacan los tramos, los accesorios, las uniones y los soportes; lo que el croquis no dice, lo pregunta.'),
+        area,
+        h('div', { class: 'io-acc' },
+          h('button', { type: 'button', class: lectura.activa || sample ? 'btn btn-sec' : 'btn btn-primario', id: 'uf-leer', disabled: lectura.activa, onclick: () => leerTexto($('#uf-texto').value) }, 'Leer el unifilar'),
+          h('label', { class: 'btn btn-sec archivo' }, 'Cargar archivo', archivo),
+          h('button', { type: 'button', class: 'btn btn-sec', id: 'uf-ejemplo', disabled: lectura.activa, onclick: probarEjemplo }, 'Probar con el ejemplo'))));
     W.reemplazar(pie,
       guardada() ? h('button', { type: 'button', class: 'btn btn-sec', id: 'uf-volver', onclick: () => { vista = 'revision'; errores = []; pintar(); } }, 'Volver a la lectura actual') : null,
       h('button', { type: 'button', class: 'btn btn-sec', onclick: cerrar }, 'Cancelar'));
@@ -165,6 +202,8 @@
   }
 
   function leerTexto(texto) {
+    textoCarga = typeof texto === 'string' ? texto : '';
+    notaLectura = '';
     errores = [];
     if (!texto || !texto.trim()) errores = ['Pegue el JSON de la lectura o cargue un archivo.'];
     else if (texto.length > MAX_TEXTO) errores = ['El texto es demasiado grande para ser una lectura de unifilar.'];
@@ -173,9 +212,14 @@
       r = UF().leer(texto);
       errores = r.errores;
     }
-    if (!errores.length && !despiece({ lectura: r.lectura, respuestas: {} })) errores = ['Las reglas no pudieron despiezar esta lectura. Revise que la red esté completa.'];
     if (errores.length) { pintar(); return; }
-    const nueva = { lectura: r.lectura, respuestas: {}, importado: false };
+    aceptarLectura(r.lectura);
+  }
+
+  /** Una lectura ya revisada pasa a la revisión (y a la cotización si no hay partidas importadas que reemplazar). */
+  function aceptarLectura(lect) {
+    if (!despiece({ lectura: lect, respuestas: {} })) { errores = ['Las reglas no pudieron despiezar esta lectura. Revise que la red esté completa.']; pintar(); return; }
+    const nueva = { lectura: lect, respuestas: {}, importado: false };
     const g = guardada();
     if (g && g.importado) borrador = nueva; // no toca las partidas importadas hasta que se reemplacen
     else {
@@ -186,6 +230,194 @@
     vista = 'revision';
     nota = '';
     pintar('');
+  }
+
+  /* ------------------------------------------------------------------ la foto: Claude lee, las reglas cuentan */
+
+  /** La foto como imagen dibujable (con su orientación) y su tamaño. */
+  async function cargarImagen(file) {
+    if (typeof root.createImageBitmap === 'function') {
+      try {
+        const b = await root.createImageBitmap(file, { imageOrientation: 'from-image' });
+        return { fuente: b, w: b.width, h: b.height };
+      } catch (e) { /* algunos navegadores no aceptan la opción: se usa <img> */ }
+    }
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      return { fuente: img, w: img.naturalWidth, h: img.naturalHeight };
+    } finally { URL.revokeObjectURL(url); }
+  }
+
+  /** Un recuadro de la foto (en sus píxeles) dibujado a w × h y convertido en JPEG. */
+  function aJpeg(img, r, w, h) {
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w));
+    c.height = Math.max(1, Math.round(h));
+    const g = c.getContext('2d');
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, c.width, c.height);
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(img.fuente, r.x, r.y, r.w, r.h, 0, 0, c.width, c.height);
+    return new Promise((ok, no) => c.toBlob((b) => (b ? ok(b) : no({ code: 'imagen' })), 'image/jpeg', 0.9));
+  }
+
+  /** Lo que se le dice al ingeniero según cómo falló la llamada (sample rechaza con { code }). */
+  function mensajeDe(e) {
+    const code = e && e.code;
+    if (['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed', 'images_unavailable'].includes(code)) {
+      sample = null;
+      return ['Esta vista no puede pedirle a Claude que lea la foto. Pegue la lectura en JSON.'];
+    }
+    return [({
+      rate_limited: 'Se alcanzó el límite de uso de Claude por ahora: intente más tarde.',
+      session_expired: 'Su sesión de claude.ai venció: vuelva a entrar y lea la foto otra vez.',
+      image_rejected: 'Claude no aceptó la imagen (formato o tamaño): pruebe con otra foto en JPG o PNG.',
+      refused: 'Claude no pudo leer este croquis. Pruebe con una foto más nítida, de frente y con buena luz.',
+      empty_completion: 'Claude no pudo leer este croquis. Pruebe con una foto más nítida, de frente y con buena luz.',
+      invalid_json: 'La lectura no salió en el formato esperado (quedó abajo, por si sirve). Intente de nuevo; si se repite, recorte la foto al croquis.',
+      prompt_too_large: 'La lectura es demasiado grande para hacerla de una vez: recorte la foto a una parte del croquis.',
+      imagen: 'No se pudo preparar la foto en este navegador.',
+    })[code] || 'Se interrumpió la lectura. Intente de nuevo.'];
+  }
+
+  function avance(fase, detalle) {
+    lectura.fase = fase;
+    lectura.detalle = detalle || '';
+    const f = $('#uf-progreso-txt');
+    const d = $('#uf-progreso-det');
+    if (f) f.textContent = lectura.fase;
+    if (d) d.textContent = lectura.detalle;
+  }
+
+  /**
+   * Claude lee la foto (la hoja completa y recortes a más resolución) y devuelve la lectura en JSON; las reglas la revisan.
+   * Luego relee en recortes ampliados los textos dudosos (§7.4) y aplica lo que salga más seguro. La foto queda en memoria
+   * para dibujar la lectura encima.
+   */
+  async function leerFoto(file) {
+    if (!sample || lectura.activa) return;
+    errores = [];
+    notaLectura = '';
+    if (limites.images.mediaTypes.length && !limites.images.mediaTypes.includes(file.type)) {
+      errores = [`La foto debe ser ${limites.images.mediaTypes.map((t) => t.replace('image/', '').toUpperCase()).join(', ')}.`];
+      pintar();
+      return;
+    }
+    if (file.size > limites.images.maxInputBytes) { errores = ['La foto es demasiado grande: mande una de menos resolución.']; pintar(); return; }
+    const ctl = new AbortController();
+    lectura = { activa: true, fase: 'Preparando la foto…', detalle: '', ctl };
+    pintar();
+    try {
+      const img = await cargarImagen(file);
+      const plan = V().planDeImagen(img.w, img.h, limites.images.maxCount);
+      const hoja = await aJpeg(img, { x: 0, y: 0, w: img.w, h: img.h }, plan.enviado.w, plan.enviado.h);
+      const recortes = await Promise.all(plan.recortes.map((r) => aJpeg(img, r.origen, r.salida.w, r.salida.h)));
+      avance('Claude está leyendo el croquis (de 1 a 3 minutos)…');
+      const json = await sample.json(V().promptLectura(plan), {
+        images: [hoja, ...recortes], modelTier: 'complex', signal: ctl.signal,
+        onText: ({ text }) => avance(lectura.fase, `${text.length.toLocaleString('es-MX')} caracteres escritos`),
+      });
+      const completa = V().completarLectura(json, { archivo: file.name, ancho: img.w, alto: img.h, plan });
+      let r = UF().leer(completa);
+      if (r.errores.length) {
+        textoCarga = JSON.stringify(completa, null, 2);
+        throw { code: 'lectura_invalida', errores: r.errores };
+      }
+      // re-lectura dirigida: lo dudoso, en recortes ampliados (una sola llamada)
+      const items = V().dudosos(r.lectura, Math.min(8, limites.images.maxCount), plan.enviado);
+      let cambios = [];
+      if (items.length) {
+        avance(`Releyendo ${items.length} ${items.length === 1 ? 'texto dudoso' : 'textos dudosos'} en recortes ampliados…`);
+        try {
+          const ampliados = await Promise.all(items.map((it) => {
+            const o = { x: it.recorte.x / plan.escala, y: it.recorte.y / plan.escala, w: it.recorte.w / plan.escala, h: it.recorte.h / plan.escala };
+            const k = Math.min(3, 768 / Math.max(o.w, o.h));
+            return aJpeg(img, o, o.w * k, o.h * k);
+          }));
+          const releido = await sample.json(V().promptRelectura(items), { images: ampliados, modelTier: 'default', signal: ctl.signal });
+          const ap = V().aplicarRelectura(r.lectura, releido);
+          const r2 = UF().leer(ap.lectura);
+          if (!r2.errores.length) { r = r2; cambios = ap.cambios; }
+        } catch (e) {
+          if (e && e.code === 'cancelled') throw e;
+          cambios = null; // la primera lectura se queda tal cual
+        }
+      }
+      foto = { fuente: img.fuente, ancho: img.w, alto: img.h, w: plan.enviado.w, h: plan.enviado.h, lectura: r.lectura };
+      notaLectura = cambios === null ? 'No se pudieron releer los textos dudosos: se usa la primera lectura (las reglas preguntan lo dudoso).'
+        : cambios.length ? `Se releyeron en recortes ampliados: ${cambios.join(' · ')}.` : '';
+      lectura = { activa: false };
+      textoCarga = JSON.stringify(r.lectura, null, 2);
+      aceptarLectura(r.lectura);
+    } catch (e) {
+      lectura = { activa: false };
+      if (e && e.code === 'invalid_json' && typeof e.text === 'string') textoCarga = e.text;
+      errores = e && e.code === 'cancelled' ? [] : e && e.code === 'lectura_invalida'
+        ? ['La lectura de Claude no está completa; quedó abajo para corregirla a mano:', ...e.errores] : mensajeDe(e);
+      vista = 'carga';
+      pintar();
+    }
+  }
+
+  /* ------------------------------------------------------------------ dibujo de la lectura */
+
+  const svg = (tag, attrs, ...hijos) => {
+    const el = document.createElementNS(NS, tag);
+    Object.keys(attrs || {}).forEach((k) => el.setAttribute(k, attrs[k]));
+    hijos.forEach((c) => el.append(c && c.nodeType ? c : document.createTextNode(String(c))));
+    return el;
+  };
+
+  /** La red leída (aristas con su Ø y su cota, nodos y equipos) sobre la foto, o sola si no hay foto; lo que se pregunta, resaltado. */
+  function dibujo(bom, preguntas) {
+    const red = bom.red;
+    if (!red.nodos.length) return null;
+    const N = new Map(red.nodos.map((n) => [n.id, n]));
+    const conFoto = foto && foto.lectura === fuente().lectura;
+    let vb;
+    if (conFoto) vb = [0, 0, foto.w, foto.h];
+    else {
+      const xs = red.nodos.map((n) => n.pos_px.x);
+      const ys = red.nodos.map((n) => n.pos_px.y);
+      const ancho = Math.max(1, Math.max(...xs) - Math.min(...xs));
+      const alto = Math.max(1, Math.max(...ys) - Math.min(...ys));
+      const m = 0.12 * Math.max(ancho, alto);
+      vb = [Math.min(...xs) - m, Math.min(...ys) - m, ancho + 2 * m, alto + 2 * m];
+    }
+    const k = Math.max(vb[2], vb[3]) / 75;
+    const duda = new Set(preguntas.flatMap((a) => a.referencias));
+    const lienzo = svg('svg', { viewBox: vb.map((x) => Math.round(x)).join(' '), role: 'img', 'aria-label': 'La red leída: aristas con su diámetro y su cota, nodos y equipos' });
+    red.aristas.forEach((a) => {
+      const p = N.get(a.nodo_a).pos_px;
+      const q = N.get(a.nodo_b).pos_px;
+      lienzo.append(svg('line', { x1: p.x, y1: p.y, x2: q.x, y2: q.y, class: `uf-d-arista${duda.has(a.id) ? ' uf-d-duda' : ''}`, 'stroke-width': (k * 0.35).toFixed(1) }));
+    });
+    red.aristas.forEach((a) => {
+      const p = N.get(a.nodo_a).pos_px;
+      const q = N.get(a.nodo_b).pos_px;
+      const d = a.diametro.valor ? `${a.diametro.valor}″` : 'Ø?';
+      const l = a.longitud_cota.valor ? `${a.longitud_cota.valor} m` : '¿m?';
+      lienzo.append(svg('text', { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 - k * 0.5, 'font-size': k.toFixed(1), 'text-anchor': 'middle', class: `uf-d-txt${duda.has(a.id) ? ' uf-d-txt-duda' : ''}` }, `${a.id} · ${d} · ${l}`));
+    });
+    red.nodos.forEach((n) => {
+      lienzo.append(svg('circle', { cx: n.pos_px.x, cy: n.pos_px.y, r: (k * 0.45).toFixed(1), class: `uf-d-nodo${duda.has(n.id) ? ' uf-d-duda' : ''}` }));
+      const eq = n.equipo_id ? bom.equipos.find((e) => e.id === n.equipo_id) : null;
+      lienzo.append(svg('text', { x: n.pos_px.x + k * 0.7, y: n.pos_px.y + k * 1.4, 'font-size': (k * 0.85).toFixed(1), class: 'uf-d-txt uf-d-nodo-txt' }, eq ? `${n.id} · ${eq.nombre}` : n.id));
+    });
+    const marco = h('div', { class: `uf-dibujo${conFoto ? ' uf-dibujo-foto' : ''}` });
+    if (conFoto) {
+      const c = h('canvas', { width: String(foto.w), height: String(foto.h), 'aria-hidden': 'true' });
+      try { c.getContext('2d').drawImage(foto.fuente, 0, 0, foto.ancho, foto.alto, 0, 0, foto.w, foto.h); } catch (e) { /* sin foto, sólo la red */ }
+      marco.append(c);
+    }
+    marco.append(lienzo);
+    return h('details', { class: 'uf-grupo uf-g-dibujo', open: conFoto },
+      h('summary', null, conFoto ? 'La lectura sobre la foto' : 'Dibujo de la lectura'),
+      h('p', { class: 'uf-ayuda' }, conFoto ? 'Revise que cada línea, diámetro y cota coincidan con el croquis; en color de aviso, lo que se pregunta.' : 'La red tal como se leyó (sin la foto); en color de aviso, lo que se pregunta.'),
+      marco);
   }
 
   /** Guarda una respuesta (o la quita con valor undefined), vuelve a correr las reglas y, si ya están en la cotización, actualiza las partidas. */
@@ -340,6 +572,7 @@
         W.tile('Ménsulas', String(R.conteo.menulas), 'regla del taller'),
         W.tile('Al punto más lejano', `${W.num(R.longitud_al_punto_mas_alejado_m, 1)} m`, `Ø mayor ${W.num(R.diametro_max_in, 0)}″`)),
       borrador ? h('p', { class: 'uf-nota' }, `Es una lectura nueva: al aplicarla reemplaza las ${importadas().length} partidas del unifilar que ya están en la cotización.`) : null,
+      notaLectura ? h('p', { class: 'uf-nota uf-nota-lectura' }, notaLectura) : null,
       nota ? h('p', { class: 'uf-nota', role: 'status' }, nota) : null,
       preguntas.length
         ? h('section', { class: 'uf-preguntas', 'aria-labelledby': 'uf-tit-preg' },
@@ -349,6 +582,7 @@
       grupo('Avisos', opcionales, !preguntas.length, 'uf-g-avisos'),
       grupo('Decisiones de las reglas', notas, false, 'uf-g-notas'),
       grupo('Respondidas', respondidas, false, 'uf-g-resp'),
+      dibujo(bom, preguntas),
       h('details', { class: 'uf-grupo uf-g-piezas' },
         h('summary', null, `Piezas del despiece (${partidas.length} partidas)`),
         W.tabla([{ t: 'Pieza' }, { t: 'Partida' }, { t: 'Medidas' }, { t: 'Cant.', num: true }],
@@ -379,8 +613,19 @@
     $('#btn-unifilar').addEventListener('click', abrir);
     $('#aviso-unifilar-abrir').addEventListener('click', abrir);
     $('#uf-cerrar').addEventListener('click', cerrar);
-    d.addEventListener('close', () => { borrador = null; });
+    d.addEventListener('close', () => { borrador = null; if (lectura.ctl) lectura.ctl.abort(); });
     d.addEventListener('click', (e) => { if (e.target === d) cerrar(); });
+    // en la página publicada, Claude puede leer la foto (si esta vista manda imágenes); en otra copia no hay window.claude
+    if (root.claude && typeof root.claude.use === 'function') {
+      root.claude.use('sample').then(async (s) => {
+        if (!s) return;
+        const lim = await s.limits().catch(() => null);
+        if (!lim || !lim.images) return;
+        sample = s;
+        limites = lim;
+        if (d.open && vista === 'carga' && !lectura.activa) pintar();
+      }).catch(() => {});
+    }
   }
 
   W.unifilarUI = { render, abrir, despiece: () => despiece() };
