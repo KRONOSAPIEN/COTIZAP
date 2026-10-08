@@ -1903,7 +1903,7 @@ const ok = (cond, msg) => {
     const total = () => p.locator('#rapida-total-val').innerText();
     const desglose = () => p.locator('#rapida-desglose').innerText();
     await p.click('#tab-rapida');
-    await p.selectOption('#r_soporteria_modo', 'NO'); // la regla del taller sin soportería (la automática se prueba en 31)
+    await p.fill('#r_menulas', '0'); // la regla del taller sin ménsulas (las ménsulas y mangueras se prueban en 29 y 31)
     ok(await p.locator('#panel-rapida').isVisible() && await p.getByRole('tab', { name: 'Cotización rápida' }).count() === 1, 'la pestaña «Cotización rápida» abre su panel (nombre accesible completo aunque diga «Rápida»)');
     ok(/Capture el diámetro máximo y los metros/.test(await p.locator('#rapida-resultado').innerText()) && await p.locator('#r_diam_unidad').innerText() === 'pulgadas', 'vacía, explica qué capturar; el diámetro va en la unidad de la cotización (pulgadas)');
 
@@ -2022,7 +2022,7 @@ const ok = (cond, msg) => {
 
     // el texto para el cliente: sin el desglose interno, se copia y se imprime solo
     await p.click('#tab-rapida');
-    await p.selectOption('#r_soporteria_modo', 'NO');
+    await p.fill('#r_menulas', '0');
     await p.fill('#r_cliente', 'Nave 3');
     await p.fill('#r_diam', '11');
     await p.fill('#r_metros', '40');
@@ -2056,7 +2056,7 @@ const ok = (cond, msg) => {
   {
     const p = await nuevaPagina();
     await p.click('#tab-rapida');
-    await p.selectOption('#r_soporteria_modo', 'NO');
+    await p.fill('#r_menulas', '0');
     await p.click('#rapida-ejemplo');
     await p.waitForTimeout(100);
     ok(await p.inputValue('#r_diam') === '11' && await p.inputValue('#r_metros') === '31' && await p.locator('#r_yarda input[value="914"]').isChecked()
@@ -2071,30 +2071,44 @@ const ok = (cond, msg) => {
     await p.context().close();
   }
 
-  console.log('29) Cotización rápida: mangueras, soportería y viáticos opcionales suman al costo y se nombran en el texto del cliente');
+  console.log('29) Cotización rápida: ménsulas y mangueras por piezas, a los precios de las tablas, y viáticos por importe');
   {
     const p = await nuevaPagina();
     await p.click('#tab-rapida');
-    await p.selectOption('#r_soporteria_modo', 'NO');
+    await p.fill('#r_menulas', '0');
     await p.click('#rapida-ejemplo');
     await p.waitForTimeout(100);
-    ok(await p.locator('#rapida-total-val').innerText() === '$46,512.00' && !/Mangueras|Soportería|Viáticos/.test(await p.locator('#rapida-desglose').innerText()), 'sin importes no hay renglones extra: $46,512.00');
-    await p.fill('#r_mangueras', '6275.92');
-    await p.selectOption('#r_soporteria_modo', 'IMPORTE');
-    ok(await p.locator('#r_soporteria_campo').isVisible(), 'por importe se captura la soportería');
-    await p.fill('#r_soporteria', '2386.20');
+    ok(await p.locator('#rapida-total-val').innerText() === '$46,512.00' && !/Ménsulas|Mangueras|Viáticos/.test(await p.locator('#rapida-desglose').innerText()), 'sin ménsulas, mangueras ni viáticos no hay renglones extra: $46,512.00');
+    ok(await p.locator('#r_menulas').getAttribute('placeholder') === '13 sugeridas', 'la caja de ménsulas sugiere 13 (una cada 2.5 m)');
+    await p.fill('#r_menulas', '7');
+    await p.waitForTimeout(100);
+    ok(/7 piezas × \$345\.25 con abrazadera = \$2,416\.78/.test(await p.locator('#r_menulas_nota').innerText()), 'las 7 que estima el ingeniero: ángulo 1¼″ × 1/8″ y solera 1¼″ × 1/8″, $345.25 cada una = $2,416.78');
+    ok(await p.inputValue('#r_menula_barra') === 'ANG_1_1_4X1_8' && await p.inputValue('#r_abrazadera_barra') === 'SOL_1_1_4X1_8', 'de arranque, ángulo y solera de 1¼″ × 1/8″');
+    await p.selectOption('#r_menula_barra', 'ANG_1_1_2X3_16');
+    await p.selectOption('#r_abrazadera_barra', 'SOL_1_1_2X3_16');
+    await p.waitForTimeout(100);
+    let des = await p.locator('#rapida-desglose').innerText();
+    ok(/Ménsulas: 7 piezas con abrazadera/.test(des) && /Ángulo 1½" × 3\/16"[\s\S]*\$351\.86/.test(des) && /Solera 1½" × 3\/16": \$43\.00/.test(des) && /\$2,764\.04/.test(des),
+      'de ángulo 1½″ × 3/16″ ($351.86) y solera 1½″ × 3/16″ ($43.00): 7 × $394.86 = $2,764.04');
+    ok(await p.locator('#r_menula_barra option').count() === 4 && await p.locator('#r_abrazadera_barra option').count() === 3, 'se elige entre los ángulos y las soleras de la lista del proveedor');
+    await p.fill('#r_mangueras_tramos', '3');
+    await p.waitForTimeout(100);
+    ok(await p.locator('#r_abrazaderas_manguera').getAttribute('placeholder') === '18 (6 por tramo)', 'con 3 tramos se cuentan 18 abrazaderas de manguera (6 por tramo)');
+    des = await p.locator('#rapida-desglose').innerText();
+    ok(/Mangueras: 3 tramos y 18 abrazaderas/.test(des) && /3 tramos × \$1,807\.49 \(Manguera azul de 6″/.test(des) && /\$6,275\.92/.test(des), 'mangueras de 6″ del catálogo: 3 × $1,807.49 + 18 × $47.41 = $6,275.92 (lo del caso real)');
     await p.fill('#r_viaticos', '1987.93');
     await p.waitForTimeout(100);
-    const tot = Math.round((33413.79 + 10650.05) * 1.2 * 1.16 * 100) / 100;
-    ok(await p.locator('#rapida-total-val').innerText() === `$${tot.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, `el total sube a $${tot}`);
-    const des = await p.locator('#rapida-desglose').innerText();
-    ok(/Mangueras[\s\S]*\$6,275\.92/.test(des) && /Soportería[\s\S]*\$2,386\.20/.test(des) && /Viáticos[\s\S]*\$1,987\.93/.test(des), 'el desglose trae los tres renglones');
+    ok(await p.locator('#rapida-total-val').innerText() === '$61,862.83', 'con ménsulas, mangueras y viáticos el total es $61,862.83');
     ok(/Incluye suministro, fabricación, instalación, mangueras, soportería y viáticos\./.test(await p.inputValue('#rapida-texto')), 'el texto del cliente dice lo que incluye');
-    await p.fill('#r_mangueras', 'abc');
+    await p.selectOption('#r_manguera_id', 'MANGUERA_5');
+    await p.fill('#r_abrazaderas_manguera', '4');
     await p.waitForTimeout(100);
-    ok(/importe de mangueras/.test(await p.locator('.rapida-error').innerText()), 'un importe ilegible se señala');
+    ok(/Mangueras: 3 tramos y 4 abrazaderas/.test(await p.locator('#rapida-desglose').innerText()) && /Manguera azul de 5″/.test(await p.locator('#rapida-desglose').innerText()), 'otra manguera y otras abrazaderas');
+    await p.fill('#r_menulas', 'abc');
+    await p.waitForTimeout(100);
+    ok(/Las ménsulas debe ser un número entero/.test(await p.locator('.rapida-error').innerText()), 'una cantidad ilegible se señala');
     await p.click('#rapida-limpiar');
-    ok(await p.inputValue('#r_mangueras') === '' && await p.inputValue('#r_soporteria') === '' && await p.inputValue('#r_viaticos') === '', 'Limpiar vacía los tres');
+    ok(await p.inputValue('#r_menulas') === '' && await p.inputValue('#r_mangueras_tramos') === '' && await p.inputValue('#r_viaticos') === '' && await p.inputValue('#r_menula_barra') === 'ANG_1_1_4X1_8', 'Limpiar vacía todo y regresa el ángulo de las tablas');
     await p.context().close();
   }
 
@@ -2182,31 +2196,30 @@ const ok = (cond, msg) => {
     await p.context().close();
   }
 
-  console.log('31) Cotización rápida: la soportería sale sola (una ménsula con abrazadera cada 2.5 m), o se captura, o no lleva');
+  console.log('31) Cotización rápida: sin capturar ménsulas van las sugeridas (una cada 2.5 m); 0 = no lleva; lo elegido se recuerda');
   {
     const p = await nuevaPagina();
     await p.click('#tab-rapida');
-    ok(await p.inputValue('#r_soporteria_modo') === 'AUTO' && await p.locator('#r_soporteria_campo').isHidden(), 'de arranque la soportería es automática y no se captura importe');
     await p.click('#rapida-ejemplo');
     await p.waitForTimeout(100);
     const des = await p.locator('#rapida-desglose').innerText();
-    ok(/Soportería: 13 ménsulas con abrazadera/.test(des) && /\$4,456\.24/.test(des) && /Una cada 2\.5 m en 31 m/.test(des), '31 m ÷ 2.5 m = 13 ménsulas con abrazadera: $4,456.24 de costo directo');
-    ok(/1,300 mm de Ángulo 1¼" × 1\/8" con 4 anclajes y 137\.14 min de taller: \$310\.57/.test(des) && /abrazadera de media vuelta de Solera 1" × 1\/8": \$32\.21/.test(des), 'dice con qué se costea: la ménsula ($310.57) y la abrazadera tipo cuna ($32.21)');
-    ok(await p.locator('#rapida-total-val').innerText() === '$52,715.08', 'el unifilar con su soportería: $52,715.08 (antes $46,512.00)');
-    ok(/13 ménsulas con abrazadera \(una cada 2\.5 m\) · \$4,456\.24/.test(await p.locator('#r_soporteria_nota').innerText()), 'junto al selector se ve cuántas y cuánto');
-    ok(/mangueras|soportería/.test(await p.inputValue('#rapida-texto')) && /instalación y soportería\./.test(await p.inputValue('#rapida-texto')), 'el texto del cliente dice que incluye la soportería');
+    ok(/Ménsulas: 13 piezas con abrazadera/.test(des) && /Las sugeridas: una cada 2\.5 m en 31 m/.test(des) && /\$4,488\.31/.test(des), 'vacía, van las 13 sugeridas: $4,488.31 de costo directo');
+    ok(/1,300 mm de Ángulo 1¼" × 1\/8" con 4 anclajes y 137\.14 min de taller: \$310\.57/.test(des) && /abrazadera de media vuelta de Solera 1¼" × 1\/8": \$34\.68/.test(des), 'dice con qué se costea: la ménsula ($310.57) y la abrazadera ($34.68)');
+    ok(await p.locator('#rapida-total-val').innerText() === '$52,759.73', 'el unifilar con sus ménsulas sugeridas: $52,759.73');
+    ok(/13 sugeridas \(una cada 2\.5 m\) × \$345\.25 con abrazadera = \$4,488\.31/.test(await p.locator('#r_menulas_nota').innerText()), 'junto a la caja se ve cuántas y cuánto');
     await p.fill('#r_metros', '40');
     await p.waitForTimeout(100);
-    ok(/Soportería: 16 ménsulas con abrazadera/.test(await p.locator('#rapida-desglose').innerText()), 'con 40 m son 16');
-    await p.selectOption('#r_soporteria_modo', 'NO');
+    ok(/Ménsulas: 16 piezas/.test(await p.locator('#rapida-desglose').innerText()), 'con 40 m se sugieren 16');
     await p.fill('#r_metros', '31');
+    await p.fill('#r_menulas', '0');
     await p.waitForTimeout(100);
-    ok(await p.locator('#rapida-total-val').innerText() === '$46,512.00' && !/Soportería/.test(await p.locator('#rapida-desglose').innerText()), '«No lleva»: vuelve a $46,512.00, sin renglón de soportería');
+    ok(await p.locator('#rapida-total-val').innerText() === '$46,512.00' && !/Ménsulas/.test(await p.locator('#rapida-desglose').innerText()), '0 = no lleva: vuelve a $46,512.00');
+    await p.fill('#r_menulas', '9');
+    await p.selectOption('#r_menula_barra', 'ANG_1_1_2X3_16');
     await p.reload();
     await p.waitForSelector('#lista-partidas .partida:not(.partida-auto)');
     await p.click('#tab-rapida');
-    ok(await p.inputValue('#r_soporteria_modo') === 'NO', 'lo elegido se recuerda');
-    await p.selectOption('#r_soporteria_modo', 'AUTO');
+    ok(await p.inputValue('#r_menulas') === '9' && await p.inputValue('#r_menula_barra') === 'ANG_1_1_2X3_16', 'lo capturado y elegido se recuerda');
     await p.context().close();
   }
 

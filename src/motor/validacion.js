@@ -585,6 +585,15 @@
         });
         if (!['MEDIA', 'COMPLETA'].includes(S.abrazadera_vuelta)) agregar(['rapida', 'soporteria', 'abrazadera_vuelta'], `debe ser MEDIA o COMPLETA; vale ${texto(S.abrazadera_vuelta)}`);
       }
+      // Las mangueras: artículos del catálogo de compras
+      const MG = R.mangueras;
+      if (!esObjeto(MG)) agregar(['rapida', 'mangueras'], 'falta la tabla de las mangueras');
+      else {
+        ['articulo', 'abrazadera'].forEach((k) => {
+          if (!tiene(M.compras && M.compras.articulos, MG[k])) agregar(['rapida', 'mangueras', k], `debe ser un artículo del catálogo de compras; vale ${texto(MG[k])}`);
+        });
+        if (!Number.isInteger(MG.abrazaderas_por_tramo) || MG.abrazaderas_por_tramo < 0 || MG.abrazaderas_por_tramo > 100) agregar(['rapida', 'mangueras', 'abrazaderas_por_tramo'], `debe ser un número entero de 0 a 100 (vale ${texto(MG.abrazaderas_por_tramo)})`);
+      }
     }
 
     if (quiere('merma')) {

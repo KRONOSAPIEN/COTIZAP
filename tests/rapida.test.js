@@ -255,60 +255,81 @@ test('Sin elegir lámina: del ancho de la yarda, la que menos desperdicia; la el
   assert.equal(R.cotizar({ D_mm: 152.4, L_m: 40 }, M).hoja.id, 'GALV_C22_4X10');
 });
 
-test('Mangueras, soportería y viáticos: renglones opcionales en pesos sin IVA que suman al costo, antes de la utilidad', () => {
-  const M = crearMaestros();
-  const base = { D_mm: 279.4, L_m: 31, yarda_mm: 914.4, dias_fabricacion: 4, dias_instalacion: 5 };
-  const sin = R.cotizar(base, M);
-  assert.deepEqual(sin.extras, { mangueras: 0, soporteria: 0, viaticos: 0, importe: 0 });
-  const con = R.cotizar({ ...base, mangueras: 6275.92, soporteria: 2386.2, viaticos: 1987.93 }, M);
-  cerca(con.extras.importe, 10650.05, 1e-6, 'suman $10,650.05');
-  cerca(con.costo, sin.costo + 10650.05, 1e-6, 'al costo');
-  cerca(con.total, (sin.costo + 10650.05) * 1.2 * 1.16, 1e-6, 'y llevan utilidad e IVA');
-  // uno solo, o vacíos / en cero, no cambian nada más
-  cerca(R.cotizar({ ...base, viaticos: 2000 }, M).costo, sin.costo + 2000, 1e-9);
-  assert.equal(R.cotizar({ ...base, mangueras: '', soporteria: null, viaticos: 0 }, M).costo, sin.costo);
-  assert.equal(con.entrada.mangueras, 6275.92);
-  assert.throws(() => R.cotizar({ ...base, mangueras: -1 }, M), /importe de mangueras/);
-  assert.throws(() => R.cotizar({ ...base, soporteria: NaN }, M), /importe de soportería/);
-  assert.throws(() => R.cotizar({ ...base, viaticos: 'mucho' }, M), /importe de viáticos/);
-});
-
-test('Soportería automática: una ménsula con su abrazadera cada 2.5 m, costeadas como partidas de soportería, antes de la utilidad', () => {
+test('Ménsulas por piezas: las que estime el ingeniero (o las sugeridas), del ángulo y la solera elegidos, costeadas como partidas', () => {
   const M = crearMaestros();
   const base = { D_mm: 279.4, L_m: 31, yarda_mm: 914.4, dias_fabricacion: 4, dias_instalacion: 5 };
   const no = R.cotizar(base, M);
-  assert.equal(no.soporteria.modo, 'NO', 'sin decir y sin importe: no lleva (como antes)');
-  assert.equal(R.cotizar({ ...base, soporteria: 2000 }, M).soporteria.modo, 'IMPORTE', 'sin decir y con importe: el importe');
-  const au = R.cotizar({ ...base, soporteria_modo: 'AUTO', soporteria: 99999 }, M);
-  const s = au.soporteria;
-  assert.equal(s.menulas, 13, '31 m ÷ 2.5 = 12.4 → 13');
-  assert.equal(s.separacion_m, 2.5);
+  assert.equal(no.soporteria.menulas, 0, 'sin decir: no lleva (como antes)');
+  assert.equal(no.soporteria.sugeridas, 13, 'pero dice cuántas se sugieren: 31 m ÷ 2.5 = 12.4 → 13');
+  assert.equal(no.total, 46512);
   // las mismas piezas cotizadas como partidas de soportería dan el mismo costo directo
-  const cd = (p) => C.cotizarPartida({ familia: 'SOPORTE', cantidad: 13, ...p }, M).costos.CD;
   const S = M.rapida.soporteria;
-  const men = cd({ barra_id: S.menula_barra, largo_pieza_mm: S.menula_largo_mm, anclajes_pieza: S.menula_anclajes, min_pieza: S.menula_min });
-  const abz = cd({ barra_id: S.abrazadera_barra, abrazadera_D_mm: 279.4, abrazadera_vuelta: S.abrazadera_vuelta, min_pieza: S.abrazadera_min });
-  cerca(s.importe, men + abz, 1e-9);
-  cerca(s.unitario, (men + abz) / 13, 1e-9);
-  assert.equal(au.extras.soporteria, s.importe, 'el importe capturado no cuenta en automático');
-  cerca(au.costo, no.costo + s.importe, 1e-9);
-  cerca(au.total, (no.costo + s.importe) * 1.2 * 1.16, 1e-6);
-  cerca(au.total, 52715.08, 0.005, 'el unifilar con su soportería');
-  assert.equal(R.cotizar({ ...base, L_m: 40, soporteria_modo: 'AUTO' }, M).soporteria.menulas, 16);
-  assert.equal(R.cotizar({ ...base, L_m: 1, soporteria_modo: 'AUTO' }, M).soporteria.menulas, 1, 'al menos una');
-  assert.equal(R.cotizar({ ...base, soporteria_modo: 'NO', soporteria: 5000 }, M).extras.soporteria, 0, '«no lleva» no suma aunque traiga importe');
-  // las tablas mandan: la separación de Proceso › Soportería y la vuelta de la abrazadera
+  const cd = (n, men, abz) => C.cotizarPartida({ familia: 'SOPORTE', cantidad: n, barra_id: men, largo_pieza_mm: S.menula_largo_mm, anclajes_pieza: S.menula_anclajes, min_pieza: S.menula_min }, M).costos.CD
+    + C.cotizarPartida({ familia: 'SOPORTE', cantidad: n, barra_id: abz, abrazadera_D_mm: 279.4, abrazadera_vuelta: S.abrazadera_vuelta, min_pieza: S.abrazadera_min }, M).costos.CD;
+  const au = R.cotizar({ ...base, menulas: 'AUTO' }, M);
+  assert.equal(au.soporteria.menulas, 13);
+  assert.equal(au.soporteria.sugeridas_usadas, true);
+  assert.equal(S.abrazadera_barra, 'SOL_1_1_4X1_8', 'de arranque, solera 1¼″ × 1/8″');
+  cerca(au.soporteria.importe, cd(13, 'ANG_1_1_4X1_8', 'SOL_1_1_4X1_8'), 1e-9);
+  cerca(au.costo, no.costo + au.soporteria.importe, 1e-9);
+  cerca(au.total, (no.costo + au.soporteria.importe) * 1.2 * 1.16, 1e-6);
+  // las que estime el ingeniero, de ángulo 1½″ × 3/16″ y solera 1½″ × 3/16″
+  const siete = R.cotizar({ ...base, menulas: 7, menula_barra: 'ANG_1_1_2X3_16', abrazadera_barra: 'SOL_1_1_2X3_16' }, M).soporteria;
+  assert.equal(siete.menulas, 7);
+  assert.equal(siete.sugeridas_usadas, false);
+  cerca(siete.importe, cd(7, 'ANG_1_1_2X3_16', 'SOL_1_1_2X3_16'), 1e-9);
+  assert.match(siete.menula.barra, /Ángulo 1½" × 3\/16"/);
+  assert.match(siete.abrazadera.barra, /Solera 1½" × 3\/16"/);
+  const siete14 = R.cotizar({ ...base, menulas: 7 }, M).soporteria;
+  assert.ok(siete.unitario > siete14.unitario, 'el ángulo y la solera más gruesos cuestan más');
+  cerca(siete14.importe, 2416.78, 0.005, '7 ménsulas de 1¼″ con su abrazadera: $2,416.78 (el caso real gastó $2,386.20)');
+  assert.equal(R.cotizar({ ...base, menulas: 0 }, M).extras.soporteria, 0, '0 = no lleva');
+  assert.equal(R.cotizar({ ...base, L_m: 40, menulas: 'AUTO' }, M).soporteria.menulas, 16);
+  assert.equal(R.cotizar({ ...base, L_m: 1, menulas: 'AUTO' }, M).soporteria.menulas, 1, 'al menos una');
   const M2 = crearMaestros();
   M2.proceso.soportes.espaciado.horizontal_m = 2;
-  assert.equal(R.cotizar({ ...base, soporteria_modo: 'AUTO' }, M2).soporteria.menulas, 16, '31 m ÷ 2 = 15.5 → 16');
-  M2.rapida.soporteria.abrazadera_vuelta = 'COMPLETA';
-  const c2 = R.cotizar({ ...base, soporteria_modo: 'AUTO' }, M2).soporteria;
-  assert.equal(c2.abrazadera.vuelta, 'COMPLETA');
-  assert.ok(c2.abrazadera.largo_mm > 1000);
+  assert.equal(R.cotizar({ ...base, menulas: 'AUTO' }, M2).soporteria.menulas, 16, 'la separación de Proceso › Soportería manda: 31 m ÷ 2 = 15.5 → 16');
+  // listas para elegir: ángulos y soleras con precio
+  assert.deepEqual(R.barrasDeTipo(M, 'ANGULO').map((b) => b.id), ['ANG_1_1_2X3_16', 'ANG_2X3_16', 'ANG_1_1_4X1_8', 'ANG_3_4X1_8']);
+  assert.deepEqual(R.barrasDeTipo(M, 'SOLERA').map((b) => b.id), ['SOL_1_1_2X3_16', 'SOL_1_1_4X1_8', 'SOL_1X1_8']);
   // errores legibles
-  assert.throws(() => R.cotizar({ ...base, soporteria_modo: 'A VECES' }, M), /La soportería debe ser automática, por importe o no llevar/);
+  assert.throws(() => R.cotizar({ ...base, menulas: 2.5 }, M), /Las ménsulas debe ser un número entero de piezas/);
+  assert.throws(() => R.cotizar({ ...base, menulas: 3, menula_barra: 'NO_EXISTE' }, M), /El ángulo de la ménsula «NO_EXISTE»/);
+  assert.throws(() => R.cotizar({ ...base, menulas: 3, abrazadera_barra: 'NO_EXISTE' }, M), /La solera de la abrazadera «NO_EXISTE»/);
+  assert.doesNotThrow(() => R.cotizar({ ...base, menulas: 0, menula_barra: 'NO_EXISTE' }, M), 'sin ménsulas no importa la barra');
   const M3 = crearMaestros();
   M3.rapida.soporteria.menula_barra = 'NO_EXISTE';
   assert.throws(() => R.cotizar(base, M3), /menula barra: debe ser una barra de la lista del proveedor/);
+});
+
+test('Mangueras por tramos del catálogo con sus abrazaderas (6 por tramo si no se dice), y viáticos por importe', () => {
+  const M = crearMaestros();
+  const base = { D_mm: 279.4, L_m: 31, yarda_mm: 914.4, dias_fabricacion: 4, dias_instalacion: 5 };
+  const no = R.cotizar(base, M);
+  assert.deepEqual(no.extras, { mangueras: 0, soporteria: 0, viaticos: 0, importe: 0 });
+  const tres = R.cotizar({ ...base, mangueras_tramos: 3 }, M).mangueras;
+  assert.equal(tres.manguera.id, 'MANGUERA_6');
+  assert.equal(tres.abrazaderas, 18, '6 por tramo');
+  assert.equal(tres.abrazaderas_sugeridas, true);
+  cerca(tres.abrazadera.unitario, 55 / 1.16, 1e-9, 'la abrazadera trae IVA: se cuesta sin él');
+  cerca(tres.importe, 3 * 1807.49 + 18 * (55 / 1.16), 1e-9);
+  cerca(tres.importe, 6275.92, 0.005, 'lo que gastó el caso real en mangueras');
+  const cinco = R.cotizar({ ...base, mangueras_tramos: 2, manguera_id: 'MANGUERA_5', abrazaderas_manguera: 4 }, M).mangueras;
+  cerca(cinco.importe, 2 * 1427.03 + 4 * (55 / 1.16), 1e-9);
+  assert.equal(cinco.abrazaderas_sugeridas, false);
+  assert.equal(R.cotizar({ ...base, abrazaderas_manguera: 2 }, M).mangueras.abrazaderas, 2, 'abrazaderas sueltas, sin tramos');
+  assert.deepEqual(R.manguerasDelCatalogo(M).map((x) => x.id), ['MANGUERA_6', 'MANGUERA_5', 'MANGUERA_3']);
+  // el caso real completo: 7 ménsulas, 3 tramos y los viáticos
+  const todo = R.cotizar({ ...base, menulas: 7, mangueras_tramos: 3, viaticos: 1987.93 }, M);
+  cerca(todo.extras.importe, 2416.78 + 6275.92 + 1987.93, 0.01);
+  cerca(todo.costo, no.costo + todo.extras.importe, 1e-9);
+  cerca(todo.total, 61379.44, 0.005);
+  assert.equal(todo.entrada.mangueras_tramos, 3);
+  assert.throws(() => R.cotizar({ ...base, mangueras_tramos: -1 }, M), /Los tramos de manguera debe ser un número entero/);
+  assert.throws(() => R.cotizar({ ...base, mangueras_tramos: 1, manguera_id: 'NO_EXISTE' }, M), /La manguera «NO_EXISTE»/);
+  assert.throws(() => R.cotizar({ ...base, viaticos: 'mucho' }, M), /importe de viáticos/);
   assert.deepEqual(V.problemasMaestros(crearMaestros(), { solo: ['rapida'] }), []);
+  const M4 = crearMaestros();
+  M4.rapida.mangueras.abrazaderas_por_tramo = 2.5;
+  assert.match(V.problemasMaestros(M4, { solo: ['rapida'] }).map(V.textoProblema).join(' '), /abrazaderas por tramo/);
 });

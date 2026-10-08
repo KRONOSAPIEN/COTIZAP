@@ -22,7 +22,8 @@
   const MAX_TIRA = 24; // láminas que se dibujan en la tira; más se resumen
 
   /** Lo capturado (textos, como se tecleó): diámetro (en la unidad de la cotización), metros, yarda (mm), lámina, utilidad (%), días e importes opcionales. */
-  const VACIA = { cliente: '', diam: '', metros: '', yarda: '', hoja_id: '', utilidad: '', dias_fab: '', dias_ins: '', mangueras: '', soporteria: '', viaticos: '', soporteria_modo: '' };
+  const VACIA = { cliente: '', diam: '', metros: '', yarda: '', hoja_id: '', utilidad: '', dias_fab: '', dias_ins: '',
+    menulas: '', menula_barra: '', abrazadera_barra: '', mangueras_tramos: '', manguera_id: '', abrazaderas_manguera: '', viaticos: '' };
   const SOLO_COPIAR = !!root.COTIZAP_ENTORNO_ARTIFACT; // en un visor restringido no se puede imprimir
   let captura = null;
   function leerGuardado() {
@@ -43,9 +44,6 @@
   const pies = (y) => `${corto(y / MM_PIE)} ft`;
   const plural = (n, uno, varios) => `${W.num(n, 0)} ${n === 1 ? uno : varios}`;
 
-  /** La soportería: automática (de arranque), por importe o no lleva; lo guardado antes con un importe y sin modo es por importe. */
-  const modoSoporteria = () => (['AUTO', 'IMPORTE', 'NO'].includes(captura.soporteria_modo) ? captura.soporteria_modo : texto(captura.soporteria).trim() ? 'IMPORTE' : 'AUTO');
-
   /** Un número tecleado: vacío → undefined; ilegible → NaN (el motor lo señala). */
   const numero = (v) => (texto(v).trim() === '' ? undefined : W.leerNumero(v));
 
@@ -62,9 +60,12 @@
       utilidad_pct: u === undefined ? undefined : u / 100,
       dias_fabricacion: numero(captura.dias_fab),
       dias_instalacion: numero(captura.dias_ins),
-      mangueras: numero(captura.mangueras),
-      soporteria_modo: modoSoporteria(),
-      soporteria: modoSoporteria() === 'IMPORTE' ? numero(captura.soporteria) : undefined,
+      menulas: texto(captura.menulas).trim() === '' ? 'AUTO' : numero(captura.menulas), // vacío: las sugeridas
+      menula_barra: captura.menula_barra || undefined,
+      abrazadera_barra: captura.abrazadera_barra || undefined,
+      mangueras_tramos: numero(captura.mangueras_tramos),
+      manguera_id: captura.manguera_id || undefined,
+      abrazaderas_manguera: numero(captura.abrazaderas_manguera),
       viaticos: numero(captura.viaticos),
     };
   }
@@ -153,15 +154,28 @@
   /** El renglón de un importe opcional (sólo si se capturó). */
   const extra = (concepto, detalle, importe) => (importe > 0 ? renglon(concepto, detalle, W.mxn(importe)) : null);
 
-  /** El renglón de la soportería: automática (ménsulas por metros, con su cuenta) o el importe capturado. */
+  const sinParentesis = (s) => String(s).replace(/\s*\(.*\)\s*$/, '');
+
+  /** El renglón de las ménsulas: cuántas (las sugeridas o las que se capturaron), con qué se hacen y cuánto cuesta cada una. */
   function renglonSoporteria(r) {
     const s = r.soporteria;
-    if (!s || s.modo !== 'AUTO') return extra('Soportería', 'Importe capturado, sin IVA.', r.extras.soporteria);
+    if (!s || !(s.menulas > 0)) return null;
     const m = s.menula;
     const a = s.abrazadera;
-    return renglon(`Soportería: ${plural(s.menulas, 'ménsula', 'ménsulas')} con abrazadera`,
-      `Una cada ${corto(s.separacion_m)} m en ${corto(r.entrada.L_m)} m. Ménsula de ${mm(m.largo_mm)} mm de ${m.barra.replace(/\s*\(.*\)\s*$/, '')}${m.anclajes ? ` con ${plural(m.anclajes, 'anclaje', 'anclajes')}` : ''} y ${corto(m.minutos)} min de taller: ${W.mxn(m.unitario)}; abrazadera ${a.vuelta === 'COMPLETA' ? 'de vuelta completa' : 'de media vuelta'} de ${a.barra.replace(/\s*\(.*\)\s*$/, '')}: ${W.mxn(a.unitario)}. Costo directo (material y taller), sin IVA.`,
+    return renglon(`Ménsulas: ${plural(s.menulas, 'pieza', 'piezas')} con abrazadera`,
+      `${s.sugeridas_usadas ? `Las sugeridas: una cada ${corto(s.separacion_m)} m en ${corto(r.entrada.L_m)} m. ` : ''}Ménsula de ${mm(m.largo_mm)} mm de ${sinParentesis(m.barra)}${m.anclajes ? ` con ${plural(m.anclajes, 'anclaje', 'anclajes')}` : ''} y ${corto(m.minutos)} min de taller: ${W.mxn(m.unitario)}; abrazadera ${a.vuelta === 'COMPLETA' ? 'de vuelta completa' : 'de media vuelta'} de ${sinParentesis(a.barra)}: ${W.mxn(a.unitario)}. Costo directo (material y taller), sin IVA.`,
       W.mxn(s.importe));
+  }
+
+  /** El renglón de las mangueras: tramos del catálogo y sus abrazaderas, a su precio sin IVA. */
+  function renglonMangueras(r) {
+    const g = r.mangueras;
+    if (!g || !(g.importe > 0)) return null;
+    const partes = [];
+    if (g.tramos > 0) partes.push(`${plural(g.tramos, g.manguera.unidad, `${g.manguera.unidad}s`)} × ${W.mxn(g.manguera.unitario)} (${g.manguera.descripcion})`);
+    if (g.abrazaderas > 0) partes.push(`${plural(g.abrazaderas, 'abrazadera', 'abrazaderas')} × ${W.mxn(g.abrazadera.unitario)}${g.abrazaderas_sugeridas ? ` (${g.abrazaderas_por_tramo} por tramo)` : ''}`);
+    return renglon(`Mangueras: ${plural(g.tramos, 'tramo', 'tramos')}${g.abrazaderas > 0 ? ` y ${plural(g.abrazaderas, 'abrazadera', 'abrazaderas')}` : ''}`,
+      `${partes.join(' + ')}. Del catálogo de compras, sin IVA.`, W.mxn(g.importe));
   }
 
   /** Lo que incluye el precio, para el cliente: «suministro, fabricación, instalación y soportería». */
@@ -280,8 +294,8 @@
         renglon('Bridas', `Por ${corto(r.entrada.L_m)} m: ${tramo}.`, W.mxn(r.bridas.importe)),
         manoDeObra('Fabricación de bridas', r.mano_obra.fabricacion),
         manoDeObra('Instalación', r.mano_obra.instalacion),
-        extra('Mangueras', 'Importe capturado, sin IVA.', r.extras.mangueras),
         renglonSoporteria(r),
+        renglonMangueras(r),
         extra('Viáticos', 'Importe capturado, sin IVA.', r.extras.viaticos),
         renglon('Costo', null, W.mxn(r.costo), 'r-sub'),
         renglon(`Utilidad ${corto(r.utilidad_pct * 100)} %`, 'Sobre el costo.', W.mxn(r.utilidad)),
@@ -336,12 +350,28 @@
       $('#r_fab_nota').textContent = cuadrilla(M.rapida.personas_fabricacion, M.rapida.pago_dia_fabricacion);
       $('#r_ins_nota').textContent = cuadrilla(M.rapida.personas_instalacion, M.rapida.pago_dia_instalacion);
     }
-    const modo = modoSoporteria();
-    $('#r_soporteria_modo').value = modo;
-    $('#r_soporteria_campo').hidden = modo !== 'IMPORTE';
+    // ménsulas: el ángulo y la solera de la lista del proveedor; vacío = las sugeridas (una cada 2.5 m)
+    const opciones = (selId, lista, clave, defecto) => {
+      const s = $(selId);
+      W.reemplazar(s, ...lista.map((x) => h('option', { value: x.id }, x.descripcion)));
+      s.value = lista.some((x) => x.id === captura[clave]) ? captura[clave] : defecto;
+    };
+    if (M.rapida && M.rapida.soporteria) {
+      opciones('#r_menula_barra', C.rapida.barrasDeTipo(M, 'ANGULO'), 'menula_barra', M.rapida.soporteria.menula_barra);
+      opciones('#r_abrazadera_barra', C.rapida.barrasDeTipo(M, 'SOLERA'), 'abrazadera_barra', M.rapida.soporteria.abrazadera_barra);
+    }
+    if (M.rapida && M.rapida.mangueras) opciones('#r_manguera_id', C.rapida.manguerasDelCatalogo(M), 'manguera_id', M.rapida.mangueras.articulo);
+    const sugeridas = Number.isFinite(e.L_m) ? C.rapida.menulasSugeridas(M, e.L_m) : null;
     const espaciado = M.proceso && M.proceso.soportes && M.proceso.soportes.espaciado;
-    const notaSop = (txt) => { $('#r_soporteria_nota').textContent = txt; };
-    notaSop(modo === 'AUTO' ? `Una ménsula con su abrazadera cada ${espaciado ? corto(espaciado.horizontal_m) : '2.5'} m.` : modo === 'NO' ? 'Sin soportería.' : 'En pesos sin IVA.');
+    const sep = espaciado ? corto(espaciado.horizontal_m) : '2.5';
+    $('#r_menulas').placeholder = sugeridas ? `${sugeridas} sugeridas` : `una cada ${sep} m`;
+    const notaMen = (txt) => { $('#r_menulas_nota').textContent = txt; };
+    notaMen(sugeridas ? `Vacío = ${plural(sugeridas, 'sugerida', 'sugeridas')} (una cada ${sep} m); 0 = no lleva.` : `Vacío = una cada ${sep} m de los metros; 0 = no lleva.`);
+    const porTramo = M.rapida && M.rapida.mangueras ? M.rapida.mangueras.abrazaderas_por_tramo : 0;
+    const tr = Number.isFinite(e.mangueras_tramos) ? e.mangueras_tramos : 0;
+    $('#r_abrazaderas_manguera').placeholder = tr > 0 ? `${tr * porTramo} (${porTramo} por tramo)` : `${porTramo} por tramo`;
+    const notaMang = (txt) => { $('#r_mangueras_nota').textContent = txt; };
+    notaMang('Del catálogo de compras.');
     const cont = $('#rapida-resultado');
     if (e.D_mm === undefined && e.L_m === undefined) {
       W.reemplazar(cont, h('div', { class: 'tarjeta rapida-vacia' },
@@ -352,7 +382,9 @@
     }
     try {
       const r = C.rapida.cotizar(e, M);
-      if (r.soporteria && r.soporteria.modo === 'AUTO') notaSop(`${plural(r.soporteria.menulas, 'ménsula', 'ménsulas')} con abrazadera (una cada ${corto(r.soporteria.separacion_m)} m) · ${W.mxn(r.soporteria.importe)}`);
+      if (r.soporteria.menulas > 0) notaMen(`${r.soporteria.sugeridas_usadas ? `${plural(r.soporteria.menulas, 'sugerida', 'sugeridas')} (una cada ${sep} m)` : plural(r.soporteria.menulas, 'pieza', 'piezas')} × ${W.mxn(r.soporteria.unitario)} con abrazadera = ${W.mxn(r.soporteria.importe)}${r.soporteria.sugeridas_usadas ? '' : ' · vacío = las sugeridas'}`);
+      else notaMen(`Sin ménsulas.${sugeridas ? ` Vacío = ${plural(sugeridas, 'sugerida', 'sugeridas')}.` : ''}`);
+      if (r.mangueras.importe > 0) notaMang(`${r.mangueras.manguera ? `Tramo: ${W.mxn(r.mangueras.manguera.unitario)}` : ''}${r.mangueras.abrazadera ? `${r.mangueras.manguera ? ' · ' : ''}abrazadera: ${W.mxn(r.mangueras.abrazadera.unitario)}` : ''} sin IVA = ${W.mxn(r.mangueras.importe)}`);
       W.reemplazar(cont, ...resultado(r));
     } catch (err) {
       const msgs = err && err.errores ? err.errores : [String(err && err.message ? err.message : err)];
@@ -370,14 +402,19 @@
 
   function iniciar() {
     captura = { ...VACIA, ...leerGuardado() };
-    const campos = [['#r_cliente', 'cliente'], ['#r_diam', 'diam'], ['#r_metros', 'metros'], ['#r_utilidad', 'utilidad'], ['#r_dias_fab', 'dias_fab'], ['#r_dias_ins', 'dias_ins'], ['#r_mangueras', 'mangueras'], ['#r_soporteria', 'soporteria'], ['#r_viaticos', 'viaticos']];
+    // lo guardado por la versión anterior: «no lleva soportería» son 0 ménsulas
+    if (captura.soporteria_modo === 'NO' && texto(captura.menulas).trim() === '') captura.menulas = '0';
+    ['soporteria_modo', 'soporteria', 'mangueras'].forEach((k) => delete captura[k]);
+    const campos = [['#r_cliente', 'cliente'], ['#r_diam', 'diam'], ['#r_metros', 'metros'], ['#r_utilidad', 'utilidad'], ['#r_dias_fab', 'dias_fab'], ['#r_dias_ins', 'dias_ins'], ['#r_menulas', 'menulas'], ['#r_mangueras_tramos', 'mangueras_tramos'], ['#r_abrazaderas_manguera', 'abrazaderas_manguera'], ['#r_viaticos', 'viaticos']];
     campos.forEach(([sel, k]) => {
       const el = $(sel);
       el.value = texto(captura[k]);
       el.addEventListener('input', () => { captura[k] = el.value; guardar(); render(); });
     });
     $('#r_hoja').addEventListener('change', (ev) => { captura.hoja_id = ev.target.value; guardar(); render(); });
-    $('#r_soporteria_modo').addEventListener('change', (ev) => { captura.soporteria_modo = ev.target.value; guardar(); render(); });
+    [['#r_menula_barra', 'menula_barra'], ['#r_abrazadera_barra', 'abrazadera_barra'], ['#r_manguera_id', 'manguera_id']].forEach(([sel, k]) => {
+      $(sel).addEventListener('change', (ev) => { captura[k] = ev.target.value; guardar(); render(); });
+    });
     $('#rapida-form').addEventListener('submit', (ev) => ev.preventDefault());
     $('#rapida-limpiar').addEventListener('click', () => {
       captura = { ...VACIA };

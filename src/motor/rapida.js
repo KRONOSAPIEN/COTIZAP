@@ -8,8 +8,8 @@
  *   costo    = lámina × factor_lamina (3: cubre mano de obra, accesorios y lo demás) + bridas por metros
  *              + días de fabricación de bridas × personas × pago por día (1 × $500)
  *              + días de instalación × personas × pago por día (2 × $500)
- *              + los renglones opcionales en pesos sin IVA: mangueras, soportería y viáticos (lo que el factor no cubre)
- *              (la soportería puede ser automática: una ménsula con su abrazadera cada 2.5 m, costeadas como partidas)
+ *              + lo que el factor no cubre: las ménsulas con su abrazadera (por piezas), las mangueras (por tramos y abrazaderas,
+ *                del catálogo de compras) y los viáticos (importe sin IVA)
  *   precio   = costo × (1 + utilidad)            (la utilidad se SUMA sobre el costo)
  *   total    = precio × (1 + IVA)
  *
@@ -27,11 +27,15 @@
  * rectángulo de cada plantilla para dibujar la hoja. Si la plantilla no cabe en la hoja de ninguna forma, cada yarda lleva
  * hojas completas y un retazo, y los retazos se acomodan juntos.
  * Los días de fabricación (de las bridas) y de instalación dan el plazo y suman su mano de obra al costo, antes de la utilidad.
- * Las mangueras, la soportería y los viáticos se capturan como importe (MXN sin IVA, vacío = no hay): el factor de la lámina no
- * los cubre (en el proyecto de referencia sumaron cerca de $10,650) y también entran al costo, antes de la utilidad.
- * La soportería tiene además un modo automático (`soporteria_modo: 'AUTO'`): ménsulas = ⌈metros ÷ separación horizontal⌉
- * (proceso.soportes.espaciado, 2.5 m), cada una con su abrazadera, y su costo directo (material y taller) sale de cotizar la
- * ménsula y la abrazadera de `rapida.soporteria` como partidas de soportería. Sin modo: el importe capturado, o nada.
+ * Lo que el factor de la lámina no cubre (en el proyecto de referencia, cerca de $10,650) entra al costo, antes de la utilidad,
+ * por piezas y con los precios de las tablas (el taller, 8-oct-2026):
+ *   · ménsulas: las que estime el ingeniero (`menulas`; 'AUTO' = las sugeridas, ⌈metros ÷ 2.5 m⌉ con la separación horizontal
+ *     de proceso.soportes.espaciado), cada una con su abrazadera, del ángulo y la solera que se elijan (de la lista del
+ *     proveedor; sin elegir, las de `rapida.soporteria`). Su costo directo (material, anclajes y taller) sale de cotizarlas
+ *     como partidas de soportería;
+ *   · mangueras: tramos del artículo del catálogo de compras que se elija y sus abrazaderas de manguera (sin decir cuántas,
+ *     `abrazaderas_por_tramo` por tramo), a su precio sin IVA;
+ *   · viáticos: un importe sin IVA.
  * Pura: no muta nada; lanza ErrorValidacion con mensajes legibles.
  */
 (function (root, factory) {
@@ -174,45 +178,77 @@
     return n;
   };
 
-  const EXTRAS = [['mangueras', 'mangueras'], ['soporteria', 'soportería'], ['viaticos', 'viáticos']];
   const leerImporte = (v, nombre, errores) => {
     if (v === undefined || v === null || v === '') return null;
     const n = Number(v);
     if (!finito(n) || n < 0 || n > 100000000) { errores.push(`El importe de ${nombre} debe ser de $0 a $100,000,000 (sin IVA).`); return null; }
     return n;
   };
+  const leerPiezas = (v, nombre, errores) => {
+    if (v === undefined || v === null || v === '') return null;
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < 0 || n > 100000) { errores.push(`${nombre} debe ser un número entero de piezas, de 0 a 100 000.`); return null; }
+    return n;
+  };
 
-  const MODOS_SOPORTERIA = ['AUTO', 'IMPORTE', 'NO'];
+  /** SOLERA o ANGULO: el tipo de una barra de la lista del proveedor (el suyo o el de su perfil). */
+  function tipoBarra(M, id) {
+    const b = M.proveedor && M.proveedor.barras && M.proveedor.barras[id];
+    if (!b) return null;
+    if (b.tipo) return b.tipo;
+    const pf = b.perfil && M.herrajes && M.herrajes.perfiles && M.herrajes.perfiles[b.perfil];
+    return pf ? pf.tipo : null;
+  }
+  /** Las barras con precio de la lista del proveedor de un tipo: [{ id, descripcion }] (para elegir la ménsula y la abrazadera). */
+  function barrasDeTipo(M, tipo) {
+    return Object.keys((M.proveedor && M.proveedor.barras) || {}).filter((id) => tipoBarra(M, id) === tipo && PROV.barra(M, id)).map((id) => ({ id, descripcion: M.proveedor.barras[id].descripcion || id }));
+  }
+  /** Los artículos del catálogo de compras que son mangueras (para elegir cuál): [{ id, descripcion, unidad }]. */
+  function manguerasDelCatalogo(M) {
+    const A = (M.compras && M.compras.articulos) || {};
+    return Object.keys(A).filter((id) => /^MANGUERA/.test(id) || /^manguera/i.test(A[id].descripcion || '')).map((id) => ({ id, descripcion: A[id].descripcion || id, unidad: A[id].unidad || 'pza' }));
+  }
+  /** Las ménsulas que se sugieren para L_m metros: una cada «horizontal_m» (2.5 m), al menos una; null sin la regla. */
+  function menulasSugeridas(M, L_m) {
+    const E = M.proceso && M.proceso.soportes && M.proceso.soportes.espaciado;
+    if (!E || !(E.horizontal_m > 0) || !(L_m > 0)) return null;
+    return Math.max(1, Math.ceil(L_m / E.horizontal_m - EPS));
+  }
 
   /**
-   * La soportería automática para L_m metros de ducto de diámetro D: cuántas ménsulas (una cada «horizontal_m»), y el costo
-   * directo de las ménsulas y de sus abrazaderas, cotizadas como partidas de soportería con los datos de `rapida.soporteria`.
+   * n ménsulas, cada una con su abrazadera para el ducto de diámetro D: su costo directo (material, anclajes y minutos de taller),
+   * cotizadas como partidas de soportería con los datos de `rapida.soporteria` y el ángulo y la solera elegidos.
    */
-  function soporteriaAuto(M, D, L_m) {
+  function costoSoporteria(M, D, n, barras) {
     const S = M.rapida.soporteria;
-    const E = M.proceso && M.proceso.soportes && M.proceso.soportes.espaciado;
-    if (!E || !(E.horizontal_m > 0)) throw new U.ErrorValidacion(['Soportería automática: faltan las reglas de espaciamiento de soportes en las tablas maestras (Proceso › Soportería).']);
-    const n = Math.max(1, Math.ceil(L_m / E.horizontal_m - EPS));
     const partida = (p) => {
       try {
         return COT.cotizarPartida({ familia: 'SOPORTE', cantidad: n, cantidad_modo: 'MANUAL', ...p }, M);
       } catch (err) {
-        if (err instanceof U.ErrorValidacion) throw new U.ErrorValidacion(err.errores.map((m) => `Soportería automática: ${m}`));
+        if (err instanceof U.ErrorValidacion) throw new U.ErrorValidacion(err.errores.map((m) => `Ménsulas: ${m}`));
         throw err;
       }
     };
-    const men = partida({ descripcion: 'Ménsulas', barra_id: S.menula_barra, largo_pieza_mm: S.menula_largo_mm, anclajes_pieza: S.menula_anclajes, min_pieza: S.menula_min > 0 ? S.menula_min : undefined });
-    const abz = partida({ descripcion: 'Abrazaderas', barra_id: S.abrazadera_barra, abrazadera_D_mm: D, abrazadera_vuelta: S.abrazadera_vuelta, min_pieza: S.abrazadera_min > 0 ? S.abrazadera_min : undefined });
-    const pieza = (f) => ({ barra: f.soporte.barra.descripcion, largo_mm: f.soporte.largo_pieza_mm, anclajes: n > 0 ? f.soporte.anclajes / n : 0, minutos: f.soporte.minutos_pieza, costo: f.costos.CD, unitario: f.costos.CD / n });
+    const men = partida({ descripcion: 'Ménsulas', barra_id: barras.menula, largo_pieza_mm: S.menula_largo_mm, anclajes_pieza: S.menula_anclajes, min_pieza: S.menula_min > 0 ? S.menula_min : undefined });
+    const abz = partida({ descripcion: 'Abrazaderas', barra_id: barras.abrazadera, abrazadera_D_mm: D, abrazadera_vuelta: S.abrazadera_vuelta, min_pieza: S.abrazadera_min > 0 ? S.abrazadera_min : undefined });
+    const pieza = (f) => ({ barra_id: f.soporte.barra.id, barra: f.soporte.barra.descripcion, largo_mm: f.soporte.largo_pieza_mm, anclajes: f.soporte.anclajes / n, minutos: f.soporte.minutos_pieza, costo: f.costos.CD, unitario: f.costos.CD / n });
     const menula = pieza(men);
     const abrazadera = { ...pieza(abz), vuelta: abz.soporte.vuelta };
-    return { modo: 'AUTO', menulas: n, separacion_m: E.horizontal_m, menula, abrazadera, unitario: menula.unitario + abrazadera.unitario, importe: menula.costo + abrazadera.costo };
+    return { menula, abrazadera, unitario: menula.unitario + abrazadera.unitario, importe: menula.costo + abrazadera.costo };
+  }
+
+  /** Un artículo del catálogo de compras a su precio sin IVA: { id, descripcion, unidad, unitario }. */
+  function articulo(M, id) {
+    const a = M.compras && M.compras.articulos && M.compras.articulos[id];
+    if (!a || !finito(a.precio) || !finito(M.compras.iva_pct)) return null;
+    return { id, descripcion: a.descripcion || id, unidad: a.unidad || 'pza', unitario: a.iva_incluido === true ? a.precio / (1 + M.compras.iva_pct) : a.precio };
   }
 
   /**
-   * entrada: { D_mm, L_m, yarda_mm?, hoja_id?, utilidad_pct?, dias_fabricacion?, dias_instalacion?, mangueras?, soporteria?, viaticos?,
-   *            soporteria_modo? ('AUTO' | 'IMPORTE' | 'NO'; sin decir: IMPORTE si trae importe, si no NO) }
-   * (utilidad en fracción: 0.20; los tres últimos en MXN sin IVA)
+   * entrada: { D_mm, L_m, yarda_mm?, hoja_id?, utilidad_pct?, dias_fabricacion?, dias_instalacion?,
+   *            menulas? (piezas, o 'AUTO' = las sugeridas; vacío = no lleva), menula_barra?, abrazadera_barra?,
+   *            mangueras_tramos?, manguera_id?, abrazaderas_manguera? (vacío = abrazaderas_por_tramo por tramo), viaticos? (MXN sin IVA) }
+   * (utilidad en fracción: 0.20)
    * Devuelve el desglose: hoja, plantilla, acomodo, yardas, hojas, lámina, factor, bridas, mano de obra por días, costo, utilidad,
    * precio, IVA, total y plazo.
    */
@@ -246,11 +282,26 @@
     if (!finito(u) || u < 0 || u > 10) errores.push('La utilidad debe ser de 0 % a 1 000 %.');
     const diasFab = leerDias(e0.dias_fabricacion, 'fabricación', errores);
     const diasIns = leerDias(e0.dias_instalacion, 'instalación', errores);
-    const dadosExtras = {};
-    EXTRAS.forEach(([k, nombre]) => { dadosExtras[k] = leerImporte(e0[k], nombre, errores); });
-    const vacioModo = e0.soporteria_modo === undefined || e0.soporteria_modo === null || e0.soporteria_modo === '';
-    const modoSop = vacioModo ? (dadosExtras.soporteria !== null ? 'IMPORTE' : 'NO') : e0.soporteria_modo;
-    if (!MODOS_SOPORTERIA.includes(modoSop)) errores.push(`La soportería debe ser automática, por importe o no llevar (AUTO, IMPORTE o NO); vale «${String(e0.soporteria_modo)}».`);
+    // Lo que el factor no cubre: ménsulas (por piezas, del ángulo y la solera elegidos), mangueras (por tramos) y viáticos
+    const viaticos = leerImporte(e0.viaticos, 'viáticos', errores);
+    const sugeridas = finito(L_m) && L_m > 0 && L_m <= 100000 ? menulasSugeridas(M, L_m) : null;
+    const auto = e0.menulas === 'AUTO';
+    const nMen = auto ? sugeridas : leerPiezas(e0.menulas, 'Las ménsulas', errores);
+    if (auto && sugeridas === null && finito(L_m) && L_m > 0) errores.push('Para sugerir las ménsulas faltan las reglas de espaciamiento de soportes en las tablas maestras (Proceso › Soportería).');
+    const S = R.soporteria;
+    const barras = { menula: e0.menula_barra || S.menula_barra, abrazadera: e0.abrazadera_barra || S.abrazadera_barra };
+    if (nMen > 0) {
+      if (!PROV.barra(M, barras.menula)) errores.push(`El ángulo de la ménsula «${String(barras.menula)}» no está (con precio) en la lista del proveedor.`);
+      if (!PROV.barra(M, barras.abrazadera)) errores.push(`La solera de la abrazadera «${String(barras.abrazadera)}» no está (con precio) en la lista del proveedor.`);
+    }
+    const tramos = leerPiezas(e0.mangueras_tramos, 'Los tramos de manguera', errores);
+    const MG = R.mangueras;
+    const abzPedidas = leerPiezas(e0.abrazaderas_manguera, 'Las abrazaderas de manguera', errores);
+    const mangueraId = e0.manguera_id || MG.articulo;
+    const manguera = tramos > 0 ? articulo(M, mangueraId) : null;
+    const abzManguera = (tramos > 0 || abzPedidas > 0) ? articulo(M, MG.abrazadera) : null;
+    if (tramos > 0 && !manguera) errores.push(`La manguera «${String(mangueraId)}» no está (con precio) en el catálogo de compras.`);
+    if ((tramos > 0 || abzPedidas > 0) && !abzManguera) errores.push(`La abrazadera de manguera «${String(MG.abrazadera)}» no está (con precio) en el catálogo de compras.`);
     const factor = R.factor_lamina;
     const iva = M.capas.iva_pct;
     const bridas = finito(L_m) && L_m > 0 ? bridasPara(M, L_m) : null;
@@ -285,17 +336,29 @@
       fabricacion: cuadrilla(diasFab, R.personas_fabricacion, R.pago_dia_fabricacion),
       instalacion: cuadrilla(diasIns, R.personas_instalacion, R.pago_dia_instalacion),
     };
-    // la soportería: automática (ménsulas por metros), el importe capturado o nada
-    const soporteria = modoSop === 'AUTO' ? soporteriaAuto(M, D, L_m) : { modo: modoSop, importe: modoSop === 'IMPORTE' ? dadosExtras.soporteria || 0 : 0 };
-    const extras = { importe: 0 };
-    EXTRAS.forEach(([k]) => { extras[k] = k === 'soporteria' ? soporteria.importe : dadosExtras[k] || 0; extras.importe += extras[k]; });
+    // las ménsulas con su abrazadera, costeadas como partidas de soportería
+    const E = M.proceso.soportes && M.proceso.soportes.espaciado;
+    const soporteria = {
+      menulas: nMen || 0, sugeridas, sugeridas_usadas: auto, separacion_m: E ? E.horizontal_m : null,
+      ...(nMen > 0 ? costoSoporteria(M, D, nMen, barras) : { menula: null, abrazadera: null, unitario: 0, importe: 0 }),
+    };
+    // las mangueras: tramos del catálogo y sus abrazaderas (sin decir cuántas, las de cada tramo)
+    const n_abz = abzPedidas !== null ? abzPedidas : (tramos || 0) * MG.abrazaderas_por_tramo;
+    const mangueras = {
+      tramos: tramos || 0, manguera, abrazaderas: n_abz, abrazaderas_sugeridas: abzPedidas === null, abrazaderas_por_tramo: MG.abrazaderas_por_tramo, abrazadera: n_abz > 0 ? abzManguera : null,
+      importe: (tramos || 0) * (manguera ? manguera.unitario : 0) + (n_abz > 0 && abzManguera ? n_abz * abzManguera.unitario : 0),
+    };
+    const extras = { mangueras: mangueras.importe, soporteria: soporteria.importe, viaticos: viaticos || 0 };
+    extras.importe = extras.mangueras + extras.soporteria + extras.viaticos;
     const costo = lamina_factor + bridas.importe + mano_obra.fabricacion.importe + mano_obra.instalacion.importe + extras.importe;
     const utilidad = costo * u;
     const precio_neto = costo + utilidad;
     const iva_monto = precio_neto * iva;
     const aprovechado = Math.min(1, (B * Y * n_yardas) / (n_hojas * W * Lh));
     return {
-      entrada: { D_mm: D, L_m, yarda_mm: Y, hoja_id, utilidad_pct: u, dias_fabricacion: diasFab, dias_instalacion: diasIns, mangueras: dadosExtras.mangueras, soporteria: dadosExtras.soporteria, viaticos: dadosExtras.viaticos, soporteria_modo: modoSop },
+      entrada: { D_mm: D, L_m, yarda_mm: Y, hoja_id, utilidad_pct: u, dias_fabricacion: diasFab, dias_instalacion: diasIns,
+        menulas: auto ? 'AUTO' : nMen, menula_barra: barras.menula, abrazadera_barra: barras.abrazadera, mangueras_tramos: tramos, manguera_id: mangueraId, abrazaderas_manguera: abzPedidas, viaticos,
+      },
       hoja: {
         id: hoja_id, descripcion: H.descripcion || hoja_id, material: H.material, calibre: H.calibre, ancho_mm: W, largo_mm: Lh,
         espesor_mm: e, precio: precio.precio, sin_iva: precio.sin_iva, kg: precio.kg,
@@ -304,12 +367,12 @@
       hoja_auto: !e0.hoja_id, hojas_comparadas: candidatas.length, // sin elegir lámina: de cuántas hojas del ancho de la yarda se tomó la más barata
       acomodo: aco, yardas: n_yardas, yardas_por_hoja: aco.n, yardas_ultima_hoja: ultima, hojas: n_hojas, aprovechamiento: aprovechado, kg: n_hojas * precio.kg,
       lamina, factor, lamina_factor,
-      bridas, mano_obra, extras, soporteria,
+      bridas, mano_obra, extras, soporteria, mangueras,
       costo, utilidad_pct: u, utilidad, precio: precio_neto, iva_pct: iva, iva: iva_monto, total: precio_neto + iva_monto,
       plazo: diasFab === null && diasIns === null ? null : { fabricacion: diasFab || 0, instalacion: diasIns || 0, total: (diasFab || 0) + (diasIns || 0) },
       advertencias,
     };
   }
 
-  return { cotizar, soporteriaAuto, MODOS_SOPORTERIA, hojas, yardas, bridasPara, acomodo, hojaPara, hojasDeLaYarda, plantillaDe };
+  return { cotizar, menulasSugeridas, barrasDeTipo, tipoBarra, manguerasDelCatalogo, hojas, yardas, bridasPara, acomodo, hojaPara, hojasDeLaYarda, plantillaDe };
 }));

@@ -53,7 +53,7 @@
     [/_mm$/, 'mm'], [/_mm2$/, 'mm²'], [/_m_min$/, 'm/min'], [/_min_m2$/, 'min/m²'], [/_min_m$/, 'min/m'], [/_min_kg$/, 'min/kg'], [/_min$/, 'min'], [/_deg$/, '°'],
     [/^salario_diario$/, 'MXN/día'], [/^pago_dia_/, 'MXN/día'], [/^personas_/, 'personas'], [/^dias_/, 'días'], [/^horas_dia$/, 'h/día'], [/_envase_L$/, 'L'], [/^tornillos_multiplo$/, 'juegos'], [/^tornillos_pieza$/, 'juegos'],
     [/^ml_sellador_junta_m$/, 'mL/m'],
-    [/^(horizontal_m|horizontal_max_m|vertical_m)$/, 'm'], [/^(base_vertical|por_accesorio)$/, 'soportes'], [/^menula_anclajes$/, 'piezas'],
+    [/^(horizontal_m|horizontal_max_m|vertical_m)$/, 'm'], [/^(base_vertical|por_accesorio)$/, 'soportes'], [/^menula_anclajes$/, 'piezas'], [/^abrazaderas_por_tramo$/, 'piezas'],
     [/_kg_m3$/, 'kg/m³'], [/_g_cm3$/, 'g/cm³'], [/_L_min$/, 'L/min'], [/_um$/, 'µm'], [/^sv_pct$/, '%'], [/^dias_cobro$/, 'días'], [/ml_por_m/, 'mL/m'], [/^cartucho_ml$/, 'mL'],
   ];
 
@@ -207,15 +207,15 @@
         'hasta m': 'Metros hasta el punto más alejado que cubre el renglón (40 m incluye los 40 m).',
         importe: 'Lo que se suma por las bridas, en MXN sin IVA.',
       } });
-  E('rapida.soporteria', 'Soportería automática',
-    'Con qué se costean las ménsulas que la cotización rápida pone sola: una con su abrazadera cada 2.5 m (la separación horizontal de Proceso › Soportería › Espaciamiento) en los metros hasta el punto más alejado.',
+  E('rapida.soporteria', 'Ménsulas de la cotización rápida',
+    'Con qué se costean las ménsulas de la cotización rápida, cada una con su abrazadera. El ingeniero dice cuántas (vacío: las sugeridas, una cada 2.5 m de Proceso › Soportería) y de qué ángulo y solera; aquí están los de arranque.',
     'La ménsula y la abrazadera se cotizan como dos partidas de soportería (material de la lista del proveedor, anclajes y minutos reales de taller), sin utilidad: la utilidad la suma la cotización rápida.',
-    'Con 31 m son 13 ménsulas con su abrazadera, unos $343 cada una de costo directo: $4,456. La pestaña permite capturar otro importe o quitarla.',
+    'Con 31 m se sugieren 13, unos $345 cada una de costo directo con ángulo 1¼″ y solera 1¼″: $4,488.',
     { afecta: ['rapida'] });
   E('rapida.soporteria.menula_barra', 'Barra de la ménsula',
     'La barra de la lista del proveedor de la que se corta cada ménsula.',
-    'Se elige de la lista de barras. El taller: ángulo 1¼″ × 1/8″.',
-    'Cambia el precio del material de las ménsulas.',
+    'Se elige de la lista de barras. El taller: ángulo 1¼″ × 1/8″ (o 1½″ × 3/16″, que se elige en la pestaña).',
+    'Cambia el precio del material de las ménsulas: con 1½″ × 3/16″ cada una cuesta unos $41 más.',
     { afecta: ['rapida'] });
   E('rapida.soporteria.menula_largo_mm', 'Largo de barra por ménsula',
     'Lo que se corta de la barra para una ménsula (brazo y pierna).',
@@ -234,7 +234,7 @@
     { afecta: ['rapida'], tip: [15, 240] });
   E('rapida.soporteria.abrazadera_barra', 'Barra de la abrazadera',
     'La barra de la que se corta cada abrazadera; su largo sale del diámetro máximo de la cotización rápida.',
-    'Se elige de la lista de barras. Recomendado para cal. 22: tipo cuna de solera de 1″ × 1/8″ (su precio es aproximado).',
+    'Se elige de la lista de barras. De arranque, solera 1¼″ × 1/8″ (o 1½″ × 3/16″, que se elige en la pestaña); la de 1″ × 1/8″ tiene precio aproximado.',
     'Cambia el precio del material de las abrazaderas.',
     { afecta: ['rapida'] });
   E('rapida.soporteria.abrazadera_vuelta', 'Vuelta de la abrazadera',
@@ -242,6 +242,26 @@
     'MEDIA o COMPLETA. La completa lleva el doble de solera y cuatro orejas.',
     'La completa reparte mejor el peso en cal. 22, pero cuesta el doble de solera.',
     { afecta: ['rapida'] });
+  E('rapida.mangueras', 'Mangueras de la cotización rápida',
+    'Con qué se costean las mangueras: el ingeniero dice cuántos tramos y de qué manguera del catálogo de compras, y cuántas abrazaderas de manguera (vacío: las de cada tramo).',
+    'Los precios son los del catálogo de compras, sin IVA.',
+    'El caso real: 3 tramos de 6″ y 18 abrazaderas = $6,275.92 sin IVA.',
+    { afecta: ['rapida'] });
+  E('rapida.mangueras.articulo', 'Manguera de arranque',
+    'El artículo del catálogo de compras que se usa si la pestaña no elige otro.',
+    'Se elige del catálogo de compras (hoy la manguera de 6″, tramo de 5 m).',
+    'Cambia el precio por tramo.',
+    { afecta: ['rapida'] });
+  E('rapida.mangueras.abrazadera', 'Abrazadera de manguera',
+    'El artículo del catálogo de compras con que se sujeta cada manguera.',
+    'Se elige del catálogo de compras (hoy la abrazadera ajustable, $55 con IVA).',
+    'Cambia el precio de cada abrazadera de manguera.',
+    { afecta: ['rapida'] });
+  E('rapida.mangueras.abrazaderas_por_tramo', 'Abrazaderas por tramo de manguera',
+    'Cuántas abrazaderas se cuentan por tramo si la pestaña no dice cuántas.',
+    'Un número entero. El caso real: 18 para 3 tramos, 6 por tramo.',
+    'Más abrazaderas por tramo, más costo de mangueras.',
+    { afecta: ['rapida'], tip: [2, 12] });
   E('rapida.soporteria.abrazadera_min', 'Minutos de taller por abrazadera',
     'Lo que tarda el taller en cortar, rolar, doblar las orejas y barrenar una abrazadera.',
     'En min reales. 15 min (el de Proceso › Soportería, ilustrativo). 0 = el de Proceso › Soportería.',

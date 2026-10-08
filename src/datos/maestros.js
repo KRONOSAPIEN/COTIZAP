@@ -550,14 +550,17 @@
         { hasta_m: 80, importe: 12000 },
         { hasta_m: 120, importe: 18000 },
       ],
-      // Soportería automática (el taller, 8-oct-2026): una ménsula con su abrazadera cada «horizontal_m» de
-      // proceso.soportes.espaciado (2.5 m) en los metros de la cotización, costeadas como las partidas de soportería
-      // (material y taller, sin utilidad). La ménsula: brazo y pierna de 650 mm de ángulo 1¼″ con 4 taquetes, en 137 min
-      // (las 7 del caso real en 2 días); la abrazadera: tipo cuna de solera de 1″ × 1/8″, media vuelta, 15 min
+      // Ménsulas (el taller, 8-oct-2026): el ingeniero dice cuántas (se sugiere una cada «horizontal_m» de
+      // proceso.soportes.espaciado, 2.5 m) y de qué ángulo y solera; se costean como las partidas de soportería (material y
+      // taller, sin utilidad). Sin elegir: la ménsula de ángulo 1¼″ × 1/8″ (brazo y pierna de 650 mm) con 4 taquetes, en
+      // 137 min (las 7 del caso real en 2 días), y la abrazadera tipo cuna de solera 1¼″ × 1/8″, media vuelta, en 15 min
       soporteria: {
         menula_barra: 'ANG_1_1_4X1_8', menula_largo_mm: 1300, menula_anclajes: 4, menula_min: 137.14,
-        abrazadera_barra: 'SOL_1X1_8', abrazadera_vuelta: 'MEDIA', abrazadera_min: 15,
+        abrazadera_barra: 'SOL_1_1_4X1_8', abrazadera_vuelta: 'MEDIA', abrazadera_min: 15,
       },
+      // Mangueras: tramos del artículo del catálogo de compras y sus abrazaderas; sin decir cuántas abrazaderas, 6 por tramo
+      // (el caso real: 3 tramos de 6″ y 18 abrazaderas = $6,275.92 sin IVA)
+      mangueras: { articulo: 'MANGUERA_6', abrazadera: 'ABRAZADERA_MANGUERA', abrazaderas_por_tramo: 6 },
     },
   };
 
