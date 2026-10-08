@@ -39,6 +39,7 @@ Los avisos de arriba (valores ilustrativos, cotización de ejemplo) sólo aparec
 npm test                 # motor y guardado: geometría, ejemplo, precios, validaciones, robustez, almacén de tablas
 npm run test:e2e         # interfaz (opcional): npm i -D playwright && npx playwright install chromium
 npm run caso:unifilar    # regenera el caso de prueba de unifilares (docs/ejemplos y su bloque en el documento) desde las reglas
+npm run evaluar:unifilares   # mide la lectura de croquis contra las corregidas de docs/evaluacion
 ```
 
 ## Usar el motor desde código
@@ -128,7 +129,7 @@ La pestaña **Compras y gastos** nació de una hoja de control de gastos real: u
 
 En **Cotización detallada → Importar unifilar** se escoge la **foto del croquis** o se pega (o se carga de un archivo) su **lectura** en JSON: los nodos, las aristas con su Ø y su cota, los textos con su confianza y los equipos, como los describe el [documento de lectura de unifilares](docs/vision-unifilares.md) (§8). *Probar con el ejemplo* carga la de su caso de prueba.
 
-- **La foto** se lee en la versión publicada en claude.ai, con la cuenta de Claude de quien la usa (la primera vez pide permiso; tarda de 1 a 3 minutos). Se manda la hoja completa y, si la foto es grande, cuatro recortes a más resolución; luego se releen en recortes ampliados las cotas, diámetros y ángulos dudosos. El diálogo dibuja la red leída encima de la foto para revisarla. En el archivo suelto (`dist/cotizap.html`) no está esa capacidad: ahí se pega el JSON. La foto no se guarda.
+- **La foto** se lee en la versión publicada en claude.ai, con la cuenta de Claude de quien la usa (la primera vez pide permiso; tarda de 1 a 3 minutos). Antes de mandarla se puede **enderezar** la hoja (arrastrando sus cuatro esquinas) y **limpiar** sombras y la cuadrícula de la libreta, con vista previa. Se manda la hoja completa y, si la foto es grande, cuatro recortes a más resolución; luego se releen en recortes ampliados las cotas, diámetros y ángulos dudosos, los textos que pueden ser de dos líneas (con las dos marcadas) y los cruces. El diálogo dibuja la red leída encima de la foto y puede **pedirle a Claude que la compare** con la foto: lo que no coincida queda en «Avisos». En el archivo suelto (`dist/cotizap.html`) no está esa capacidad: ahí se pega el JSON. La foto no se guarda.
 
 Las reglas del taller (`src/motor/unifilar.js`) hacen el resto:
 
@@ -136,7 +137,7 @@ Las reglas del taller (`src/motor/unifilar.js`) hacen el resto:
 - **Preguntas.** Lo que el croquis no dice se decide y se pregunta: cada pregunta trae la propuesta ya escrita (un número, una lista o «aceptar»). También se avisa lo leído con poca seguridad (confianza menor que 0.9), las cotas que no cuadran con su total, una reducción de más de la mitad y una nota «SUBE/BAJA» que contradice el ángulo del codo. El estado dice si el despiece es **definitivo**, **preliminar** (sirve como precio estimado) o **no cotizable** (algo bloquea y no se puede agregar).
 - **Partidas.** *Agregar N partidas* las pone en la cotización con la etiqueta de su pieza (`DUCT-005`, `INJ-001`…). Un aviso sobre la lista cuenta las preguntas pendientes; **cada respuesta vuelve a correr las reglas y reemplaza las partidas del unifilar**. Si editó a mano alguna de ellas, no se pisa sola: el diálogo lo dice y ofrece *Actualizar partidas*. La lectura y las respuestas se guardan con la cotización; *Quitar de la cotización* la quita con sus partidas (con *Deshacer*).
 
-El caso de prueba del documento da 22 partidas (8 tramos, 5 accesorios, 6 de soportería y 3 compradas): 30 aros, 14 ménsulas y **$45,792.38** con IVA con las tablas de arranque, con 4 preguntas por confirmar (la cota «1.? m», la T a 90° que se propone a 45°, el tramo dibujado vertical y la boca del colector). Todavía no se rectifica la perspectiva de la foto ni hay un conjunto de croquis reales para medir qué tan bien lee (§9.1 y §12 del documento).
+El caso de prueba del documento da 22 partidas (8 tramos, 5 accesorios, 6 de soportería y 3 compradas): 30 aros, 14 ménsulas y **$45,792.38** con IVA con las tablas de arranque, con 4 preguntas por confirmar (la cota «1.? m», la T a 90° que se propone a 45°, el tramo dibujado vertical y la boca del colector). Para saber qué tan bien lee, `npm run evaluar:unifilares` compara la lectura de Claude («Copiar la lectura de Claude») con la corregida de cada croquis de [`docs/evaluacion`](docs/evaluacion/README.md). Da el F1 de nodos y aristas, la exactitud de diámetros y cotas, los accesorios, la diferencia de costo y los errores silenciosos contra las metas del documento (§12). Faltan los croquis reales del taller para armar ese conjunto.
 
 ## Datos que el cotizador no acepta
 
@@ -250,16 +251,18 @@ Los dibujos salen de `src/web/planos.js` (funciones puras, probadas en `tests/pl
 ```text
 docs/arquitectura-cotizador-ducterias.md   especificación
 docs/vision-unifilares.md                  lectura de croquis unifilares (con unifilar-bom.schema.json y ejemplos/unifilar-caso-prueba.json)
+docs/evaluacion/                           conjunto de evaluación de la lectura (una carpeta por croquis)
 src/
   datos/maestros.js                        tablas maestras (valores ilustrativos)
   datos/ayuda_maestros.js                  ayuda de cada dato de las tablas (qué es · cómo se llena · qué esperar)
   datos/ejemplos.js                        el proyecto real de la hoja de control de gastos y el pedido de ductería del 30-sep-2026
   datos/unifilar_ejemplo.js                la lectura del croquis unifilar del caso de prueba (docs/vision-unifilares.md §11)
-  motor/                                   util · gastos · geometria · material · proveedor · mano_obra · consumibles · precios · validacion · compras · soportes · cotizador · rapida · unifilar · unifilar_vision
+  motor/                                   util · gastos · geometria · material · proveedor · mano_obra · consumibles · precios · validacion · compras · soportes · cotizador · rapida · unifilar · unifilar_vision · imagen · unifilar_evaluacion
   web/                                     index.html · app.js · almacen.js · maestros_ui.js · maestros_ayuda_ui.js · compras_ui.js · planos.js · planos_ui.js · rapida_ui.js · unifilar_ui.js · esquemas.js · dom.js · estilos.css
 tests/                                     *.test.js (node:test) · e2e/ui.e2e.js (Playwright, opcional)
 scripts/construir.js                       empaquetado a un solo HTML
 scripts/caso-unifilar.js                   regenera el caso de prueba de unifilares desde las reglas
+scripts/evaluar-unifilares.js              mide la lectura contra el conjunto de evaluación
 ```
 
 ## Límites conocidos

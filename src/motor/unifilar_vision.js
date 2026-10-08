@@ -151,34 +151,135 @@ Responde sólo con el JSON de este croquis.`;
         const h = Math.min(H, Math.max(b.h * 1.6, lado * 0.6));
         const x = Math.max(0, Math.min(W - w, b.x + b.w / 2 - w / 2));
         const y = Math.max(0, Math.min(H - h, b.y + b.h / 2 - h / 2));
-        return { texto_id: t.id, tipo: t.tipo, contenido_crudo: t.contenido_crudo, confianza_ocr: t.confianza_ocr, asociado_a: t.asociado_a, recorte: { x: redondo(x), y: redondo(y), w: redondo(w), h: redondo(h) } };
+        return { clase: 'TEXTO', texto_id: t.id, tipo: t.tipo, contenido_crudo: t.contenido_crudo, confianza_ocr: t.confianza_ocr, asociado_a: t.asociado_a, recorte: { x: redondo(x), y: redondo(y), w: redondo(w), h: redondo(h) } };
       });
   }
 
-  /** Las instrucciones para releer los recortes ampliados (una imagen por texto, en orden). */
+  /** Un cuadro de `lado` (y `alto`) centrado en (cx, cy), dentro de la hoja. */
+  function cuadro(cx, cy, lado, alto, W, H) {
+    const w = Math.min(W, lado);
+    const h = Math.min(H, alto || lado);
+    return { x: redondo(Math.max(0, Math.min(W - w, cx - w / 2))), y: redondo(Math.max(0, Math.min(H - h, cy - h / 2))), w: redondo(w), h: redondo(h) };
+  }
+
+  /** Donde se cortan dos segmentos (o null si no se cortan). */
+  function corte(p1, p2, q1, q2) {
+    const d = (p2.x - p1.x) * (q2.y - q1.y) - (p2.y - p1.y) * (q2.x - q1.x);
+    if (Math.abs(d) < 1e-9) return null;
+    const t = ((q1.x - p1.x) * (q2.y - q1.y) - (q1.y - p1.y) * (q2.x - q1.x)) / d;
+    const u = ((q1.x - p1.x) * (p2.y - p1.y) - (q1.y - p1.y) * (p2.x - p1.x)) / d;
+    return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? { x: p1.x + t * (p2.x - p1.x), y: p1.y + t * (p2.y - p1.y) } : null;
+  }
+
+  /**
+   * Las dudas de la lectura que se aclaran con un recorte (§7.4): un texto que puede ser de dos aristas
+   * (ASOCIACION_AMBIGUA: el recorte lleva las dos marcadas «1» y «2» y el texto encuadrado) y dos aristas que se cruzan
+   * (CRUCE_SIN_NODO: el cruce al centro). `alerta` es su posición en lectura.alertas_ambiguedad.
+   */
+  function ambiguas(lectura, max, enviado) {
+    const W = enviado ? enviado.w : Infinity;
+    const H = enviado ? enviado.h : Infinity;
+    const A = new Map(lectura.red.aristas.map((a) => [a.id, a]));
+    const N = new Map(lectura.red.nodos.map((n) => [n.id, n]));
+    const T = new Map(lectura.red.textos.map((t) => [t.id, t]));
+    const trazo = (aid, k) => ({ etiqueta: String(k + 1), arista: aid, de: N.get(A.get(aid).nodo_a).pos_px, a: N.get(A.get(aid).nodo_b).pos_px });
+    const items = [];
+    (lectura.alertas_ambiguedad || []).forEach((al, i) => {
+      const refs = Array.isArray(al.referencias) ? al.referencias : [];
+      const cands = refs.filter((r) => A.has(r)).slice(0, 2);
+      if (cands.length < 2) return;
+      if (al.codigo === 'ASOCIACION_AMBIGUA') {
+        const t = refs.map((r) => T.get(r)).find(Boolean);
+        if (!t || !(t.bbox_px.w > 0)) return;
+        const lado = Math.max(260, 4 * Math.max(t.bbox_px.w, t.bbox_px.h));
+        items.push({ clase: 'ASOCIACION', alerta: i, texto_id: t.id, contenido_crudo: t.contenido_crudo, candidatas: cands, trazos: cands.map(trazo), caja: { ...t.bbox_px },
+          recorte: cuadro(t.bbox_px.x + t.bbox_px.w / 2, t.bbox_px.y + t.bbox_px.h / 2, lado, lado * 0.75, W, H) });
+      } else if (al.codigo === 'CRUCE_SIN_NODO') {
+        const [a, b] = cands.map((aid) => A.get(aid));
+        const p = corte(N.get(a.nodo_a).pos_px, N.get(a.nodo_b).pos_px, N.get(b.nodo_a).pos_px, N.get(b.nodo_b).pos_px);
+        if (!p) return;
+        items.push({ clase: 'CRUCE', alerta: i, aristas: cands, punto: p, recorte: cuadro(p.x, p.y, 220, 220, W, H) });
+      }
+    });
+    return items.slice(0, Math.max(0, max));
+  }
+
+  /**
+   * Las instrucciones para releer los recortes ampliados (una imagen por pregunta, en orden): textos dudosos (clase TEXTO,
+   * la de dudosos()), textos que pueden ser de dos líneas y cruces (las de ambiguas()).
+   */
   function promptRelectura(items) {
-    const lista = items.map((it, i) => `${i + 1}) ${it.texto_id}: se leyó «${it.contenido_crudo}» como ${it.tipo} con confianza ${it.confianza_ocr}${it.asociado_a ? `, junto a ${it.asociado_a}` : ''}.`).join('\n');
-    return `Estos son recortes ampliados de un croquis unifilar de ductería, uno por texto que se leyó con duda, en este orden:
+    const lista = items.map((it, i) => {
+      if (it.clase === 'ASOCIACION') return `${i + 1}) El texto ${it.texto_id} «${it.contenido_crudo}» (encuadrado en azul): ¿pertenece a la línea marcada 1 (magenta, ${it.candidatas[0]}) o a la marcada 2 (verde, ${it.candidatas[1]})?`;
+      if (it.clase === 'CRUCE') return `${i + 1}) Las líneas ${it.aristas[0]} y ${it.aristas[1]} se cruzan al centro del recorte: ¿se unen ahí (hay un punto, una T o una derivación dibujada) o una pasa por encima de la otra sin unirse?`;
+      return `${i + 1}) ${it.texto_id}: se leyó «${it.contenido_crudo}» como ${it.tipo} con confianza ${it.confianza_ocr}${it.asociado_a ? `, junto a ${it.asociado_a}` : ''}.`;
+    }).join('\n');
+    const hayTexto = items.some((it) => !it.clase || it.clase === 'TEXTO');
+    const formatos = [
+      hayTexto ? '- Texto que se leyó con duda: { "n": 1, "texto_id": "T-0xx", "contenido_crudo": "lo que dice", "contenido_normalizado": "el número solo, como «1.3», o null", "tipo": "DIAMETRO" | "LONGITUD" | "ANGULO" | "CALIBRE" | "ILEGIBLE", "confianza_ocr": 0-1 }' : '',
+      items.some((it) => it.clase === 'ASOCIACION') ? '- Texto entre dos líneas: { "n": 2, "pertenece_a": 1 | 2 | null, "confianza": 0-1 }' : '',
+      items.some((it) => it.clase === 'CRUCE') ? '- Cruce: { "n": 3, "se_unen": true | false | null, "confianza": 0-1 }' : '',
+    ].filter(Boolean).join('\n');
+    return `Estos son recortes ampliados de un croquis unifilar de ductería, uno por duda de la lectura, en este orden:
 ${lista}
 
-En cada recorte, lee el texto que está al CENTRO (cerca puede haber otros textos o líneas del dibujo). Diámetros: «Ø12», «12"»; cotas: «3.0 m», «3000»; ángulos: «45°».
-No adivines: si sigue sin leerse, transcribe lo que veas (con «?» donde no se lee), contenido_normalizado null, tipo ILEGIBLE y confianza menor que 0.5.
+${hayTexto ? 'En los recortes de texto, lee el texto que está al CENTRO (cerca puede haber otros textos o líneas del dibujo). Diámetros: «Ø12», «12"»; cotas: «3.0 m», «3000»; ángulos: «45°». No adivines: si sigue sin leerse, transcribe lo que veas (con «?» donde no se lee), contenido_normalizado null, tipo ILEGIBLE y confianza menor que 0.5.\n' : ''}Si no puedes decidir, responde null con confianza baja.
 
-Responde SÓLO con un arreglo JSON, un objeto por recorte y en el mismo orden:
-[{ "texto_id": "${items[0] ? items[0].texto_id : 'T-001'}", "contenido_crudo": "lo que dice", "contenido_normalizado": "el número solo, como «1.3», o null", "tipo": "DIAMETRO" | "LONGITUD" | "ANGULO" | "CALIBRE" | "ILEGIBLE", "confianza_ocr": 0-1 }]`;
+Responde SÓLO con un arreglo JSON, un objeto por recorte y en el mismo orden, con "n" = su número:
+${formatos}`;
   }
 
   /**
    * Aplica lo releído: un texto sólo cambia si la nueva lectura es más segura, y con él la medida que lo cita (o, si era
    * ilegible, la cota o el diámetro vacíos de la arista a la que está asociado). No muta: devuelve { lectura, cambios }.
    */
-  function aplicarRelectura(lectura0, resultados) {
+  function aplicarRelectura(lectura0, resultados, items) {
     const L = JSON.parse(JSON.stringify(lectura0));
     const cambios = [];
     if (!Array.isArray(resultados)) return { lectura: L, cambios };
     const textos = new Map(L.red.textos.map((t) => [t.id, t]));
-    resultados.filter(esObjeto).forEach((r) => {
-      const t = textos.get(r.texto_id);
+    const A = new Map(L.red.aristas.map((a) => [a.id, a]));
+    const quitar = new Set(); // alertas de la lectura que la re-lectura aclaró
+    resultados.filter(esObjeto).forEach((r, i) => {
+      const it = Array.isArray(items) ? items[(Number.isInteger(r.n) && r.n >= 1 ? r.n : i + 1) - 1] : null;
+      const confR = finito(r.confianza) ? Math.max(0, Math.min(1, r.confianza)) : 0;
+      if (it && it.clase === 'ASOCIACION') {
+        const al = L.alertas_ambiguedad[it.alerta];
+        const k = String(r.pertenece_a);
+        const gana = k === '1' ? it.candidatas[0] : k === '2' ? it.candidatas[1] : null;
+        const t = textos.get(it.texto_id);
+        if (!gana || confR < 0.7 || !t) {
+          if (al) al.mensaje = `${al.mensaje || ''} La re-lectura no lo aclara.`.trim();
+          return;
+        }
+        const pierde = it.candidatas.find((x) => x !== gana);
+        const campo = t.tipo === 'DIAMETRO' ? 'diametro' : t.tipo === 'LONGITUD' ? 'longitud_cota' : null;
+        t.asociado_a = gana;
+        if (campo) {
+          const ap = A.get(pierde);
+          const ag = A.get(gana);
+          if (ap && ap[campo].texto_id === t.id) ap[campo] = { valor: null, unidad: ap[campo].unidad, origen: 'OCR', confianza: 0, texto_id: null };
+          const num = parseFloat(t.contenido_normalizado);
+          if (ag && (ag[campo].valor === null || ag[campo].texto_id === t.id) && finito(num) && num > 0) {
+            ag[campo] = { valor: num, unidad: ag[campo].unidad || (campo === 'diametro' ? 'in' : 'm'), origen: 'OCR', confianza: t.confianza_ocr, texto_id: t.id };
+          }
+        }
+        quitar.add(it.alerta);
+        cambios.push(`${t.id} «${t.contenido_crudo}» va con ${gana}, no con ${pierde} (${confR})`);
+        return;
+      }
+      if (it && it.clase === 'CRUCE') {
+        const al = L.alertas_ambiguedad[it.alerta];
+        if (r.se_unen === false && confR >= 0.7) {
+          quitar.add(it.alerta);
+          cambios.push(`${it.aristas[0]} y ${it.aristas[1]} se cruzan sin unirse (${confR})`);
+        } else if (r.se_unen === true && al) {
+          al.severidad = 'CONFIRMAR';
+          al.mensaje = `${al.mensaje || ''} En la re-lectura parecen unirse: faltaría un nodo en el cruce.`.trim();
+        }
+        return;
+      }
+      const t = textos.get(r.texto_id || (it && it.texto_id));
       const conf = finito(r.confianza_ocr) ? Math.max(0, Math.min(1, r.confianza_ocr)) : 0;
       if (!t || conf <= t.confianza_ocr) return;
       const antes = `«${t.contenido_crudo}» (${t.confianza_ocr})`;
@@ -209,8 +310,39 @@ Responde SÓLO con un arreglo JSON, un objeto por recorte y en el mismo orden:
       }
       cambios.push(`${t.id}: ${antes} → «${t.contenido_crudo}» (${conf})`);
     });
+    if (quitar.size) L.alertas_ambiguedad = L.alertas_ambiguedad.filter((_, i) => !quitar.has(i));
     return { lectura: L, cambios };
   }
 
-  return { planDeImagen, promptLectura, completarLectura, dudosos, promptRelectura, aplicarRelectura, MAX_PX };
+  /** Las instrucciones de la verificación visual (§9): la foto y la misma foto con la lectura dibujada encima. */
+  function promptVerificacion(lectura) {
+    const lineas = lectura.red.aristas.map((a) => `${a.id}: ${a.diametro.valor ? `${a.diametro.valor}″` : 'Ø sin leer'}, ${a.longitud_cota.valor ? `${a.longitud_cota.valor} m` : 'cota sin leer'}`).join('; ');
+    return `Imagen 1: un croquis unifilar de ductería. Imagen 2: el mismo croquis con nuestra lectura dibujada encima en azul: cada línea leída con su identificador, su diámetro y su cota, y cada nodo con un punto.
+La lectura: ${lineas}.
+
+Compara con cuidado la imagen 2 contra el croquis y lista SÓLO las diferencias reales: líneas del croquis que no se leyeron, líneas leídas que no existen, diámetros o cotas que no coinciden con lo escrito, uniones o derivaciones mal puestas, equipos en otro extremo. No repitas lo que coincide.
+
+Responde SÓLO con un arreglo JSON (vacío si todo coincide), a lo más 12 objetos:
+[{ "referencias": ["A-004"], "problema": "qué está mal, en una oración", "sugerencia": "qué debería decir, o null" }]`;
+  }
+
+  /**
+   * Agrega a la lectura lo que encontró la verificación visual como avisos (VERIFICACION_VISUAL, ADVERTENCIA); la lectura no se
+   * cambia: lo decide el ingeniero. Reemplaza los de una verificación anterior. Devuelve { lectura, n }.
+   */
+  function agregarVerificacion(lectura0, diferencias) {
+    const L = JSON.parse(JSON.stringify(lectura0));
+    const ids = new Set([...L.red.nodos, ...L.red.aristas, ...L.red.textos, ...L.equipos].map((x) => x.id));
+    L.alertas_ambiguedad = (L.alertas_ambiguedad || []).filter((a) => a.codigo !== 'VERIFICACION_VISUAL');
+    const nuevas = (Array.isArray(diferencias) ? diferencias : []).filter((d) => esObjeto(d) && typeof d.problema === 'string' && d.problema.trim()).slice(0, 12).map((d) => ({
+      codigo: 'VERIFICACION_VISUAL', severidad: 'ADVERTENCIA',
+      referencias: (Array.isArray(d.referencias) ? d.referencias : []).filter((r) => typeof r === 'string' && ids.has(r)).slice(0, 6),
+      mensaje: d.problema.trim().slice(0, 300), decision_tomada: 'Lo señaló la revisión visual de Claude; la lectura no se cambió: corríjala si es así.',
+      pregunta: typeof d.sugerencia === 'string' && d.sugerencia.trim() ? d.sugerencia.trim().slice(0, 300) : null,
+    }));
+    L.alertas_ambiguedad.push(...nuevas);
+    return { lectura: L, n: nuevas.length };
+  }
+
+  return { planDeImagen, promptLectura, completarLectura, dudosos, ambiguas, promptRelectura, aplicarRelectura, promptVerificacion, agregarVerificacion, MAX_PX };
 }));

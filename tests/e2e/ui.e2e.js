@@ -2326,16 +2326,18 @@ const ok = (cond, msg) => {
     await p.context().close();
   }
 
-  console.log('33) Leer la foto del croquis con Claude (capacidad sample simulada): lectura, re-lectura de lo dudoso y dibujo sobre la foto');
+  console.log('33) Leer la foto del croquis con Claude (capacidad sample simulada): preparar la foto, leerla, releer las dudas, dibujarla y revisarla');
   {
-    // un window.claude de mentira con `sample`: devuelve la lectura del ejemplo llevada al tamaño de la hoja enviada
+    // un window.claude de mentira con `sample`: devuelve la lectura del ejemplo llevada al tamaño de la hoja enviada, con
+    // «3.6 m» puesto en la línea equivocada y la duda anotada; relee y verifica según lo que se le pide
     const conSample = (ctx) => ctx.addInitScript(() => {
       window.__llamadas = [];
       window.__modoSample = 'normal';
       const json = async (input, opts) => {
         const imgs = [].concat(opts.images || []);
         const dims = await Promise.all(imgs.map(async (b) => { const x = await createImageBitmap(b); return [x.width, x.height]; }));
-        window.__llamadas.push({ relee: /recortes ampliados/.test(input), imagenes: imgs.length, dims, tier: opts.modelTier });
+        const tipo = /Compara con cuidado/.test(input) ? 'verifica' : /recortes ampliados/.test(input) ? 'relee' : 'lee';
+        window.__llamadas.push({ tipo, imagenes: imgs.length, dims, tier: opts.modelTier });
         const modo = window.__modoSample;
         if (modo === 'lento') {
           await new Promise((ok, no) => {
@@ -2345,9 +2347,13 @@ const ok = (cond, msg) => {
         }
         if (modo === 'not_granted') throw { code: 'not_granted', message: 'no' };
         if (modo === 'invalid_json') throw { code: 'invalid_json', message: 'no', text: 'Aquí va la lectura: {"red": ' };
-        if (/recortes ampliados/.test(input)) {
-          return [{ texto_id: 'T-011', contenido_crudo: '1.6 m', contenido_normalizado: '1.6', tipo: 'LONGITUD', confianza_ocr: 0.86 },
-            { texto_id: 'T-010', contenido_crudo: '5"', contenido_normalizado: '5', tipo: 'DIAMETRO', confianza_ocr: 0.8 }];
+        if (tipo === 'verifica') return [{ referencias: ['A-007'], problema: 'La cota de A-007 dice 2.6 m, no 2.5 m.', sugerencia: '2.6 m' }];
+        if (tipo === 'relee') {
+          return [...input.matchAll(/^(\d+)\) (.+)$/gm)].map(([, n, linea]) => {
+            if (/pertenece a la línea/.test(linea)) return { n: Number(n), pertenece_a: 2, confianza: 0.9 };
+            if (/T-011/.test(linea)) return { n: Number(n), texto_id: 'T-011', contenido_crudo: '1.6 m', contenido_normalizado: '1.6', tipo: 'LONGITUD', confianza_ocr: 0.86 };
+            return { n: Number(n), texto_id: 'T-010', contenido_crudo: '5"', contenido_normalizado: '5', tipo: 'DIAMETRO', confianza_ocr: 0.8 };
+          });
         }
         if (opts.onText) opts.onText({ text: '{"version":"1.0"', delta: '{"version":"1.0"' });
         const W = Number(/la hoja completa, (\d+) ×/.exec(input)[1]);
@@ -2355,6 +2361,12 @@ const ok = (cond, msg) => {
         const L = JSON.parse(JSON.stringify(window.COTIZAP.unifilarEjemplo));
         L.red.nodos.forEach((n) => { n.pos_px = { x: n.pos_px.x * k, y: n.pos_px.y * k }; });
         L.red.textos.forEach((t) => { t.bbox_px = { x: t.bbox_px.x * k, y: t.bbox_px.y * k, w: t.bbox_px.w * k, h: t.bbox_px.h * k }; });
+        const a4 = L.red.aristas.find((a) => a.id === 'A-004');
+        const a5 = L.red.aristas.find((a) => a.id === 'A-005');
+        a5.longitud_cota = { ...a4.longitud_cota };
+        a4.longitud_cota = { valor: null, unidad: 'm', origen: 'OCR', confianza: 0, texto_id: null };
+        L.red.textos.find((t) => t.id === 'T-009').asociado_a = 'A-005';
+        L.alertas_ambiguedad = [{ codigo: 'ASOCIACION_AMBIGUA', severidad: 'CONFIRMAR', referencias: ['T-009', 'A-005', 'A-004'], mensaje: '«3.6 m» queda entre dos líneas.' }];
         delete L.metadatos.fuente;
         return L;
       };
@@ -2382,32 +2394,54 @@ const ok = (cond, msg) => {
       return c.toDataURL('image/png').split(',')[1];
     }), 'base64');
     const subir = () => p.setInputFiles('#uf-foto', { name: 'croquis.png', mimeType: 'image/png', buffer: png });
+    const leerFoto = async () => { await subir(); await p.waitForSelector('#uf-leer-foto'); await p.click('#uf-leer-foto'); };
     await p.click('#btn-nueva');
     await p.click('#btn-unifilar');
     await p.waitForSelector('#uf-foto', { state: 'attached' });
     ok(/Leer la foto del croquis/i.test(await p.locator('.uf-foto').innerText()), 'en la página publicada se ofrece leer la foto');
     await subir();
+    await p.waitForSelector('#uf-leer-foto');
+    ok(await R(() => window.__llamadas.length) === 0, 'escoger la foto no gasta nada: primero se prepara');
+    ok(await p.isChecked('#uf-limpiar') && !(await p.isChecked('#uf-enderezar')) && /3000 × 2250 px de trabajo/.test(await p.locator('.uf-foto-prep').innerText()), '«Limpiar» viene marcado; la foto se trabaja a 3000 × 2250 px');
+    await p.check('#uf-enderezar');
+    ok(await p.locator('.uf-prep-punto').count() === 4, 'al enderezar aparecen las cuatro esquinas de la hoja');
+    const antes = await p.locator('.uf-prep-punto').first().getAttribute('cx');
+    await p.locator('.uf-prep-punto').first().focus();
+    await p.keyboard.press('ArrowRight');
+    ok(Number(await p.locator('.uf-prep-punto').first().getAttribute('cx')) > Number(antes), 'una esquina se mueve con las flechas (o arrastrándola)');
+    await p.click('#uf-previa');
+    ok(await p.locator('#uf-previa').innerText() === 'Ver la foto original' && await p.locator('.uf-prep-punto').count() === 0, '«Ver cómo queda» muestra la hoja enderezada y limpia');
+    await p.click('#uf-previa');
+    await p.uncheck('#uf-enderezar');
+    await p.click('#uf-leer-foto');
     await p.waitForSelector('.uf-preguntas', { timeout: 20000 });
     const ll = await R(() => window.__llamadas);
-    ok(ll.length === 2 && !ll[0].relee && ll[0].imagenes === 5 && ll[0].tier === 'complex', 'una llamada con la hoja y 4 recortes (modelo más capaz)');
+    ok(ll.length === 2 && ll[0].tipo === 'lee' && ll[0].imagenes === 5 && ll[0].tier === 'complex', 'una llamada con la hoja y 4 recortes (modelo más capaz)');
     ok(JSON.stringify(ll[0].dims[0]) === '[1238,928]' && ll[0].dims.every(([w, h]) => w * h <= 1150000), 'la hoja va a 1238 × 928 px y ninguna imagen pasa de 1.15 MP');
-    ok(ll[1].relee && ll[1].imagenes === 2, 'y otra que relee los 2 textos dudosos en recortes ampliados');
-    ok(/T-011: «1\.\? m» \(0\.41\) → «1\.6 m» \(0\.86\)/.test(await p.locator('.uf-nota-lectura').innerText()), 'dice qué se releyó: la cota «1.? m» ahora se lee 1.6 m');
-    ok(await p.locator('.uf-preguntas .uf-alerta').count() === 3 && await p.locator('.uf-preguntas [data-codigo="COTA_ILEGIBLE"]').count() === 0, 'la cota ya no se pregunta: quedan 3 preguntas');
+    ok(ll[1].tipo === 'relee' && ll[1].imagenes === 3, 'y otra que relee 3 dudas en recortes ampliados: la cota entre dos líneas y 2 textos');
+    const nota = await p.locator('.uf-nota-lectura').innerText();
+    ok(/T-009 «3\.6 m» va con A-004, no con A-005/.test(nota) && /T-011: «1\.\? m» \(0\.41\) → «1\.6 m» \(0\.86\)/.test(nota), 'dice qué se releyó: «3.6 m» era de A-004 y «1.? m» es 1.6 m');
+    ok(await p.locator('[data-codigo="ASOCIACION_AMBIGUA"]').count() === 0 && await p.locator('.uf-preguntas .uf-alerta').count() === 3, 'la duda ya no se pregunta: quedan 3 preguntas');
     ok(await p.locator('.uf-g-dibujo[open] .uf-dibujo-foto canvas').count() === 1 && await p.locator('.uf-dibujo svg line').count() === 8, 'la lectura se dibuja sobre la foto: 8 aristas');
-    ok(/A-005 · 5″ · 1\.6 m/.test(await p.locator('.uf-dibujo svg').textContent()), 'cada arista con su diámetro y su cota');
+    ok(/A-005 · 5″ · 1\.6 m/.test(await p.locator('.uf-dibujo svg').textContent()) && /A-004 · 10″ · 3\.6 m/.test(await p.locator('.uf-dibujo svg').textContent()), 'cada arista con su diámetro y su cota');
+    // la revisión visual: Claude compara la foto con la lectura dibujada; lo que encuentra queda en «Avisos»
+    await p.click('#uf-verificar');
+    await p.waitForSelector('[data-codigo="VERIFICACION_VISUAL"]', { state: 'attached' });
+    const lv = (await R(() => window.__llamadas)).slice(-1)[0];
+    ok(lv.tipo === 'verifica' && lv.imagenes === 2, 'manda la foto limpia y la foto con la lectura encima');
+    ok(/encontró 1 diferencia/.test(await p.locator('.uf-nota-lectura').innerText()) && /La cota de A-007 dice 2\.6 m/.test(await p.locator('[data-codigo="VERIFICACION_VISUAL"]').innerText()), 'la diferencia queda como aviso, con lo que sugiere');
     await p.click('#uf-agregar');
     ok(await R(() => window.COTIZAP.web.estadoApp.cot.partidas.find((x) => x.unifilar_id === 'DUCT-005').L_mm) === 1250, 'las partidas salen de lo leído: el tramo de 5″ con 1.6 m queda en 1 250 mm');
 
-    // errores: JSON que no sirve, permiso negado y detener a medias
+    // errores: JSON que no sirve, detener a medias y permiso negado
     await p.click('#aviso-unifilar-abrir');
     await p.click('#uf-otra');
     await R(() => { window.__modoSample = 'invalid_json'; });
-    await subir();
+    await leerFoto();
     await p.waitForSelector('.uf-errores');
     ok(/no salió en el formato esperado/.test(await p.locator('.uf-errores').innerText()) && /Aquí va la lectura/.test(await p.inputValue('#uf-texto')), 'si no sale JSON, lo dice y deja el texto para revisarlo');
     await R(() => { window.__modoSample = 'lento'; });
-    await subir();
+    await leerFoto();
     await p.waitForSelector('#uf-detener');
     const leyendo = await p.waitForFunction(() => /Claude está leyendo el croquis/.test((document.querySelector('.uf-progreso') || {}).innerText || ''), null, { timeout: 5000 }).then(() => true, () => false);
     ok(leyendo, 'mientras lee, dice qué está haciendo');
@@ -2415,7 +2449,7 @@ const ok = (cond, msg) => {
     await p.waitForSelector('#uf-foto', { state: 'attached' });
     ok(await p.locator('.uf-errores').count() === 0, '«Detener» vuelve al inicio sin error');
     await R(() => { window.__modoSample = 'not_granted'; });
-    await subir();
+    await leerFoto();
     await p.waitForSelector('.uf-errores');
     ok(/no puede pedirle a Claude/.test(await p.locator('.uf-errores').innerText()) && await p.locator('#uf-foto').count() === 0, 'sin permiso, se deja de ofrecer leer la foto');
     ok(await R(() => window.COTIZAP.web.estadoApp.cot.partidas.filter((x) => x.unifilar_id).length) === 22, 'nada de eso tocó las partidas ya importadas');

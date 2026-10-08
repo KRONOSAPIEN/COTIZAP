@@ -39,7 +39,7 @@
   const SNAP_DEG = 7.5;
   const NETA_MIN_MM = 150;
   // Alertas que sólo puede ver la etapa de visión: si la lectura las trae, se conservan
-  const ALERTAS_DE_LECTURA = ['ASOCIACION_AMBIGUA', 'TRAZO_SIN_CONECTAR', 'CRUCE_SIN_NODO'];
+  const ALERTAS_DE_LECTURA = ['ASOCIACION_AMBIGUA', 'TRAZO_SIN_CONECTAR', 'CRUCE_SIN_NODO', 'VERIFICACION_VISUAL'];
   // Lo que una regla puso en un despiece anterior: al volver a leerlo se descarta y se vuelve a calcular
   const ORIGENES_DE_REGLA = ['INFERIDO', 'ESCALA', 'DEFECTO_TALLER'];
   /** Lo que el ingeniero puede contestar: respuestas[elemento][campo]. */

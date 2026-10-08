@@ -1,0 +1,796 @@
+{
+ "version": "1.0",
+ "metadatos": {
+  "fuente": {
+   "archivo": "croquis-unifilar.jpg",
+   "ancho_px": 4032,
+   "alto_px": 3024,
+   "ancho_enviado_px": 2576,
+   "alto_enviado_px": 1932,
+   "recortes": [
+    {
+     "id": "R-01",
+     "x": 0,
+     "y": 0,
+     "w": 1400,
+     "h": 1932,
+     "motivo": "subida y derivación de 6″"
+    },
+    {
+     "id": "R-02",
+     "x": 1176,
+     "y": 0,
+     "w": 1400,
+     "h": 1932,
+     "motivo": "derivación de 5″, reducción y campana"
+    }
+   ]
+  },
+  "vista": "ISOMETRICO",
+  "unidades_diametro": "IN",
+  "unidades_longitud": "M",
+  "convencion_cotas": "EJES",
+  "flujo_hacia": "EQ-01",
+  "material": {
+   "valor": "GALVANIZADO",
+   "unidad": null,
+   "origen": "OCR",
+   "confianza": 0.93,
+   "texto_id": "T-023"
+  },
+  "calibre": {
+   "valor": 22,
+   "unidad": null,
+   "origen": "OCR",
+   "confianza": 0.93,
+   "texto_id": "T-023"
+  },
+  "yarda_mm": 914.4,
+  "modelo": "claude-opus-5-5",
+  "fecha": "2026-10-08T12:00:00Z"
+ },
+ "red": {
+  "nodos": [
+   {
+    "id": "N-001",
+    "tipo": "EXTREMO",
+    "grado": 1,
+    "pos_px": {
+     "x": 420,
+     "y": 1850
+    },
+    "aristas": [
+     "A-001"
+    ],
+    "equipo_id": "EQ-01",
+    "accesorio_id": null,
+    "confianza": 0.97
+   },
+   {
+    "id": "N-002",
+    "tipo": "VERTICE",
+    "grado": 2,
+    "pos_px": {
+     "x": 420,
+     "y": 1420
+    },
+    "aristas": [
+     "A-001",
+     "A-002"
+    ],
+    "equipo_id": null,
+    "accesorio_id": null,
+    "confianza": 0.95
+   },
+   {
+    "id": "N-003",
+    "tipo": "DERIVACION",
+    "grado": 3,
+    "pos_px": {
+     "x": 1080,
+     "y": 1040
+    },
+    "aristas": [
+     "A-002",
+     "A-003",
+     "A-004"
+    ],
+    "equipo_id": null,
+    "accesorio_id": null,
+    "confianza": 0.93
+   },
+   {
+    "id": "N-004",
+    "tipo": "EXTREMO",
+    "grado": 1,
+    "pos_px": {
+     "x": 1000,
+     "y": 1250
+    },
+    "aristas": [
+     "A-003"
+    ],
+    "equipo_id": "EQ-02",
+    "accesorio_id": null,
+    "confianza": 0.92
+   },
+   {
+    "id": "N-005",
+    "tipo": "DERIVACION",
+    "grado": 3,
+    "pos_px": {
+     "x": 1610,
+     "y": 735
+    },
+    "aristas": [
+     "A-004",
+     "A-005",
+     "A-006"
+    ],
+    "equipo_id": null,
+    "accesorio_id": null,
+    "confianza": 0.9
+   },
+   {
+    "id": "N-006",
+    "tipo": "EXTREMO",
+    "grado": 1,
+    "pos_px": {
+     "x": 1420,
+     "y": 845
+    },
+    "aristas": [
+     "A-005"
+    ],
+    "equipo_id": "EQ-03",
+    "accesorio_id": null,
+    "confianza": 0.9
+   },
+   {
+    "id": "N-007",
+    "tipo": "UNION_COLINEAL",
+    "grado": 2,
+    "pos_px": {
+     "x": 1905,
+     "y": 565
+    },
+    "aristas": [
+     "A-006",
+     "A-007"
+    ],
+    "equipo_id": null,
+    "accesorio_id": null,
+    "confianza": 0.88
+   },
+   {
+    "id": "N-008",
+    "tipo": "VERTICE",
+    "grado": 2,
+    "pos_px": {
+     "x": 2270,
+     "y": 355
+    },
+    "aristas": [
+     "A-007",
+     "A-008"
+    ],
+    "equipo_id": null,
+    "accesorio_id": null,
+    "confianza": 0.91
+   },
+   {
+    "id": "N-009",
+    "tipo": "EXTREMO",
+    "grado": 1,
+    "pos_px": {
+     "x": 2270,
+     "y": 655
+    },
+    "aristas": [
+     "A-008"
+    ],
+    "equipo_id": "EQ-04",
+    "accesorio_id": null,
+    "confianza": 0.94
+   }
+  ],
+  "aristas": [
+   {
+    "id": "A-001",
+    "nodo_a": "N-001",
+    "nodo_b": "N-002",
+    "orientacion_pantalla": "VERTICAL",
+    "eje_iso": "Z",
+    "angulo_pantalla_deg": 90,
+    "diametro": {
+     "valor": 12,
+     "unidad": "in",
+     "origen": "OCR",
+     "confianza": 0.96,
+     "texto_id": "T-001"
+    },
+    "longitud_cota": {
+     "valor": 3,
+     "unidad": "m",
+     "origen": "OCR",
+     "confianza": 0.94,
+     "texto_id": "T-002"
+    },
+    "ducto_id": null
+   },
+   {
+    "id": "A-002",
+    "nodo_a": "N-002",
+    "nodo_b": "N-003",
+    "orientacion_pantalla": "INCLINADA",
+    "eje_iso": "X",
+    "angulo_pantalla_deg": 30,
+    "diametro": {
+     "valor": 12,
+     "unidad": "in",
+     "origen": "OCR",
+     "confianza": 0.91,
+     "texto_id": "T-003"
+    },
+    "longitud_cota": {
+     "valor": 4.5,
+     "unidad": "m",
+     "origen": "OCR",
+     "confianza": 0.95,
+     "texto_id": "T-004"
+    },
+    "ducto_id": null
+   },
+   {
+    "id": "A-003",
+    "nodo_a": "N-003",
+    "nodo_b": "N-004",
+    "orientacion_pantalla": "INCLINADA",
+    "eje_iso": "NINGUNO",
+    "angulo_pantalla_deg": 249,
+    "diametro": {
+     "valor": 6,
+     "unidad": "in",
+     "origen": "OCR",
+     "confianza": 0.97,
+     "texto_id": "T-005"
+    },
+    "longitud_cota": {
+     "valor": 1.8,
+     "unidad": "m",
+     "origen": "OCR",
+     "confianza": 0.9,
+     "texto_id": "T-006"
+    },
+    "ducto_id": null
+   },
+   {
+    "id": "A-004",
+    "nodo_a": "N-003",
+    "nodo_b": "N-005",
+    "orientacion_pantalla": "INCLINADA",
+    "eje_iso": "X",
+    "angulo_pantalla_deg": 30,
+    "diametro": {
+     "valor": 10,
+     "unidad": "in",
+     "origen": "OCR",
+     "confianza": 0.95,
+     "texto_id": "T-008"
+    },
+    "longitud_cota": {
+     "valor": 3.6,
+     "unidad": "m",
+     "origen": "OCR",
+     "confianza": 0.92,
+     "texto_id": "T-009"
+    },
+    "ducto_id": null
+   },
+   {
+    "id": "A-005",
+    "nodo_a": "N-005",
+    "nodo_b": "N-006",
+    "orientacion_pantalla": "INCLINADA",
+    "eje_iso": "Y",
+    "angulo_pantalla_deg": 150,
+    "diametro": {
+     "valor": 5,
+     "unidad": "in",
+     "origen": "OCR",
+     "confianza": 0.88,
+     "texto_id": "T-010"
+    },
+    "longitud_cota": {
+     "valor": null,
+     "unidad": "m",
+     "origen": "OCR",
+     "confianza": 0.41,
+     "texto_id": "T-011"
+    },
+    "ducto_id": null
+   },
+   {
+    "id": "A-006",
+    "nodo_a": "N-005",
+    "nodo_b": "N-007",
+    "orientacion_pantalla": "INCLINADA",
+    "eje_iso": "X",
+    "angulo_pantalla_deg": 30,
+    "diametro": {
+     "valor": null,
+     "unidad": "in",
+     "origen": "OCR",
+     "confianza": 0,
+     "texto_id": null
+    },
+    "longitud_cota": {
+     "valor": 2,
+     "unidad": "m",
+     "origen": "OCR",
+     "confianza": 0.9,
+     "texto_id": "T-012"
+    },
+    "ducto_id": null
+   },
+   {
+    "id": "A-007",
+    "nodo_a": "N-007",
+    "nodo_b": "N-008",
+    "orientacion_pantalla": "INCLINADA",
+    "eje_iso": "X",
+    "angulo_pantalla_deg": 30,
+    "diametro": {
+     "valor": 8,
+     "unidad": "in",
+     "origen": "OCR",
+     "confianza": 0.94,
+     "texto_id": "T-013"
+    },
+    "longitud_cota": {
+     "valor": 2.5,
+     "unidad": "m",
+     "origen": "OCR",
+     "confianza": 0.93,
+     "texto_id": "T-014"
+    },
+    "ducto_id": null
+   },
+   {
+    "id": "A-008",
+    "nodo_a": "N-008",
+    "nodo_b": "N-009",
+    "orientacion_pantalla": "VERTICAL",
+    "eje_iso": "Z",
+    "angulo_pantalla_deg": 270,
+    "diametro": {
+     "valor": null,
+     "unidad": "in",
+     "origen": "OCR",
+     "confianza": 0,
+     "texto_id": null
+    },
+    "longitud_cota": {
+     "valor": 1.5,
+     "unidad": "m",
+     "origen": "OCR",
+     "confianza": 0.92,
+     "texto_id": "T-015"
+    },
+    "ducto_id": null
+   }
+  ],
+  "textos": [
+   {
+    "id": "T-001",
+    "contenido_crudo": "Ø12\"",
+    "contenido_normalizado": "12",
+    "tipo": "DIAMETRO",
+    "bbox_px": {
+     "x": 380,
+     "y": 1560,
+     "w": 92,
+     "h": 40
+    },
+    "confianza_ocr": 0.96,
+    "asociado_a": "A-001"
+   },
+   {
+    "id": "T-002",
+    "contenido_crudo": "L=3.0m",
+    "contenido_normalizado": "3.0",
+    "tipo": "LONGITUD",
+    "bbox_px": {
+     "x": 300,
+     "y": 1630,
+     "w": 120,
+     "h": 38
+    },
+    "confianza_ocr": 0.94,
+    "asociado_a": "A-001"
+   },
+   {
+    "id": "T-003",
+    "contenido_crudo": "12\"",
+    "contenido_normalizado": "12",
+    "tipo": "DIAMETRO",
+    "bbox_px": {
+     "x": 700,
+     "y": 1180,
+     "w": 70,
+     "h": 36
+    },
+    "confianza_ocr": 0.91,
+    "asociado_a": "A-002"
+   },
+   {
+    "id": "T-004",
+    "contenido_crudo": "4.5 m",
+    "contenido_normalizado": "4.5",
+    "tipo": "LONGITUD",
+    "bbox_px": {
+     "x": 760,
+     "y": 1300,
+     "w": 96,
+     "h": 36
+    },
+    "confianza_ocr": 0.95,
+    "asociado_a": "A-002"
+   },
+   {
+    "id": "T-005",
+    "contenido_crudo": "Ø6",
+    "contenido_normalizado": "6",
+    "tipo": "DIAMETRO",
+    "bbox_px": {
+     "x": 960,
+     "y": 1150,
+     "w": 60,
+     "h": 34
+    },
+    "confianza_ocr": 0.97,
+    "asociado_a": "A-003"
+   },
+   {
+    "id": "T-006",
+    "contenido_crudo": "1.8m",
+    "contenido_normalizado": "1.8",
+    "tipo": "LONGITUD",
+    "bbox_px": {
+     "x": 890,
+     "y": 1230,
+     "w": 80,
+     "h": 34
+    },
+    "confianza_ocr": 0.9,
+    "asociado_a": "A-003"
+   },
+   {
+    "id": "T-007",
+    "contenido_crudo": "45°",
+    "contenido_normalizado": "45",
+    "tipo": "ANGULO",
+    "bbox_px": {
+     "x": 1110,
+     "y": 1090,
+     "w": 58,
+     "h": 32
+    },
+    "confianza_ocr": 0.93,
+    "asociado_a": "N-003"
+   },
+   {
+    "id": "T-008",
+    "contenido_crudo": "Ø10\"",
+    "contenido_normalizado": "10",
+    "tipo": "DIAMETRO",
+    "bbox_px": {
+     "x": 1300,
+     "y": 830,
+     "w": 88,
+     "h": 38
+    },
+    "confianza_ocr": 0.95,
+    "asociado_a": "A-004"
+   },
+   {
+    "id": "T-009",
+    "contenido_crudo": "3.6 m",
+    "contenido_normalizado": "3.6",
+    "tipo": "LONGITUD",
+    "bbox_px": {
+     "x": 1350,
+     "y": 950,
+     "w": 96,
+     "h": 36
+    },
+    "confianza_ocr": 0.92,
+    "asociado_a": "A-004"
+   },
+   {
+    "id": "T-010",
+    "contenido_crudo": "5\"",
+    "contenido_normalizado": "5",
+    "tipo": "DIAMETRO",
+    "bbox_px": {
+     "x": 1500,
+     "y": 760,
+     "w": 46,
+     "h": 34
+    },
+    "confianza_ocr": 0.88,
+    "asociado_a": "A-005"
+   },
+   {
+    "id": "T-011",
+    "contenido_crudo": "1.? m",
+    "contenido_normalizado": null,
+    "tipo": "ILEGIBLE",
+    "bbox_px": {
+     "x": 1470,
+     "y": 830,
+     "w": 86,
+     "h": 36
+    },
+    "confianza_ocr": 0.41,
+    "asociado_a": "A-005"
+   },
+   {
+    "id": "T-012",
+    "contenido_crudo": "2.0 m",
+    "contenido_normalizado": "2.0",
+    "tipo": "LONGITUD",
+    "bbox_px": {
+     "x": 1740,
+     "y": 700,
+     "w": 96,
+     "h": 36
+    },
+    "confianza_ocr": 0.9,
+    "asociado_a": "A-006"
+   },
+   {
+    "id": "T-013",
+    "contenido_crudo": "Ø8\"",
+    "contenido_normalizado": "8",
+    "tipo": "DIAMETRO",
+    "bbox_px": {
+     "x": 2050,
+     "y": 420,
+     "w": 80,
+     "h": 38
+    },
+    "confianza_ocr": 0.94,
+    "asociado_a": "A-007"
+   },
+   {
+    "id": "T-014",
+    "contenido_crudo": "2.5m",
+    "contenido_normalizado": "2.5",
+    "tipo": "LONGITUD",
+    "bbox_px": {
+     "x": 2100,
+     "y": 520,
+     "w": 86,
+     "h": 36
+    },
+    "confianza_ocr": 0.93,
+    "asociado_a": "A-007"
+   },
+   {
+    "id": "T-015",
+    "contenido_crudo": "1.5 m",
+    "contenido_normalizado": "1.5",
+    "tipo": "LONGITUD",
+    "bbox_px": {
+     "x": 2300,
+     "y": 500,
+     "w": 96,
+     "h": 36
+    },
+    "confianza_ocr": 0.92,
+    "asociado_a": "A-008"
+   },
+   {
+    "id": "T-016",
+    "contenido_crudo": "45°",
+    "contenido_normalizado": "45",
+    "tipo": "ANGULO",
+    "bbox_px": {
+     "x": 2310,
+     "y": 330,
+     "w": 58,
+     "h": 32
+    },
+    "confianza_ocr": 0.9,
+    "asociado_a": "N-008"
+   },
+   {
+    "id": "T-017",
+    "contenido_crudo": "COLECTOR",
+    "contenido_normalizado": "COLECTOR",
+    "tipo": "EQUIPO",
+    "bbox_px": {
+     "x": 330,
+     "y": 1900,
+     "w": 170,
+     "h": 40
+    },
+    "confianza_ocr": 0.97,
+    "asociado_a": "EQ-01"
+   },
+   {
+    "id": "T-018",
+    "contenido_crudo": "MAQ. A",
+    "contenido_normalizado": "MAQUINA",
+    "tipo": "EQUIPO",
+    "bbox_px": {
+     "x": 930,
+     "y": 1300,
+     "w": 120,
+     "h": 38
+    },
+    "confianza_ocr": 0.92,
+    "asociado_a": "EQ-02"
+   },
+   {
+    "id": "T-019",
+    "contenido_crudo": "MANG 6\"",
+    "contenido_normalizado": "MANGUERA 6",
+    "tipo": "NOTA",
+    "bbox_px": {
+     "x": 930,
+     "y": 1345,
+     "w": 130,
+     "h": 36
+    },
+    "confianza_ocr": 0.89,
+    "asociado_a": "EQ-02"
+   },
+   {
+    "id": "T-020",
+    "contenido_crudo": "MAQ. B",
+    "contenido_normalizado": "MAQUINA",
+    "tipo": "EQUIPO",
+    "bbox_px": {
+     "x": 1300,
+     "y": 880,
+     "w": 120,
+     "h": 38
+    },
+    "confianza_ocr": 0.91,
+    "asociado_a": "EQ-03"
+   },
+   {
+    "id": "T-021",
+    "contenido_crudo": "MANG 5\"",
+    "contenido_normalizado": "MANGUERA 5",
+    "tipo": "NOTA",
+    "bbox_px": {
+     "x": 1300,
+     "y": 925,
+     "w": 130,
+     "h": 36
+    },
+    "confianza_ocr": 0.87,
+    "asociado_a": "EQ-03"
+   },
+   {
+    "id": "T-022",
+    "contenido_crudo": "CAMPANA",
+    "contenido_normalizado": "CAMPANA",
+    "tipo": "EQUIPO",
+    "bbox_px": {
+     "x": 2220,
+     "y": 700,
+     "w": 150,
+     "h": 40
+    },
+    "confianza_ocr": 0.95,
+    "asociado_a": "EQ-04"
+   },
+   {
+    "id": "T-023",
+    "contenido_crudo": "GALV CAL 22",
+    "contenido_normalizado": "GALVANIZADO 22",
+    "tipo": "CALIBRE",
+    "bbox_px": {
+     "x": 120,
+     "y": 120,
+     "w": 230,
+     "h": 44
+    },
+    "confianza_ocr": 0.93,
+    "asociado_a": null
+   },
+   {
+    "id": "T-024",
+    "contenido_crudo": "x",
+    "contenido_normalizado": null,
+    "tipo": "ILEGIBLE",
+    "bbox_px": {
+     "x": 1820,
+     "y": 1500,
+     "w": 22,
+     "h": 22
+    },
+    "confianza_ocr": 0.3,
+    "asociado_a": null
+   },
+   {
+    "id": "T-025",
+    "contenido_crudo": "8.1 m",
+    "contenido_normalizado": "8.1",
+    "tipo": "LONGITUD",
+    "bbox_px": {
+     "x": 1700,
+     "y": 470,
+     "w": 96,
+     "h": 36
+    },
+    "confianza_ocr": 0.9,
+    "asociado_a": "CT-001"
+   }
+  ],
+  "cotas_totales": [
+   {
+    "id": "CT-001",
+    "aristas": [
+     "A-004",
+     "A-006",
+     "A-007"
+    ],
+    "longitud": {
+     "valor": 8.1,
+     "unidad": "m",
+     "origen": "OCR",
+     "confianza": 0.9,
+     "texto_id": "T-025"
+    }
+   }
+  ]
+ },
+ "equipos": [
+  {
+   "id": "EQ-01",
+   "tipo": "COLECTOR",
+   "nombre": "Colector de polvo",
+   "nodo_id": "N-001",
+   "conexion": "BRIDA_EQUIPO",
+   "texto_id": "T-017",
+   "confianza": 0.97,
+   "boca_diametro": null
+  },
+  {
+   "id": "EQ-02",
+   "tipo": "MAQUINA",
+   "nombre": "Máquina A",
+   "nodo_id": "N-004",
+   "conexion": "MANGUERA",
+   "texto_id": "T-018",
+   "confianza": 0.92,
+   "boca_diametro": null
+  },
+  {
+   "id": "EQ-03",
+   "tipo": "MAQUINA",
+   "nombre": "Máquina B",
+   "nodo_id": "N-006",
+   "conexion": "MANGUERA",
+   "texto_id": "T-020",
+   "confianza": 0.91,
+   "boca_diametro": null
+  },
+  {
+   "id": "EQ-04",
+   "tipo": "CAMPANA",
+   "nombre": "Campana",
+   "nodo_id": "N-009",
+   "conexion": "BRIDA_TALLER",
+   "texto_id": "T-022",
+   "confianza": 0.95,
+   "boca_diametro": null
+  }
+ ],
+ "alertas_ambiguedad": []
+}

@@ -12,6 +12,7 @@
     "test:e2e": "node tests/e2e/ui.e2e.js",
     "construir": "node scripts/construir.js",
     "construir:fragmento": "node scripts/construir.js --fragmento",
-    "caso:unifilar": "node scripts/caso-unifilar.js"
+    "caso:unifilar": "node scripts/caso-unifilar.js",
+    "evaluar:unifilares": "node scripts/evaluar-unifilares.js"
   }
 }

@@ -23,14 +23,24 @@
   const E = () => W.estadoApp;
   const UF = () => C.unifilar;
   const V = () => C.unifilarVision;
+  const IMG = () => C.imagen;
+  const MAX_TRABAJO = 3000; // lado mayor con que se prepara la foto (los recortes que se mandan no piden más)
   const MAX_TEXTO = 5e6; // caracteres: una lectura real pesa decenas de kB
   const NS = 'http://www.w3.org/2000/svg';
+  /** Un elemento SVG con sus atributos e hijos. */
+  const svg = (tag, attrs, ...hijos) => {
+    const el = document.createElementNS(NS, tag);
+    Object.keys(attrs || {}).forEach((k) => el.setAttribute(k, attrs[k]));
+    hijos.forEach((c) => el.append(c && c.nodeType ? c : document.createTextNode(String(c))));
+    return el;
+  };
+
 
   const SEVERIDAD = { BLOQUEANTE: 'Bloquea', CONFIRMAR: 'Por confirmar', ADVERTENCIA: 'Aviso', INFO: 'Nota' };
   const CODIGO = {
     COTA_ILEGIBLE: 'Cota ilegible', COTA_FALTANTE: 'Cota faltante', DIAMETRO_FALTANTE: 'Diámetro faltante', DIAMETRO_INFERIDO: 'Diámetro heredado',
     DIAMETRO_INCONSISTENTE: 'Diámetro dudoso', ANGULO_INFERIDO: 'Ángulo del codo', ANGULO_NO_PERMITIDO: 'Ángulo del codo', ANGULO_DERIVACION_NO_PERMITIDO: 'Ángulo del injerto',
-    DERIVACION_CONTRA_FLUJO: 'Contra el flujo', ORIENTACION_AMBIGUA: 'Orientación', TRANSICION_INSERTADA: 'Reducción insertada', ACCESORIOS_ENCIMADOS: 'Accesorios encimados',
+    DERIVACION_CONTRA_FLUJO: 'Contra el flujo', ORIENTACION_AMBIGUA: 'Orientación', TRANSICION_INSERTADA: 'Reducción insertada', ACCESORIOS_ENCIMADOS: 'Accesorios encimados', VERIFICACION_VISUAL: 'Revisión visual',
     CONEXION_EQUIPO: 'Boca del equipo', MANGUERA_SIN_LARGO: 'Manguera', CALIBRE_BAJO_TABLA: 'Calibre', CALIBRE_FALTANTE: 'Calibre', MATERIAL_FALTANTE: 'Material',
     TEXTO_SIN_ASOCIAR: 'Texto suelto', ASOCIACION_AMBIGUA: 'Texto ambiguo', TRAZO_SIN_CONECTAR: 'Trazo suelto', CRUCE_SIN_NODO: 'Cruce', CICLO_EN_RED: 'Ciclo en la red',
     PANTALON_RETIRADO: 'Pantalón', SIN_COLECTOR: 'Colector', LECTURA_DUDOSA: 'Lectura dudosa', COTAS_NO_CUADRAN: 'Cotas que no cuadran', REDUCCION_GRANDE: 'Reducción grande',
@@ -55,6 +65,10 @@
   /** La última foto leída (sólo en memoria): para dibujar la lectura encima. */
   let foto = null;
   let notaLectura = '';
+  /** La foto escogida, antes de leerla: enderezar (cuatro esquinas) y limpiar. */
+  let prep = null;
+  let verif = { activa: false };
+  let avisosAbiertos = false; // tras una verificación visual con hallazgos, «Avisos» se muestra abierto
 
   const guardada = () => E().cot.unifilar || null;
   const fuente = () => borrador || guardada();
@@ -135,7 +149,9 @@
   function pintar(enfocar) {
     const cuerpo = $('#uf-cuerpo');
     const pie = $('#uf-pie');
-    if (vista === 'carga') pintarCarga(cuerpo, pie); else pintarRevision(cuerpo, pie);
+    if (vista === 'carga') pintarCarga(cuerpo, pie);
+    else if (vista === 'foto' && prep) pintarFoto(cuerpo, pie);
+    else pintarRevision(cuerpo, pie);
     if (enfocar !== undefined) {
       // la misma pregunta si sigue a la vista (una ya respondida pasa al grupo cerrado), si no la primera pendiente
       const visible = (el) => el && !el.closest('details:not([open])');
@@ -150,11 +166,11 @@
       return h('p', { class: 'uf-ayuda uf-sin-foto' }, 'Para que Claude lea la foto del croquis, abra COTIZAP publicada en claude.ai: ahí la lee con su cuenta. Aquí puede pegar la lectura en JSON.');
     }
     const entrada = h('input', { id: 'uf-foto', type: 'file', accept: limites.images.mediaTypes.join(',') });
-    entrada.addEventListener('change', (ev) => { const f = ev.target.files[0]; ev.target.value = ''; if (f) leerFoto(f); });
+    entrada.addEventListener('change', (ev) => { const f = ev.target.files[0]; ev.target.value = ''; if (f) elegirFoto(f); });
     return h('section', { class: 'uf-foto', 'aria-labelledby': 'uf-tit-foto' },
       h('h3', { id: 'uf-tit-foto' }, 'Leer la foto del croquis'),
-      h('p', { class: 'uf-ayuda' }, 'Claude la lee con su cuenta de claude.ai (la primera vez pide permiso) y tarda de 1 a 3 minutos; luego vuelve a leer en recortes ampliados lo que quedó dudoso. ',
-        'Lo que lea pasa por las mismas reglas y preguntas. Mejor una foto de frente, con buena luz y sólo el croquis.'),
+      h('p', { class: 'uf-ayuda' }, 'Primero puede enderezar la hoja y limpiarla de sombras y cuadrícula. Claude la lee con su cuenta de claude.ai (la primera vez pide permiso) y tarda de 1 a 3 minutos; ',
+        'luego vuelve a leer en recortes ampliados lo que quedó dudoso. Lo que lea pasa por las mismas reglas y preguntas.'),
       lectura.activa
         ? h('div', { class: 'uf-progreso', role: 'status' },
           h('span', { class: 'uf-girando', 'aria-hidden': 'true' }),
@@ -218,6 +234,7 @@
 
   /** Una lectura ya revisada pasa a la revisión (y a la cotización si no hay partidas importadas que reemplazar). */
   function aceptarLectura(lect) {
+    avisosAbiertos = false;
     if (!despiece({ lectura: lect, respuestas: {} })) { errores = ['Las reglas no pudieron despiezar esta lectura. Revise que la red esté completa.']; pintar(); return; }
     const nueva = { lectura: lect, respuestas: {}, importado: false };
     const g = guardada();
@@ -252,7 +269,7 @@
   }
 
   /** Un recuadro de la foto (en sus píxeles) dibujado a w × h y convertido en JPEG. */
-  function aJpeg(img, r, w, h) {
+  function aJpeg(img, r, w, h, encima) {
     const c = document.createElement('canvas');
     c.width = Math.max(1, Math.round(w));
     c.height = Math.max(1, Math.round(h));
@@ -261,6 +278,7 @@
     g.fillRect(0, 0, c.width, c.height);
     g.imageSmoothingQuality = 'high';
     g.drawImage(img.fuente, r.x, r.y, r.w, r.h, 0, 0, c.width, c.height);
+    if (encima) encima(g, c.width, c.height);
     return new Promise((ok, no) => c.toBlob((b) => (b ? ok(b) : no({ code: 'imagen' })), 'image/jpeg', 0.9));
   }
 
@@ -297,7 +315,36 @@
    * Luego relee en recortes ampliados los textos dudosos (§7.4) y aplica lo que salga más seguro. La foto queda en memoria
    * para dibujar la lectura encima.
    */
-  async function leerFoto(file) {
+  /** Un lienzo con la imagen a lo más de `max` px de lado mayor. */
+  function lienzoDe(img, max) {
+    const k = Math.min(1, max / Math.max(img.w, img.h));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(img.w * k));
+    c.height = Math.max(1, Math.round(img.h * k));
+    const g = c.getContext('2d');
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(img.fuente, 0, 0, img.w, img.h, 0, 0, c.width, c.height);
+    return { fuente: c, w: c.width, h: c.height, k };
+  }
+  /** Una imagen { width, height, data } (motor/imagen.js) en un lienzo. */
+  function aLienzo(im) {
+    const c = document.createElement('canvas');
+    c.width = im.width;
+    c.height = im.height;
+    c.getContext('2d').putImageData(new ImageData(im.data, im.width, im.height), 0, 0);
+    return { fuente: c, w: c.width, h: c.height };
+  }
+  /** Endereza (si se pidió) y limpia (si se pidió) una imagen; `esc` lleva las esquinas de la foto de trabajo a ésta. */
+  function procesar(img, esc) {
+    if (!prep.enderezar && !prep.limpiar) return img;
+    let im = img.fuente.getContext('2d').getImageData(0, 0, img.w, img.h);
+    if (prep.enderezar) im = IMG().enderezar(im, prep.esquinas.map((p) => ({ x: p.x * esc, y: p.y * esc })));
+    if (prep.limpiar) im = IMG().limpiar(im);
+    return aLienzo(im);
+  }
+
+  /** La foto escogida: se abre a tamaño de trabajo y pasa a «Preparar la foto» (nada se manda todavía). */
+  async function elegirFoto(file) {
     if (!sample || lectura.activa) return;
     errores = [];
     notaLectura = '';
@@ -307,11 +354,158 @@
       return;
     }
     if (file.size > limites.images.maxInputBytes) { errores = ['La foto es demasiado grande: mande una de menos resolución.']; pintar(); return; }
-    const ctl = new AbortController();
-    lectura = { activa: true, fase: 'Preparando la foto…', detalle: '', ctl };
+    lectura = { activa: true, fase: 'Abriendo la foto…', detalle: '' };
     pintar();
     try {
-      const img = await cargarImagen(file);
+      const img = lienzoDe(await cargarImagen(file), MAX_TRABAJO);
+      prep = { img, archivo: file.name, esquinas: IMG().esquinasIniciales(img.w, img.h), enderezar: false, limpiar: true, previa: null };
+      lectura = { activa: false };
+      vista = 'foto';
+      pintar();
+    } catch (e) {
+      lectura = { activa: false };
+      errores = ['No se pudo abrir la foto en este navegador.'];
+      pintar();
+    }
+  }
+
+  const NOMBRE_ESQ = ['superior izquierda', 'superior derecha', 'inferior derecha', 'inferior izquierda'];
+
+  /** «Preparar la foto»: la foto con las cuatro esquinas de la hoja (para enderezarla), limpiar, vista previa y leer. */
+  function pintarFoto(cuerpo, pie) {
+    const { img } = prep;
+    const mostrar = prep.previa || img;
+    const ancho = Math.min(mostrar.w, 1100);
+    const alto = Math.round((mostrar.h * ancho) / mostrar.w);
+    const lienzo = h('canvas', { width: String(ancho), height: String(alto), 'aria-hidden': 'true' });
+    lienzo.getContext('2d').drawImage(mostrar.fuente, 0, 0, mostrar.w, mostrar.h, 0, 0, ancho, alto);
+    const marco = h('div', { class: 'uf-prep' }, lienzo);
+    if (prep.enderezar && !prep.previa) {
+      const r = Math.max(img.w, img.h) / 70;
+      const capa = svg('svg', { viewBox: `0 0 ${img.w} ${img.h}`, class: 'uf-prep-esq' });
+      const poligono = svg('polygon', { class: 'uf-prep-hoja', points: prep.esquinas.map((p) => `${p.x},${p.y}`).join(' '), 'stroke-width': (r / 4).toFixed(1) });
+      capa.append(poligono);
+      const mover = (i, x, y, el) => {
+        prep.esquinas[i] = { x: Math.max(0, Math.min(img.w, x)), y: Math.max(0, Math.min(img.h, y)) };
+        el.setAttribute('cx', prep.esquinas[i].x);
+        el.setAttribute('cy', prep.esquinas[i].y);
+        poligono.setAttribute('points', prep.esquinas.map((p) => `${p.x},${p.y}`).join(' '));
+      };
+      prep.esquinas.forEach((p, i) => {
+        const c = svg('circle', { cx: p.x, cy: p.y, r: r.toFixed(1), class: 'uf-prep-punto', tabindex: '0', role: 'slider', 'aria-label': `Esquina ${NOMBRE_ESQ[i]} de la hoja (flechas para moverla)`, 'aria-valuetext': `x ${Math.round(p.x)}, y ${Math.round(p.y)}` });
+        c.addEventListener('pointerdown', (ev) => {
+          ev.preventDefault();
+          c.setPointerCapture(ev.pointerId);
+          const arrastrar = (e) => {
+            const b = capa.getBoundingClientRect();
+            mover(i, ((e.clientX - b.left) / b.width) * img.w, ((e.clientY - b.top) / b.height) * img.h, c);
+          };
+          c.addEventListener('pointermove', arrastrar);
+          c.addEventListener('pointerup', () => c.removeEventListener('pointermove', arrastrar), { once: true });
+        });
+        c.addEventListener('keydown', (ev) => {
+          const paso = (ev.shiftKey ? 0.02 : 0.005) * Math.max(img.w, img.h);
+          const d = { ArrowLeft: [-paso, 0], ArrowRight: [paso, 0], ArrowUp: [0, -paso], ArrowDown: [0, paso] }[ev.key];
+          if (!d) return;
+          ev.preventDefault();
+          mover(i, prep.esquinas[i].x + d[0], prep.esquinas[i].y + d[1], c);
+          c.setAttribute('aria-valuetext', `x ${Math.round(prep.esquinas[i].x)}, y ${Math.round(prep.esquinas[i].y)}`);
+        });
+        capa.append(c);
+      });
+      marco.append(capa);
+    }
+    const casilla = (id, texto, valor, alCambiar) => {
+      const el = h('input', { type: 'checkbox', id, checked: valor });
+      el.addEventListener('change', () => { alCambiar(el.checked); prep.previa = null; pintar(); });
+      return h('label', { class: 'check', for: id }, el, texto);
+    };
+    const archivo = h('input', { type: 'file', accept: limites.images.mediaTypes.join(',') });
+    archivo.addEventListener('change', (ev) => { const f = ev.target.files[0]; ev.target.value = ''; if (f) elegirFoto(f); });
+    W.reemplazar(cuerpo,
+      h('section', { class: 'uf-foto uf-foto-prep', 'aria-labelledby': 'uf-tit-prep' },
+        h('h3', { id: 'uf-tit-prep' }, 'Preparar la foto'),
+        h('p', { class: 'uf-ayuda' }, prep.enderezar ? 'Arrastre los cuatro puntos a las esquinas de la hoja (o use las flechas del teclado): la hoja se endereza como si se hubiera fotografiado de frente.'
+          : 'Si la hoja salió chueca o de lado, marque «Enderezar la hoja». «Limpiar» quita sombras y la cuadrícula clara de la libreta; el trazo queda oscuro.'),
+        h('div', { class: 'uf-prep-op' },
+          casilla('uf-enderezar', 'Enderezar la hoja', prep.enderezar, (v) => { prep.enderezar = v; }),
+          casilla('uf-limpiar', 'Limpiar sombras y cuadrícula', prep.limpiar, (v) => { prep.limpiar = v; }),
+          prep.enderezar || prep.limpiar
+            ? h('button', { type: 'button', class: 'btn-texto', id: 'uf-previa', onclick: () => {
+              if (prep.previa) prep.previa = null;
+              else { const chica = lienzoDe(prep.img, 1100); prep.previa = procesar(chica, chica.k); }
+              pintar();
+            } }, prep.previa ? 'Ver la foto original' : 'Ver cómo queda')
+            : null),
+        marco,
+        h('p', { class: 'uf-ayuda' }, `${prep.archivo} · ${img.w} × ${img.h} px de trabajo.`)));
+    W.reemplazar(pie,
+      h('label', { class: 'btn btn-sec archivo' }, 'Otra foto', archivo),
+      h('button', { type: 'button', class: 'btn btn-sec', id: 'uf-prep-cancelar', onclick: () => { prep = null; vista = 'carga'; pintar(); } }, 'Cancelar'),
+      h('span', { class: 'uf-pie-esp' }),
+      h('button', { type: 'button', class: 'btn btn-primario', id: 'uf-leer-foto', onclick: leerPreparada }, 'Leer con Claude'));
+  }
+
+  /** Prepara la foto a tamaño de trabajo (enderezar, limpiar) y la manda a leer. */
+  async function leerPreparada() {
+    if (!sample || lectura.activa || !prep) return;
+    const ctl = new AbortController();
+    lectura = { activa: true, fase: 'Preparando la foto…', detalle: '', ctl };
+    vista = 'carga';
+    pintar();
+    await new Promise((ok) => setTimeout(ok, 30)); // que se vea el aviso antes del cálculo
+    let img;
+    try { img = procesar(prep.img, 1); } catch (e) {
+      lectura = { activa: false };
+      errores = [String((e && e.message) || 'No se pudo preparar la foto.')];
+      vista = 'foto';
+      pintar();
+      return;
+    }
+    await leerImagen(img, prep.archivo, ctl);
+  }
+
+  /** Un recorte ampliado; en una asociación dudosa lleva marcadas las dos líneas («1» magenta, «2» verde) y el texto. */
+  function recorteMarcado(img, it, plan) {
+    const o = { x: it.recorte.x / plan.escala, y: it.recorte.y / plan.escala, w: it.recorte.w / plan.escala, h: it.recorte.h / plan.escala };
+    const k = Math.min(3, 768 / Math.max(o.w, o.h));
+    if (it.clase !== 'ASOCIACION') return aJpeg(img, o, o.w * k, o.h * k);
+    const f = k / plan.escala; // de la hoja enviada al recorte
+    const P = (p) => ({ x: (p.x - it.recorte.x) * f, y: (p.y - it.recorte.y) * f });
+    return aJpeg(img, o, o.w * k, o.h * k, (g, W2, H2) => {
+      const colores = ['#d6249f', '#12a150'];
+      it.trazos.forEach((t, i) => {
+        const a = P(t.de);
+        const b = P(t.a);
+        g.strokeStyle = colores[i];
+        g.globalAlpha = 0.55;
+        g.lineWidth = 6;
+        g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+        g.globalAlpha = 1;
+        // la etiqueta, en el punto de la línea más cercano al centro del recorte
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const u = Math.max(0.05, Math.min(0.95, ((W2 / 2 - a.x) * dx + (H2 / 2 - a.y) * dy) / ((dx * dx + dy * dy) || 1)));
+        const x = Math.max(14, Math.min(W2 - 14, a.x + u * dx + 16));
+        const y = Math.max(20, Math.min(H2 - 6, a.y + u * dy - 10));
+        g.font = 'bold 26px sans-serif';
+        g.lineWidth = 5; g.strokeStyle = '#ffffff'; g.strokeText(t.etiqueta, x, y);
+        g.fillStyle = colores[i]; g.fillText(t.etiqueta, x, y);
+      });
+      const c = P(it.caja);
+      g.strokeStyle = '#1f6feb';
+      g.lineWidth = 3;
+      g.strokeRect(c.x - 6, c.y - 6, it.caja.w * f + 12, it.caja.h * f + 12);
+    });
+  }
+
+  /**
+   * Claude lee la foto (la hoja completa y recortes a más resolución) y devuelve la lectura en JSON; las reglas la revisan.
+   * Luego relee en recortes ampliados los textos dudosos, los textos que pueden ser de dos líneas y los cruces (§7.4), y
+   * aplica lo que salga más seguro. La foto queda en memoria para dibujar la lectura encima.
+   */
+  async function leerImagen(img, archivo, ctl) {
+    try {
       const plan = V().planDeImagen(img.w, img.h, limites.images.maxCount);
       const hoja = await aJpeg(img, { x: 0, y: 0, w: img.w, h: img.h }, plan.enviado.w, plan.enviado.h);
       const recortes = await Promise.all(plan.recortes.map((r) => aJpeg(img, r.origen, r.salida.w, r.salida.h)));
@@ -320,25 +514,23 @@
         images: [hoja, ...recortes], modelTier: 'complex', signal: ctl.signal,
         onText: ({ text }) => avance(lectura.fase, `${text.length.toLocaleString('es-MX')} caracteres escritos`),
       });
-      const completa = V().completarLectura(json, { archivo: file.name, ancho: img.w, alto: img.h, plan });
+      const completa = V().completarLectura(json, { archivo, ancho: img.w, alto: img.h, plan });
       let r = UF().leer(completa);
       if (r.errores.length) {
         textoCarga = JSON.stringify(completa, null, 2);
         throw { code: 'lectura_invalida', errores: r.errores };
       }
-      // re-lectura dirigida: lo dudoso, en recortes ampliados (una sola llamada)
-      const items = V().dudosos(r.lectura, Math.min(8, limites.images.maxCount), plan.enviado);
+      // re-lectura dirigida: asociaciones dudosas, cruces y textos dudosos, en recortes ampliados (una sola llamada)
+      const max = Math.min(8, limites.images.maxCount);
+      const amb = V().ambiguas(r.lectura, max, plan.enviado);
+      const items = [...amb, ...V().dudosos(r.lectura, max - amb.length, plan.enviado)];
       let cambios = [];
       if (items.length) {
-        avance(`Releyendo ${items.length} ${items.length === 1 ? 'texto dudoso' : 'textos dudosos'} en recortes ampliados…`);
+        avance(`Releyendo ${items.length} ${items.length === 1 ? 'duda' : 'dudas'} de la lectura en recortes ampliados…`);
         try {
-          const ampliados = await Promise.all(items.map((it) => {
-            const o = { x: it.recorte.x / plan.escala, y: it.recorte.y / plan.escala, w: it.recorte.w / plan.escala, h: it.recorte.h / plan.escala };
-            const k = Math.min(3, 768 / Math.max(o.w, o.h));
-            return aJpeg(img, o, o.w * k, o.h * k);
-          }));
+          const ampliados = await Promise.all(items.map((it) => recorteMarcado(img, it, plan)));
           const releido = await sample.json(V().promptRelectura(items), { images: ampliados, modelTier: 'default', signal: ctl.signal });
-          const ap = V().aplicarRelectura(r.lectura, releido);
+          const ap = V().aplicarRelectura(r.lectura, releido, items);
           const r2 = UF().leer(ap.lectura);
           if (!r2.errores.length) { r = r2; cambios = ap.cambios; }
         } catch (e) {
@@ -347,7 +539,8 @@
         }
       }
       foto = { fuente: img.fuente, ancho: img.w, alto: img.h, w: plan.enviado.w, h: plan.enviado.h, lectura: r.lectura };
-      notaLectura = cambios === null ? 'No se pudieron releer los textos dudosos: se usa la primera lectura (las reglas preguntan lo dudoso).'
+      prep = null;
+      notaLectura = cambios === null ? 'No se pudieron releer las dudas: se usa la primera lectura (las reglas preguntan lo dudoso).'
         : cambios.length ? `Se releyeron en recortes ampliados: ${cambios.join(' · ')}.` : '';
       lectura = { activa: false };
       textoCarga = JSON.stringify(r.lectura, null, 2);
@@ -363,13 +556,6 @@
   }
 
   /* ------------------------------------------------------------------ dibujo de la lectura */
-
-  const svg = (tag, attrs, ...hijos) => {
-    const el = document.createElementNS(NS, tag);
-    Object.keys(attrs || {}).forEach((k) => el.setAttribute(k, attrs[k]));
-    hijos.forEach((c) => el.append(c && c.nodeType ? c : document.createTextNode(String(c))));
-    return el;
-  };
 
   /** La red leída (aristas con su Ø y su cota, nodos y equipos) sobre la foto, o sola si no hay foto; lo que se pregunta, resaltado. */
   function dibujo(bom, preguntas) {
@@ -414,10 +600,69 @@
       marco.append(c);
     }
     marco.append(lienzo);
+    const revisar = conFoto && sample
+      ? h('div', { class: 'uf-progreso' }, verif.activa
+        ? [h('span', { class: 'uf-girando', 'aria-hidden': 'true' }), h('span', { role: 'status' }, 'Claude está comparando la lectura con la foto…'),
+          h('button', { type: 'button', class: 'btn btn-sec', id: 'uf-verificar-detener', onclick: () => verif.ctl && verif.ctl.abort() }, 'Detener')]
+        : [h('button', { type: 'button', class: 'btn btn-sec', id: 'uf-verificar', onclick: verificar }, 'Pedir a Claude que compare la lectura con la foto')])
+      : null;
     return h('details', { class: 'uf-grupo uf-g-dibujo', open: conFoto },
       h('summary', null, conFoto ? 'La lectura sobre la foto' : 'Dibujo de la lectura'),
       h('p', { class: 'uf-ayuda' }, conFoto ? 'Revise que cada línea, diámetro y cota coincidan con el croquis; en color de aviso, lo que se pregunta.' : 'La red tal como se leyó (sin la foto); en color de aviso, lo que se pregunta.'),
+      revisar,
       marco);
+  }
+
+  /** Cambia la lectura (con sus respuestas) por otra: la de la verificación visual, que sólo agrega avisos. */
+  function reemplazarLectura(nueva) {
+    const f = fuente();
+    f.lectura = nueva;
+    if (foto) foto.lectura = nueva;
+    if (f === guardada()) W.recalcular();
+  }
+
+  /** La foto con la lectura dibujada encima (para la verificación visual), en JPEG. */
+  function fotoConLectura(lect) {
+    const N = new Map(lect.red.nodos.map((n) => [n.id, n.pos_px]));
+    return aJpeg({ fuente: foto.fuente, w: foto.ancho, h: foto.alto }, { x: 0, y: 0, w: foto.ancho, h: foto.alto }, foto.w, foto.h, (g, w2) => {
+      const k = w2 / 75;
+      g.strokeStyle = 'rgba(36, 86, 181, 0.85)';
+      g.lineWidth = Math.max(2, k * 0.3);
+      lect.red.aristas.forEach((a) => { const p = N.get(a.nodo_a); const q = N.get(a.nodo_b); g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(q.x, q.y); g.stroke(); });
+      g.fillStyle = 'rgba(36, 86, 181, 0.95)';
+      N.forEach((p) => { g.beginPath(); g.arc(p.x, p.y, Math.max(3, k * 0.35), 0, 2 * Math.PI); g.fill(); });
+      g.font = `bold ${Math.max(11, Math.round(k * 0.9))}px sans-serif`;
+      g.textAlign = 'center';
+      lect.red.aristas.forEach((a) => {
+        const p = N.get(a.nodo_a);
+        const q = N.get(a.nodo_b);
+        const t = `${a.id} · ${a.diametro.valor ? `${a.diametro.valor}″` : 'Ø?'} · ${a.longitud_cota.valor ? `${a.longitud_cota.valor} m` : '¿m?'}`;
+        g.lineWidth = 4; g.strokeStyle = '#ffffff'; g.strokeText(t, (p.x + q.x) / 2, (p.y + q.y) / 2 - k * 0.5);
+        g.fillStyle = '#1b4596'; g.fillText(t, (p.x + q.x) / 2, (p.y + q.y) / 2 - k * 0.5);
+      });
+    });
+  }
+
+  /** Verificación visual (§9): Claude compara la foto con la lectura dibujada encima; lo que encuentre queda como avisos. */
+  async function verificar() {
+    if (!sample || verif.activa || !foto) return;
+    const ctl = new AbortController();
+    verif = { activa: true, ctl };
+    pintar();
+    try {
+      const lect = fuente().lectura;
+      const [limpia, marcada] = await Promise.all([
+        aJpeg({ fuente: foto.fuente, w: foto.ancho, h: foto.alto }, { x: 0, y: 0, w: foto.ancho, h: foto.alto }, foto.w, foto.h), fotoConLectura(lect)]);
+      const difs = await sample.json(V().promptVerificacion(lect), { images: [limpia, marcada], modelTier: 'default', signal: ctl.signal });
+      const { lectura: nueva, n } = V().agregarVerificacion(lect, difs);
+      reemplazarLectura(nueva);
+      avisosAbiertos = n > 0;
+      notaLectura = n ? `La revisión visual de Claude encontró ${n} ${n === 1 ? 'diferencia' : 'diferencias'} entre la lectura y la foto: están en «Avisos».` : 'La revisión visual de Claude no encontró diferencias entre la lectura y la foto.';
+    } catch (e) {
+      if (!(e && e.code === 'cancelled')) notaLectura = `La revisión visual no se pudo hacer: ${mensajeDe(e)[0]}`;
+    }
+    verif = { activa: false };
+    pintar();
   }
 
   /** Guarda una respuesta (o la quita con valor undefined), vuelve a correr las reglas y, si ya están en la cotización, actualiza las partidas. */
@@ -579,7 +824,7 @@
           h('h3', { id: 'uf-tit-preg' }, `Preguntas (${preguntas.length})`),
           h('div', { class: 'uf-lista' }, preguntas.map(tarjeta)))
         : h('p', { class: 'uf-sin' }, W.icono('check'), 'No hay preguntas pendientes.'),
-      grupo('Avisos', opcionales, !preguntas.length, 'uf-g-avisos'),
+      grupo('Avisos', opcionales, !preguntas.length || avisosAbiertos, 'uf-g-avisos'),
       grupo('Decisiones de las reglas', notas, false, 'uf-g-notas'),
       grupo('Respondidas', respondidas, false, 'uf-g-resp'),
       dibujo(bom, preguntas),
@@ -590,7 +835,9 @@
       ed.length ? h('p', { class: 'uf-nota' }, `Editó a mano ${ed.length === 1 ? 'la partida' : 'las partidas'} ${ed.map((p) => p.unifilar_id).join(', ')}: al actualizar se reemplazan con las del despiece.`) : null,
       h('p', { class: 'uf-pie-txt' },
         h('button', { type: 'button', class: 'btn-texto', id: 'uf-copiar', onclick: () => W.copiarTexto(JSON.stringify(bom, null, 2), 'Despiece copiado en JSON') }, 'Copiar el despiece en JSON'),
-        ' · el esquema está en docs/unifilar-bom.schema.json'));
+        ' · ',
+        h('button', { type: 'button', class: 'btn-texto', id: 'uf-copiar-lectura', onclick: () => W.copiarTexto(JSON.stringify(f.lectura, null, 2), 'Lectura copiada en JSON') }, 'Copiar la lectura de Claude'),
+        ' · el esquema está en docs/unifilar-bom.schema.json; para medir la lectura, docs/evaluacion'));
     const bloqueado = R.estado === 'NO_COTIZABLE';
     const pendienteAplicar = reemplaza && (borrador || ed.length);
     const primario = !f.importado || borrador
@@ -613,7 +860,7 @@
     $('#btn-unifilar').addEventListener('click', abrir);
     $('#aviso-unifilar-abrir').addEventListener('click', abrir);
     $('#uf-cerrar').addEventListener('click', cerrar);
-    d.addEventListener('close', () => { borrador = null; if (lectura.ctl) lectura.ctl.abort(); });
+    d.addEventListener('close', () => { borrador = null; if (lectura.ctl) lectura.ctl.abort(); if (verif.ctl) verif.ctl.abort(); });
     d.addEventListener('click', (e) => { if (e.target === d) cerrar(); });
     // en la página publicada, Claude puede leer la foto (si esta vista manda imágenes); en otra copia no hay window.claude
     if (root.claude && typeof root.claude.use === 'function') {

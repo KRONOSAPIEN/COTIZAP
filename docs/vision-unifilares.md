@@ -113,7 +113,7 @@ En **planta** los ángulos del dibujo son los reales. En **isométrico** los tre
 
 ### 4.1 Capa vectorial: aristas y nodos
 
-1. **Preparación.** Orientación EXIF; rectificación de perspectiva (se detecta el cuadrilátero de la hoja y se lleva a rectángulo); corrección de contraste local; supresión de la cuadrícula de la libreta (filtro de frecuencia o apertura morfológica del tamaño del renglón). Se guarda el factor de escala entre la imagen enviada (≤ 2576 px en el lado largo, §9) y la original para traducir coordenadas.
+1. **Preparación.** Orientación EXIF; rectificación de perspectiva (se detecta el cuadrilátero de la hoja y se lleva a rectángulo); corrección de contraste local; supresión de la cuadrícula de la libreta (filtro de frecuencia o apertura morfológica del tamaño del renglón). Se guarda el factor de escala entre la imagen enviada (≤ 2576 px en el lado largo, §9) y la original para traducir coordenadas. En la aplicación ([`src/motor/imagen.js`](../src/motor/imagen.js), §9.1): el ingeniero marca las cuatro esquinas de la hoja y una homografía la endereza (con muestreo bilineal), y **limpiar** divide cada píxel entre el brillo del papel a su alrededor (quita sombras), lleva a blanco lo más claro que 82 % del papel (la cuadrícula) y oscurece el trazo. Las esquinas no se detectan solas todavía.
 2. **Lectura.** El modelo devuelve los **nodos** (extremos, vértices, uniones) con su posición en píxeles y las **aristas** como pares de nodos con su polilínea. En la variante híbrida, el esqueleto morfológico propone los nodos (píxeles con 1 vecino = extremo; con 3 o más = unión) y los segmentos (LSD), y el modelo los confirma.
 3. **Saneamiento geométrico.** Se simplifica cada polilínea (Douglas–Peucker, tolerancia = 1.5 × grosor del trazo); dos segmentos consecutivos casi colineales (< 10°) sin texto de ángulo entre ellos se funden; dos extremos a menos de 3 × grosor del trazo se unen en un nodo (*snap*); un extremo que cae sobre el cuerpo de otra arista la parte en dos con un nodo de derivación.
 4. **Verificación de tinta.** Cada arista se muestrea a lo largo: si menos del 80 % de los puntos caen sobre tinta, se baja su confianza y, por debajo de 0.5, se descarta con alerta `TRAZO_SIN_CONECTAR`.
@@ -304,6 +304,7 @@ Con la regla del taller (`proceso.soportes.espaciado`, documento de arquitectura
 | `LECTURA_DUDOSA` | Un Ø, una cota o un ángulo leídos con confianza de 0.5 a 0.9 | Se usa el valor leído | CONFIRMAR por debajo de 0.7; ADVERTENCIA de 0.7 a 0.9 |
 | `COTAS_NO_CUADRAN` | Las parciales de una cota total no suman la total | Se cotizan las parciales | ADVERTENCIA |
 | `REDUCCION_GRANDE` | Una reducción de más de la mitad | Se cotiza como está | ADVERTENCIA |
+| `VERIFICACION_VISUAL` | La revisión visual de Claude encontró una diferencia entre la foto y la lectura | La lectura no se cambia | ADVERTENCIA |
 | `MANGUERA_SIN_LARGO` | Manguera sin largo | Un tramo del catálogo | ADVERTENCIA |
 | `CALIBRE_BAJO_TABLA` | Calibre más delgado que la tabla de servicio | El anotado (se confirma o se cambia) | ADVERTENCIA |
 | `CALIBRE_FALTANTE` / `MATERIAL_FALTANTE` | Sin anotación | El del taller | CONFIRMAR |
@@ -319,7 +320,7 @@ Con la regla del taller (`proceso.soportes.espaciado`, documento de arquitectura
 
 Para todo texto con confianza < 0.70, toda asociación ambigua y todo nodo de grado ≥ 3 dudoso, se recorta la zona (la caja ampliada 3 veces, a resolución nativa de la foto original) y se hace al modelo una pregunta cerrada sobre ese recorte («¿qué número está escrito junto a esta línea?», «¿esta línea se une con la otra o pasa por encima?»). Se guardan las dos lecturas; si discrepan, gana la de mayor confianza y la alerta lo dice. Esto es más eficaz que pedirle más razonamiento: en dibujos técnicos, el modelo mejora sobre todo con más resolución y con una herramienta para recortar y ampliar (§9).
 
-En la aplicación (§9.1) se releen, en una sola llamada con un recorte ampliado por texto, los diámetros, cotas, ángulos y calibres con confianza < 0.90 y los ilegibles que están junto a algo (hasta ocho, los más dudosos primero). Lo releído sólo entra si sale más seguro; con el texto cambia la medida que lo cita (o la cota vacía de su arista). El diálogo dice qué se releyó. Las asociaciones ambiguas y los cruces todavía no se releen.
+En la aplicación (§9.1) se releen, en una sola llamada con un recorte ampliado por texto, los diámetros, cotas, ángulos y calibres con confianza < 0.90 y los ilegibles que están junto a algo (hasta ocho, los más dudosos primero). Lo releído sólo entra si sale más seguro; con el texto cambia la medida que lo cita (o la cota vacía de su arista). El diálogo dice qué se releyó. En la misma llamada van las **asociaciones ambiguas** —el recorte lleva las dos líneas candidatas marcadas «1» (magenta) y «2» (verde) y el texto encuadrado, y se pregunta a cuál pertenece; con confianza ≥ 0.7 el texto y su medida pasan a esa línea y la otra se queda sin ella— y los **cruces** —el cruce al centro: si se confirma que no se unen, la alerta se va; si parecen unirse, se queda como CONFIRMAR y lo dice.
 
 ### 7.5 Lo que el sistema nunca hace
 
@@ -665,7 +666,7 @@ Es el archivo [`docs/unifilar-bom.schema.json`](unifilar-bom.schema.json) (JSON 
             "COTA_ILEGIBLE", "COTA_FALTANTE", "DIAMETRO_FALTANTE", "DIAMETRO_INFERIDO", "DIAMETRO_INCONSISTENTE", "ANGULO_INFERIDO", "ANGULO_NO_PERMITIDO",
             "ANGULO_DERIVACION_NO_PERMITIDO", "DERIVACION_CONTRA_FLUJO", "ORIENTACION_AMBIGUA", "TRANSICION_INSERTADA", "ACCESORIOS_ENCIMADOS", "CONEXION_EQUIPO",
             "MANGUERA_SIN_LARGO", "CALIBRE_BAJO_TABLA", "CALIBRE_FALTANTE", "MATERIAL_FALTANTE", "TEXTO_SIN_ASOCIAR", "ASOCIACION_AMBIGUA", "TRAZO_SIN_CONECTAR",
-            "CRUCE_SIN_NODO", "CICLO_EN_RED", "PANTALON_RETIRADO", "SIN_COLECTOR", "LECTURA_DUDOSA", "COTAS_NO_CUADRAN", "REDUCCION_GRANDE"
+            "CRUCE_SIN_NODO", "CICLO_EN_RED", "PANTALON_RETIRADO", "SIN_COLECTOR", "LECTURA_DUDOSA", "COTAS_NO_CUADRAN", "REDUCCION_GRANDE", "VERIFICACION_VISUAL"
           ]
         },
         "referencias": { "type": "array", "items": { "type": "string" } },
@@ -774,7 +775,7 @@ La **lectura** (`metadatos`, `red`, `equipos`, `alertas_ambiguedad`) está escri
 
 1. Validación del JSON contra el esquema, incluidos rangos y patrones.
 2. Consistencia topológica (§4.4): árbol, colector, monotonía del Ø.
-3. **Verificación visual.** Se dibuja el grafo leído encima de la foto (aristas con su ID, Ø y L) y se le pide al modelo, en una segunda llamada, que liste las diferencias entre el dibujo original y la superposición. El modelo es bueno verificando visualmente su propio trabajo.
+3. **Verificación visual.** Se dibuja el grafo leído encima de la foto (aristas con su ID, Ø y L) y se le pide al modelo, en una segunda llamada, que liste las diferencias entre el dibujo original y la superposición. El modelo es bueno verificando visualmente su propio trabajo. En la aplicación es un botón de la revisión; cada diferencia queda como aviso `VERIFICACION_VISUAL` (ADVERTENCIA) y la lectura no se cambia: decide el ingeniero.
 4. Métricas contra el conjunto de evaluación (§12).
 
 **Operación.** Para el procesamiento que no urge (cotizaciones de un día para otro) existe el procesamiento por lotes, a la mitad del costo.
@@ -783,10 +784,12 @@ La **lectura** (`metadatos`, `red`, `equipos`, `alertas_ambiguedad`) está escri
 
 La versión de COTIZAP publicada en claude.ai lee la foto **con la cuenta de Claude de quien la usa** (la capacidad `sample` de la página; la primera vez pide permiso). No hay llaves de API ni servidor propio. En el archivo suelto (`dist/cotizap.html`) no existe esa capacidad: ahí se pega la lectura en JSON. Lo que no depende del navegador está en [`src/motor/unifilar_vision.js`](../src/motor/unifilar_vision.js) y tiene sus pruebas.
 
+0. **Preparar la foto** (antes de gastar nada): se abre a 3000 px de lado mayor y se puede **enderezar** (el ingeniero arrastra las cuatro esquinas de la hoja, o las mueve con las flechas) y **limpiar** sombras y cuadrícula (§4.1, marcado por omisión), con vista previa.
 1. **Imágenes.** La plataforma reduce cada imagen a unos 1.2 MP, así que la página manda la hoja completa a 1.15 MP como mucho (una foto de 4032 × 3024 va a 1238 × 928: con ese tamaño no se vuelve a reducir y las coordenadas no cambian) y, si la foto es mucho mayor, **cuatro recortes que se traslapan 12 %**, cada uno también a 1.15 MP: casi el doble de resolución. Las instrucciones dicen dónde cae cada recorte y piden todas las coordenadas en la hoja completa.
 2. **Lectura.** Una llamada al modelo más capaz (`modelTier: complex`) con la gramática de §3, las reglas (no inventar, `null` y texto ILEGIBLE para lo que no se lee, confianza honesta, no deducir por continuidad ni por escala) y el formato de la lectura con un ejemplo corto. La respuesta se lee como JSON y la revisa `leer()`; si no sirve, el diálogo lo dice y deja el texto para corregirlo a mano.
-3. **Re-lectura dirigida** de lo dudoso en recortes ampliados (§7.4), con el modelo de uso diario.
-4. **Revisión.** La lectura pasa por las mismas reglas y preguntas que una pegada en JSON. El diálogo dibuja la red leída —cada arista con su ID, Ø y cota; en color de aviso, lo que se pregunta— **encima de la foto**, para que el ingeniero compare (la verificación visual de arriba, hecha por la persona).
+3. **Re-lectura dirigida** de lo dudoso en recortes ampliados (§7.4): textos, asociaciones ambiguas y cruces, con el modelo de uso diario.
+4. **Revisión.** La lectura pasa por las mismas reglas y preguntas que una pegada en JSON. El diálogo dibuja la red leída —cada arista con su ID, Ø y cota; en color de aviso, lo que se pregunta— **encima de la foto**, para que el ingeniero compare, y ofrece **pedirle a Claude que compare** la foto con la lectura dibujada (la verificación visual de §9).
+5. **Para medir.** «Copiar la lectura de Claude» entrega la lectura cruda, sin respuestas: con la corregida forma un caso del conjunto de evaluación (§12).
 
 Diferencias con el diseño de §9 que vienen de la plataforma: no hay salida estructurada (el JSON se lee con tolerancia y lo valida el código), ni herramienta de recorte (los recortes se mandan hechos), ni se elige el modelo exacto ni el esfuerzo (sólo el nivel). La foto no se guarda: sólo dura mientras la página está abierta.
 
@@ -815,7 +818,7 @@ En **Cotización detallada → Importar unifilar** se escoge la **foto del croqu
 4. **Responder después.** Un aviso sobre la lista dice cuántas preguntas faltan; cada respuesta vuelve a correr las reglas y **reemplaza las partidas del unifilar** en su lugar (conservan su id). Si alguna partida importada se editó a mano, no se pisa sola: el diálogo lo dice y ofrece «Actualizar partidas». Si una respuesta deja el despiece no cotizable, las partidas se quedan como estaban hasta resolverlo.
 5. **Se guarda con la cotización** (`cotizacion.unifilar = { lectura, respuestas, importado }`), también en «Guardar y cargar». «Otra lectura» no toca las partidas hasta «Reemplazar»; «Quitar de la cotización» quita la lectura y sus partidas, con «Deshacer». Una partida duplicada ya no es la pieza del croquis.
 
-**Lo que todavía no hace** (queda como diseño en este documento): la preparación de la foto (perspectiva, cuadrícula de la libreta: §4.1; sólo se corrige la orientación), la visión clásica de apoyo (§2), la re-lectura de asociaciones ambiguas y cruces (§7.4), la segunda llamada de verificación visual (§9: la hace el ingeniero con el dibujo sobre la foto) y el conjunto de evaluación con sus métricas (§12), que pide croquis reales del taller.
+**Lo que todavía no hace** (queda como diseño en este documento): detectar solas las esquinas de la hoja (§4.1: se marcan a mano), la visión clásica de apoyo (§2: se agrega sólo donde la evaluación muestre fallas) y, sobre todo, **el conjunto de evaluación**: la herramienta para medir ya está (§12), pero faltan los croquis reales del taller con su lectura corregida.
 
 ## 11. Caso de prueba
 
@@ -1983,7 +1986,9 @@ Es el archivo [`docs/ejemplos/unifilar-caso-prueba.json`](ejemplos/unifilar-caso
 | Precisión de las alertas CONFIRMAR / BLOQUEANTE | Que pregunte lo que de verdad es dudoso | ≥ 0.7 (y ningún error grave sin alerta) |
 | Errores silenciosos | Un dato mal leído con confianza ≥ 0.9 y sin alerta | 0 en el conjunto de prueba |
 
-**Regresión.** La prueba de contrato (`tests/unifilar_contrato.test.js`) y las de las reglas (`tests/unifilar.test.js`: lectura, caso de prueba, respuestas, lo que bloquea, geometría en planta y partidas) corren con el resto de las pruebas; la prueba de la interfaz recorre el botón de punta a punta. Cada croquis del conjunto de evaluación se convierte en otro caso con su lectura y su despiece esperado.
+**Cómo se mide.** [`docs/evaluacion/`](evaluacion/README.md) lleva una carpeta por croquis con `obtenida.json` (lo que leyó Claude: «Copiar la lectura de Claude») y `esperada.json` (la lectura corregida: «Copiar el despiece en JSON» con todo respondido y revisado). `npm run evaluar:unifilares` las compara con [`src/motor/unifilar_evaluacion.js`](../src/motor/unifilar_evaluacion.js): empareja los nodos por cercanía (a menos de 2 % de la diagonal), las aristas por sus nodos, y da por croquis el F1 de nodos y de aristas, la exactitud de Ø y de cotas (±2 %), los accesorios que salen iguales (tipo y ángulo), la diferencia de costo directo de los dos despieces y los errores silenciosos; al final, qué fracción de los croquis cumple cada meta. El caso `ejemplo-perturbado` es inventado y sólo muestra el reporte.
+
+**Regresión.** La prueba de contrato (`tests/unifilar_contrato.test.js`) y las de las reglas (`tests/unifilar.test.js`: lectura, caso de prueba, respuestas, lo que bloquea, geometría en planta y partidas), de la visión (`tests/unifilar_vision.test.js`), de la preparación de la foto (`tests/imagen.test.js`) y de la evaluación (`tests/unifilar_evaluacion.test.js`) corren con el resto de las pruebas; la prueba de la interfaz recorre el botón de punta a punta, con la foto y un Claude simulado. Cada croquis del conjunto de evaluación se convierte en otro caso con su lectura y su despiece esperado.
 
 ## 13. Autoevaluación contra los criterios del encargo
 

@@ -90,3 +90,74 @@ test('aplicarRelectura: sólo lo más seguro entra, y con ello la cota que falta
   assert.equal(cal.metadatos.calibre.valor, 20);
   assert.deepEqual(V.aplicarRelectura(L, null).cambios, []);
 });
+
+test('ambiguas y aplicarRelectura: un texto entre dos líneas se queda con la que diga la re-lectura y la otra pierde la cota', () => {
+  // la lectura puso «3.6 m» (T-009) en A-005 y dudó entre A-005 y A-004
+  const x = JSON.parse(JSON.stringify(EJEMPLO));
+  const a4 = x.red.aristas.find((a) => a.id === 'A-004');
+  const a5 = x.red.aristas.find((a) => a.id === 'A-005');
+  a5.longitud_cota = { ...a4.longitud_cota };
+  a4.longitud_cota = { valor: null, unidad: 'm', origen: 'OCR', confianza: 0, texto_id: null };
+  x.red.textos.find((t) => t.id === 'T-009').asociado_a = 'A-005';
+  x.alertas_ambiguedad = [{ codigo: 'ASOCIACION_AMBIGUA', severidad: 'CONFIRMAR', referencias: ['T-009', 'A-005', 'A-004'], mensaje: '«3.6 m» queda entre dos líneas.' }];
+  const L = UF.leer(x).lectura;
+  const amb = V.ambiguas(L, 8, { w: 2576, h: 1932 });
+  assert.equal(amb.length, 1);
+  assert.deepEqual([amb[0].clase, amb[0].texto_id, amb[0].candidatas, amb[0].trazos.map((t) => t.etiqueta)], ['ASOCIACION', 'T-009', ['A-005', 'A-004'], ['1', '2']]);
+  const r = amb[0].recorte;
+  assert.ok(r.x <= 1350 && r.x + r.w >= 1446 && r.w >= 260, 'el recorte contiene el texto');
+  const items = [...amb, ...V.dudosos(L, 7, { w: 2576, h: 1932 })];
+  assert.match(V.promptRelectura(items), /1\) El texto T-009 «3\.6 m» \(encuadrado en azul\): ¿pertenece a la línea marcada 1 \(magenta, A-005\) o a la marcada 2 \(verde, A-004\)\?/);
+  // poca seguridad: no cambia nada y la alerta lo dice
+  const dudoso = V.aplicarRelectura(L, [{ n: 1, pertenece_a: 2, confianza: 0.5 }], items).lectura;
+  assert.equal(dudoso.alertas_ambiguedad.length, 1);
+  assert.match(dudoso.alertas_ambiguedad[0].mensaje, /no lo aclara/);
+  // seguro: la cota pasa a A-004, A-005 se queda sin cota (la estimarán las reglas) y la alerta se va
+  const { lectura, cambios } = V.aplicarRelectura(L, [{ n: 1, pertenece_a: 2, confianza: 0.9 }], items);
+  assert.deepEqual([lectura.red.aristas.find((a) => a.id === 'A-004').longitud_cota.valor, lectura.red.aristas.find((a) => a.id === 'A-005').longitud_cota.valor], [3.6, null]);
+  assert.equal(lectura.red.textos.find((t) => t.id === 'T-009').asociado_a, 'A-004');
+  assert.equal(lectura.alertas_ambiguedad.length, 0);
+  assert.deepEqual(cambios, ['T-009 «3.6 m» va con A-004, no con A-005 (0.9)']);
+  const bom = UF.despiezar(UF.leer(lectura).lectura, crearMaestros(), {});
+  assert.equal(bom.ductos_rectos.find((d) => d.arista_id === 'A-004').longitud_cota_mm, 3600);
+});
+
+test('Un cruce: si la re-lectura confirma que no se unen, la alerta se va; si dice que sí, se queda y lo explica', () => {
+  const med = (v, u) => ({ valor: v, unidad: u, origen: 'OCR', confianza: 0.95, texto_id: null });
+  const L = UF.leer({
+    metadatos: { vista: 'PLANTA' },
+    red: {
+      nodos: [{ id: 'N-001', pos_px: { x: 0, y: 200 } }, { id: 'N-002', pos_px: { x: 400, y: 200 } }, { id: 'N-003', pos_px: { x: 200, y: 50 } }, { id: 'N-004', pos_px: { x: 200, y: 350 } }],
+      aristas: [{ id: 'A-001', nodo_a: 'N-001', nodo_b: 'N-002', diametro: med(8, 'in'), longitud_cota: med(2, 'm') }, { id: 'A-002', nodo_a: 'N-003', nodo_b: 'N-004', diametro: med(6, 'in'), longitud_cota: med(1.5, 'm') }],
+      textos: [],
+    },
+    equipos: [],
+    alertas_ambiguedad: [{ codigo: 'CRUCE_SIN_NODO', severidad: 'ADVERTENCIA', referencias: ['A-001', 'A-002'], mensaje: 'Las líneas se cruzan.' }],
+  }).lectura;
+  const amb = V.ambiguas(L, 8, { w: 400, h: 400 });
+  assert.deepEqual([amb[0].clase, amb[0].punto], ['CRUCE', { x: 200, y: 200 }]);
+  assert.match(V.promptRelectura(amb), /A-001 y A-002 se cruzan al centro del recorte/);
+  assert.equal(V.aplicarRelectura(L, [{ n: 1, se_unen: false, confianza: 0.85 }], amb).lectura.alertas_ambiguedad.length, 0);
+  const unen = V.aplicarRelectura(L, [{ n: 1, se_unen: true, confianza: 0.85 }], amb).lectura.alertas_ambiguedad[0];
+  assert.deepEqual([unen.severidad, /faltaría un nodo/.test(unen.mensaje)], ['CONFIRMAR', true]);
+});
+
+test('Verificación visual: las diferencias que encuentra quedan como avisos en el despiece; la lectura no cambia', () => {
+  const L = lecturaEjemplo();
+  const p = V.promptVerificacion(L);
+  assert.match(p, /A-005: 5″, cota sin leer/);
+  assert.match(p, /arreglo JSON \(vacío si todo coincide\)/);
+  const { lectura, n } = V.agregarVerificacion(L, [
+    { referencias: ['A-007', 'X-999'], problema: 'La cota de A-007 dice 2.6 m, no 2.5 m.', sugerencia: '2.6 m' },
+    { referencias: [], problema: '   ' }, // sin problema: no cuenta
+    'basura',
+  ]);
+  assert.equal(n, 1);
+  assert.deepEqual(lectura.red, L.red, 'la lectura no se toca');
+  const bom = UF.despiezar(UF.leer(lectura).lectura, crearMaestros(), {});
+  const av = bom.alertas_ambiguedad.find((a) => a.codigo === 'VERIFICACION_VISUAL');
+  assert.deepEqual([av.severidad, av.referencias.slice(0, 2), av.mensaje, av.pregunta], ['ADVERTENCIA', ['A-007', 'DUCT-007'], 'La cota de A-007 dice 2.6 m, no 2.5 m.', '2.6 m']);
+  assert.equal(bom.resumen.estado, 'PRELIMINAR', 'un aviso no cambia el estado');
+  // una segunda verificación reemplaza a la primera
+  assert.equal(V.agregarVerificacion(lectura, []).lectura.alertas_ambiguedad.filter((a) => a.codigo === 'VERIFICACION_VISUAL').length, 0);
+});
