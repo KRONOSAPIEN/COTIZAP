@@ -111,6 +111,9 @@
     ['proceso.soportes.anclaje_defecto', () => Object.keys(W.estadoApp.M.compras.articulos).map((k) => [k, W.estadoApp.M.compras.articulos[k].descripcion || k])],
     ['proceso.soportes.tornillo', () => claves(W.estadoApp.M.herrajes.tornillo_precio_ref)],
     ['rapida.hoja_defecto', () => C.rapida.hojas(W.estadoApp.M).map((x) => [x.id, x.descripcion])],
+    ['rapida.soporteria.menula_barra', () => Object.keys(W.estadoApp.M.proveedor.barras).map((k) => [k, W.estadoApp.M.proveedor.barras[k].descripcion || k])],
+    ['rapida.soporteria.abrazadera_barra', () => Object.keys(W.estadoApp.M.proveedor.barras).map((k) => [k, W.estadoApp.M.proveedor.barras[k].descripcion || k])],
+    ['rapida.soporteria.abrazadera_vuelta', () => [['MEDIA', 'Media vuelta · cuna de 180°'], ['COMPLETA', 'Vuelta completa · 360°, dos mitades']]],
     ['proceso.costuras.*.cordon', () => [['', 'Sin cordón (no se suelda)'], ['TOPE', 'A tope'], ['FILETE', 'De filete']]],
     ...REFS_PRECIO.map(([patron, re]) => [patron, () => opcionesDePrecio(re)]),
   ].map(([patron, lista]) => [patron.split('.'), lista]);

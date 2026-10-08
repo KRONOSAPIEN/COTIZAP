@@ -571,6 +571,20 @@
           if (typeof r.importe !== 'number' || !(r.importe >= 0)) agregar(['rapida', 'bridas_por_metros', i, 'importe'], `debe ser un importe de 0 en adelante (vale ${texto(r.importe)})`);
         });
       }
+      // La soportería automática: barras de la lista del proveedor, medidas y minutos razonables
+      const S = R.soporteria;
+      if (!esObjeto(S)) agregar(['rapida', 'soporteria'], 'falta la tabla de la soportería automática');
+      else {
+        ['menula_barra', 'abrazadera_barra'].forEach((k) => {
+          if (!tiene(M.proveedor && M.proveedor.barras, S[k])) agregar(['rapida', 'soporteria', k], `debe ser una barra de la lista del proveedor; vale ${texto(S[k])}`);
+        });
+        if (typeof S.menula_largo_mm !== 'number' || !(S.menula_largo_mm > 0 && S.menula_largo_mm <= 6000)) agregar(['rapida', 'soporteria', 'menula_largo_mm'], `debe ser de más de 0 a 6 000 mm (vale ${texto(S.menula_largo_mm)})`);
+        if (!Number.isInteger(S.menula_anclajes) || S.menula_anclajes < 0 || S.menula_anclajes > 100) agregar(['rapida', 'soporteria', 'menula_anclajes'], `debe ser un número entero de 0 a 100 (vale ${texto(S.menula_anclajes)})`);
+        ['menula_min', 'abrazadera_min'].forEach((k) => {
+          if (typeof S[k] !== 'number' || !(S[k] >= 0 && S[k] <= 10000)) agregar(['rapida', 'soporteria', k], `debe ser de 0 a 10 000 min (vale ${texto(S[k])})`);
+        });
+        if (!['MEDIA', 'COMPLETA'].includes(S.abrazadera_vuelta)) agregar(['rapida', 'soporteria', 'abrazadera_vuelta'], `debe ser MEDIA o COMPLETA; vale ${texto(S.abrazadera_vuelta)}`);
+      }
     }
 
     if (quiere('merma')) {

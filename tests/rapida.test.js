@@ -272,3 +272,43 @@ test('Mangueras, soportería y viáticos: renglones opcionales en pesos sin IVA 
   assert.throws(() => R.cotizar({ ...base, soporteria: NaN }, M), /importe de soportería/);
   assert.throws(() => R.cotizar({ ...base, viaticos: 'mucho' }, M), /importe de viáticos/);
 });
+
+test('Soportería automática: una ménsula con su abrazadera cada 2.5 m, costeadas como partidas de soportería, antes de la utilidad', () => {
+  const M = crearMaestros();
+  const base = { D_mm: 279.4, L_m: 31, yarda_mm: 914.4, dias_fabricacion: 4, dias_instalacion: 5 };
+  const no = R.cotizar(base, M);
+  assert.equal(no.soporteria.modo, 'NO', 'sin decir y sin importe: no lleva (como antes)');
+  assert.equal(R.cotizar({ ...base, soporteria: 2000 }, M).soporteria.modo, 'IMPORTE', 'sin decir y con importe: el importe');
+  const au = R.cotizar({ ...base, soporteria_modo: 'AUTO', soporteria: 99999 }, M);
+  const s = au.soporteria;
+  assert.equal(s.menulas, 13, '31 m ÷ 2.5 = 12.4 → 13');
+  assert.equal(s.separacion_m, 2.5);
+  // las mismas piezas cotizadas como partidas de soportería dan el mismo costo directo
+  const cd = (p) => C.cotizarPartida({ familia: 'SOPORTE', cantidad: 13, ...p }, M).costos.CD;
+  const S = M.rapida.soporteria;
+  const men = cd({ barra_id: S.menula_barra, largo_pieza_mm: S.menula_largo_mm, anclajes_pieza: S.menula_anclajes, min_pieza: S.menula_min });
+  const abz = cd({ barra_id: S.abrazadera_barra, abrazadera_D_mm: 279.4, abrazadera_vuelta: S.abrazadera_vuelta, min_pieza: S.abrazadera_min });
+  cerca(s.importe, men + abz, 1e-9);
+  cerca(s.unitario, (men + abz) / 13, 1e-9);
+  assert.equal(au.extras.soporteria, s.importe, 'el importe capturado no cuenta en automático');
+  cerca(au.costo, no.costo + s.importe, 1e-9);
+  cerca(au.total, (no.costo + s.importe) * 1.2 * 1.16, 1e-6);
+  cerca(au.total, 52715.08, 0.005, 'el unifilar con su soportería');
+  assert.equal(R.cotizar({ ...base, L_m: 40, soporteria_modo: 'AUTO' }, M).soporteria.menulas, 16);
+  assert.equal(R.cotizar({ ...base, L_m: 1, soporteria_modo: 'AUTO' }, M).soporteria.menulas, 1, 'al menos una');
+  assert.equal(R.cotizar({ ...base, soporteria_modo: 'NO', soporteria: 5000 }, M).extras.soporteria, 0, '«no lleva» no suma aunque traiga importe');
+  // las tablas mandan: la separación de Proceso › Soportería y la vuelta de la abrazadera
+  const M2 = crearMaestros();
+  M2.proceso.soportes.espaciado.horizontal_m = 2;
+  assert.equal(R.cotizar({ ...base, soporteria_modo: 'AUTO' }, M2).soporteria.menulas, 16, '31 m ÷ 2 = 15.5 → 16');
+  M2.rapida.soporteria.abrazadera_vuelta = 'COMPLETA';
+  const c2 = R.cotizar({ ...base, soporteria_modo: 'AUTO' }, M2).soporteria;
+  assert.equal(c2.abrazadera.vuelta, 'COMPLETA');
+  assert.ok(c2.abrazadera.largo_mm > 1000);
+  // errores legibles
+  assert.throws(() => R.cotizar({ ...base, soporteria_modo: 'A VECES' }, M), /La soportería debe ser automática, por importe o no llevar/);
+  const M3 = crearMaestros();
+  M3.rapida.soporteria.menula_barra = 'NO_EXISTE';
+  assert.throws(() => R.cotizar(base, M3), /menula barra: debe ser una barra de la lista del proveedor/);
+  assert.deepEqual(V.problemasMaestros(crearMaestros(), { solo: ['rapida'] }), []);
+});

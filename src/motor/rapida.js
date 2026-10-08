@@ -9,6 +9,7 @@
  *              + días de fabricación de bridas × personas × pago por día (1 × $500)
  *              + días de instalación × personas × pago por día (2 × $500)
  *              + los renglones opcionales en pesos sin IVA: mangueras, soportería y viáticos (lo que el factor no cubre)
+ *              (la soportería puede ser automática: una ménsula con su abrazadera cada 2.5 m, costeadas como partidas)
  *   precio   = costo × (1 + utilidad)            (la utilidad se SUMA sobre el costo)
  *   total    = precio × (1 + IVA)
  *
@@ -28,16 +29,19 @@
  * Los días de fabricación (de las bridas) y de instalación dan el plazo y suman su mano de obra al costo, antes de la utilidad.
  * Las mangueras, la soportería y los viáticos se capturan como importe (MXN sin IVA, vacío = no hay): el factor de la lámina no
  * los cubre (en el proyecto de referencia sumaron cerca de $10,650) y también entran al costo, antes de la utilidad.
+ * La soportería tiene además un modo automático (`soporteria_modo: 'AUTO'`): ménsulas = ⌈metros ÷ separación horizontal⌉
+ * (proceso.soportes.espaciado, 2.5 m), cada una con su abrazadera, y su costo directo (material y taller) sale de cotizar la
+ * ménsula y la abrazadera de `rapida.soporteria` como partidas de soportería. Sin modo: el importe capturado, o nada.
  * Pura: no muta nada; lanza ErrorValidacion con mensajes legibles.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('./util'), require('./geometria'), require('./proveedor'), require('./validacion'));
+    module.exports = factory(require('./util'), require('./geometria'), require('./proveedor'), require('./validacion'), require('./cotizador'));
   } else {
     root.COTIZAP = root.COTIZAP || {};
-    root.COTIZAP.rapida = factory(root.COTIZAP.util, root.COTIZAP.geometria, root.COTIZAP.proveedor, root.COTIZAP.validacion);
+    root.COTIZAP.rapida = factory(root.COTIZAP.util, root.COTIZAP.geometria, root.COTIZAP.proveedor, root.COTIZAP.validacion, root.COTIZAP.cotizador);
   }
-}(typeof self !== 'undefined' ? self : this, function (U, GEO, PROV, VAL) {
+}(typeof self !== 'undefined' ? self : this, function (U, GEO, PROV, VAL, COT) {
   'use strict';
 
   const EPS = 1e-6;
@@ -178,8 +182,36 @@
     return n;
   };
 
+  const MODOS_SOPORTERIA = ['AUTO', 'IMPORTE', 'NO'];
+
   /**
-   * entrada: { D_mm, L_m, yarda_mm?, hoja_id?, utilidad_pct?, dias_fabricacion?, dias_instalacion?, mangueras?, soporteria?, viaticos? }
+   * La soportería automática para L_m metros de ducto de diámetro D: cuántas ménsulas (una cada «horizontal_m»), y el costo
+   * directo de las ménsulas y de sus abrazaderas, cotizadas como partidas de soportería con los datos de `rapida.soporteria`.
+   */
+  function soporteriaAuto(M, D, L_m) {
+    const S = M.rapida.soporteria;
+    const E = M.proceso && M.proceso.soportes && M.proceso.soportes.espaciado;
+    if (!E || !(E.horizontal_m > 0)) throw new U.ErrorValidacion(['Soportería automática: faltan las reglas de espaciamiento de soportes en las tablas maestras (Proceso › Soportería).']);
+    const n = Math.max(1, Math.ceil(L_m / E.horizontal_m - EPS));
+    const partida = (p) => {
+      try {
+        return COT.cotizarPartida({ familia: 'SOPORTE', cantidad: n, cantidad_modo: 'MANUAL', ...p }, M);
+      } catch (err) {
+        if (err instanceof U.ErrorValidacion) throw new U.ErrorValidacion(err.errores.map((m) => `Soportería automática: ${m}`));
+        throw err;
+      }
+    };
+    const men = partida({ descripcion: 'Ménsulas', barra_id: S.menula_barra, largo_pieza_mm: S.menula_largo_mm, anclajes_pieza: S.menula_anclajes, min_pieza: S.menula_min > 0 ? S.menula_min : undefined });
+    const abz = partida({ descripcion: 'Abrazaderas', barra_id: S.abrazadera_barra, abrazadera_D_mm: D, abrazadera_vuelta: S.abrazadera_vuelta, min_pieza: S.abrazadera_min > 0 ? S.abrazadera_min : undefined });
+    const pieza = (f) => ({ barra: f.soporte.barra.descripcion, largo_mm: f.soporte.largo_pieza_mm, anclajes: n > 0 ? f.soporte.anclajes / n : 0, minutos: f.soporte.minutos_pieza, costo: f.costos.CD, unitario: f.costos.CD / n });
+    const menula = pieza(men);
+    const abrazadera = { ...pieza(abz), vuelta: abz.soporte.vuelta };
+    return { modo: 'AUTO', menulas: n, separacion_m: E.horizontal_m, menula, abrazadera, unitario: menula.unitario + abrazadera.unitario, importe: menula.costo + abrazadera.costo };
+  }
+
+  /**
+   * entrada: { D_mm, L_m, yarda_mm?, hoja_id?, utilidad_pct?, dias_fabricacion?, dias_instalacion?, mangueras?, soporteria?, viaticos?,
+   *            soporteria_modo? ('AUTO' | 'IMPORTE' | 'NO'; sin decir: IMPORTE si trae importe, si no NO) }
    * (utilidad en fracción: 0.20; los tres últimos en MXN sin IVA)
    * Devuelve el desglose: hoja, plantilla, acomodo, yardas, hojas, lámina, factor, bridas, mano de obra por días, costo, utilidad,
    * precio, IVA, total y plazo.
@@ -216,6 +248,9 @@
     const diasIns = leerDias(e0.dias_instalacion, 'instalación', errores);
     const dadosExtras = {};
     EXTRAS.forEach(([k, nombre]) => { dadosExtras[k] = leerImporte(e0[k], nombre, errores); });
+    const vacioModo = e0.soporteria_modo === undefined || e0.soporteria_modo === null || e0.soporteria_modo === '';
+    const modoSop = vacioModo ? (dadosExtras.soporteria !== null ? 'IMPORTE' : 'NO') : e0.soporteria_modo;
+    if (!MODOS_SOPORTERIA.includes(modoSop)) errores.push(`La soportería debe ser automática, por importe o no llevar (AUTO, IMPORTE o NO); vale «${String(e0.soporteria_modo)}».`);
     const factor = R.factor_lamina;
     const iva = M.capas.iva_pct;
     const bridas = finito(L_m) && L_m > 0 ? bridasPara(M, L_m) : null;
@@ -250,15 +285,17 @@
       fabricacion: cuadrilla(diasFab, R.personas_fabricacion, R.pago_dia_fabricacion),
       instalacion: cuadrilla(diasIns, R.personas_instalacion, R.pago_dia_instalacion),
     };
+    // la soportería: automática (ménsulas por metros), el importe capturado o nada
+    const soporteria = modoSop === 'AUTO' ? soporteriaAuto(M, D, L_m) : { modo: modoSop, importe: modoSop === 'IMPORTE' ? dadosExtras.soporteria || 0 : 0 };
     const extras = { importe: 0 };
-    EXTRAS.forEach(([k]) => { extras[k] = dadosExtras[k] || 0; extras.importe += extras[k]; });
+    EXTRAS.forEach(([k]) => { extras[k] = k === 'soporteria' ? soporteria.importe : dadosExtras[k] || 0; extras.importe += extras[k]; });
     const costo = lamina_factor + bridas.importe + mano_obra.fabricacion.importe + mano_obra.instalacion.importe + extras.importe;
     const utilidad = costo * u;
     const precio_neto = costo + utilidad;
     const iva_monto = precio_neto * iva;
     const aprovechado = Math.min(1, (B * Y * n_yardas) / (n_hojas * W * Lh));
     return {
-      entrada: { D_mm: D, L_m, yarda_mm: Y, hoja_id, utilidad_pct: u, dias_fabricacion: diasFab, dias_instalacion: diasIns, mangueras: dadosExtras.mangueras, soporteria: dadosExtras.soporteria, viaticos: dadosExtras.viaticos },
+      entrada: { D_mm: D, L_m, yarda_mm: Y, hoja_id, utilidad_pct: u, dias_fabricacion: diasFab, dias_instalacion: diasIns, mangueras: dadosExtras.mangueras, soporteria: dadosExtras.soporteria, viaticos: dadosExtras.viaticos, soporteria_modo: modoSop },
       hoja: {
         id: hoja_id, descripcion: H.descripcion || hoja_id, material: H.material, calibre: H.calibre, ancho_mm: W, largo_mm: Lh,
         espesor_mm: e, precio: precio.precio, sin_iva: precio.sin_iva, kg: precio.kg,
@@ -267,12 +304,12 @@
       hoja_auto: !e0.hoja_id, hojas_comparadas: candidatas.length, // sin elegir lámina: de cuántas hojas del ancho de la yarda se tomó la más barata
       acomodo: aco, yardas: n_yardas, yardas_por_hoja: aco.n, yardas_ultima_hoja: ultima, hojas: n_hojas, aprovechamiento: aprovechado, kg: n_hojas * precio.kg,
       lamina, factor, lamina_factor,
-      bridas, mano_obra, extras,
+      bridas, mano_obra, extras, soporteria,
       costo, utilidad_pct: u, utilidad, precio: precio_neto, iva_pct: iva, iva: iva_monto, total: precio_neto + iva_monto,
       plazo: diasFab === null && diasIns === null ? null : { fabricacion: diasFab || 0, instalacion: diasIns || 0, total: (diasFab || 0) + (diasIns || 0) },
       advertencias,
     };
   }
 
-  return { cotizar, hojas, yardas, bridasPara, acomodo, hojaPara, hojasDeLaYarda, plantillaDe };
+  return { cotizar, soporteriaAuto, MODOS_SOPORTERIA, hojas, yardas, bridasPara, acomodo, hojaPara, hojasDeLaYarda, plantillaDe };
 }));

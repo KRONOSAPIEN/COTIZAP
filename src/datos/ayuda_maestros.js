@@ -53,7 +53,7 @@
     [/_mm$/, 'mm'], [/_mm2$/, 'mm²'], [/_m_min$/, 'm/min'], [/_min_m2$/, 'min/m²'], [/_min_m$/, 'min/m'], [/_min_kg$/, 'min/kg'], [/_min$/, 'min'], [/_deg$/, '°'],
     [/^salario_diario$/, 'MXN/día'], [/^pago_dia_/, 'MXN/día'], [/^personas_/, 'personas'], [/^dias_/, 'días'], [/^horas_dia$/, 'h/día'], [/_envase_L$/, 'L'], [/^tornillos_multiplo$/, 'juegos'], [/^tornillos_pieza$/, 'juegos'],
     [/^ml_sellador_junta_m$/, 'mL/m'],
-    [/^(horizontal_m|horizontal_max_m|vertical_m)$/, 'm'], [/^(base_vertical|por_accesorio)$/, 'soportes'],
+    [/^(horizontal_m|horizontal_max_m|vertical_m)$/, 'm'], [/^(base_vertical|por_accesorio)$/, 'soportes'], [/^menula_anclajes$/, 'piezas'],
     [/_kg_m3$/, 'kg/m³'], [/_g_cm3$/, 'g/cm³'], [/_L_min$/, 'L/min'], [/_um$/, 'µm'], [/^sv_pct$/, '%'], [/^dias_cobro$/, 'días'], [/ml_por_m/, 'mL/m'], [/^cartucho_ml$/, 'mL'],
   ];
 
@@ -207,6 +207,46 @@
         'hasta m': 'Metros hasta el punto más alejado que cubre el renglón (40 m incluye los 40 m).',
         importe: 'Lo que se suma por las bridas, en MXN sin IVA.',
       } });
+  E('rapida.soporteria', 'Soportería automática',
+    'Con qué se costean las ménsulas que la cotización rápida pone sola: una con su abrazadera cada 2.5 m (la separación horizontal de Proceso › Soportería › Espaciamiento) en los metros hasta el punto más alejado.',
+    'La ménsula y la abrazadera se cotizan como dos partidas de soportería (material de la lista del proveedor, anclajes y minutos reales de taller), sin utilidad: la utilidad la suma la cotización rápida.',
+    'Con 31 m son 13 ménsulas con su abrazadera, unos $343 cada una de costo directo: $4,456. La pestaña permite capturar otro importe o quitarla.',
+    { afecta: ['rapida'] });
+  E('rapida.soporteria.menula_barra', 'Barra de la ménsula',
+    'La barra de la lista del proveedor de la que se corta cada ménsula.',
+    'Se elige de la lista de barras. El taller: ángulo 1¼″ × 1/8″.',
+    'Cambia el precio del material de las ménsulas.',
+    { afecta: ['rapida'] });
+  E('rapida.soporteria.menula_largo_mm', 'Largo de barra por ménsula',
+    'Lo que se corta de la barra para una ménsula (brazo y pierna).',
+    'En mm. El caso real: brazo y pierna de 650 mm, 1 300 mm.',
+    'Más largo, más material por ménsula (y más barras en la compra).',
+    { afecta: ['rapida'], tip: [400, 3000] });
+  E('rapida.soporteria.menula_anclajes', 'Anclajes por ménsula',
+    'Los anclajes (taquetes) con que se fija cada ménsula a la estructura; el artículo es el de Proceso › Soportería.',
+    'Un número entero. El caso real: 4 taquetes de 3/8″.',
+    'Cada anclaje suma su precio del catálogo de compras, sin IVA.',
+    { afecta: ['rapida'], tip: [0, 8] });
+  E('rapida.soporteria.menula_min', 'Minutos de taller por ménsula',
+    'Lo que tarda el taller en hacer una ménsula: cortar, doblar, barrenar y puntear.',
+    'En min reales (sin eficiencia). El taller: 7 ménsulas en 2 días (16 h) = 137 min cada una. 0 = el de Proceso › Soportería.',
+    'Es lo que más pesa en la ménsula: 137 min a $62.50/h son unos $143 de mano de obra por pieza.',
+    { afecta: ['rapida'], tip: [15, 240] });
+  E('rapida.soporteria.abrazadera_barra', 'Barra de la abrazadera',
+    'La barra de la que se corta cada abrazadera; su largo sale del diámetro máximo de la cotización rápida.',
+    'Se elige de la lista de barras. Recomendado para cal. 22: tipo cuna de solera de 1″ × 1/8″ (su precio es aproximado).',
+    'Cambia el precio del material de las abrazaderas.',
+    { afecta: ['rapida'] });
+  E('rapida.soporteria.abrazadera_vuelta', 'Vuelta de la abrazadera',
+    'Si la abrazadera abraza media vuelta del tubo (cuna de 180°) o la vuelta completa (360°, dos mitades).',
+    'MEDIA o COMPLETA. La completa lleva el doble de solera y cuatro orejas.',
+    'La completa reparte mejor el peso en cal. 22, pero cuesta el doble de solera.',
+    { afecta: ['rapida'] });
+  E('rapida.soporteria.abrazadera_min', 'Minutos de taller por abrazadera',
+    'Lo que tarda el taller en cortar, rolar, doblar las orejas y barrenar una abrazadera.',
+    'En min reales. 15 min (el de Proceso › Soportería, ilustrativo). 0 = el de Proceso › Soportería.',
+    'Sube la mano de obra de cada abrazadera.',
+    { afecta: ['rapida'], tip: [5, 60] });
 
   /* ---------------------------------------- Precios ---------------------------------------- */
   const P = (clave, t, que, como, efecto, extra) => E(`precios.${clave}`, t, que, como, efecto, extra);
