@@ -273,7 +273,7 @@
     "alerta": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "severidad", "codigo", "referencias", "mensaje", "decision_tomada", "pregunta", "resuelta"],
+      "required": ["id", "severidad", "codigo", "referencias", "mensaje", "decision_tomada", "pregunta", "respuesta", "resuelta"],
       "properties": {
         "id": { "type": "string", "pattern": "^ALR-[0-9]{3}$" },
         "severidad": { "type": "string", "enum": ["BLOQUEANTE", "CONFIRMAR", "ADVERTENCIA", "INFO"] },
@@ -290,7 +290,30 @@
         "mensaje": { "type": "string" },
         "decision_tomada": { "type": ["string", "null"] },
         "pregunta": { "type": ["string", "null"] },
+        "respuesta": { "anyOf": [{ "$ref": "#/$defs/respuesta" }, { "type": "null" }] },
         "resuelta": { "type": "boolean" }
+      }
+    },
+    "respuesta": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Cómo contesta el ingeniero la pregunta en la aplicación: el valor se guarda en respuestas[elemento][campo] (origen USUARIO) y el despiece se vuelve a calcular. La lectura la deja en null.",
+      "required": ["tipo", "elemento", "campo", "unidad", "opciones", "propuesta"],
+      "properties": {
+        "tipo": { "type": "string", "enum": ["NUMERO", "OPCIONES", "ACEPTAR"] },
+        "elemento": { "type": "string" },
+        "campo": { "type": "string", "enum": ["longitud_m", "diametro_in", "angulo_deg", "posicion", "boca_in", "manguera_tramos", "calibre", "material", "aceptado"] },
+        "unidad": { "type": ["string", "null"] },
+        "opciones": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["valor", "texto"],
+            "properties": { "valor": { "type": ["number", "string"] }, "texto": { "type": "string" } }
+          }
+        },
+        "propuesta": { "type": ["number", "string", "boolean", "null"] }
       }
     },
     "resumen": {

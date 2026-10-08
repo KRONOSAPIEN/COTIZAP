@@ -2223,6 +2223,109 @@ const ok = (cond, msg) => {
     await p.context().close();
   }
 
+  console.log('32) Importar unifilar: la lectura del croquis → preguntas → partidas; cada respuesta actualiza las partidas');
+  {
+    const p = await nuevaPagina();
+    const R = (fn, arg) => p.evaluate(fn, arg);
+    const preguntas = () => p.locator('.uf-preguntas .uf-alerta').count();
+    const imp = () => R(() => window.COTIZAP.web.estadoApp.cot.partidas.filter((x) => x.unifilar_id).map((x) => ({ id: x.id, u: x.unifilar_id, ed: !!x.unifilar_editada, L: x.L_mm, theta: x.theta_deg, beta: x.beta_deg })));
+    const dePieza = async (u) => (await imp()).find((x) => x.u === u);
+    await p.click('#btn-nueva');
+    await p.click('#btn-unifilar');
+    ok(await p.locator('#dlg-unifilar[open] #uf-texto').isVisible(), 'sin lectura, el diálogo abre en «pegar o cargar»');
+    await p.click('#uf-leer');
+    ok(/Pegue el JSON/.test(await p.locator('.uf-errores').innerText()), 'vacío: pide el JSON');
+    await p.fill('#uf-texto', '{ "red": ');
+    await p.click('#uf-leer');
+    ok(/no es un JSON válido/.test(await p.locator('.uf-errores').innerText()), 'texto roto: lo dice sin romper la página');
+    await p.click('#uf-ejemplo');
+    await p.waitForSelector('.uf-preguntas');
+    ok(await preguntas() === 4 && /Despiece preliminar/.test(await p.locator('.uf-estado').innerText()), 'el ejemplo: despiece preliminar con 4 preguntas');
+    ok(await p.locator('#uf-agregar').innerText() === 'Agregar 22 partidas', 'propone agregar 22 partidas');
+    ok(await R(() => document.activeElement && document.activeElement.dataset.clave) === 'A-005|longitud_m', 'el cursor queda en la primera pregunta (la cota ilegible)');
+    ok(/30\s+6 sueltos · 116 tornillos/.test(await p.locator('.uf-tiles').innerText()) && /14\s+regla del taller/.test(await p.locator('.uf-tiles').innerText()), 'resumen: 30 aros (6 sueltos) y 14 ménsulas');
+    await p.fill('[data-clave="A-005|longitud_m"]', 'abc');
+    await p.click('.uf-preguntas [data-codigo="COTA_ILEGIBLE"] button');
+    ok(/mayor que cero/.test(await p.locator('.uf-preguntas [data-codigo="COTA_ILEGIBLE"] .uf-err').innerText()), 'una cota que no es número no se acepta');
+    await p.fill('[data-clave="A-005|longitud_m"]', '1.6');
+    await p.press('[data-clave="A-005|longitud_m"]', 'Enter');
+    ok(await preguntas() === 3, 'respondida la cota quedan 3 preguntas');
+    ok(await R(() => document.activeElement && document.activeElement.dataset.clave) === 'N-005|angulo_deg', 'el cursor pasa a la siguiente pregunta');
+    ok(await p.locator('#aviso-unifilar').isVisible() && /sin agregar/.test(await p.locator('#aviso-unifilar').innerText()), 'antes de agregar, el aviso dice que hay una lectura sin agregar');
+    await p.click('#uf-agregar');
+    ok(!(await p.locator('#dlg-unifilar').evaluate((d) => d.open)), 'al agregar se cierra el diálogo');
+    ok(await p.locator('#lista-partidas .partida:not(.partida-auto)').count() === 22 && await p.locator('#lista-partidas .chip-unifilar').count() === 22, '22 partidas, cada una con la etiqueta de su pieza');
+    ok(/22 partidas agregadas · 3 preguntas por responder/.test(await p.locator('#toasts').innerText()), 'el aviso flotante lo resume');
+    ok((await dePieza('DUCT-005')).L === 1250, 'el tramo de 5″ con la cota respondida: 1.6 m − 350 mm del injerto = 1 250 mm');
+    ok(/22 partidas de un croquis unifilar · preliminar\. 3 preguntas por responder/.test(await p.locator('#aviso-unifilar').innerText()), 'el aviso de la cotización cuenta las preguntas');
+    const id1 = (await dePieza('DUCT-001')).id;
+
+    await p.click('#aviso-unifilar-abrir');
+    await p.selectOption('[data-clave="A-008|posicion"]', { label: 'Baja: codo de 90°' });
+    await p.click('.uf-preguntas [data-codigo="ORIENTACION_AMBIGUA"] button');
+    ok((await dePieza('CODO-002')).theta === 90 && (await dePieza('DUCT-001')).id === id1, 'responder actualiza las partidas al momento (codo de 90°) y conservan su id');
+    ok(/Partidas del unifilar actualizadas/.test(await p.locator('#toasts').innerText()), 'y lo avisa');
+    await p.click('#uf-listo');
+
+    // una partida importada editada a mano: la siguiente respuesta ya no la pisa sin avisar
+    const iDuct1 = (await R(() => window.COTIZAP.web.estadoApp.cot.partidas.findIndex((x) => x.unifilar_id === 'DUCT-001')));
+    await editar(p, iDuct1);
+    await p.fill('#f_descripcion', 'Subida al colector');
+    await p.click('#dlg-guardar');
+    ok((await dePieza('DUCT-001')).ed && /DUCT-001 · editada/.test(await p.locator('#lista-partidas .chip-unifilar').first().innerText()), 'la partida editada sigue siendo la pieza DUCT-001, marcada «editada»');
+    await p.click('#aviso-unifilar-abrir');
+    await p.selectOption('[data-clave="N-005|angulo_deg"]', { label: '30°' });
+    await p.click('.uf-preguntas [data-codigo="ANGULO_DERIVACION_NO_PERMITIDO"] button');
+    ok((await dePieza('INJ-001')).beta === 45 && /editadas a mano/.test(await p.locator('#uf-cuerpo').innerText()), 'con una editada no se actualiza sola: lo explica');
+    ok(await p.locator('#uf-agregar').innerText() === 'Actualizar partidas', 'y ofrece «Actualizar partidas»');
+    await p.click('#uf-agregar');
+    ok((await dePieza('INJ-001')).beta === 30 && !(await dePieza('DUCT-001')).ed, 'al actualizar: injerto a 30° y la editada se reemplaza');
+
+    // persiste con la cotización
+    await p.reload();
+    await p.waitForSelector('#lista-partidas .partida');
+    ok(await p.locator('#lista-partidas .chip-unifilar').count() === 22 && /1 pregunta por responder/.test(await p.locator('#aviso-unifilar').innerText()), 'al recargar siguen las 22 partidas y la pregunta pendiente');
+    await p.click('#aviso-unifilar-abrir');
+    ok(/Respondidas \(3\)/i.test(await p.locator('.uf-g-resp summary').innerText()), 'y las 3 respuestas');
+    await p.locator('.uf-g-resp summary').click();
+    await p.locator('.uf-g-resp [data-codigo="COTA_ILEGIBLE"] .btn-texto').click();
+    ok(await preguntas() === 2 && (await dePieza('DUCT-005')).L === 800, '«Quitar la respuesta» vuelve a la cota estimada y a preguntarla: 1.3 m − 500 mm del injerto a 30° = 800 mm');
+
+    // otra lectura con partidas ya importadas: no toca la cotización hasta reemplazar
+    await p.click('#uf-otra');
+    await p.click('#uf-ejemplo');
+    ok(/Reemplazar con 22 partidas/.test(await p.locator('#uf-agregar').innerText()) && /reemplaza las 22 partidas/.test(await p.locator('#uf-cuerpo').innerText()), 'otra lectura: ofrece reemplazar las 22 importadas');
+    await p.click('#uf-cerrar');
+    ok((await dePieza('INJ-001')).beta === 30, 'al cerrar sin reemplazar, nada cambia');
+
+    // quitar de la cotización, con deshacer
+    await p.click('#aviso-unifilar-abrir');
+    await p.click('#uf-descartar');
+    ok(await p.locator('#lista-partidas .chip-unifilar').count() === 0 && await p.locator('#aviso-unifilar').isHidden(), '«Quitar de la cotización» quita las partidas y el aviso');
+    await p.locator('#toasts .btn-texto').first().click();
+    ok(await p.locator('#lista-partidas .chip-unifilar').count() === 22 && await p.locator('#aviso-unifilar').isVisible(), '«Deshacer» las devuelve');
+
+    // la copia de una partida importada ya no es la pieza del croquis
+    await p.locator('#lista-partidas .partida:not(.partida-auto)').first().locator('button[aria-label="Duplicar"]').click();
+    ok(await p.locator('#lista-partidas .partida:not(.partida-auto)').count() === 23 && await p.locator('#lista-partidas .chip-unifilar').count() === 22, 'la copia no lleva la etiqueta de la pieza');
+
+    // datos guardados dañados: una lectura que no es lectura se descarta, y con ella la marca de las partidas
+    await R(() => {
+      const k = 'cotizap.cotizacion.v1';
+      const c = JSON.parse(localStorage.getItem(k));
+      c.unifilar = { lectura: { red: 1 }, respuestas: { x: { longitud_m: 1 } }, importado: true };
+      localStorage.setItem(k, JSON.stringify(c));
+    });
+    await p.reload();
+    await p.waitForSelector('#lista-partidas .partida');
+    ok(await p.locator('#aviso-unifilar').isHidden() && await p.locator('#lista-partidas .chip-unifilar').count() === 0 && await p.locator('#lista-partidas .partida:not(.partida-auto)').count() === 23, 'una lectura dañada se descarta sin perder las partidas');
+    await p.setViewportSize({ width: 390, height: 844 });
+    await p.click('#btn-unifilar');
+    await p.click('#uf-ejemplo');
+    ok(await R(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'en el celular el diálogo no se sale de la pantalla');
+    await p.context().close();
+  }
+
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

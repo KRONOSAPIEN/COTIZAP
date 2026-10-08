@@ -1,7 +1,7 @@
 /**
  * Contrato de la lectura de unifilares (docs/vision-unifilares.md): el caso de prueba cumple el esquema
- * (docs/unifilar-bom.schema.json), su red es un árbol consistente, su despiece cuadra con el motor de COTIZAP y el
- * documento trae el esquema y el caso tal como están en sus archivos.
+ * (docs/unifilar-bom.schema.json), su red es un árbol consistente, su despiece cuadra con el motor de COTIZAP, es el que
+ * dan las reglas a la lectura del ejemplo y el documento trae el esquema y el caso tal como están en sus archivos.
  */
 'use strict';
 
@@ -13,6 +13,8 @@ const { crearMaestros } = require('../src/datos/maestros');
 const C = require('../src/motor/cotizador');
 const SOP = require('../src/motor/soportes');
 const R = require('../src/motor/rapida');
+const UF = require('../src/motor/unifilar');
+const EJEMPLO = require('../src/datos/unifilar_ejemplo');
 
 const raiz = path.join(__dirname, '..');
 const leer = (r) => fs.readFileSync(path.join(raiz, r), 'utf8');
@@ -87,7 +89,7 @@ test('La red es un árbol consistente: identificadores únicos, referencias que 
   const { nodos, aristas, textos } = CASO.red;
   const ids = [...nodos, ...aristas, ...textos, ...CASO.equipos, ...CASO.ductos_rectos, ...CASO.accesorios, ...CASO.elementos_union, ...CASO.soportes, ...CASO.alertas_ambiguedad].map((x) => x.id);
   assert.equal(new Set(ids).size, ids.length, 'identificadores únicos');
-  const existe = new Set(ids);
+  const existe = new Set([...ids, 'metadatos']); // «metadatos»: el material y el calibre de todo el croquis
   const N = new Map(nodos.map((n) => [n.id, n]));
   aristas.forEach((a) => {
     assert.ok(N.has(a.nodo_a) && N.has(a.nodo_b), `${a.id}: nodos`);
@@ -170,6 +172,12 @@ test('Las partidas se cotizan con el motor y sus bridas, ménsulas y abrazaderas
   const rap = R.cotizar({ D_mm: q.D_mm, L_m: q.L_m, yarda_mm: q.yarda_mm, menulas: q.menulas, mangueras_tramos: q.mangueras_tramos }, M);
   assert.ok(rap.total > 0);
   assert.equal(rap.soporteria.menulas, men.cantidad);
+});
+
+test('El caso de prueba es lo que dan las reglas (motor/unifilar.js) a la lectura de src/datos/unifilar_ejemplo.js', () => {
+  const { lectura, errores } = UF.leer(EJEMPLO);
+  assert.deepEqual(errores, []);
+  assert.deepEqual(UF.despiezar(lectura, crearMaestros(), {}), CASO, 'regenere con npm run caso:unifilar');
 });
 
 test('El documento trae el esquema y el caso de prueba tal como están en sus archivos', () => {

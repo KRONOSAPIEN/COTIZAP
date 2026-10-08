@@ -55,6 +55,7 @@
       </div>
       <div class="planos-acc acciones">
         <button type="button" class="btn btn-sec" id="btn-nueva">Nueva</button>
+        <button type="button" class="btn btn-sec" id="btn-unifilar">Importar unifilar</button>
         <button type="button" class="btn btn-sec" id="btn-io">Guardar y cargar</button>
         <button type="button" class="btn btn-sec" id="btn-imprimir">Imprimir propuesta</button>
       </div>
@@ -83,6 +84,12 @@
         <div class="datos-mas-cuerpo" id="c_parametros_mas_cuerpo"></div>
       </details>
     </form>
+
+    <div class="aviso aviso-ejemplo" id="aviso-unifilar" hidden>
+      <span class="aviso-icono" aria-hidden="true">?</span>
+      <p class="aviso-txt"></p>
+      <button type="button" class="btn-texto" id="aviso-unifilar-abrir">Revisar el unifilar</button>
+    </div>
 
     <div class="rejilla">
       <section class="col-lista" aria-labelledby="tit-partidas">
@@ -275,6 +282,17 @@
   </div>
 </dialog>
 
+<dialog id="dlg-unifilar" aria-labelledby="uf-titulo">
+  <div class="uf">
+    <header class="dlg-cab">
+      <h2 id="uf-titulo">Importar unifilar</h2>
+      <button type="button" class="btn-icono" id="uf-cerrar" aria-label="Cerrar"><span class="icono" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span></button>
+    </header>
+    <div class="uf-cuerpo" id="uf-cuerpo"></div>
+    <footer class="dlg-pie uf-pie" id="uf-pie"></footer>
+  </div>
+</dialog>
+
 <div id="rapida-impresion" class="rapida-impresion" aria-hidden="true"></div>
 <div id="toasts" aria-live="polite"></div>
 
@@ -283,6 +301,7 @@
 <script src="../datos/maestros.js"></script>
 <script src="../datos/ayuda_maestros.js"></script>
 <script src="../datos/ejemplos.js"></script>
+<script src="../datos/unifilar_ejemplo.js"></script>
 <script src="../motor/geometria.js"></script>
 <script src="../motor/material.js"></script>
 <script src="../motor/proveedor.js"></script>
@@ -294,6 +313,7 @@
 <script src="../motor/soportes.js"></script>
 <script src="../motor/cotizador.js"></script>
 <script src="../motor/rapida.js"></script>
+<script src="../motor/unifilar.js"></script>
 <script src="dom.js"></script>
 <script src="esquemas.js"></script>
 <script src="planos.js"></script>
@@ -302,6 +322,7 @@
 <script src="compras_ui.js"></script>
 <script src="planos_ui.js"></script>
 <script src="rapida_ui.js"></script>
+<script src="unifilar_ui.js"></script>
 <script src="almacen.js"></script>
 <script src="app.js"></script>
 </body>

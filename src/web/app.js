@@ -173,10 +173,16 @@
       return q;
     });
     cot.ejemplo = cot.ejemplo === true;
+    // La lectura de un croquis unifilar importada (unifilar_ui.js): se vuelve a revisar; lo que no es lectura se descarta
+    const uf = esObjeto(c.unifilar) ? C.unifilar.leer(c.unifilar.lectura) : null;
+    if (uf && !uf.errores.length) cot.unifilar = { lectura: uf.lectura, respuestas: C.unifilar.respuestasValidas(c.unifilar.respuestas), importado: c.unifilar.importado === true };
+    else delete cot.unifilar;
     const vistos = new Set();
     cot.partidas = c.partidas.filter(esObjeto).map((p) => {
       const q = { ...C.validacion.migrarPartida({ ...p }) }; // lo guardado con campos de versiones anteriores pasa a los de hoy
       if (q.descripcion !== undefined && typeof q.descripcion !== 'string') q.descripcion = typeof q.descripcion === 'number' ? String(q.descripcion) : '';
+      // la pieza del croquis de la que salió la partida (sólo mientras la cotización tenga su lectura)
+      if (!cot.unifilar || typeof q.unifilar_id !== 'string' || !/^[A-Za-z0-9_-]{1,60}$/.test(q.unifilar_id)) { delete q.unifilar_id; delete q.unifilar_editada; } else if (q.unifilar_editada !== true) delete q.unifilar_editada;
       while (typeof q.id !== 'string' || !q.id || vistos.has(q.id)) q.id = idNuevo();
       vistos.add(q.id);
       return q;
@@ -528,6 +534,7 @@
     const chips = [];
     if (f && !f.ok) chips.push(h('span', { class: 'chip chip-err', title: f.errores.join('\n') }, W.icono('error'), 'Revisar datos'));
     if (adv) chips.push(h('span', { class: 'chip chip-adv', title: f.advertencias.join('\n') }, W.icono('aviso'), `${adv} ${adv === 1 ? 'aviso' : 'avisos'}`));
+    if (p.unifilar_id) chips.push(h('span', { class: 'chip chip-auto chip-unifilar', title: p.unifilar_editada ? 'Pieza del croquis unifilar, editada a mano' : 'Pieza del croquis unifilar' }, p.unifilar_id, p.unifilar_editada ? ' · editada' : ''));
     const activar = () => seleccionar(p.id);
     const li = h('li', { class: `partida${sel ? ' sel' : ''}${f && !f.ok ? ' err' : ''}`, dataset: { id: p.id } },
       h('div', {
@@ -589,6 +596,8 @@
     const copia = U.clonar(estado.cot.partidas[i]);
     copia.id = idNuevo();
     copia.descripcion = `${tituloPartida(copia)} (copia)`;
+    delete copia.unifilar_id; // la copia ya no es la pieza del croquis
+    delete copia.unifilar_editada;
     estado.cot.partidas.splice(i + 1, 0, copia);
     estado.sel = copia.id;
     persistir();
@@ -1609,6 +1618,9 @@
       if (dlg.error) { $('#dlg-prev').scrollIntoView({ block: 'nearest' }); return; }
       if (dlg.id) {
         const i = estado.cot.partidas.findIndex((x) => x.id === dlg.id);
+        const original = estado.cot.partidas[i];
+        // una pieza del croquis editada a mano sigue siendo esa pieza: al actualizar el unifilar se avisa antes de reemplazarla
+        if (original && original.unifilar_id) Object.assign(p, { unifilar_id: original.unifilar_id, unifilar_editada: true });
         estado.cot.partidas[i] = p;
         estado.sel = p.id;
       } else {
@@ -1803,6 +1815,7 @@
     renderDetalle();
     renderPropuesta();
     if (W.comprasUI) W.comprasUI.render();
+    if (W.unifilarUI) W.unifilarUI.render();
     if (W.planosUI && estado.tab === 'planos') W.planosUI.render(); // los planos se dibujan sólo a la vista
     if (W.rapidaUI && estado.tab === 'rapida') W.rapidaUI.render(); // las tablas maestras o la unidad pudieron cambiar
   }
@@ -1871,6 +1884,7 @@
   W.cotizarCon = (M) => C.cotizador.cotizar(entradaCotizacion(), M);
   W.recalcular = () => { persistir(); render(); };
   W.toast = toast;
+  W.idNuevo = idNuevo;
   W.tile = tile;
   W.tabla = tabla;
   W.reemplazar = reemplazar;

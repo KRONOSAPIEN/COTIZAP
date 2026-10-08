@@ -9,7 +9,7 @@ Cotizador para ducterías de lámina (colección de polvo y control ambiental). 
 | Pieza | Dónde | Qué es |
 | --- | --- | --- |
 | **Documento de arquitectura** | [`docs/arquitectura-cotizador-ducterias.md`](docs/arquitectura-cotizador-ducterias.md) | Insumos, fórmulas geométricas, mano de obra y consumibles, estructura de precios, lista de compras, venta pactada y control de gastos, pseudocódigo, ejemplos resueltos paso a paso y un proyecto real. Es la especificación. |
-| **Lectura de unifilares (diseño)** | [`docs/vision-unifilares.md`](docs/vision-unifilares.md) · [`docs/unifilar-bom.schema.json`](docs/unifilar-bom.schema.json) | Cómo un modelo multimodal lee la foto de un croquis unifilar y la convierte en un grafo y en un despiece cotizable: gramática visual, grafo en tres capas, reglas de inferencia, protocolo de ambigüedad, esquema JSON y un caso de prueba generado con el motor. Todavía no está en la aplicación. |
+| **Lectura de unifilares** | [`docs/vision-unifilares.md`](docs/vision-unifilares.md) · [`docs/unifilar-bom.schema.json`](docs/unifilar-bom.schema.json) · `src/motor/unifilar.js` | Cómo un modelo multimodal lee la foto de un croquis unifilar y la convierte en un grafo y en un despiece cotizable: gramática visual, grafo en tres capas, reglas de inferencia, protocolo de ambigüedad, esquema JSON y un caso de prueba. Las reglas (de la lectura al despiece) ya corren en la aplicación: [Importar unifilar](#importar-unifilar). La etapa de visión (leer la foto) es diseño. |
 | **Motor de cálculo** | `src/motor/` | Funciones puras, sin dependencias. Separa *cantidades* de *precios*. |
 | **Tablas maestras** | `src/datos/maestros.js` · `src/datos/ayuda_maestros.js` | Lista de precios del proveedor, catálogo de compras, materiales, calibres, perfiles, uniones, velocidades, tarifas, merma y capas de precio; y la ayuda de cada dato (qué es, cómo se llena, qué esperar). |
 | **Aplicación web** | `src/web/` | Cotización rápida con el diámetro mayor y los metros, captura de partidas con su dibujo acotado en vivo, desglose paso a paso, planos de pedido imprimibles, compras y gastos del proyecto, editor de tablas maestras con ayuda integrada, propuesta imprimible. |
@@ -24,7 +24,7 @@ Las cinco pestañas van en el orden en que se trabaja:
 | Pestaña | Para qué | Qué hace |
 | --- | --- | --- |
 | **Cotización rápida** | Dar un precio en minutos | Con el diámetro mayor y los metros hasta el punto más alejado: láminas enteras × 3, bridas por metros, mano de obra de los días, utilidad e IVA. Dibuja cómo salen las yardas de cada lámina y prepara el **texto para el cliente** (*Copiar texto* para WhatsApp o correo, *Imprimir*). [Ver abajo](#cotización-rápida). |
-| **Cotización detallada** | El precio pieza por pieza | Arriba, los datos de la cotización: cliente, unidades, **ancho de la yarda**, **instalación** (decide la pintura) y, sólo para esta cotización, **margen, comisión, descuento y días de cobro** (más en *Más parámetros de precio*). Luego *Agregar partida*, elegir la familia y capturar medidas: el precio se recalcula mientras escribe. Al seleccionar una partida se ve su dibujo y su desglose. Aquí están *Nueva*, *Guardar y cargar* (JSON y CSV para Excel) e *Imprimir propuesta* (la hoja para el cliente, sin costos internos). |
+| **Cotización detallada** | El precio pieza por pieza | Arriba, los datos de la cotización: cliente, unidades, **ancho de la yarda**, **instalación** (decide la pintura) y, sólo para esta cotización, **margen, comisión, descuento y días de cobro** (más en *Más parámetros de precio*). Luego *Agregar partida*, elegir la familia y capturar medidas: el precio se recalcula mientras escribe. Al seleccionar una partida se ve su dibujo y su desglose. Aquí están *Nueva*, *Importar unifilar* (las partidas desde la lectura de un croquis, [ver abajo](#importar-unifilar)), *Guardar y cargar* (JSON y CSV para Excel) e *Imprimir propuesta* (la hoja para el cliente, sin costos internos). |
 | **Planos** | Mandar a fabricar | Cada pieza dibujada y acotada en hojas por tipo de pieza, con marcas y el cuadre de bridas. [Ver abajo](#planos-de-las-piezas). |
 | **Compras y gastos** | Comprar y controlar | Lo que hay que comprar en piezas enteras, la venta pactada contra el precio mínimo y lo gastado contra lo cotizado. [Ver abajo](#compras-y-gastos-del-proyecto). |
 | **Tablas maestras** | Poner los precios del taller | La lista del proveedor, precios, tarifas, tiempos y las reglas de la cotización rápida; cada dato con su ayuda (ⓘ). Se guardan solas. |
@@ -38,6 +38,7 @@ Los avisos de arriba (valores ilustrativos, cotización de ejemplo) sólo aparec
 ```bash
 npm test                 # motor y guardado: geometría, ejemplo, precios, validaciones, robustez, almacén de tablas
 npm run test:e2e         # interfaz (opcional): npm i -D playwright && npx playwright install chromium
+npm run caso:unifilar    # regenera el caso de prueba de unifilares (docs/ejemplos y su bloque en el documento) desde las reglas
 ```
 
 ## Usar el motor desde código
@@ -122,6 +123,16 @@ La pestaña **Compras y gastos** nació de una hoja de control de gastos real: u
 - **Lista de compras en piezas enteras.** Junta lo que piden todas las partidas y lo redondea a lo que se compra: hojas y barras completas (los aros y las piezas de soportería se acomodan en barras de 6 m), tornillos por decena, cartuchos y envases enteros. Cada renglón dice cuánto se necesita, cuánto se compra, lo que ya cobran las partidas y el **sobrante**, que **siempre se cobra**: va en la cotización como una partida automática. Se copia como CSV.
 - **Control de gastos.** Capture cada ticket o factura como viene: si el precio **trae IVA** y si hay **factura** (con factura el IVA se acredita y no es costo; sin factura sí lo es; la raya no lleva IVA). La lista de compras se puede usar como base: cada compra, la mano de obra y los viáticos llegan como renglones *estimado* para cambiar su precio por el real. La comparación por categoría (material, consumibles, mano de obra, compras a terceros, soportería, instalación, viáticos) dice en qué se gastó de más, y el resultado del proyecto da la utilidad **antes** y **después** de indirectos y el IVA acreditable.
 - **Lo que había que corregir en la hoja.** Restó de la venta con IVA sus compras con IVA y la raya, que no lleva IVA: no descontó los **$713.23 de IVA neto** que se le pagan al SAT. Además pagó 2 días de bridas en vez de 4 y no traía los 2 días de las ménsulas ni el esmalte. Corregida: la venta es **$39,405.17** sin IVA, se gastaron **$43,277.47** y el proyecto **perdió $3,872.30 antes de indirectos** (−9.8 %), contra los −$829.06 de la hoja. La app compra lo mismo que el taller (6 soleras, 2 ángulos, 1 solera chica, 1 PTR, 28 taquetes, 220 juegos de tornillos y 2 Sikaflex) y lo cotizado queda 1 % arriba de lo gastado, porque cobra el sobrante de las piezas enteras.
+
+## Importar unifilar
+
+En **Cotización detallada → Importar unifilar** se pega (o se carga de un archivo) la **lectura** de un croquis unifilar en JSON: los nodos, las aristas con su Ø y su cota, los textos con su confianza y los equipos, como los describe el [documento de lectura de unifilares](docs/vision-unifilares.md) (§8). *Probar con el ejemplo* carga la de su caso de prueba. Las reglas del taller (`src/motor/unifilar.js`) hacen el resto:
+
+- **Despiece.** Orientan la red hacia el colector, heredan los Ø que faltan, estiman por escala la cota ilegible, ponen la pieza de cada nodo (codo a 30/45/60/90°, injerto a 30 o 45°, reducción con injerto, reducción cuando cambia el Ø sin accesorio dibujado), descuentan de cada cota lo que ocupan los accesorios y arman las uniones, las ménsulas con su abrazadera y las mangueras.
+- **Preguntas.** Lo que el croquis no dice se decide y se pregunta: cada pregunta trae la propuesta ya escrita (un número, una lista o «aceptar»). El estado dice si el despiece es **definitivo**, **preliminar** (sirve como precio estimado) o **no cotizable** (algo bloquea y no se puede agregar).
+- **Partidas.** *Agregar N partidas* las pone en la cotización con la etiqueta de su pieza (`DUCT-005`, `INJ-001`…). Un aviso sobre la lista cuenta las preguntas pendientes; **cada respuesta vuelve a correr las reglas y reemplaza las partidas del unifilar**. Si editó a mano alguna de ellas, no se pisa sola: el diálogo lo dice y ofrece *Actualizar partidas*. La lectura y las respuestas se guardan con la cotización; *Quitar de la cotización* la quita con sus partidas (con *Deshacer*).
+
+El caso de prueba del documento da 22 partidas (8 tramos, 5 accesorios, 6 de soportería y 3 compradas): 30 aros, 14 ménsulas y **$45,792.38** con IVA con las tablas de arranque, con 4 preguntas por confirmar (la cota «1.? m», la T a 90° que se propone a 45°, el tramo dibujado vertical y la boca del colector). La aplicación todavía no lee fotos: recibe el JSON que entregaría la etapa de visión.
 
 ## Datos que el cotizador no acepta
 
@@ -234,14 +245,17 @@ Los dibujos salen de `src/web/planos.js` (funciones puras, probadas en `tests/pl
 
 ```text
 docs/arquitectura-cotizador-ducterias.md   especificación
+docs/vision-unifilares.md                  lectura de croquis unifilares (con unifilar-bom.schema.json y ejemplos/unifilar-caso-prueba.json)
 src/
   datos/maestros.js                        tablas maestras (valores ilustrativos)
   datos/ayuda_maestros.js                  ayuda de cada dato de las tablas (qué es · cómo se llena · qué esperar)
   datos/ejemplos.js                        el proyecto real de la hoja de control de gastos y el pedido de ductería del 30-sep-2026
-  motor/                                   util · gastos · geometria · material · proveedor · mano_obra · consumibles · precios · validacion · compras · cotizador · rapida
-  web/                                     index.html · app.js · almacen.js · maestros_ui.js · maestros_ayuda_ui.js · compras_ui.js · planos.js · planos_ui.js · rapida_ui.js · esquemas.js · dom.js · estilos.css
+  datos/unifilar_ejemplo.js                la lectura del croquis unifilar del caso de prueba (docs/vision-unifilares.md §11)
+  motor/                                   util · gastos · geometria · material · proveedor · mano_obra · consumibles · precios · validacion · compras · soportes · cotizador · rapida · unifilar
+  web/                                     index.html · app.js · almacen.js · maestros_ui.js · maestros_ayuda_ui.js · compras_ui.js · planos.js · planos_ui.js · rapida_ui.js · unifilar_ui.js · esquemas.js · dom.js · estilos.css
 tests/                                     *.test.js (node:test) · e2e/ui.e2e.js (Playwright, opcional)
 scripts/construir.js                       empaquetado a un solo HTML
+scripts/caso-unifilar.js                   regenera el caso de prueba de unifilares desde las reglas
 ```
 
 ## Límites conocidos

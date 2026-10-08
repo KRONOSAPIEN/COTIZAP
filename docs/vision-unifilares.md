@@ -1,7 +1,7 @@
 # Lectura de croquis unifilares con visión: del dibujo al despiece cotizable
 
 > **Documento de diseño · COTIZAP · 8-oct-2026.** Para quienes programarán el pipeline de visión y para los analistas de ingeniería que lo integran con el cotizador.
-> Lo acompañan tres archivos que se mantienen junto con este texto: el esquema de salida [`docs/unifilar-bom.schema.json`](unifilar-bom.schema.json), el caso de prueba [`docs/ejemplos/unifilar-caso-prueba.json`](ejemplos/unifilar-caso-prueba.json) —generado con el motor de COTIZAP, no escrito a mano— y la prueba de contrato [`tests/unifilar_contrato.test.js`](../tests/unifilar_contrato.test.js), que verifica que el caso cumple el esquema, que su red es un árbol consistente, que su despiece cuadra con el motor (aros, ménsulas, longitudes) y que este documento trae el esquema y el caso tal como están en sus archivos.
+> Lo acompañan el esquema de salida [`docs/unifilar-bom.schema.json`](unifilar-bom.schema.json), las reglas de §4.4 a §7 ya programadas en [`src/motor/unifilar.js`](../src/motor/unifilar.js) —las usa el botón **Importar unifilar** de la cotización detallada (§10)—, el caso de prueba [`docs/ejemplos/unifilar-caso-prueba.json`](ejemplos/unifilar-caso-prueba.json) —el despiece que dan esas reglas a la lectura de [`src/datos/unifilar_ejemplo.js`](../src/datos/unifilar_ejemplo.js); se regenera con `npm run caso:unifilar`— y la prueba de contrato [`tests/unifilar_contrato.test.js`](../tests/unifilar_contrato.test.js), que verifica que el caso cumple el esquema, que su red es un árbol consistente, que su despiece cuadra con el motor (aros, ménsulas, longitudes), que es lo que dan las reglas y que este documento trae el esquema y el caso tal como están en sus archivos.
 
 ## Índice
 
@@ -158,7 +158,7 @@ Si los dos mejores candidatos de un texto quedan a menos de 15 % uno del otro, s
 | Grado 2 | No colineal, Ø distinto | Codo + reducción (dos piezas, la reducción del lado alejado) | `CODO` + `REDUCCION` | Alerta `TRANSICION_INSERTADA` |
 | Grado 3 | Un par colineal (el tronco) y un ramal; tronco con el mismo Ø | Injerto simple | `RAMAL` | `D_mm`, `d_mm`, `beta_deg`, `L_cuerpo_mm`, `L_ramal_mm` |
 | Grado 3 | Tronco con Ø distinto a cada lado | Reducción con injerto (el injerto va sobre el cono) | `REDUCCION_INJERTO` | `D1_mm` (lado colector), `D2_mm`, `d_mm`, `beta_deg` |
-| Grado 3 | Sin par colineal (Y simétrica) | Pantalón | `PANTALON` (familia retirada) | Alerta `PANTALON_RETIRADO`: se propone injerto + codo |
+| Grado 3 | Sin par colineal (Y simétrica) | Pantalón | `PANTALON` (familia retirada) | Alerta `PANTALON_RETIRADO`: se propone un injerto con el hijo de mayor Ø como tronco |
 | Grado ≥ 4 | Cruce de dos derivaciones | Dos injertos separados al menos 1 D | `RAMAL` × 2 | Alerta `CRUCE_SIN_NODO` |
 
 **Reglas del taller que la clasificación respeta** (todas están en las tablas maestras del motor):
@@ -221,9 +221,9 @@ longitud_neta = cota_a_ejes − Σ ocupación de cada accesorio sobre esa arista
 | Injerto simple | L_cuerpo / 2 en el tronco; L_ramal en el ramal | 10″ con 5″: **175 mm** y **350 mm** |
 | Equipo | 0 (la cota llega a la boca) | — |
 
-- Si la longitud neta queda en menos de 150 mm, los accesorios están **encimados** (`ACCESORIOS_ENCIMADOS`): se arman pegados (`UNION` engargolada, sin bridas en esa cara) y se confirma.
-- **Cadenas de cotas.** Si hay una cota total y varias parciales, la que falta sale por diferencia (`COTA_FALTANTE` resuelta, INFO).
-- **Estimación por escala (último recurso).** Si una cota es ilegible y no sale por diferencia, se estima con la mediana de px/m de las aristas acotadas **del mismo eje** (en isométrico cada eje tiene su escala). Sólo si su dispersión es menor que 25 %; si no, no se estima (`COTA_FALTANTE`, BLOQUEANTE). Una cota estimada lleva `origen: ESCALA`, confianza ≤ 0.4 y alerta CONFIRMAR, siempre.
+- Si la longitud neta queda en menos de 150 mm, los accesorios están **encimados** (`ACCESORIOS_ENCIMADOS`, CONFIRMAR): se fabrica el tramo corto entre ellos y se pregunta. Si queda en 0 o menos, no hay tramo: BLOQUEANTE (la cota o los accesorios están mal). Armarlos pegados con una unión engargolada (familia `UNION`) es la mejora siguiente.
+- **Cadenas de cotas** (diseño, todavía no en la aplicación). Si hay una cota total y varias parciales, la que falta sale por diferencia (`COTA_FALTANTE` resuelta, INFO).
+- **Estimación por escala (último recurso).** Si una cota es ilegible y no sale por diferencia, se estima con la mediana de px/m de las aristas acotadas con confianza ≥ 0.7 que son **paralelas a los ejes** (en planta, todas; en isométrico, las de los ejes X, Y y Z, que tienen la misma escala). Sólo si hay al menos dos, si su dispersión es menor que 25 % y si la arista misma va sobre un eje; si no, no se estima (BLOQUEANTE). Una cota estimada se redondea a 100 mm y lleva `origen: ESCALA`, confianza 0.35 y alerta CONFIRMAR, siempre.
 
 ### 6.6 Material y calibre
 
@@ -282,34 +282,34 @@ Con la regla del taller (`proceso.soportes.espaciado`, documento de arquitectura
 | `ADVERTENCIA` | Un dato raro que no cambia la pieza (calibre bajo tabla, manguera sin largo) | No cambia el estado |
 | `INFO` | Una inferencia segura (Ø heredado, transición insertada) | No cambia el estado |
 
-`DEFINITIVA` exige cero BLOQUEANTE y cero CONFIRMAR sin resolver. Cada alerta CONFIRMAR o BLOQUEANTE trae una **pregunta** concreta y cerrada para el ingeniero; su respuesta se guarda con `origen: USUARIO`, confianza 1, y se vuelve a correr la etapa E6.
+`DEFINITIVA` exige cero BLOQUEANTE y cero CONFIRMAR sin resolver. Cada alerta CONFIRMAR o BLOQUEANTE trae una **pregunta** concreta y cerrada para el ingeniero y, en `respuesta`, cómo se contesta: `tipo` (`NUMERO`, `OPCIONES` o `ACEPTAR`), el `elemento` y el `campo` que cambia, la `unidad`, las `opciones` y la `propuesta` (lo que se usó). La respuesta se guarda como `respuestas[elemento][campo]` —campos `longitud_m`, `diametro_in`, `angulo_deg`, `posicion`, `boca_in`, `manguera_tramos`, `calibre`, `material` y `aceptado`— y se vuelven a correr las reglas: el dato queda con `origen: USUARIO`, confianza 1, y la alerta pasa a INFO con `resuelta: true` y su `respuesta`, para cambiarla o quitarla. Algunas ADVERTENCIA e INFO también traen `respuesta` (la manguera, el calibre, un Ø heredado, un ángulo inferido): contestarlas es opcional.
 
 ### 7.3 Catálogo de alertas
 
 | Código | Cuándo | Decisión por omisión | Severidad |
 | --- | --- | --- | --- |
-| `COTA_ILEGIBLE` | La L de una arista no se lee (< 0.5) | Por diferencia de cadena; si no, escala del mismo eje | CONFIRMAR (BLOQUEANTE si no hay escala confiable) |
+| `COTA_ILEGIBLE` | La L de una arista no se lee (< 0.5) | Escala de las aristas acotadas paralelas a los ejes (§6.5) | CONFIRMAR (BLOQUEANTE si no hay escala confiable) |
 | `COTA_FALTANTE` | Una arista sin L | Igual | Igual |
 | `DIAMETRO_FALTANTE` | Ø no anotado ni heredable | Ninguna | BLOQUEANTE |
 | `DIAMETRO_INFERIDO` | Ø heredado por continuidad | El de la vecina | INFO |
-| `DIAMETRO_INCONSISTENTE` | El Ø crece al alejarse del colector | Revisar confusiones de OCR | CONFIRMAR |
+| `DIAMETRO_INCONSISTENTE` | El Ø crece al alejarse del colector, o se leyó con confianza 0.5–0.7 | Se cotiza como está; revisar confusiones de OCR | CONFIRMAR (BLOQUEANTE si un ramal es mayor que su tronco: la pieza no existe) |
 | `ANGULO_INFERIDO` | Codo sin cota | §6.1 | INFO o CONFIRMAR |
 | `ANGULO_NO_PERMITIDO` | Codo fuera de 30/45/60/90 | El permitido más cercano | CONFIRMAR |
 | `ANGULO_DERIVACION_NO_PERMITIDO` | Injerto fuera de 30/45 (T a 90°) | 45° a favor del flujo | CONFIRMAR |
 | `DERIVACION_CONTRA_FLUJO` | El ramal entra contra el flujo | Se voltea | CONFIRMAR |
 | `ORIENTACION_AMBIGUA` | Vertical en la hoja que puede ser diagonal de 45° | La cota manda; si no, bajada | CONFIRMAR |
 | `TRANSICION_INSERTADA` | Cambio de Ø sin accesorio dibujado | Reducción concéntrica | INFO |
-| `ACCESORIOS_ENCIMADOS` | Longitud neta < 150 mm | Unión engargolada | CONFIRMAR |
+| `ACCESORIOS_ENCIMADOS` | Longitud neta < 150 mm (o el motor no puede fabricar la pieza) | Se fabrica el tramo corto | CONFIRMAR (BLOQUEANTE si la neta es ≤ 0) |
 | `CONEXION_EQUIPO` | Boca de equipo sin medida ni barrenos | Brida compatible del Ø del ducto | CONFIRMAR |
 | `MANGUERA_SIN_LARGO` | Manguera sin largo | Un tramo del catálogo | ADVERTENCIA |
-| `CALIBRE_BAJO_TABLA` | Calibre más delgado que la tabla de servicio | El anotado | ADVERTENCIA |
+| `CALIBRE_BAJO_TABLA` | Calibre más delgado que la tabla de servicio | El anotado (se confirma o se cambia) | ADVERTENCIA |
 | `CALIBRE_FALTANTE` / `MATERIAL_FALTANTE` | Sin anotación | El del taller | CONFIRMAR |
 | `TEXTO_SIN_ASOCIAR` | Un texto lejos de todo | Se descarta | INFO |
 | `ASOCIACION_AMBIGUA` | Dos candidatos casi iguales | Re-lectura dirigida | CONFIRMAR si persiste |
-| `TRAZO_SIN_CONECTAR` | Extremo sin equipo, arista sin tinta | Se descarta la arista | CONFIRMAR |
+| `TRAZO_SIN_CONECTAR` | Extremo sin equipo (reglas) o arista sin tinta (lectura) | El extremo queda abierto, sin brida; la arista sin tinta la descarta la lectura | CONFIRMAR (BLOQUEANTE si una parte no llega al colector) |
 | `CRUCE_SIN_NODO` | Dos aristas se cruzan sin unión dibujada | Pasan por encima (no se unen) | CONFIRMAR |
 | `CICLO_EN_RED` | La red tiene un ciclo | Ninguna | BLOQUEANTE |
-| `PANTALON_RETIRADO` | Y simétrica | Injerto + codo | CONFIRMAR |
+| `PANTALON_RETIRADO` | Y simétrica | Injerto sobre el hijo de mayor Ø | CONFIRMAR |
 | `SIN_COLECTOR` | No se identifica el colector | Ninguna | BLOQUEANTE |
 
 ### 7.4 Re-lectura dirigida
@@ -334,7 +334,7 @@ Para todo texto con confianza < 0.70, toda asociación ambigua y todo nodo de gr
 | `metadatos` | Modelo (lectura) | Imagen, recortes, vista, unidades, convención de cotas, colector, material y calibre globales, yarda |
 | `red` | Modelo (lectura) | `nodos`, `aristas` y `textos` con coordenadas, medidas con origen y confianza |
 | `equipos` | Modelo (lectura) | Colector, máquinas, campanas, con su nodo y cómo se conectan |
-| `alertas_ambiguedad` | Modelo y reglas | Lo dudoso, la decisión tomada y la pregunta |
+| `alertas_ambiguedad` | Modelo y reglas | Lo dudoso, la decisión tomada, la pregunta y cómo se contesta (`respuesta`) |
 | `ductos_rectos` | Reglas (despiece) | Tramos con cota, descuentos, longitud neta, posición, extremos, armado por yardas y su partida |
 | `accesorios` | Reglas (despiece) | Codos, reducciones, injertos, con su nodo, ángulo (con origen) y su partida |
 | `elementos_union` | Reglas (despiece) | Juntas por nodo y por armado: aros, sueltos, barrenos, tornillos, sellador, abrazaderas de manguera |
@@ -636,7 +636,7 @@ Es el archivo [`docs/unifilar-bom.schema.json`](unifilar-bom.schema.json) (JSON 
     "alerta": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "severidad", "codigo", "referencias", "mensaje", "decision_tomada", "pregunta", "resuelta"],
+      "required": ["id", "severidad", "codigo", "referencias", "mensaje", "decision_tomada", "pregunta", "respuesta", "resuelta"],
       "properties": {
         "id": { "type": "string", "pattern": "^ALR-[0-9]{3}$" },
         "severidad": { "type": "string", "enum": ["BLOQUEANTE", "CONFIRMAR", "ADVERTENCIA", "INFO"] },
@@ -653,7 +653,30 @@ Es el archivo [`docs/unifilar-bom.schema.json`](unifilar-bom.schema.json) (JSON 
         "mensaje": { "type": "string" },
         "decision_tomada": { "type": ["string", "null"] },
         "pregunta": { "type": ["string", "null"] },
+        "respuesta": { "anyOf": [{ "$ref": "#/$defs/respuesta" }, { "type": "null" }] },
         "resuelta": { "type": "boolean" }
+      }
+    },
+    "respuesta": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Cómo contesta el ingeniero la pregunta en la aplicación: el valor se guarda en respuestas[elemento][campo] (origen USUARIO) y el despiece se vuelve a calcular. La lectura la deja en null.",
+      "required": ["tipo", "elemento", "campo", "unidad", "opciones", "propuesta"],
+      "properties": {
+        "tipo": { "type": "string", "enum": ["NUMERO", "OPCIONES", "ACEPTAR"] },
+        "elemento": { "type": "string" },
+        "campo": { "type": "string", "enum": ["longitud_m", "diametro_in", "angulo_deg", "posicion", "boca_in", "manguera_tramos", "calibre", "material", "aceptado"] },
+        "unidad": { "type": ["string", "null"] },
+        "opciones": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["valor", "texto"],
+            "properties": { "valor": { "type": ["number", "string"] }, "texto": { "type": "string" } }
+          }
+        },
+        "propuesta": { "type": ["number", "string", "boolean", "null"] }
       }
     },
     "resumen": {
@@ -752,13 +775,17 @@ La **lectura** (`metadatos`, `red`, `equipos`, `alertas_ambiguedad`) está escri
 | `elementos_union` | — | — | Verificación: el motor ya los cobra (§6.8) |
 | `resumen.cotizacion_rapida` | Cotización rápida | `D_mm` (Ø máximo), `L_m` (al punto más alejado), `menulas`, `mangueras_tramos` | Precio en minutos con la misma lectura |
 
-**En la aplicación** (siguiente paso, no construido todavía): un botón *Importar unifilar* en la cotización detallada que reciba este JSON. Debe hacer tres cosas:
+### 10.1 En la aplicación: «Importar unifilar»
 
-- Agregar las partidas a la cotización.
-- Mostrar el panel de alertas con sus preguntas.
-- Al responder una pregunta, volver a correr las reglas y actualizar las partidas.
+En **Cotización detallada → Importar unifilar** se pega la lectura en JSON (o se carga de un archivo; también sirve un despiece completo, del que se toma sólo la lectura). **Probar con el ejemplo** carga la de §11.
 
-Las partidas importadas llevan en su descripción el ID de la pieza (`DUCT-005`…), para ubicarlas en el croquis.
+1. **Lectura.** `leer()` revisa la estructura (identificadores únicos, aristas entre nodos que existen, posición de cada nodo) y descarta lo que haya puesto una regla en un despiece anterior (`origen` `INFERIDO`, `ESCALA` o `DEFECTO_TALLER`): se vuelve a calcular. Releer el caso de prueba da el mismo despiece.
+2. **Revisión.** El diálogo muestra el estado (definitiva, preliminar o no cotizable), los conteos (tramos, accesorios, aros, ménsulas y el punto más lejano), las **preguntas** pendientes con su control —un número, una lista de opciones o «aceptar», con la propuesta ya escrita—, los avisos, las decisiones de las reglas, lo ya respondido (con «Cambiar» y «Quitar la respuesta») y la tabla de piezas. **Copiar el despiece en JSON** entrega el despiece con este esquema.
+3. **Agregar.** «Agregar N partidas» las pone en la cotización, cada una con la etiqueta de su pieza (`DUCT-005`, `INJ-001`, `SOP-001`, `COMPRA-MANGUERA_6`…) en la lista. No se puede mientras haya algo BLOQUEANTE.
+4. **Responder después.** Un aviso sobre la lista dice cuántas preguntas faltan; cada respuesta vuelve a correr las reglas y **reemplaza las partidas del unifilar** en su lugar (conservan su id). Si alguna partida importada se editó a mano, no se pisa sola: el diálogo lo dice y ofrece «Actualizar partidas». Si una respuesta deja el despiece no cotizable, las partidas se quedan como estaban hasta resolverlo.
+5. **Se guarda con la cotización** (`cotizacion.unifilar = { lectura, respuestas, importado }`), también en «Guardar y cargar». «Otra lectura» no toca las partidas hasta «Reemplazar»; «Quitar de la cotización» quita la lectura y sus partidas, con «Deshacer». Una partida duplicada ya no es la pieza del croquis.
+
+**Lo que las reglas de la aplicación todavía no hacen** (queda como diseño en este documento): la etapa de visión misma (la aplicación recibe el JSON; no lee fotos), las cadenas de cotas por diferencia (§6.5), la re-lectura dirigida (§7.4), armar con unión engargolada los accesorios encimados, el aviso de una reducción de más de la mitad (§6.2), la banda de confianza 0.70–0.90 (§7.1: se acepta sin marcar), el Ø de la boca de un equipo anotado en el croquis (se pregunta) y las anotaciones «SUBE/BAJA».
 
 ## 11. Caso de prueba
 
@@ -804,20 +831,20 @@ Foto de celular (4032 × 3024 px) de un isométrico a mano alzada:
 | A-005 | N-005 → N-006 | Y | 5″ (OCR, 0.88) | **1.3 m (ESCALA, 0.35)** — «1.? m» ilegible |
 | A-006 | N-005 → N-007 | X | **10″ (INFERIDO, 0.80)** | 2.0 m (OCR, 0.90) |
 | A-007 | N-007 → N-008 | X | 8″ (OCR, 0.94) | 2.5 m (OCR, 0.93) |
-| A-008 | N-008 → N-009 | — (vertical en la hoja) | **8″ (INFERIDO, 0.80)** | 1.5 m (OCR, 0.92) |
+| A-008 | N-008 → N-009 | Z (vertical en la hoja) | **8″ (INFERIDO, 0.80)** | 1.5 m (OCR, 0.92) |
 
 24 textos leídos: 22 asociados a una arista, un nodo o un equipo (uno de ellos ilegible, «1.? m»), 1 global («GALV CAL 22») y 1 descartado («x», confianza 0.30).
 
 ### 11.3 Reglas aplicadas
 
-1. **N-002**, grado 2, del eje Z al eje X → **codo de 90°** inferido (`ALR-005`); R = 1.5 × 304.8 = 457.2 mm ocupa 457.2 mm de cada pierna.
+1. **N-002**, grado 2, del eje Z al eje X → **codo de 90°** inferido (`ALR-010`); R = 1.5 × 304.8 = 457.2 mm ocupa 457.2 mm de cada pierna.
 2. **N-003**, grado 3, tronco 12″ → 10″ con ramal de 6″ «45°» → **reducción con injerto** `RINJ-001`. La reducción mide 246.5 mm (123.2 mm por lado) y el injerto 410.5 mm.
 3. **N-005**, grado 3, tronco de 10″ igual a ambos lados con ramal de 5″ dibujado a 90° → **injerto simple a 45°**, propuesto porque el taller no hace T a 90° (`ALR-002`, CONFIRMAR). Tronco de 350 mm y ramal de 350 mm.
-4. **A-006** hereda 10″ del tronco y **A-008** hereda 8″ del codo (`ALR-006`, `ALR-007`).
-5. **N-007**, grado 2 colineal, 10″ → 8″ sin cono dibujado → **reducción concéntrica insertada** de 94.8 mm (`ALR-008`).
+4. **A-006** hereda 10″ del tronco y **A-008** hereda 8″ del codo (`ALR-008`, `ALR-009`).
+5. **N-007**, grado 2 colineal, 10″ → 8″ sin cono dibujado → **reducción concéntrica insertada** de 94.8 mm (`ALR-011`).
 6. **N-008**, codo «45°». El tramo siguiente se ve vertical en la hoja, pero la cota de 45° lo hace una diagonal horizontal en planta (`ALR-003`, CONFIRMAR: si fuera bajada, el codo sería de 90°).
-7. **A-005** «1.? m»: no hay cadena de cotas; se estima 1.3 m con la escala del eje Y (`ALR-001`, CONFIRMAR).
-8. Extremos: el colector y la campana van con junta de equipo (el colector sin medida de boca: `ALR-004`); las máquinas, con manguera (`ALR-009`).
+7. **A-005** «1.? m»: no hay cadena de cotas; se estima 1.3 m con la escala de las seis aristas acotadas de los ejes X y Z (mediana de 169.6 px/m, dispersión de 10 %) (`ALR-001`, CONFIRMAR).
+8. Extremos: el colector y la campana van con junta de equipo (el colector sin medida de boca: `ALR-004`); las máquinas, con manguera (`ALR-005`, `ALR-006`). El calibre 22 es más delgado que la tabla de servicio (`ALR-007`) y la marca «x» se descarta (`ALR-012`).
 
 ### 11.4 Despiece
 
@@ -862,18 +889,18 @@ Soportes: **14 ménsulas** (automáticas) con su abrazadera: 5 de 12″, 4 de 10
 
 | Alerta | Severidad | Código | Pregunta |
 | --- | --- | --- | --- |
-| ALR-001 | CONFIRMAR | `COTA_ILEGIBLE` | ¿Cuánto mide el ramal de 5″ a la máquina B? |
-| ALR-002 | CONFIRMAR | `ANGULO_DERIVACION_NO_PERMITIDO` | ¿Se acepta el injerto a 45°? |
-| ALR-003 | CONFIRMAR | `ORIENTACION_AMBIGUA` | ¿El tramo a la campana es horizontal (codo de 45°) o baja (codo de 90°)? |
-| ALR-004 | CONFIRMAR | `CONEXION_EQUIPO` | Confirmar el diámetro de la boca y el patrón de barrenos del colector. |
-| ALR-005 | INFO | `ANGULO_INFERIDO` | — |
-| ALR-006 · ALR-007 | INFO | `DIAMETRO_INFERIDO` | — |
-| ALR-008 | INFO | `TRANSICION_INSERTADA` | — |
-| ALR-009 | ADVERTENCIA | `MANGUERA_SIN_LARGO` | ¿Cuántos metros de manguera lleva cada máquina? |
-| ALR-010 | ADVERTENCIA | `CALIBRE_BAJO_TABLA` | — |
-| ALR-011 | INFO | `TEXTO_SIN_ASOCIAR` | — |
+| ALR-001 | CONFIRMAR | `COTA_ILEGIBLE` | ¿Cuánto mide el tramo de 5″ a «Máquina B» (A-005)? · número en m, propuesta 1.3 |
+| ALR-002 | CONFIRMAR | `ANGULO_DERIVACION_NO_PERMITIDO` | ¿Se acepta el injerto a 45°? · opciones 45° o 30° |
+| ALR-003 | CONFIRMAR | `ORIENTACION_AMBIGUA` | ¿El tramo de 8″ a «Campana» (A-008) es horizontal (codo de 45°) o baja (codo de 90°)? |
+| ALR-004 | CONFIRMAR | `CONEXION_EQUIPO` | ¿De qué diámetro es la boca de «Colector de polvo»? (confirme también su patrón de barrenos) · propuesta 12″ |
+| ALR-005 · ALR-006 | ADVERTENCIA | `MANGUERA_SIN_LARGO` | ¿Cuántos tramos de manguera lleva «Máquina A» / «Máquina B»? · propuesta 1 |
+| ALR-007 | ADVERTENCIA | `CALIBRE_BAJO_TABLA` | ¿Se confirma el calibre? · propuesta 22 |
+| ALR-008 · ALR-009 | INFO | `DIAMETRO_INFERIDO` | — (se puede corregir el Ø) |
+| ALR-010 | INFO | `ANGULO_INFERIDO` | — (se puede corregir el ángulo) |
+| ALR-011 | INFO | `TRANSICION_INSERTADA` | — |
+| ALR-012 | INFO | `TEXTO_SIN_ASOCIAR` | — |
 
-Estado: **PRELIMINAR** (4 por confirmar, ninguna bloqueante).
+Estado: **PRELIMINAR** (4 por confirmar, ninguna bloqueante). Con las respuestas, por ejemplo 1.6 m para A-005, el injerto a 30° y la bajada de A-008 con codo de 90°, el tramo de 5″ queda de 1 100 mm netos (el ramal a 30° ocupa 500 mm), el codo de la campana pasa a 90° y el despiece queda **DEFINITIVA** en cuanto se confirma la boca del colector.
 
 ### 11.6 En el cotizador
 
@@ -882,11 +909,11 @@ Las **22 partidas** se cotizan sin errores: 8 tramos, 5 accesorios, 6 de soporte
 - **$39,476.19** antes de IVA (incluye el sobrante de compra, que siempre se cobra) y **$45,792.38** con IVA.
 - Costo directo de $20,367.28 y 183.8 kg netos.
 
-Con las mismas entradas, la **cotización rápida** da **$36,918.02** con IVA: Ø 12″, 17.1 m al punto más alejado, yardas de 3 ft, 7 láminas, 14 ménsulas y 2 tramos de manguera. Sin ménsulas ni mangueras serían $24,348.00.
+Es lo que se ve en la aplicación con **Importar unifilar → Probar con el ejemplo → Agregar 22 partidas** en una cotización nueva. Con las mismas entradas, la **cotización rápida** da **$36,918.02** con IVA: Ø 12″, 17.1 m al punto más alejado, yardas de 3 ft, 7 láminas, 14 ménsulas y 2 tramos de manguera. Sin ménsulas ni mangueras serían $24,348.00.
 
 ### 11.7 JSON completo
 
-Es el archivo [`docs/ejemplos/unifilar-caso-prueba.json`](ejemplos/unifilar-caso-prueba.json). Lo generó, con el motor, el mismo procedimiento de las reglas de este documento; la prueba de contrato comprueba que este bloque es idéntico al archivo.
+Es el archivo [`docs/ejemplos/unifilar-caso-prueba.json`](ejemplos/unifilar-caso-prueba.json): el despiece que dan las reglas de [`src/motor/unifilar.js`](../src/motor/unifilar.js) a la lectura de [`src/datos/unifilar_ejemplo.js`](../src/datos/unifilar_ejemplo.js) (`npm run caso:unifilar` lo regenera). La prueba de contrato comprueba que el archivo es lo que dan las reglas y que este bloque es idéntico al archivo.
 
 <details>
 <summary>Ver el JSON del caso de prueba</summary>
@@ -921,7 +948,7 @@ Es el archivo [`docs/ejemplos/unifilar-caso-prueba.json`](ejemplos/unifilar-caso
       { "id": "N-003", "tipo": "DERIVACION", "grado": 3, "pos_px": { "x": 1080, "y": 1040 }, "aristas": ["A-002", "A-003", "A-004"], "equipo_id": null, "accesorio_id": "RINJ-001", "confianza": 0.93 },
       { "id": "N-004", "tipo": "EXTREMO", "grado": 1, "pos_px": { "x": 1000, "y": 1250 }, "aristas": ["A-003"], "equipo_id": "EQ-02", "accesorio_id": null, "confianza": 0.92 },
       { "id": "N-005", "tipo": "DERIVACION", "grado": 3, "pos_px": { "x": 1610, "y": 735 }, "aristas": ["A-004", "A-005", "A-006"], "equipo_id": null, "accesorio_id": "INJ-001", "confianza": 0.9 },
-      { "id": "N-006", "tipo": "EXTREMO", "grado": 1, "pos_px": { "x": 1350, "y": 885 }, "aristas": ["A-005"], "equipo_id": "EQ-03", "accesorio_id": null, "confianza": 0.9 },
+      { "id": "N-006", "tipo": "EXTREMO", "grado": 1, "pos_px": { "x": 1420, "y": 845 }, "aristas": ["A-005"], "equipo_id": "EQ-03", "accesorio_id": null, "confianza": 0.9 },
       { "id": "N-007", "tipo": "CAMBIO_DIAMETRO", "grado": 2, "pos_px": { "x": 1905, "y": 565 }, "aristas": ["A-006", "A-007"], "equipo_id": null, "accesorio_id": "RED-001", "confianza": 0.88 },
       { "id": "N-008", "tipo": "VERTICE", "grado": 2, "pos_px": { "x": 2270, "y": 355 }, "aristas": ["A-007", "A-008"], "equipo_id": null, "accesorio_id": "CODO-002", "confianza": 0.91 },
       { "id": "N-009", "tipo": "EXTREMO", "grado": 1, "pos_px": { "x": 2270, "y": 655 }, "aristas": ["A-008"], "equipo_id": "EQ-04", "accesorio_id": null, "confianza": 0.94 }
@@ -1009,7 +1036,7 @@ Es el archivo [`docs/ejemplos/unifilar-caso-prueba.json`](ejemplos/unifilar-caso
         "nodo_a": "N-008",
         "nodo_b": "N-009",
         "orientacion_pantalla": "VERTICAL",
-        "eje_iso": "NINGUNO",
+        "eje_iso": "Z",
         "angulo_pantalla_deg": 270,
         "diametro": { "valor": 8, "unidad": "in", "origen": "INFERIDO", "confianza": 0.8, "texto_id": null },
         "longitud_cota": { "valor": 1.5, "unidad": "m", "origen": "OCR", "confianza": 0.92, "texto_id": "T-015" },
@@ -1026,19 +1053,19 @@ Es el archivo [`docs/ejemplos/unifilar-caso-prueba.json`](ejemplos/unifilar-caso
       { "id": "T-007", "contenido_crudo": "45°", "contenido_normalizado": "45", "tipo": "ANGULO", "bbox_px": { "x": 1110, "y": 1090, "w": 58, "h": 32 }, "confianza_ocr": 0.93, "asociado_a": "N-003" },
       { "id": "T-008", "contenido_crudo": "Ø10\"", "contenido_normalizado": "10", "tipo": "DIAMETRO", "bbox_px": { "x": 1300, "y": 830, "w": 88, "h": 38 }, "confianza_ocr": 0.95, "asociado_a": "A-004" },
       { "id": "T-009", "contenido_crudo": "3.6 m", "contenido_normalizado": "3.6", "tipo": "LONGITUD", "bbox_px": { "x": 1350, "y": 950, "w": 96, "h": 36 }, "confianza_ocr": 0.92, "asociado_a": "A-004" },
-      { "id": "T-010", "contenido_crudo": "5\"", "contenido_normalizado": "5", "tipo": "DIAMETRO", "bbox_px": { "x": 1440, "y": 860, "w": 46, "h": 34 }, "confianza_ocr": 0.88, "asociado_a": "A-005" },
-      { "id": "T-011", "contenido_crudo": "1.? m", "contenido_normalizado": null, "tipo": "ILEGIBLE", "bbox_px": { "x": 1430, "y": 930, "w": 86, "h": 36 }, "confianza_ocr": 0.41, "asociado_a": "A-005" },
+      { "id": "T-010", "contenido_crudo": "5\"", "contenido_normalizado": "5", "tipo": "DIAMETRO", "bbox_px": { "x": 1500, "y": 760, "w": 46, "h": 34 }, "confianza_ocr": 0.88, "asociado_a": "A-005" },
+      { "id": "T-011", "contenido_crudo": "1.? m", "contenido_normalizado": null, "tipo": "ILEGIBLE", "bbox_px": { "x": 1470, "y": 830, "w": 86, "h": 36 }, "confianza_ocr": 0.41, "asociado_a": "A-005" },
       { "id": "T-012", "contenido_crudo": "2.0 m", "contenido_normalizado": "2.0", "tipo": "LONGITUD", "bbox_px": { "x": 1740, "y": 700, "w": 96, "h": 36 }, "confianza_ocr": 0.9, "asociado_a": "A-006" },
       { "id": "T-013", "contenido_crudo": "Ø8\"", "contenido_normalizado": "8", "tipo": "DIAMETRO", "bbox_px": { "x": 2050, "y": 420, "w": 80, "h": 38 }, "confianza_ocr": 0.94, "asociado_a": "A-007" },
       { "id": "T-014", "contenido_crudo": "2.5m", "contenido_normalizado": "2.5", "tipo": "LONGITUD", "bbox_px": { "x": 2100, "y": 520, "w": 86, "h": 36 }, "confianza_ocr": 0.93, "asociado_a": "A-007" },
       { "id": "T-015", "contenido_crudo": "1.5 m", "contenido_normalizado": "1.5", "tipo": "LONGITUD", "bbox_px": { "x": 2300, "y": 500, "w": 96, "h": 36 }, "confianza_ocr": 0.92, "asociado_a": "A-008" },
       { "id": "T-016", "contenido_crudo": "45°", "contenido_normalizado": "45", "tipo": "ANGULO", "bbox_px": { "x": 2310, "y": 330, "w": 58, "h": 32 }, "confianza_ocr": 0.9, "asociado_a": "N-008" },
-      { "id": "T-017", "contenido_crudo": "COLECTOR", "contenido_normalizado": "COLECTOR", "tipo": "EQUIPO", "bbox_px": { "x": 330, "y": 1900, "w": 170, "h": 40 }, "confianza_ocr": 0.97, "asociado_a": "N-001" },
-      { "id": "T-018", "contenido_crudo": "MAQ. A", "contenido_normalizado": "MAQUINA", "tipo": "EQUIPO", "bbox_px": { "x": 930, "y": 1300, "w": 120, "h": 38 }, "confianza_ocr": 0.92, "asociado_a": "N-004" },
-      { "id": "T-019", "contenido_crudo": "MANG 6\"", "contenido_normalizado": "MANGUERA 6", "tipo": "NOTA", "bbox_px": { "x": 930, "y": 1345, "w": 130, "h": 36 }, "confianza_ocr": 0.89, "asociado_a": "N-004" },
-      { "id": "T-020", "contenido_crudo": "MAQ. B", "contenido_normalizado": "MAQUINA", "tipo": "EQUIPO", "bbox_px": { "x": 1250, "y": 930, "w": 120, "h": 38 }, "confianza_ocr": 0.91, "asociado_a": "N-006" },
-      { "id": "T-021", "contenido_crudo": "MANG 5\"", "contenido_normalizado": "MANGUERA 5", "tipo": "NOTA", "bbox_px": { "x": 1250, "y": 975, "w": 130, "h": 36 }, "confianza_ocr": 0.87, "asociado_a": "N-006" },
-      { "id": "T-022", "contenido_crudo": "CAMPANA", "contenido_normalizado": "CAMPANA", "tipo": "EQUIPO", "bbox_px": { "x": 2220, "y": 700, "w": 150, "h": 40 }, "confianza_ocr": 0.95, "asociado_a": "N-009" },
+      { "id": "T-017", "contenido_crudo": "COLECTOR", "contenido_normalizado": "COLECTOR", "tipo": "EQUIPO", "bbox_px": { "x": 330, "y": 1900, "w": 170, "h": 40 }, "confianza_ocr": 0.97, "asociado_a": "EQ-01" },
+      { "id": "T-018", "contenido_crudo": "MAQ. A", "contenido_normalizado": "MAQUINA", "tipo": "EQUIPO", "bbox_px": { "x": 930, "y": 1300, "w": 120, "h": 38 }, "confianza_ocr": 0.92, "asociado_a": "EQ-02" },
+      { "id": "T-019", "contenido_crudo": "MANG 6\"", "contenido_normalizado": "MANGUERA 6", "tipo": "NOTA", "bbox_px": { "x": 930, "y": 1345, "w": 130, "h": 36 }, "confianza_ocr": 0.89, "asociado_a": "EQ-02" },
+      { "id": "T-020", "contenido_crudo": "MAQ. B", "contenido_normalizado": "MAQUINA", "tipo": "EQUIPO", "bbox_px": { "x": 1300, "y": 880, "w": 120, "h": 38 }, "confianza_ocr": 0.91, "asociado_a": "EQ-03" },
+      { "id": "T-021", "contenido_crudo": "MANG 5\"", "contenido_normalizado": "MANGUERA 5", "tipo": "NOTA", "bbox_px": { "x": 1300, "y": 925, "w": 130, "h": 36 }, "confianza_ocr": 0.87, "asociado_a": "EQ-03" },
+      { "id": "T-022", "contenido_crudo": "CAMPANA", "contenido_normalizado": "CAMPANA", "tipo": "EQUIPO", "bbox_px": { "x": 2220, "y": 700, "w": 150, "h": 40 }, "confianza_ocr": 0.95, "asociado_a": "EQ-04" },
       { "id": "T-023", "contenido_crudo": "GALV CAL 22", "contenido_normalizado": "GALVANIZADO 22", "tipo": "CALIBRE", "bbox_px": { "x": 120, "y": 120, "w": 230, "h": 44 }, "confianza_ocr": 0.93, "asociado_a": null },
       { "id": "T-024", "contenido_crudo": "x", "contenido_normalizado": null, "tipo": "ILEGIBLE", "bbox_px": { "x": 1820, "y": 1500, "w": 22, "h": 22 }, "confianza_ocr": 0.3, "asociado_a": null }
     ]
@@ -1712,8 +1739,8 @@ Es el archivo [`docs/ejemplos/unifilar-caso-prueba.json`](ejemplos/unifilar-caso
     }
   ],
   "partidas_compradas": [
-    { "familia": "COMPRADO", "descripcion": "Manguera de 6″ a la máquina A", "articulo_id": "MANGUERA_6", "cantidad": 1 },
-    { "familia": "COMPRADO", "descripcion": "Manguera de 5″ a la máquina B", "articulo_id": "MANGUERA_5", "cantidad": 1 },
+    { "familia": "COMPRADO", "descripcion": "Manguera azul de 6″ (tramo de 5 m)", "articulo_id": "MANGUERA_6", "cantidad": 1 },
+    { "familia": "COMPRADO", "descripcion": "Manguera azul de 5″ (tramo)", "articulo_id": "MANGUERA_5", "cantidad": 1 },
     { "familia": "COMPRADO", "descripcion": "Abrazaderas de manguera", "articulo_id": "ABRAZADERA_MANGUERA", "cantidad": 4 }
   ],
   "alertas_ambiguedad": [
@@ -1722,9 +1749,10 @@ Es el archivo [`docs/ejemplos/unifilar-caso-prueba.json`](ejemplos/unifilar-caso
       "severidad": "CONFIRMAR",
       "codigo": "COTA_ILEGIBLE",
       "referencias": ["A-005", "T-011", "DUCT-005"],
-      "mensaje": "La cota del ramal de 5″ dice «1.? m» (OCR 0.41).",
-      "decision_tomada": "Se estimó 1.3 m por escala con las aristas acotadas del mismo eje (mediana de px/m); el croquis no es a escala.",
-      "pregunta": "¿Cuánto mide el ramal de 5″ a la máquina B?",
+      "mensaje": "La cota del tramo de 5″ a «Máquina B» (A-005) dice «1.? m» (lectura 0.41).",
+      "decision_tomada": "Se estimó 1.3 m por escala, con la mediana de px/m de las aristas acotadas paralelas a los ejes; el croquis no es a escala.",
+      "pregunta": "¿Cuánto mide el tramo de 5″ a «Máquina B» (A-005)?",
+      "respuesta": { "tipo": "NUMERO", "elemento": "A-005", "campo": "longitud_m", "unidad": "m", "opciones": [], "propuesta": 1.3 },
       "resuelta": false
     },
     {
@@ -1732,56 +1760,137 @@ Es el archivo [`docs/ejemplos/unifilar-caso-prueba.json`](ejemplos/unifilar-caso
       "severidad": "CONFIRMAR",
       "codigo": "ANGULO_DERIVACION_NO_PERMITIDO",
       "referencias": ["N-005", "INJ-001"],
-      "mensaje": "La derivación de 5″ se dibujó como T a 90°.",
+      "mensaje": "La derivación en N-005 hacia el tramo de 5″ a «Máquina B» (A-005) se dibujó como T a 90°.",
       "decision_tomada": "El taller sólo hace injertos a 30° o 45° y una T a 90° en colección de polvo pierde carga: se propone injerto a 45° a favor del flujo.",
       "pregunta": "¿Se acepta el injerto a 45°?",
+      "respuesta": { "tipo": "OPCIONES", "elemento": "N-005", "campo": "angulo_deg", "unidad": "deg", "opciones": [{ "valor": 45, "texto": "45°" }, { "valor": 30, "texto": "30°" }], "propuesta": 45 },
       "resuelta": false
     },
     {
       "id": "ALR-003",
       "severidad": "CONFIRMAR",
       "codigo": "ORIENTACION_AMBIGUA",
-      "referencias": ["A-008", "CODO-002"],
-      "mensaje": "El tramo final se dibujó vertical en la hoja.",
+      "referencias": ["A-008", "N-008", "DUCT-008", "CODO-002"],
+      "mensaje": "El tramo de 8″ a «Campana» (A-008) se dibujó vertical en la hoja.",
       "decision_tomada": "En isométrico una diagonal de 45° en planta también se ve vertical; la cota «45°» del codo la hace horizontal. Si fuera una bajada, el codo sería de 90°.",
-      "pregunta": "¿El tramo a la campana es horizontal (codo de 45°) o baja (codo de 90°)?",
+      "pregunta": "¿El tramo de 8″ a «Campana» (A-008) es horizontal (codo de 45°) o baja (codo de 90°)?",
+      "respuesta": { "tipo": "OPCIONES", "elemento": "A-008", "campo": "posicion", "unidad": null, "opciones": [{ "valor": "HORIZONTAL", "texto": "Horizontal: codo de 45°" }, { "valor": "VERTICAL", "texto": "Baja: codo de 90°" }], "propuesta": "HORIZONTAL" },
       "resuelta": false
     },
     {
       "id": "ALR-004",
       "severidad": "CONFIRMAR",
       "codigo": "CONEXION_EQUIPO",
-      "referencias": ["N-001", "EQ-01", "JNT-013"],
-      "mensaje": "La boca del colector no trae medida ni barrenos.",
-      "decision_tomada": "Se supone boca de 12″ con brida compatible (8 barrenos de 3/8″); la otra media junta la pone el equipo.",
-      "pregunta": "Confirmar el diámetro de la boca y el patrón de barrenos del colector.",
+      "referencias": ["EQ-01", "N-001", "JNT-013"],
+      "mensaje": "La boca de «Colector de polvo» no trae medida ni barrenos.",
+      "decision_tomada": "Se supone boca de 12″ con brida compatible; la otra media junta la pone el equipo.",
+      "pregunta": "¿De qué diámetro es la boca de «Colector de polvo»? (confirme también su patrón de barrenos)",
+      "respuesta": { "tipo": "NUMERO", "elemento": "EQ-01", "campo": "boca_in", "unidad": "in", "opciones": [], "propuesta": 12 },
       "resuelta": false
     },
-    { "id": "ALR-005", "severidad": "INFO", "codigo": "ANGULO_INFERIDO", "referencias": ["N-002", "CODO-001"], "mensaje": "El codo de la subida no trae ángulo.", "decision_tomada": "Cambio del eje vertical (Z) al eje X del isométrico: 90°.", "pregunta": null, "resuelta": false },
-    { "id": "ALR-006", "severidad": "INFO", "codigo": "DIAMETRO_INFERIDO", "referencias": ["A-006"], "mensaje": "El tronco entre la derivación de 5″ y la reducción no trae diámetro.", "decision_tomada": "Se hereda 10″ del tramo anterior (un injerto simple no cambia el diámetro del tronco).", "pregunta": null, "resuelta": false },
-    { "id": "ALR-007", "severidad": "INFO", "codigo": "DIAMETRO_INFERIDO", "referencias": ["A-008"], "mensaje": "El tramo a la campana no trae diámetro.", "decision_tomada": "Se hereda 8″ del tramo anterior (un codo no cambia el diámetro).", "pregunta": null, "resuelta": false },
-    { "id": "ALR-008", "severidad": "INFO", "codigo": "TRANSICION_INSERTADA", "referencias": ["N-007", "RED-001"], "mensaje": "La etiqueta cambia de 10″ a 8″ sin accesorio dibujado.", "decision_tomada": "Se insertó una reducción concéntrica de 10″ a 8″ (semiángulo de 15°, 94.8 mm).", "pregunta": null, "resuelta": false },
     {
-      "id": "ALR-009",
+      "id": "ALR-005",
       "severidad": "ADVERTENCIA",
       "codigo": "MANGUERA_SIN_LARGO",
-      "referencias": ["JNT-017", "JNT-018"],
-      "mensaje": "Las mangueras a las máquinas no traen largo.",
-      "decision_tomada": "Se cuenta un tramo del catálogo (5 m) por máquina y una abrazadera en cada punta.",
-      "pregunta": "¿Cuántos metros de manguera lleva cada máquina?",
+      "referencias": ["EQ-02", "JNT-017"],
+      "mensaje": "La manguera a «Máquina A» no trae largo.",
+      "decision_tomada": "Se cuenta un tramo del catálogo («Manguera azul de 6″ (tramo de 5 m)») y una abrazadera en cada punta.",
+      "pregunta": "¿Cuántos tramos de manguera lleva «Máquina A»?",
+      "respuesta": { "tipo": "NUMERO", "elemento": "EQ-02", "campo": "manguera_tramos", "unidad": "tramos", "opciones": [], "propuesta": 1 },
+      "resuelta": false
+    },
+    {
+      "id": "ALR-006",
+      "severidad": "ADVERTENCIA",
+      "codigo": "MANGUERA_SIN_LARGO",
+      "referencias": ["EQ-03", "JNT-018"],
+      "mensaje": "La manguera a «Máquina B» no trae largo.",
+      "decision_tomada": "Se cuenta un tramo del catálogo («Manguera azul de 5″ (tramo)») y una abrazadera en cada punta.",
+      "pregunta": "¿Cuántos tramos de manguera lleva «Máquina B»?",
+      "respuesta": { "tipo": "NUMERO", "elemento": "EQ-03", "campo": "manguera_tramos", "unidad": "tramos", "opciones": [], "propuesta": 1 },
+      "resuelta": false
+    },
+    {
+      "id": "ALR-007",
+      "severidad": "ADVERTENCIA",
+      "codigo": "CALIBRE_BAJO_TABLA",
+      "referencias": ["metadatos", "T-023"],
+      "mensaje": "Calibre 22 en todo el sistema.",
+      "decision_tomada": "La tabla de servicio (ilustrativa) pide calibre más grueso para estos diámetros; se cotiza el del croquis.",
+      "pregunta": "¿Se confirma el calibre?",
+      "respuesta": {
+        "tipo": "OPCIONES",
+        "elemento": "metadatos",
+        "campo": "calibre",
+        "unidad": null,
+        "propuesta": 22,
+        "opciones": [
+          { "valor": 10, "texto": "Calibre 10" },
+          { "valor": 12, "texto": "Calibre 12" },
+          { "valor": 14, "texto": "Calibre 14" },
+          { "valor": 16, "texto": "Calibre 16" },
+          { "valor": 18, "texto": "Calibre 18" },
+          { "valor": 20, "texto": "Calibre 20" },
+          { "valor": 22, "texto": "Calibre 22" },
+          { "valor": 24, "texto": "Calibre 24" },
+          { "valor": 26, "texto": "Calibre 26" },
+          { "valor": 28, "texto": "Calibre 28" }
+        ]
+      },
+      "resuelta": false
+    },
+    {
+      "id": "ALR-008",
+      "severidad": "INFO",
+      "codigo": "DIAMETRO_INFERIDO",
+      "referencias": ["A-006", "DUCT-006"],
+      "mensaje": "El tramo (A-006) no trae diámetro.",
+      "decision_tomada": "Se hereda 10″ del tramo vecino (un codo, una unión o el tronco de un injerto simple no cambian el diámetro).",
+      "pregunta": null,
+      "respuesta": { "tipo": "NUMERO", "elemento": "A-006", "campo": "diametro_in", "unidad": "in", "opciones": [], "propuesta": 10 },
+      "resuelta": false
+    },
+    {
+      "id": "ALR-009",
+      "severidad": "INFO",
+      "codigo": "DIAMETRO_INFERIDO",
+      "referencias": ["A-008", "DUCT-008"],
+      "mensaje": "El tramo a «Campana» (A-008) no trae diámetro.",
+      "decision_tomada": "Se hereda 8″ del tramo vecino (un codo, una unión o el tronco de un injerto simple no cambian el diámetro).",
+      "pregunta": null,
+      "respuesta": { "tipo": "NUMERO", "elemento": "A-008", "campo": "diametro_in", "unidad": "in", "opciones": [], "propuesta": 8 },
       "resuelta": false
     },
     {
       "id": "ALR-010",
-      "severidad": "ADVERTENCIA",
-      "codigo": "CALIBRE_BAJO_TABLA",
-      "referencias": ["T-023"],
-      "mensaje": "Calibre 22 en todo el sistema.",
-      "decision_tomada": "La tabla de servicio POLVO (ilustrativa) pide calibre más grueso para estos diámetros; el taller usa cal. 22 (confirmado 7-oct-2026).",
+      "severidad": "INFO",
+      "codigo": "ANGULO_INFERIDO",
+      "referencias": ["N-002", "CODO-001"],
+      "mensaje": "El codo en N-002 no trae ángulo.",
+      "decision_tomada": "Cambio del eje Z al eje X del isométrico: 90°.",
       "pregunta": null,
+      "respuesta": {
+        "tipo": "OPCIONES",
+        "elemento": "N-002",
+        "campo": "angulo_deg",
+        "unidad": "deg",
+        "opciones": [{ "valor": 30, "texto": "30°" }, { "valor": 45, "texto": "45°" }, { "valor": 60, "texto": "60°" }, { "valor": 90, "texto": "90°" }],
+        "propuesta": 90
+      },
       "resuelta": false
     },
-    { "id": "ALR-011", "severidad": "INFO", "codigo": "TEXTO_SIN_ASOCIAR", "referencias": ["T-024"], "mensaje": "Una marca «x» sin significado claro (OCR 0.30).", "decision_tomada": "No está cerca de ninguna arista ni nodo: se descarta.", "pregunta": null, "resuelta": false }
+    {
+      "id": "ALR-011",
+      "severidad": "INFO",
+      "codigo": "TRANSICION_INSERTADA",
+      "referencias": ["N-007", "RED-001"],
+      "mensaje": "La etiqueta cambia de 10″ a 8″ sin accesorio dibujado.",
+      "decision_tomada": "Se insertó una reducción concéntrica de 10″ a 8″ (semiángulo de 15°, 94.8 mm).",
+      "pregunta": null,
+      "respuesta": null,
+      "resuelta": false
+    },
+    { "id": "ALR-012", "severidad": "INFO", "codigo": "TEXTO_SIN_ASOCIAR", "referencias": ["T-024"], "mensaje": "«x» sin significado claro (lectura 0.3).", "decision_tomada": "No está junto a ninguna arista ni nodo: se descarta.", "pregunta": null, "respuesta": null, "resuelta": false }
   ],
   "resumen": {
     "estado": "PRELIMINAR",
@@ -1791,7 +1900,7 @@ Es el archivo [`docs/ejemplos/unifilar-caso-prueba.json`](ejemplos/unifilar-caso
     "punto_mas_alejado": "N-009",
     "longitud_al_punto_mas_alejado_m": 17.1,
     "conteo": { "ductos_rectos": 8, "accesorios": 5, "juntas_bridadas": 14, "juntas_equipo": 2, "juntas_manguera": 2, "aros": 30, "aros_sueltos": 6, "tornillos_juegos": 116, "sellador_ml": 588.3, "menulas": 14 },
-    "alertas": { "BLOQUEANTE": 0, "CONFIRMAR": 4, "ADVERTENCIA": 2, "INFO": 5 },
+    "alertas": { "BLOQUEANTE": 0, "CONFIRMAR": 4, "ADVERTENCIA": 3, "INFO": 5 },
     "cotizacion_rapida": { "D_mm": 304.8, "L_m": 17.1, "yarda_mm": 914.4, "menulas": 14, "mangueras_tramos": 2 }
   }
 }
@@ -1812,7 +1921,7 @@ Es el archivo [`docs/ejemplos/unifilar-caso-prueba.json`](ejemplos/unifilar-caso
 | Precisión de las alertas CONFIRMAR / BLOQUEANTE | Que pregunte lo que de verdad es dudoso | ≥ 0.7 (y ningún error grave sin alerta) |
 | Errores silenciosos | Un dato mal leído con confianza ≥ 0.9 y sin alerta | 0 en el conjunto de prueba |
 
-**Regresión.** La prueba de contrato (`tests/unifilar_contrato.test.js`) corre con el resto de las pruebas. Cada croquis del conjunto de evaluación se convierte en otro caso con su JSON esperado.
+**Regresión.** La prueba de contrato (`tests/unifilar_contrato.test.js`) y las de las reglas (`tests/unifilar.test.js`: lectura, caso de prueba, respuestas, lo que bloquea, geometría en planta y partidas) corren con el resto de las pruebas; la prueba de la interfaz recorre el botón de punta a punta. Cada croquis del conjunto de evaluación se convierte en otro caso con su lectura y su despiece esperado.
 
 ## 13. Autoevaluación contra los criterios del encargo
 
@@ -1820,3 +1929,4 @@ Es el archivo [`docs/ejemplos/unifilar-caso-prueba.json`](ejemplos/unifilar-caso
 - [x] **El JSON diferencia tramos rectos, accesorios y elementos de unión indirectos.** Son secciones distintas: `ductos_rectos`, `accesorios` y `elementos_union` (bridas, aros sueltos, tornillos, sellador, abrazaderas de manguera), además de `soportes` y `partidas_compradas`. Se aclara qué ya cobra el motor y qué no (§6.8); la prueba de contrato comprueba que los aros del despiece son los del motor.
 - [x] **Hay un protocolo explícito para texto ilegible y cotas faltantes.** Umbrales de confianza (§7.1), severidades y estado (§7.2), catálogo de alertas con su decisión por omisión (§7.3), re-lectura dirigida (§7.4), estimación por escala sólo como último recurso y siempre por confirmar (§6.5), y lo que el sistema nunca hace (§7.5). En el caso de prueba, la cota «1.? m» sigue ese camino.
 - [x] **Reglas negativas del encargo.** No se supone escala (§1, §6.5). Cada pieza tiene un ID ligado a la red (§8.2). Las transiciones nunca se omiten (§6.2: `RED-001` se insertó en el caso de prueba).
+- [x] **Integración con el cotizador.** Las reglas corren en la aplicación (§10.1): el botón *Importar unifilar* agrega las partidas, muestra las preguntas y, al responder, vuelve a correr las reglas y actualiza las partidas.

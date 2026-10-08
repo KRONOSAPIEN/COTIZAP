@@ -515,6 +515,55 @@ legend { font: 600 12px var(--font-ui); letter-spacing: 0.07em; text-transform: 
 .archivo { position: relative; overflow: hidden; }
 .archivo input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
 
+/* -------------------------------------------------------------------------- importar unifilar */
+#aviso-unifilar { margin: 0 0 12px; }
+.chip-unifilar { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0; }
+.uf { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.uf-cuerpo { display: flex; flex-direction: column; gap: 14px; padding: 16px 18px; overflow: auto; min-height: 0; flex: 1; }
+.uf-pie { justify-content: flex-start; flex-wrap: wrap; align-items: center; }
+.uf-pie-esp { flex: 1 1 0; }
+.uf-pie > .btn-primario { margin-left: auto; }
+.uf-pie-nota { font-size: 12.5px; color: var(--fg-2); }
+.uf-ayuda { color: var(--fg-2); }
+.uf-errores { background: var(--crit-soft); color: var(--crit); padding: 10px 14px; border-radius: 10px; }
+.uf-errores ul { margin: 6px 0 0 18px; padding: 0; }
+.uf-estado { display: flex; flex-wrap: wrap; gap: 4px 10px; padding: 10px 14px; border-radius: 10px; background: var(--surface-2); }
+.uf-estado-preliminar { background: var(--warn-soft); }
+.uf-estado-definitiva { background: var(--good-soft); }
+.uf-estado-no_cotizable { background: var(--crit-soft); }
+.uf-estado span { color: var(--fg-2); }
+.uf-nota { background: var(--warn-soft); padding: 8px 12px; border-radius: 8px; font-size: 13px; }
+.uf-preguntas h3 { font-size: 12px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fg-2); margin-bottom: 8px; }
+.uf-lista { display: flex; flex-direction: column; gap: 10px; }
+.uf-alerta { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; border: 1px solid var(--line); border-left: 4px solid var(--line-strong); border-radius: 10px; background: var(--surface); }
+.uf-bloqueante { border-left-color: var(--crit); }
+.uf-confirmar, .uf-advertencia { border-left-color: var(--warn); }
+.uf-info { border-left-color: var(--accent); }
+.uf-resuelta { border-left-color: var(--good); }
+.uf-alerta-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.uf-cod { font-weight: 600; }
+.uf-refs { margin-left: auto; font: 11.5px var(--font-mono); color: var(--fg-3); overflow-wrap: anywhere; }
+.uf-chip-bloqueante { background: var(--crit-soft); color: var(--crit); }
+.uf-chip-confirmar, .uf-chip-advertencia { background: var(--warn-soft); color: var(--warn); }
+.uf-chip-info { background: var(--info-soft); color: var(--accent); }
+.uf-chip-resuelta { background: var(--good-soft); color: var(--good); }
+.uf-dec { color: var(--fg-2); font-size: 13px; }
+.uf-resp { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+.uf-preg { font-size: 12.5px; font-weight: 600; color: var(--fg-2); }
+.uf-resp-fila { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.uf-resp-fila .ctl, .uf-resp-fila select { width: 220px; max-width: 100%; }
+.uf-err { color: var(--crit); font-size: 12.5px; }
+.uf-actual { font-size: 12.5px; color: var(--fg-2); }
+.uf-grupo { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+.uf-grupo > summary { cursor: pointer; font: 600 12px var(--font-ui); letter-spacing: 0.07em; text-transform: uppercase; color: var(--fg-2); }
+.uf-grupo[open] > summary { margin-bottom: 10px; }
+.uf-sin { display: flex; gap: 8px; align-items: center; color: var(--good); font-weight: 600; }
+.uf-pie-txt { font-size: 12.5px; color: var(--fg-3); }
+@media (max-width: 859px) {
+  .uf-cuerpo { padding: 12px 14px; }
+  .uf-refs { margin-left: 0; flex-basis: 100%; }
+}
+
 #toasts { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: center; width: min(92vw, 420px); pointer-events: none; }
 .toast { pointer-events: auto; display: flex; align-items: center; gap: 12px; background: var(--fg); color: var(--bg); padding: 10px 14px; border-radius: 10px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3); }
 .toast .btn-texto { color: var(--bg); text-decoration: underline; }
