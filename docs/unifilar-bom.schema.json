@@ -1,0 +1,335 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cotizap.local/esquemas/unifilar-bom-1.0.json",
+  "title": "Lista de materiales (BOM) de un croquis unifilar de ductería",
+  "description": "Salida del pipeline de lectura de unifilares (docs/vision-unifilares.md). Las secciones metadatos, red, equipos y alertas_ambiguedad son la LECTURA (la llena el modelo multimodal); ductos_rectos, accesorios, elementos_union, soportes, partidas_compradas y resumen son el DESPIECE (lo calculan las reglas deterministas). Los rangos numéricos y los patrones de identificador se validan en código.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "metadatos", "red", "equipos", "ductos_rectos", "accesorios", "elementos_union", "soportes", "partidas_compradas", "alertas_ambiguedad", "resumen"],
+  "properties": {
+    "version": { "type": "string", "enum": ["1.0"] },
+    "metadatos": { "$ref": "#/$defs/metadatos" },
+    "red": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodos", "aristas", "textos"],
+      "properties": {
+        "nodos": { "type": "array", "items": { "$ref": "#/$defs/nodo" } },
+        "aristas": { "type": "array", "items": { "$ref": "#/$defs/arista" } },
+        "textos": { "type": "array", "items": { "$ref": "#/$defs/texto" } }
+      }
+    },
+    "equipos": { "type": "array", "items": { "$ref": "#/$defs/equipo" } },
+    "ductos_rectos": { "type": "array", "items": { "$ref": "#/$defs/ducto_recto" } },
+    "accesorios": { "type": "array", "items": { "$ref": "#/$defs/accesorio" } },
+    "elementos_union": { "type": "array", "items": { "$ref": "#/$defs/elemento_union" } },
+    "soportes": { "type": "array", "items": { "$ref": "#/$defs/soporte" } },
+    "partidas_compradas": { "type": "array", "items": { "$ref": "#/$defs/partida_comprada" } },
+    "alertas_ambiguedad": { "type": "array", "items": { "$ref": "#/$defs/alerta" } },
+    "resumen": { "$ref": "#/$defs/resumen" }
+  },
+  "$defs": {
+    "confianza": { "type": "number", "minimum": 0, "maximum": 1, "description": "0 = no se sabe, 1 = certeza. Umbrales en §6 del documento." },
+    "id_red": { "type": "string", "pattern": "^(N|A|T)-[0-9]{3}$" },
+    "id_pieza": { "type": "string", "pattern": "^(DUCT|CODO|RED|RINJ|INJ|PANT|TRAN|EQ|JNT|SOP)-[0-9]{2,3}$" },
+    "medida": {
+      "type": "object",
+      "description": "Un dato leído o inferido, con su procedencia. valor null = faltante (y entonces hay una alerta).",
+      "additionalProperties": false,
+      "required": ["valor", "unidad", "origen", "confianza", "texto_id"],
+      "properties": {
+        "valor": { "type": ["number", "string", "null"] },
+        "unidad": { "type": ["string", "null"], "enum": ["mm", "m", "in", "deg", null] },
+        "origen": { "type": "string", "enum": ["OCR", "INFERIDO", "DEFECTO_TALLER", "ESCALA", "USUARIO"] },
+        "confianza": { "$ref": "#/$defs/confianza" },
+        "texto_id": { "type": ["string", "null"], "description": "El texto (T-###) del que sale el dato, si lo hay." }
+      }
+    },
+    "punto": {
+      "type": "object", "additionalProperties": false, "required": ["x", "y"],
+      "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
+    },
+    "caja": {
+      "type": "object", "additionalProperties": false, "required": ["x", "y", "w", "h"],
+      "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "w": { "type": "number", "minimum": 0 }, "h": { "type": "number", "minimum": 0 } }
+    },
+    "metadatos": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fuente", "vista", "unidades_diametro", "unidades_longitud", "convencion_cotas", "flujo_hacia", "material", "calibre", "yarda_mm", "modelo", "fecha"],
+      "properties": {
+        "fuente": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["archivo", "ancho_px", "alto_px", "ancho_enviado_px", "alto_enviado_px", "recortes"],
+          "properties": {
+            "archivo": { "type": "string" },
+            "ancho_px": { "type": "integer", "minimum": 1 },
+            "alto_px": { "type": "integer", "minimum": 1 },
+            "ancho_enviado_px": { "type": "integer", "minimum": 1, "maximum": 2576 },
+            "alto_enviado_px": { "type": "integer", "minimum": 1, "maximum": 2576 },
+            "recortes": {
+              "type": "array",
+              "items": {
+                "type": "object", "additionalProperties": false, "required": ["id", "x", "y", "w", "h", "motivo"],
+                "properties": {
+                  "id": { "type": "string", "pattern": "^R-[0-9]{2}$" },
+                  "x": { "type": "number" }, "y": { "type": "number" }, "w": { "type": "number" }, "h": { "type": "number" },
+                  "motivo": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "vista": { "type": "string", "enum": ["PLANTA", "ISOMETRICO", "ELEVACION", "MIXTA"] },
+        "unidades_diametro": { "type": "string", "enum": ["IN", "MM"] },
+        "unidades_longitud": { "type": "string", "enum": ["M", "MM", "FT"] },
+        "convencion_cotas": { "type": "string", "enum": ["EJES", "NETAS", "MIXTA"], "description": "EJES: de centro a centro de nodos (por omisión). NETAS: el tramo recto solo." },
+        "flujo_hacia": { "type": ["string", "null"], "description": "El equipo (EQ-##) hacia el que va el aire: el colector." },
+        "material": { "$ref": "#/$defs/medida" },
+        "calibre": { "$ref": "#/$defs/medida" },
+        "yarda_mm": { "type": "number", "enum": [914.4, 1220] },
+        "modelo": { "type": "string" },
+        "fecha": { "type": "string", "format": "date-time" }
+      }
+    },
+    "nodo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tipo", "grado", "pos_px", "aristas", "equipo_id", "accesorio_id", "confianza"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id_red" },
+        "tipo": { "type": "string", "enum": ["EXTREMO", "VERTICE", "DERIVACION", "CAMBIO_DIAMETRO", "UNION_COLINEAL", "CRUCE"] },
+        "grado": { "type": "integer", "minimum": 1 },
+        "pos_px": { "$ref": "#/$defs/punto" },
+        "aristas": { "type": "array", "items": { "$ref": "#/$defs/id_red" } },
+        "equipo_id": { "type": ["string", "null"] },
+        "accesorio_id": { "type": ["string", "null"] },
+        "confianza": { "$ref": "#/$defs/confianza" }
+      }
+    },
+    "arista": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "nodo_a", "nodo_b", "orientacion_pantalla", "eje_iso", "angulo_pantalla_deg", "diametro", "longitud_cota", "ducto_id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id_red" },
+        "nodo_a": { "$ref": "#/$defs/id_red", "description": "El extremo del lado del colector (aguas abajo)." },
+        "nodo_b": { "$ref": "#/$defs/id_red" },
+        "orientacion_pantalla": { "type": "string", "enum": ["HORIZONTAL", "VERTICAL", "INCLINADA"] },
+        "eje_iso": { "type": "string", "enum": ["X", "Y", "Z", "NINGUNO"] },
+        "angulo_pantalla_deg": { "type": "number", "minimum": 0, "maximum": 360 },
+        "diametro": { "$ref": "#/$defs/medida" },
+        "longitud_cota": { "$ref": "#/$defs/medida" },
+        "ducto_id": { "type": ["string", "null"] }
+      }
+    },
+    "texto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "contenido_crudo", "contenido_normalizado", "tipo", "bbox_px", "confianza_ocr", "asociado_a"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id_red" },
+        "contenido_crudo": { "type": "string" },
+        "contenido_normalizado": { "type": ["string", "null"] },
+        "tipo": { "type": "string", "enum": ["DIAMETRO", "LONGITUD", "ANGULO", "CALIBRE", "MATERIAL", "EQUIPO", "NOTA", "ILEGIBLE"] },
+        "bbox_px": { "$ref": "#/$defs/caja" },
+        "confianza_ocr": { "$ref": "#/$defs/confianza" },
+        "asociado_a": { "type": ["string", "null"], "description": "La arista, el nodo o el equipo al que se asoció; null = global o sin asociar." }
+      }
+    },
+    "equipo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tipo", "nombre", "nodo_id", "conexion", "texto_id", "confianza"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^EQ-[0-9]{2}$" },
+        "tipo": { "type": "string", "enum": ["COLECTOR", "MAQUINA", "CAMPANA", "COMPUERTA", "VENTILADOR", "OTRO"] },
+        "nombre": { "type": "string" },
+        "nodo_id": { "$ref": "#/$defs/id_red" },
+        "conexion": { "type": "string", "enum": ["BRIDA_EQUIPO", "BRIDA_TALLER", "MANGUERA", "LISO"] },
+        "texto_id": { "type": ["string", "null"] },
+        "confianza": { "$ref": "#/$defs/confianza" }
+      }
+    },
+    "partida_cotizap": {
+      "type": "object",
+      "description": "Partida lista para cotizar() de src/motor/cotizador.js (familia y campos del motor). La valida normalizarPartida del motor, no este esquema.",
+      "required": ["familia", "cantidad"],
+      "properties": {
+        "familia": { "type": "string", "enum": ["RECTO", "CODO", "REDUCCION", "TRANSICION", "RAMAL", "REDUCCION_INJERTO", "PANTALON", "BRIDA", "UNION", "SOPORTE", "COMPRADO", "INSTALACION"] },
+        "cantidad": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "ducto_recto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "arista_id", "nodo_inicio", "nodo_fin", "diametro_in", "diametro_mm", "longitud_cota_mm", "convencion_cota", "descuentos", "longitud_neta_mm", "posicion", "material", "calibre", "tipo_union", "extremo_inicio", "extremo_fin", "armado", "confianza", "partida_cotizap"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^DUCT-[0-9]{3}$" },
+        "arista_id": { "$ref": "#/$defs/id_red" },
+        "nodo_inicio": { "$ref": "#/$defs/id_red" },
+        "nodo_fin": { "$ref": "#/$defs/id_red" },
+        "diametro_in": { "type": "number", "minimum": 1 },
+        "diametro_mm": { "type": "number", "minimum": 25 },
+        "longitud_cota_mm": { "type": "number", "minimum": 0 },
+        "convencion_cota": { "type": "string", "enum": ["EJES", "NETAS"] },
+        "descuentos": {
+          "type": "array",
+          "description": "Lo que ocupan los accesorios de cada extremo sobre la cota a ejes.",
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["accesorio_id", "mm"],
+            "properties": { "accesorio_id": { "type": "string" }, "mm": { "type": "number", "minimum": 0 } }
+          }
+        },
+        "longitud_neta_mm": { "type": "number", "minimum": 0 },
+        "posicion": { "type": "string", "enum": ["HORIZONTAL", "VERTICAL"] },
+        "material": { "type": "string", "enum": ["GALVANIZADO", "ACERO_CARBON", "INOX_304", "INOX_316"] },
+        "calibre": { "type": "integer", "minimum": 10, "maximum": 28 },
+        "tipo_union": { "type": "string", "enum": ["BRIDADO", "ESPIGA", "LISO"] },
+        "extremo_inicio": { "$ref": "#/$defs/extremo" },
+        "extremo_fin": { "$ref": "#/$defs/extremo" },
+        "armado": {
+          "type": "object", "additionalProperties": false, "required": ["yarda_mm", "piezas", "juntas_internas", "ajuste_mm"],
+          "properties": {
+            "yarda_mm": { "type": "number" },
+            "piezas": { "type": "integer", "minimum": 1 },
+            "juntas_internas": { "type": "integer", "minimum": 0 },
+            "ajuste_mm": { "type": "number", "minimum": 0 }
+          }
+        },
+        "confianza": { "$ref": "#/$defs/confianza" },
+        "partida_cotizap": { "$ref": "#/$defs/partida_cotizap" }
+      }
+    },
+    "extremo": { "type": "string", "enum": ["BRIDA", "BRIDA_EQUIPO", "LISO_MANGUERA", "ENGARGOLADO", "ABIERTO"] },
+    "accesorio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tipo", "nodo_id", "aristas", "diametro_entrada_in", "diametro_salida_in", "d_ramal_in", "angulo", "k_R", "gajos", "excentrica", "partida_cotizap"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^(CODO|RED|RINJ|INJ|PANT|TRAN)-[0-9]{3}$" },
+        "tipo": { "type": "string", "enum": ["CODO", "REDUCCION", "REDUCCION_INJERTO", "INJERTO", "PANTALON", "TRANSICION"] },
+        "nodo_id": { "$ref": "#/$defs/id_red" },
+        "aristas": { "type": "array", "description": "Lado del colector primero; en una derivación, el ramal al último.", "items": { "$ref": "#/$defs/id_red" } },
+        "diametro_entrada_in": { "type": "number", "minimum": 1, "description": "Del lado del colector (el mayor)." },
+        "diametro_salida_in": { "type": "number", "minimum": 1 },
+        "d_ramal_in": { "type": ["number", "null"] },
+        "angulo": { "anyOf": [{ "$ref": "#/$defs/medida" }, { "type": "null" }] },
+        "k_R": { "type": ["number", "null"], "description": "Radio al eje ÷ diámetro de un codo (taller: 1.5)." },
+        "gajos": { "type": ["integer", "null"] },
+        "excentrica": { "type": ["boolean", "null"] },
+        "partida_cotizap": { "$ref": "#/$defs/partida_cotizap" }
+      }
+    },
+    "elemento_union": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tipo", "nodo_id", "piezas", "diametro_in", "aros", "aros_sueltos", "perfil", "solera_por_aro_mm", "barrenos_por_aro", "tornillos_juegos", "tornillo", "sellador_ml", "abrazaderas_manguera", "incluido_en_partidas", "origen", "articulo_manguera"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^JNT-[0-9]{3}$" },
+        "tipo": { "type": "string", "enum": ["JUNTA_BRIDADA", "JUNTA_EQUIPO", "JUNTA_MANGUERA", "UNION_ENGARGOLADA"] },
+        "nodo_id": { "type": ["string", "null"], "description": "null = junta interna de un tramo (entre piezas de hasta 3 yardas)." },
+        "piezas": { "type": "array", "items": { "type": "string" } },
+        "diametro_in": { "type": "number", "minimum": 1 },
+        "aros": { "type": "integer", "minimum": 0 },
+        "aros_sueltos": { "type": "integer", "minimum": 0 },
+        "perfil": { "type": ["string", "null"] },
+        "solera_por_aro_mm": { "type": ["number", "null"] },
+        "barrenos_por_aro": { "type": ["integer", "null"] },
+        "tornillos_juegos": { "type": "integer", "minimum": 0 },
+        "tornillo": { "type": ["string", "null"] },
+        "sellador_ml": { "type": "number", "minimum": 0, "description": "Cordón de Sikaflex sobre el círculo de barrenos, sin la reserva." },
+        "abrazaderas_manguera": { "type": "integer", "minimum": 0 },
+        "incluido_en_partidas": { "type": "string", "enum": ["COMPLETO", "MEDIA_JUNTA", "NO"], "description": "Qué parte de la junta ya cobran las partidas (cada brida lleva media junta)." },
+        "origen": { "type": "string", "enum": ["NODO", "ARMADO_YARDAS"] },
+        "articulo_manguera": { "type": ["string", "null"] }
+      }
+    },
+    "soporte": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tipo", "cantidad", "regla", "diametro_in", "partida_cotizap"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^SOP-[0-9]{3}$" },
+        "tipo": { "type": "string", "enum": ["MENSULA", "ABRAZADERA"] },
+        "cantidad": { "type": "integer", "minimum": 0 },
+        "regla": { "type": "string" },
+        "diametro_in": { "type": ["number", "null"] },
+        "partida_cotizap": { "$ref": "#/$defs/partida_cotizap" }
+      }
+    },
+    "partida_comprada": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["familia", "descripcion", "articulo_id", "cantidad"],
+      "properties": {
+        "familia": { "type": "string", "enum": ["COMPRADO"] },
+        "descripcion": { "type": "string" },
+        "articulo_id": { "type": "string" },
+        "cantidad": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "alerta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "severidad", "codigo", "referencias", "mensaje", "decision_tomada", "pregunta", "resuelta"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^ALR-[0-9]{3}$" },
+        "severidad": { "type": "string", "enum": ["BLOQUEANTE", "CONFIRMAR", "ADVERTENCIA", "INFO"] },
+        "codigo": {
+          "type": "string",
+          "enum": [
+            "COTA_ILEGIBLE", "COTA_FALTANTE", "DIAMETRO_FALTANTE", "DIAMETRO_INFERIDO", "DIAMETRO_INCONSISTENTE", "ANGULO_INFERIDO", "ANGULO_NO_PERMITIDO",
+            "ANGULO_DERIVACION_NO_PERMITIDO", "DERIVACION_CONTRA_FLUJO", "ORIENTACION_AMBIGUA", "TRANSICION_INSERTADA", "ACCESORIOS_ENCIMADOS", "CONEXION_EQUIPO",
+            "MANGUERA_SIN_LARGO", "CALIBRE_BAJO_TABLA", "CALIBRE_FALTANTE", "MATERIAL_FALTANTE", "TEXTO_SIN_ASOCIAR", "ASOCIACION_AMBIGUA", "TRAZO_SIN_CONECTAR",
+            "CRUCE_SIN_NODO", "CICLO_EN_RED", "PANTALON_RETIRADO", "SIN_COLECTOR"
+          ]
+        },
+        "referencias": { "type": "array", "items": { "type": "string" } },
+        "mensaje": { "type": "string" },
+        "decision_tomada": { "type": ["string", "null"] },
+        "pregunta": { "type": ["string", "null"] },
+        "resuelta": { "type": "boolean" }
+      }
+    },
+    "resumen": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["estado", "diametro_max_in", "longitud_total_cotas_m", "longitud_total_neta_m", "punto_mas_alejado", "longitud_al_punto_mas_alejado_m", "conteo", "alertas", "cotizacion_rapida"],
+      "properties": {
+        "estado": { "type": "string", "enum": ["DEFINITIVA", "PRELIMINAR", "NO_COTIZABLE"] },
+        "diametro_max_in": { "type": "number" },
+        "longitud_total_cotas_m": { "type": "number" },
+        "longitud_total_neta_m": { "type": "number" },
+        "punto_mas_alejado": { "$ref": "#/$defs/id_red" },
+        "longitud_al_punto_mas_alejado_m": { "type": "number" },
+        "conteo": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ductos_rectos", "accesorios", "juntas_bridadas", "juntas_equipo", "juntas_manguera", "aros", "aros_sueltos", "tornillos_juegos", "sellador_ml", "menulas"],
+          "properties": {
+            "ductos_rectos": { "type": "integer" }, "accesorios": { "type": "integer" }, "juntas_bridadas": { "type": "integer" }, "juntas_equipo": { "type": "integer" },
+            "juntas_manguera": { "type": "integer" }, "aros": { "type": "integer" }, "aros_sueltos": { "type": "integer" }, "tornillos_juegos": { "type": "integer" },
+            "sellador_ml": { "type": "number" }, "menulas": { "type": "integer" }
+          }
+        },
+        "alertas": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["BLOQUEANTE", "CONFIRMAR", "ADVERTENCIA", "INFO"],
+          "properties": { "BLOQUEANTE": { "type": "integer" }, "CONFIRMAR": { "type": "integer" }, "ADVERTENCIA": { "type": "integer" }, "INFO": { "type": "integer" } }
+        },
+        "cotizacion_rapida": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Las entradas de la cotización rápida (src/motor/rapida.js) que salen de la red.",
+          "required": ["D_mm", "L_m", "yarda_mm", "menulas", "mangueras_tramos"],
+          "properties": {
+            "D_mm": { "type": "number" }, "L_m": { "type": "number" }, "yarda_mm": { "type": "number" }, "menulas": { "type": "integer" }, "mangueras_tramos": { "type": "integer" }
+          }
+        }
+      }
+    }
+  }
+}
