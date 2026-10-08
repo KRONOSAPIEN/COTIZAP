@@ -2118,6 +2118,11 @@ const ok = (cond, msg) => {
     await p.fill('#f_separacion_m', '3.5');
     ok(/no puede pasar de 3 m/.test(await p.locator('#dlg-prev').innerText()), 'más de 3.0 m se rechaza');
     await p.fill('#f_separacion_m', '');
+    await p.selectOption('#f_criterio_horizontal', 'JUNTA');
+    ok(await p.inputValue('#f_cantidad') === '10' && await p.locator('.campo[data-campo="separacion_m"]').isHidden(),
+      'uno por junta: el tramo de 8 m en yardas de 4 ft son piezas de 3.66 m (2 cada una) y el ajuste (1): 5 + 2 + 3 = 10, sin separación que capturar');
+    await p.selectOption('#f_criterio_horizontal', 'SEPARACION');
+    ok(await p.inputValue('#f_cantidad') === '9', 'por separación vuelven a ser 9');
     await p.selectOption('#f_cantidad_modo', 'MANUAL');
     ok(!(await p.locator('#f_cantidad').evaluate((e) => e.readOnly)) && await p.locator('.campo[data-campo="separacion_m"]').isHidden() && await p.inputValue('#f_cantidad') === '9', 'en manual la cantidad se captura (empieza en la calculada) y no hay separación');
     await p.fill('#f_cantidad', '3');
@@ -2151,6 +2156,22 @@ const ok = (cond, msg) => {
     await p.waitForTimeout(100);
     await p.locator('#lista-partidas .partida:not(.partida-auto)').last().locator('button[aria-label^="Editar"]').click();
     ok(await p.inputValue('#f_cantidad_modo') === 'MANUAL' && await p.inputValue('#f_cantidad') === '7', 'una soportería de antes se abre en manual con sus 7 piezas');
+    await p.click('#dlg-cancelar');
+    // abrazadera tipo cuna de solera de 1″ × 1/8″: media vuelta o vuelta completa (dos mitades)
+    await p.click('#btn-agregar');
+    await p.click('.fam:has(span:text-is("Soportería"))');
+    await p.selectOption('#f_cantidad_modo', 'MANUAL');
+    await p.fill('#f_cantidad', '1');
+    await p.selectOption('#f_barra_id', 'SOL_1X1_8');
+    await p.fill('#f_largo_pieza_mm', '');
+    ok(await p.locator('.campo[data-campo="abrazadera_vuelta"]').isHidden(), 'la vuelta sólo se pregunta en una abrazadera');
+    await p.fill('#f_abrazadera_D_mm', '11');
+    ok(await p.locator('.campo[data-campo="abrazadera_vuelta"]').isVisible() && await p.inputValue('#f_abrazadera_vuelta') === 'MEDIA', 'con el diámetro aparece, en media vuelta (cuna de 180°)');
+    ok(/0\.54 m de Solera 1" × 1\/8"/.test(await p.locator('#dlg-prev').innerText()), 'media vuelta: 0.54 m de solera de 1″ × 1/8″');
+    await p.selectOption('#f_abrazadera_vuelta', 'COMPLETA');
+    await p.waitForTimeout(50);
+    ok(/1\.09 m de Solera 1" × 1\/8"/.test(await p.locator('#dlg-prev').innerText()) && await p.locator('#dlg-prev .prev-plano .pl-barra').count() >= 2,
+      'vuelta completa: dos mitades, 1.09 m de solera, y el dibujo trae las dos');
     await p.click('#dlg-cancelar');
     await p.context().close();
   }

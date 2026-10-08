@@ -1077,14 +1077,17 @@
     const sepH = `${W.num(c.separacion_m, 2)} m`;
     const nombre = (a) => C.soportes.NOMBRE_ACCESORIO[a.familia] || a.familia;
     const filas = [
-      ...c.tramos.map((t) => [`${t.descripcion} · ${t.posicion === 'VERTICAL' ? 'vertical' : 'horizontal'}`, `${W.num(t.L_m, 2)} m${t.piezas > 1 ? ` × ${t.piezas}` : ''} ÷ ${t.posicion === 'VERTICAL' ? `${W.num(estado.res.maestros.proceso.soportes.espaciado.vertical_m, 2)} m` : sepH}`, String(t.soportes)]),
+      ...c.tramos.map((t) => [`${t.descripcion} · ${t.posicion === 'VERTICAL' ? 'vertical (con el de carga en la base)' : 'horizontal'}`,
+        t.criterio === 'JUNTA' ? `${W.num(t.L_m, 2)} m en ${t.piezas_armadas} ${t.piezas_armadas === 1 ? 'pieza' : 'piezas'}: uno por junta${t.por_pieza > t.piezas_armadas ? ' y los que pide la separación máxima' : ''}${t.piezas > 1 ? ` × ${t.piezas}` : ''}`
+          : `${W.num(t.L_m, 2)} m${t.piezas > 1 ? ` × ${t.piezas}` : ''} ÷ ${t.posicion === 'VERTICAL' ? `${W.num(estado.res.maestros.proceso.soportes.espaciado.vertical_m, 2)} m` : sepH}`,
+        String(t.soportes)]),
       ...c.accesorios.map((a) => [`${a.descripcion} · ${nombre(a)}`, `${a.piezas} × ${estado.res.maestros.proceso.soportes.espaciado.por_accesorio} junto a la pieza (a 30–50 cm)`, String(a.soportes)]),
       { clase: 'total', celdas: ['Soportes', c.modo === 'AUTO' ? 'cantidad automática' : `mínimo con separación máxima de ${W.num(c.separacion_max_m, 2)} m: ${c.minimo}`, String(c.modo === 'AUTO' ? c.n : c.minimo)] },
     ];
     return h('div', null,
       h('h4', null, c.modo === 'AUTO' ? 'Cantidad automática de soportes' : 'Soportes que pide el ducto'),
       tabla([{ t: 'Pieza' }, { t: 'Cuenta' }, { t: 'Soportes', num: true }], filas),
-      h('p', { class: 'nota' }, 'Horizontal: uno cada 2.5 m (máximo 3.0 m; lo ideal es uno por junta, cada 2.4 m). Vertical: máximo cada 3.0 m y un soporte fuerte en la base. Con calibre 22 en 11″ conviene una abrazadera tipo cuna (solera de 1″ × 1/8″ o similar) que abrace el tubo, sin apretar la banda de más.'));
+      h('p', { class: 'nota' }, 'Horizontal: uno cada 2.5 m (máximo 3.0 m) o, mejor, uno por junta. Vertical: máximo cada 3.0 m y un soporte de carga fuerte en la base de la subida. Con calibre 22 en 11″ conviene una abrazadera tipo cuna (solera de 1″ × 1/8″ o similar) que abrace 180° o 360° del tubo, sin apretar la banda de más.'));
   }
 
   /** Soportería: la barra de la que se cortan las piezas, los anclajes, la tornillería y el tiempo de taller. */
@@ -1096,7 +1099,7 @@
       h('dl', { class: 'kvs' },
         kv('Barra', `${b.descripcion} · ${W.num(b.largo_mm / 1000, 2)} m`, `${W.mxn(b.precio)} → ${W.mxn(b.sin_iva)} sin IVA`),
         kv('Precio por metro', W.mxn(b.precio_m), 'sin IVA'),
-        kv('Largo por pieza', W.num(s.largo_pieza_mm, 0), s.largo_calculado ? `mm · abrazadera de media vuelta para Ø${W.num(e.abrazadera_D_mm, 1)} mm con dos orejas` : 'mm'),
+        kv('Largo por pieza', W.num(s.largo_pieza_mm, 0), s.largo_calculado ? `mm · abrazadera de ${s.vuelta === 'COMPLETA' ? 'vuelta completa (dos mitades) ' : 'media vuelta '}para Ø${W.num(e.abrazadera_D_mm, 1)} mm con ${s.vuelta === 'COMPLETA' ? 'cuatro' : 'dos'} orejas` : 'mm'),
         kv('Barra que usan las piezas', W.num(s.L_total_m, 3), 'm'),
         kv('Anclajes', s.anclajes ? `${s.anclajes} × ${s.anclaje.descripcion}` : 'Ninguno'),
         kv('Tornillería', s.tornillos ? `${s.tornillos} juegos de ${descTornillo(s.tornillo)}` : 'Ninguna'),
@@ -1466,7 +1469,7 @@
   /** Cuántos soportes pide el ducto de la cotización para el diálogo (la separación propia de la partida, si la trae). */
   function conteoSoportes(p) {
     const sep = Number(p.separacion_m);
-    return C.soportes.contar(estado.res.partidas, estado.res.maestros, { separacion_m: Number.isFinite(sep) && sep > 0 ? sep : undefined });
+    return C.soportes.contar(estado.res.partidas, estado.res.maestros, { separacion_m: Number.isFinite(sep) && sep > 0 ? sep : undefined, criterio: p.criterio_horizontal });
   }
 
   /** Soportería: en modo automático la cantidad es la del ducto (no se captura); en manual se captura. Al pasar a manual queda la última calculada. */
@@ -1478,7 +1481,8 @@
     cant.readOnly = auto;
     if (auto) {
       const sep = $('#f_separacion_m');
-      const c = conteoSoportes({ separacion_m: sep ? sep.value : undefined });
+      const crit = $('#f_criterio_horizontal');
+      const c = conteoSoportes({ separacion_m: sep && !sep.closest('.campo').hidden ? sep.value : undefined, criterio_horizontal: crit ? crit.value : undefined });
       cant.value = c.n >= 1 ? String(c.n) : '';
     }
   }

@@ -101,6 +101,8 @@
         ANG_1_1_4X1_8: { descripcion: 'Ángulo 1¼" × 1/8"', tipo: 'ANGULO', ancho_mm: 31.75, esp_mm: 3.175, largo_mm: 6000, precio: 260 },
         ANG_3_4X1_8: { descripcion: 'Ángulo ¾" × 1/8"', tipo: 'ANGULO', ancho_mm: 19.05, esp_mm: 3.175, largo_mm: 6000, precio: 160 },
         SOL_1_1_4X1_8: { descripcion: 'Solera 1¼" × 1/8"', tipo: 'SOLERA', ancho_mm: 31.75, esp_mm: 3.175, largo_mm: 6000, precio: 150 },
+        // 1" × 1/8": la de las abrazaderas tipo cuna; aproximada, prorrateada por peso de la de 1¼" × 1/8" (× 25.4 / 31.75)
+        SOL_1X1_8: { descripcion: 'Solera 1" × 1/8" (aprox., prorrateada de la de 1¼")', tipo: 'SOLERA', ancho_mm: 25.4, esp_mm: 3.175, largo_mm: 6000, precio: 120 },
         CANAL_U_6: { descripcion: 'Canal U 6" × 6 m (12.2 kg/m)', kg_m: 12.2, largo_mm: 6000, precio: 2177.18 },
         PTR_2X2_C14: { descripcion: 'PTR 2" × 2" cal. 14 (6 m)', kg_m: 2.91, largo_mm: 6000, precio: 490 }, // kg/m calculado de la sección (4 × (50.8 − 1.9) × 1.9 mm²); el proveedor no lo da
       },

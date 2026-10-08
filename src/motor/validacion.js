@@ -195,7 +195,8 @@
     const lista = [];
     if (fam === 'COMPRADO') lista.push(['articulo_id', claves(sub(M.compras, 'articulos')), 'Artículo del catálogo']);
     if (fam === 'SOPORTE') {
-      lista.push(['cantidad_modo', ['AUTO', 'MANUAL'], 'Cantidad de piezas'], ['barra_id', claves(sub(M.proveedor, 'barras')), 'Barra de la lista del proveedor'], ['articulo_anclaje', claves(sub(M.compras, 'articulos')), 'Anclaje']);
+      lista.push(['cantidad_modo', ['AUTO', 'MANUAL'], 'Cantidad de piezas'], ['criterio_horizontal', ['SEPARACION', 'JUNTA'], 'Soportes de los tramos horizontales'],
+        ['abrazadera_vuelta', ['MEDIA', 'COMPLETA'], 'Vuelta de la abrazadera'], ['barra_id', claves(sub(M.proveedor, 'barras')), 'Barra de la lista del proveedor'], ['articulo_anclaje', claves(sub(M.compras, 'articulos')), 'Anclaje']);
     }
     if (esDeLamina(fam)) {
       lista.push(['ref_diametro', ['INTERIOR', 'EXTERIOR'], 'Dimensión nominal'],

@@ -69,6 +69,8 @@
     // Extremo libre del tramo de ajuste (el de las tablas maestras se ofrece aparte, como «Predeterminado»)
     posicion: [['HORIZONTAL', 'Horizontal'], ['VERTICAL', 'Vertical (subida o bajada)']],
     cantidad_modo: [['AUTO', 'Automática: según el ducto de la cotización'], ['MANUAL', 'Manual: la que yo capture']],
+    criterio_horizontal: [['SEPARACION', 'Por separación (uno cada 2.5 m)'], ['JUNTA', 'Uno por junta (después de cada unión)']],
+    abrazadera_vuelta: [['MEDIA', 'Media vuelta · cuna de 180°'], ['COMPLETA', 'Vuelta completa · 360°, dos mitades']],
     ajuste: [['SUELTA', 'Brida suelta (aro terminado, tornillos y junta)'], ['SIN_BRIDA', 'Sin brida (brida en un solo extremo)'], ['CON_BRIDA', 'Brida de taller (bridas en ambos extremos)']],
     bridas_aparte: [['', 'Se hacen en esta partida (aros, tornillos y junta)'], ['true', 'Son de otra partida (Bridas sueltas o compradas): aquí sólo se unen al ducto']],
     driver: [['PIEZA', 'Por pieza'], ['KG_NETO', 'Por kg neto'], ['KG_BRUTO', 'Por kg bruto'], ['M2_NETO', 'Por m² de lámina'], ['M_CORTE', 'Por m de corte'], ['M_SOLDADURA', 'Por m de soldadura']],
@@ -193,7 +195,11 @@
         ayuda: 'Automática: una ménsula por tramo recto cada 2.5 m (vertical, cada 3.0 m) y una junto a cada codo e injerto; se recalcula al cambiar el ducto. Manual: la cantidad que usted capture (avisa si queda corta)',
       },
       {
-        id: 'separacion_m', juntoCantidad: true, etiqueta: 'Separación entre soportes', tipo: 'num', unidad: 'm', opcional: true, min: 0.3, max: 3, paso: 0.1, visible: (v) => v.cantidad_modo !== 'MANUAL',
+        id: 'criterio_horizontal', juntoCantidad: true, etiqueta: 'Tramos horizontales', tipo: 'select', opciones: 'criterio_horizontal', defecto: 'SEPARACION', visible: (v) => v.cantidad_modo !== 'MANUAL',
+        ayuda: 'Por junta: uno justo después de cada unión entre piezas (las de 3 yardas engargoladas y el ajuste), y otro dentro de la pieza que pase de 3.0 m. Le da más rigidez al ensamble',
+      },
+      {
+        id: 'separacion_m', juntoCantidad: true, etiqueta: 'Separación entre soportes', tipo: 'num', unidad: 'm', opcional: true, min: 0.3, max: 3, paso: 0.1, visible: (v) => v.cantidad_modo !== 'MANUAL' && v.criterio_horizontal !== 'JUNTA',
         ayuda: 'Sólo para los tramos horizontales. Vacío = la de las tablas maestras (2.5 m); 2.4 m pone una por junta de yarda. Máximo 3.0 m',
       },
       { id: 'barra_id', etiqueta: 'Barra de la que se cortan', tipo: 'select', opciones: 'barras', defecto: 'ANG_1_1_4X1_8' },
@@ -203,7 +209,11 @@
       },
       {
         id: 'abrazadera_D_mm', etiqueta: 'Abrazadera: diámetro del ducto', tipo: 'dim', opcional: true,
-        ayuda: 'Si la pieza es una abrazadera de media vuelta: su largo sale de π × (D + espesor) ÷ 2 más las dos orejas',
+        ayuda: 'Si la pieza es una abrazadera: su largo sale de la vuelta, π × (D + espesor) ÷ 2 por mitad, más dos orejas por mitad',
+      },
+      {
+        id: 'abrazadera_vuelta', etiqueta: 'Abrazadera: vuelta', tipo: 'select', opciones: 'abrazadera_vuelta', defecto: 'MEDIA', visible: (v) => String(v.abrazadera_D_mm || '').trim() !== '',
+        ayuda: 'Tipo cuna, de solera de 1″ × 1/8″ o similar: abraza 180° o 360° del tubo y reparte el peso. En cal. 22 no apriete la banda de más: ovala el ducto. Las dos mitades de la completa se unen con 2 tornillos (captúrelos abajo)',
       },
       { id: 'anclajes_pieza', etiqueta: 'Anclajes por pieza', tipo: 'int', defecto: 0, min: 0, paso: 1 },
       { id: 'articulo_anclaje', etiqueta: 'Anclaje', tipo: 'select', opciones: 'anclajes', defecto: '', visible: (v) => Number(v.anclajes_pieza) > 0 },
@@ -374,7 +384,7 @@
       }
       case 'SOPORTE': {
         const largo = p.largo_pieza_mm !== undefined && p.largo_pieza_mm !== '' ? `${l(p.largo_pieza_mm)} por pieza`
-          : Number(p.abrazadera_D_mm) > 0 ? `abrazadera para ducto ${d(p.abrazadera_D_mm)}` : 'sin largo';
+          : Number(p.abrazadera_D_mm) > 0 ? `abrazadera${p.abrazadera_vuelta === 'COMPLETA' ? ' de vuelta completa' : ''} para ducto ${d(p.abrazadera_D_mm)}` : 'sin largo';
         return `${de((m) => m.proveedor.barras, p.barra_id)} · ${largo}${Number(p.anclajes_pieza) > 0 ? ` · ${plural(p.anclajes_pieza, 'anclaje', 'anclajes')}` : ''}${p.cantidad_modo === 'AUTO' ? ' · cantidad automática' : ''}`;
       }
       case 'INSTALACION':

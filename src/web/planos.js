@@ -400,7 +400,7 @@
     return true;
   }
 
-  /** Soportería: la abrazadera de media vuelta con sus orejas, o la pieza recta que se corta de la barra. */
+  /** Soportería: la abrazadera (media vuelta o vuelta completa de dos mitades) con sus orejas, o la pieza recta que se corta de la barra. */
   function soporte(f, d, M) {
     const s = f.soporte;
     const p = f.entrada;
@@ -414,9 +414,16 @@
       const oreja = M ? M.proceso.soportes.oreja_abrazadera_mm : 50;
       const O = P(0, 0);
       const puntos = Array.from({ length: 49 }, (_, i) => polar(O, Rn, 180 - (180 * i) / 48));
-      d.titulo = `Abrazadera para ducto de ${nominal(p.abrazadera_D_mm)}`;
-      d.datos = [b.descripcion || '', `${mm(s.largo_pieza_mm)} mm de barra por pieza`, `Orejas de ${mm(oreja)} mm`];
+      const completa = s.vuelta === 'COMPLETA';
+      d.titulo = `Abrazadera${completa ? ' de vuelta completa' : ''} para ducto de ${nominal(p.abrazadera_D_mm)}`;
+      d.datos = [b.descripcion || '', `${mm(s.largo_pieza_mm)} mm de barra por pieza`, completa ? `Dos mitades · 4 orejas de ${mm(oreja)} mm` : `Orejas de ${mm(oreja)} mm`];
       d.trazos.push(ruta([P(-Rn - oreja, 0), ...puntos, P(Rn + oreja, 0)], 'barra'));
+      if (completa) {
+        // la otra mitad, abajo, separada el espesor de la solera para que se vean las dos orejas que se atornillan
+        const g = Math.max(t, 2);
+        const abajo = Array.from({ length: 49 }, (_, i) => polar(O, Rn, 180 + (180 * i) / 48)).map((q) => P(q[0], q[1] + g));
+        d.trazos.push(ruta([P(-Rn - oreja, g), ...abajo, P(Rn + oreja, g)], 'barra'));
+      }
       d.trazos.push(circulo(O, p.abrazadera_D_mm / 2, 'oculta'));
       d.cotas.push(cota(P(-p.abrazadera_D_mm / 2, 0), P(p.abrazadera_D_mm / 2, 0), diam(p.abrazadera_D_mm), 'abrazadera_D_mm', 1, -1));
       d.cotas.push(cota(P(Rn, 0), P(Rn + oreja, 0), mm(oreja), null, 1, 1));

@@ -161,7 +161,7 @@
 | `BRIDA` (bridas sueltas) | redondo: `D_mm` · rectangular: `a_mm`, `b_mm` (la medida **del ducto** en que van) | Sólo aros terminados, sin lámina; siempre bridada. Material y calibre son los del ducto (§3.6.1). |
 | `UNION` (armado de piezas) | `D_mm` (el de las bocas que se unen), `n_uniones` (1) | La unión entre dos piezas de otras partidas, sin lámina: engargolada en galvanizado, soldada en los demás (§3.6.4). Las piezas que se unen van sin brida en esos extremos. |
 | `PERSONALIZADO` | `A_neta_m2`, `L_corte_m`, `L_sold_tope_m`, `L_sold_filete_m`, `n_piezas`, `n_extremos`, `D_ref_mm` | Para campanas y piezas con desarrollo CAD. |
-| `SOPORTE` (soportería) | `barra_id` (de T3b), `largo_pieza_mm` o, en una abrazadera, `abrazadera_D_mm` (el diámetro del ducto que abraza), `anclajes_pieza` (0), `articulo_anclaje` (el de T7e), `tornillos_pieza` (0), `min_pieza` (minutos reales; el de T7e), `cantidad_modo` (`AUTO`: la cantidad sale del ducto de la cotización; `MANUAL`: la que se captura; sin él, manual), `separacion_m` (separación horizontal propia, de 0.3 a 3.0 m; vacía = T7e) | Ménsulas, abrazaderas y postes cortados de una barra de la lista (§3.6.2). |
+| `SOPORTE` (soportería) | `barra_id` (de T3b), `largo_pieza_mm` o, en una abrazadera, `abrazadera_D_mm` (el diámetro del ducto que abraza), `anclajes_pieza` (0), `articulo_anclaje` (el de T7e), `tornillos_pieza` (0), `min_pieza` (minutos reales; el de T7e), `cantidad_modo` (`AUTO`: la cantidad sale del ducto de la cotización; `MANUAL`: la que se captura; sin él, manual), `separacion_m` (separación horizontal propia, de 0.3 a 3.0 m; vacía = T7e), `criterio_horizontal` (`SEPARACION` por omisión o `JUNTA`: uno por junta), `abrazadera_vuelta` (`MEDIA` por omisión o `COMPLETA`) | Ménsulas, abrazaderas y postes cortados de una barra de la lista (§3.6.2). |
 | `COMPRADO` | `articulo_id` (de T3c, opcional), `precio_compra_unitario` (vacío = el del catálogo), `iva_incluido` (sí/no; vacío = el del catálogo, y un precio capturado es antes de IVA), `peso_kg`, `tornillos_pieza` y `circulo_barrenos_mm` (si se atornilla como brida; vacío = los del artículo) | Compuertas, mangueras, el ducto de un proveedor…: pasa por la pila sin mano de obra; un precio con IVA se cuesta sin IVA (§3.6.3). |
 | `INSTALACION` | `personas`, `dias`, `horas_dia` (la jornada de T8), `viajes`, `casetas_viaje`, `gasolina_viaje`, `noches`, `hospedaje_noche`, `comida_dia`, `otros_gastos`, `gastos_con_factura` (sí), `comidas_con_factura` (no) | La cuadrilla en obra y sus viáticos, capturados con IVA como en el ticket (§4.5). La `cantidad` son visitas iguales. |
 
@@ -255,6 +255,7 @@
 | `ANG_1_1_4X1_8` | Ángulo 1¼" × 1/8" | 6.00 | — | 260.00 | 224.14 | 9.02 | 24.85 | Referencia |
 | `ANG_3_4X1_8` | Ángulo ¾" × 1/8" | 6.00 | — | 160.00 | 137.93 | 5.22 | 26.41 | Referencia |
 | `SOL_1_1_4X1_8` | Solera 1¼" × 1/8" | 6.00 | — | 150.00 | 129.31 | 4.75 | 27.23 | Referencia |
+| `SOL_1X1_8` | Solera 1" × 1/8" (aprox., prorrateada de la de 1¼") | 6.00 | — | 120.00 | 103.45 | 3.80 | 27.23 | Referencia |
 | `CANAL_U_6` | Canal U 6" × 6 m (12.2 kg/m) | 6.00 | — | 2,177.18 | 1,876.88 | 73.20 | 25.64 | Referencia |
 | `PTR_2X2_C14` | PTR 2" × 2" cal. 14 (6 m) | 6.00 | — | 490.00 | 422.41 | 17.46 | 24.19 | Referencia |
 
@@ -961,10 +962,10 @@ horas:       aros + soldadura (cierre) + barrenado + acabado + pintura (bridas) 
 
 #### 3.6.2 Soportería (`SOPORTE`)
 
-Ménsulas, abrazaderas y postes que se cortan de una **barra de la lista del proveedor** (T3b): cada pieza usa `largo_pieza_mm` de barra, puede llevar anclajes del catálogo de compras (T3c) y tornillos, y cuesta **minutos reales** de taller (corte, doblez, barreno y punteo: lo que dice el taller que tarda, sin la eficiencia) a la tarifa de armado. Una **abrazadera** de media vuelta se puede pedir por el diámetro del ducto que abraza (`abrazadera_D_mm`): su largo sale solo.
+Ménsulas, abrazaderas y postes que se cortan de una **barra de la lista del proveedor** (T3b): cada pieza usa `largo_pieza_mm` de barra, puede llevar anclajes del catálogo de compras (T3c) y tornillos, y cuesta **minutos reales** de taller (corte, doblez, barreno y punteo: lo que dice el taller que tarda, sin la eficiencia) a la tarifa de armado. Una **abrazadera** tipo cuna se puede pedir por el diámetro del ducto que abraza (`abrazadera_D_mm`): su largo sale solo, de **media vuelta** (cuna de 180°, la de arranque) o de **vuelta completa** (`abrazadera_vuelta: COMPLETA`, 360°: dos mitades con sus orejas, atornilladas entre sí).
 
 ```text
-largo     = largo_pieza  |  π·(abrazadera_D + t)/2 + 2·oreja           # abrazadera: media vuelta en la fibra neutra de la solera (t = su espesor) y dos orejas de 50 mm (T7e)
+largo     = largo_pieza  |  mitades · [π·(abrazadera_D + t)/2 + 2·oreja]   # abrazadera: cada mitad es media vuelta en la fibra neutra de la solera (t = su espesor) con dos orejas de 50 mm (T7e); media vuelta = 1 mitad, vuelta completa = 2
 L_total   = cantidad · largo / 1000                                    # m de barra
 perfil    = L_total · precio_m_sin_IVA / (1 − φ_perfil)                # la fracción de barra que se usa, con la merma de perfil (T6)
 anclajes  = cantidad · anclajes_pieza · precio_sin_IVA(articulo_anclaje) # por omisión el de T7e (taquete de 3/8″)
@@ -974,7 +975,7 @@ CD        = perfil + anclajes + tornillos + h_taller · (mo_h + equipo_h)(armado
 peso      = cantidad · kg_m · largo / 1000
 ```
 
-Para la abrazadera del ducto de 11″ del caso de §7.4, con solera de 1¼″ × 1/8″: π·(279.4 + 3.175)/2 + 2·50 = **543.87 mm**; las 7 salen de una solera de 6 m.
+Para la abrazadera del ducto de 11″ del caso de §7.4, con solera de 1¼″ × 1/8″: π·(279.4 + 3.175)/2 + 2·50 = **543.87 mm**; las 7 salen de una solera de 6 m. De vuelta completa son 1 087.7 mm cada una (5 por barra).
 
 Una pieza más larga que la barra se rechaza (no sale de una sola barra). Cuántas barras completas hay que comprar lo dice la lista de compras (§5.5), que acomoda las piezas en las barras.
 
@@ -982,7 +983,8 @@ Una pieza más larga que la barra se rechaza (no sale de una sola barra). Cuánt
 
 | Dónde | Regla | Soportes |
 | --- | --- | --- |
-| Tramo horizontal | Uno cada **2.5 m**, nunca a más de **3.0 m**. La práctica ideal de montaje es una por junta (cada 2.4 m, la yarda estándar): rigidiza el ensamble | ⌈largo ÷ separación⌉, mínimo 1 |
+| Tramo horizontal, por separación | Uno cada **2.5 m**, nunca a más de **3.0 m** | ⌈largo ÷ separación⌉, mínimo 1 |
+| Tramo horizontal, **uno por junta** (`criterio_horizontal: JUNTA`) | La práctica ideal de montaje: un soporte justo después de cada unión entre piezas (las de 3 yardas engargoladas y el tramo de ajuste); rigidiza el ensamble | Σ piezas armadas ⌈largo de la pieza ÷ 3.0⌉ (una por junta y otra dentro de la pieza que pase del máximo) |
 | Tramo vertical (`posicion: VERTICAL`) | Máximo cada **3.0 m** y un soporte de carga fuerte en la base de la subida (el codo base) | ⌈largo ÷ 3.0⌉, mínimo `base_vertical` (1) |
 | Codo, injerto simple y reducción con injerto | Uno a no más de **30–50 cm** de la entrada o salida: ahí pega la partícula y se turba el aire | `por_accesorio` (1) por pieza |
 
@@ -991,9 +993,9 @@ soportes = Σ tramos rectos [ ⌈L ÷ separación⌉ · piezas ]  +  Σ codos e 
 mínimo   = lo mismo con la separación máxima (3.0 m); por debajo el ducto queda sin apoyo suficiente
 ```
 
-La cuenta lee las partidas ya calculadas de la cotización (las que tienen error no cuentan) y se **recalcula sola** al cambiar el ducto; el orden de las partidas no importa. Ménsulas y abrazaderas pueden ser dos partidas automáticas con la misma cantidad. Cada partida puede traer su **separación horizontal propia** (`separacion_m`, por ejemplo 2.4 m; más de 3.0 m se rechaza). En **manual**, la partida no cambia, pero avisa si las piezas capturadas son menos que el mínimo. Un ducto de 8 m horizontales, una subida de 4 m y 3 codos pide 4 + 2 + 3 = **9** ménsulas (mínimo 8). Sin tramos, codos ni injertos en la cotización la automática dice qué falta en lugar de calcular cero piezas.
+La cuenta lee las partidas ya calculadas de la cotización (las que tienen error no cuentan) y se **recalcula sola** al cambiar el ducto; el orden de las partidas no importa. Ménsulas y abrazaderas pueden ser dos partidas automáticas con la misma cantidad. Cada partida puede traer su **separación horizontal propia** (`separacion_m`, por ejemplo 2.4 m; más de 3.0 m se rechaza) o pedir **uno por junta**: con yardas de 3 ft el tramo de 8 m se arma en piezas de 2.74, 2.74 y 2.51 m y lleva 3 (una por junta); con yardas de 4 ft, piezas de 3.66, 3.66 y 0.68 m, lleva 5 (las de 3.66 m pasan del máximo y llevan 2). En **manual**, la partida no cambia, pero avisa si las piezas capturadas son menos que el mínimo. Un ducto de 8 m horizontales, una subida de 4 m y 3 codos pide 4 + 2 + 3 = **9** ménsulas (mínimo 8). Sin tramos, codos ni injertos en la cotización la automática dice qué falta en lugar de calcular cero piezas.
 
-*Abrazaderas en calibre 22:* el cal. 22 aguanta el ducto de 11″, pero una banda apretada con mucho torque lo ovala. Conviene una abrazadera tipo cuna (de solera de 1″ × 1/8″ o similar) que abrace 180° o 360° del tubo y reparta el peso, en lugar de un solo punto de fijación; la abrazadera por diámetro de esta partida ya es de media vuelta.
+*Abrazaderas en calibre 22:* el cal. 22 aguanta el ducto de 11″, pero una banda apretada con mucho torque lo ovala. Conviene una abrazadera tipo cuna (de solera de 1″ × 1/8″ o similar) que abrace 180° o 360° del tubo y reparta el peso, en lugar de un solo punto de fijación; la partida las hace de media vuelta o de vuelta completa, y la lista del proveedor trae la **solera de 1″ × 1/8″** (`SOL_1X1_8`, $120 la barra de 6 m: **aproximada**, prorrateada por peso de la de 1¼″; cámbiela por la real). Las dos mitades de la vuelta completa se unen con 2 tornillos, que se capturan en `tornillos_pieza`.
 
 #### 3.6.3 Artículos comprados (`COMPRADO`) y el catálogo de compras (T3c)
 
@@ -2078,7 +2080,7 @@ Qué se dibuja de cada familia:
 | Tramo recto | Lateral (cortado si pasa de 24 diámetros), con las juntas de las yardas y sus bridas (la suelta, punteada y separada) | Cada yarda arriba, el largo total abajo y D, como en los planos de yardas; «3 yardas unidas», «bridas en ambos extremos» o «brida en un extremo» en los datos |
 | Transición | Lateral | D, a × b, L |
 | Brida de solera y brida de placa comprada | De frente: el aro, el círculo de barrenos y los barrenos | Dext, Dint; nota con Dperf y los barrenos |
-| Soportería | La abrazadera de media vuelta con sus orejas, o la pieza de barra | D del ducto y oreja, o el largo |
+| Soportería | La abrazadera (media vuelta, o las dos mitades de la vuelta completa) con sus orejas, o la pieza de barra | D del ducto y oreja, o el largo |
 | Armado de piezas | Las dos bocas que se unen (cortadas: las piezas siguen en sus partidas) y el cordón | D; nota con las uniones; en la hoja se llama como lo escribió quien lo pide («Unir injerto de 11″ con codo de 60° para obtener 90°») |
 
 En las piezas bridadas se dibuja la brida en cada boca que la lleva (vista de lado, saliendo del ducto el ancho de la solera) y los datos dicen qué extremos van sin brida. Lo que sólo importa al cotizar —«bridas de otra partida»— aparece en el desglose pero no en las hojas para el proveedor.
@@ -2257,7 +2259,7 @@ Lo que dijo el taller (6 y 7 de octubre de 2026): el trabajador gana **$500 por 
 | Tornillos de las abrazaderas | Ninguno propio: los 208 juegos de la hoja son los de las bridas | `tornillos_pieza` de la partida | Si llevan 2 por abrazadera (sus orejas a la ménsula), son 14 juegos más: 222 exactos y se comprarían 240. |
 | Largo de la ménsula | 1 300 mm de ángulo por ménsula (brazo y pierna de 650 mm): de dos ángulos salen las 7, como se compró | `largo_pieza_mm` de la partida | Si la ménsula es una sola pieza de 650 mm, las 7 salen de un ángulo. |
 | Espaciamiento de las ménsulas | **Dado por el taller (8-oct-2026):** horizontal cada 2.5 m (máximo 3.0 m), vertical máximo cada 3.0 m con un soporte fuerte en la base, y uno junto a cada codo, injerto y reducción con injerto | `proceso.soportes.espaciado` (T7e) y, por partida, `separacion_m` y la `posicion` del tramo | Si el ducto lleva soportes extra (uno por junta, a 2.4 m) o más junto a los accesorios, súbalos: cada soporte de más es una ménsula más. La reducción simple y la transición no piden soporte propio; el ducto que no se marca vertical cuenta como horizontal. |
-| Abrazadera | De media vuelta para el ducto de 11″, con dos orejas de 50 mm: 543.9 mm de solera 1¼″ × 1/8″ | `abrazadera_D_mm` de la partida y `proceso.soportes.oreja_abrazadera_mm` | Otra forma cambia el largo; las 7 salen de una solera mientras cada una mida hasta 857 mm. |
+| Abrazadera | De media vuelta para el ducto de 11″, con dos orejas de 50 mm: 543.9 mm de solera 1¼″ × 1/8″ (la recomendación de 8-oct-2026 es tipo cuna de solera de 1″ × 1/8″, de media vuelta o vuelta completa; su precio es aproximado) | `abrazadera_D_mm` de la partida y `proceso.soportes.oreja_abrazadera_mm` | Otra forma cambia el largo; las 7 salen de una solera mientras cada una mida hasta 857 mm. |
 | Tiempo de las abrazaderas y el poste | El de la tabla (15 min por pieza: 2 h), aparte de los 2 días de las ménsulas | `min_pieza` de cada partida | Si se hicieron dentro de esos 2 días, repartir las 16 h entre ménsulas y abrazaderas. |
 | Cordón de Sikaflex de la junta | 40 mL por metro de círculo de barrenos (+15 % de merma): 1 084 mL para las 60 bridas, 2 cartuchos | `herrajes.uniones.BRIDADO.ml_sellador_junta_m` | Un cordón más grueso pide más cartuchos. |
 | Esmalte de las bridas de placa | No se pintan (se compran cortadas); las de solera, sí | Una partida aparte | Si también se pintaron, sumar su esmalte. |

@@ -127,3 +127,43 @@ test('Datos inválidos: modo, posición y separación se validan; unas tablas ro
   assert.equal(r.partidas[1].ok, false);
   assert.doesNotThrow(() => C.cotizar({ partidas: [recto(3000), ménsulas({ cantidad_modo: 'MANUAL' })] }, rota));
 });
+
+test('Uno por junta: un soporte después de cada unión (por pieza armada) y otro dentro de la pieza que pase de 3.0 m', () => {
+  const M = crearMaestros();
+  const r = (yarda, criterio) => C.cotizar({ yarda_mm: yarda, partidas: [recto(8000), ménsulas({ cantidad_modo: 'AUTO', criterio_horizontal: criterio })] }, M).partidas;
+  // yardas de 3 ft: piezas de 3 yardas (2.74 m) → 3 piezas, una ménsula en cada junta (cada 2.74 m, menos que el máximo)
+  const tres = r(914.4, 'JUNTA');
+  assert.deepEqual(tres[0].geometria.detalle.armado.piezas.map((p) => Math.round(p.largo_mm)), [2743, 2743, 2514]);
+  assert.equal(tres[1].entrada.cantidad, 3);
+  assert.equal(tres[1].soporte.conteo.tramos[0].criterio, 'JUNTA');
+  assert.equal(tres[1].soporte.conteo.tramos[0].piezas_armadas, 3);
+  // yardas de 4 ft: piezas de 3.66 m pasan del máximo de 3.0 m → 2 en cada una, más 1 en el ajuste de 0.68 m
+  assert.equal(r(1220, 'JUNTA')[1].entrada.cantidad, 5);
+  // por separación (el de arranque) siguen siendo 4
+  assert.equal(r(914.4, 'SEPARACION')[1].entrada.cantidad, 4);
+  assert.equal(r(914.4, undefined)[1].entrada.cantidad, 4);
+  // nunca queda por debajo del mínimo de la separación máxima
+  [914.4, 1220].forEach((y) => { const f = r(y, 'JUNTA')[1]; assert.ok(f.entrada.cantidad >= f.soporte.conteo.minimo); });
+  // las subidas verticales no cambian: siguen cada 3.0 m
+  const v = C.cotizar({ partidas: [recto(7000, { posicion: 'VERTICAL' }), ménsulas({ cantidad_modo: 'AUTO', criterio_horizontal: 'JUNTA' })] }, M).partidas[1];
+  assert.equal(v.entrada.cantidad, 3);
+  assert.match(C.cotizar({ partidas: [recto(3000), ménsulas({ cantidad_modo: 'AUTO', criterio_horizontal: 'CADA_RATO' })] }, M).partidas[1].errores.join(' '), /Soportes de los tramos horizontales/);
+});
+
+test('Abrazadera tipo cuna: media vuelta (180°) o vuelta completa (360°, dos mitades con sus orejas), de solera de 1″ × 1/8″', () => {
+  const M = crearMaestros();
+  const b = M.proveedor.barras.SOL_1X1_8;
+  assert.equal(b.ancho_mm, 25.4);
+  assert.equal(b.esp_mm, 3.175);
+  assert.equal(b.precio, 120, 'aproximada: la de 1¼″ × 1/8″ ($150) × 25.4 / 31.75');
+  const abz = (vuelta) => C.cotizar({ partidas: [{ familia: 'SOPORTE', barra_id: 'SOL_1X1_8', abrazadera_D_mm: 279.4, abrazadera_vuelta: vuelta, cantidad: 7 }] }, M).partidas[0];
+  const media = abz('MEDIA');
+  const completa = abz('COMPLETA');
+  const mitad = (Math.PI * (279.4 + 3.175)) / 2 + 2 * 50;
+  assert.ok(Math.abs(media.soporte.largo_pieza_mm - mitad) < 1e-9, 'media vuelta: π·(D + t)/2 + 2 orejas = 543.9 mm');
+  assert.ok(Math.abs(completa.soporte.largo_pieza_mm - 2 * mitad) < 1e-9, 'vuelta completa: dos mitades = 1 087.7 mm');
+  assert.equal(abz(undefined).soporte.largo_pieza_mm, media.soporte.largo_pieza_mm, 'sin decir, media vuelta (como antes)');
+  assert.equal(completa.soporte.vuelta, 'COMPLETA');
+  assert.ok(completa.costos.CD > media.costos.CD);
+  assert.match(C.cotizar({ partidas: [{ familia: 'SOPORTE', barra_id: 'SOL_1X1_8', abrazadera_D_mm: 279.4, abrazadera_vuelta: 'TRES_CUARTOS', cantidad: 1 }] }, M).partidas[0].errores.join(' '), /Vuelta de la abrazadera/);
+});

@@ -210,7 +210,7 @@ Cuatro detalles se **supusieron** y conviene confirmarlos con el taller (se edit
 | Personalizada | área desarrollada desde CAD | la que traiga el CAD |
 | Bridas sueltas | sólo aros terminados (rolados, cerrados, barrenados y pintados) para el ducto de otro, sin lámina | la del aro de taller |
 | Armado de piezas | la unión entre dos piezas de otras partidas («unir injerto de 11″ con codo de 60° para obtener 90°»): una junta de armado por unión y, al perímetro exterior, un engargolado en galvanizado o un filete en los demás materiales | exacta (recalculada a mano) |
-| Soportería | piezas cortadas de una barra de la lista (ménsulas, abrazaderas —por el diámetro del ducto—, postes), con anclajes del catálogo, tornillos y minutos reales de taller; la **cantidad sale sola del ducto** (uno cada 2.5 m en lo horizontal, cada 3.0 m en lo vertical y uno junto a cada codo e injerto) o se captura a mano | — |
+| Soportería | piezas cortadas de una barra de la lista (ménsulas, abrazaderas —por el diámetro del ducto—, postes), con anclajes del catálogo, tornillos y minutos reales de taller; la **cantidad sale sola del ducto** (uno cada 2.5 m o uno por junta en lo horizontal, cada 3.0 m en lo vertical y uno junto a cada codo e injerto) o se captura a mano; abrazaderas tipo cuna de media vuelta o de vuelta completa (360°) | — |
 | Comprado | precio de compra o artículo del catálogo; un precio con IVA se cuesta sin IVA; lo que se atornilla como brida (las bridas de placa del proveedor de corte) lleva su tornillería y su Sikaflex | — |
 | Instalación | cuadrilla en obra (personas × días × horas a $62.50) y viáticos (casetas, gasolina, hospedaje, comidas, otros; con o sin factura) | — |
 

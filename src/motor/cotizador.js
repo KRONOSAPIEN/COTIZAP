@@ -319,13 +319,16 @@
   }
 
   /**
-   * Largo de barra de una pieza de soportería: el capturado o, en una abrazadera de media vuelta para un ducto de diámetro D,
-   * media circunferencia en la fibra neutra de la solera más sus dos orejas: π·(D + t)/2 + 2·oreja.
+   * Largo de barra de una pieza de soportería: el capturado o, en una abrazadera para un ducto de diámetro D, la vuelta en la
+   * fibra neutra de la solera más sus orejas:
+   *   media vuelta (cuna, 180°):            π·(D + t)/2 + 2·oreja
+   *   vuelta completa (360°, dos mitades):  π·(D + t)   + 4·oreja      (cada mitad con sus dos orejas, atornilladas entre sí)
    */
   function largoPiezaSoporte(p, M) {
     if (p.largo_pieza_mm !== undefined) return p.largo_pieza_mm;
     const t = espesorBarra(M, p.barra_id);
-    return (Math.PI * (p.abrazadera_D_mm + t)) / 2 + 2 * M.proceso.soportes.oreja_abrazadera_mm;
+    const mitades = p.abrazadera_vuelta === 'COMPLETA' ? 2 : 1;
+    return mitades * ((Math.PI * (p.abrazadera_D_mm + t)) / 2 + 2 * M.proceso.soportes.oreja_abrazadera_mm);
   }
 
   /**
@@ -365,7 +368,7 @@
     return {
       ok: true, entrada: p, familia: 'SOPORTE', descripcion: p.descripcion || FAMILIAS.SOPORTE, advertencias: [],
       soporte: {
-        barra: b, largo_pieza_mm: largo, largo_calculado: p.largo_pieza_mm === undefined, L_total_m: L_m, minutos_pieza: minutos, horas,
+        barra: b, largo_pieza_mm: largo, largo_calculado: p.largo_pieza_mm === undefined, vuelta: p.abrazadera_vuelta === 'COMPLETA' ? 'COMPLETA' : 'MEDIA', L_total_m: L_m, minutos_pieza: minutos, horas,
         articulo_anclaje: art_id, anclaje: { ...art, unitario_sin_iva: anclaje_unit },
         anclajes: n * (p.anclajes_pieza || 0), tornillo, tornillos: n * (p.tornillos_pieza || 0), precio_tornillo,
       },
@@ -575,7 +578,7 @@
     lista.forEach((p, indice) => {
       if (filas[indice] !== null) return;
       const sep = VAL.aNumero(p.separacion_m);
-      const conteo = SOP.contar(filas.filter(Boolean), M, { separacion_m: Number.isFinite(sep) ? sep : undefined });
+      const conteo = SOP.contar(filas.filter(Boolean), M, { separacion_m: Number.isFinite(sep) ? sep : undefined, criterio: p.criterio_horizontal });
       if (!(conteo.n >= 1)) {
         filas[indice] = { ok: false, indice, errores: [conteo.sin_tabla ? 'Faltan las reglas de espaciamiento de soportes en las tablas maestras (Proceso › Soportería).' : 'No hay tramos rectos, codos ni injertos en la cotización para calcular los soportes: agréguelos o capture la cantidad a mano.'], entrada: p };
         return;
