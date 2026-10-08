@@ -10,13 +10,13 @@
   if (typeof module === 'object' && module.exports) {
     module.exports = factory(
       require('./util'), require('./geometria'), require('./material'),
-      require('./mano_obra'), require('./consumibles'), require('./precios'), require('./validacion'), require('./proveedor'), require('./compras'),
+      require('./mano_obra'), require('./consumibles'), require('./precios'), require('./validacion'), require('./proveedor'), require('./compras'), require('./soportes'),
     );
   } else {
     const C = root.COTIZAP;
-    root.COTIZAP.cotizador = factory(C.util, C.geometria, C.material, C.manoObra, C.consumibles, C.precios, C.validacion, C.proveedor, C.compras);
+    root.COTIZAP.cotizador = factory(C.util, C.geometria, C.material, C.manoObra, C.consumibles, C.precios, C.validacion, C.proveedor, C.compras, C.soportes);
   }
-}(typeof self !== 'undefined' ? self : this, function (U, GEO, MAT, MO, CON, PRE, VAL, PROV, COMP) {
+}(typeof self !== 'undefined' ? self : this, function (U, GEO, MAT, MO, CON, PRE, VAL, PROV, COMP, SOP) {
   'use strict';
 
   const FAMILIAS = {
@@ -141,6 +141,8 @@
       if (p.barra_id && !b) errores.push(`La barra «${p.barra_id}» no tiene precio o largo válidos en la lista del proveedor.`);
       const L = b ? largoPiezaSoporte(p, M) : undefined;
       if (b && L > b.largo_mm) errores.push(`Cada pieza lleva ${U.redondear(L, 1)} mm y la barra mide ${b.largo_mm} mm: una pieza no sale de una sola barra.`);
+      const E = M.proceso.soportes.espaciado;
+      if (p.separacion_m !== undefined && E && p.separacion_m > E.horizontal_max_m) errores.push(`La separación entre soportes no puede pasar de ${E.horizontal_max_m} m (el máximo para un tramo horizontal).`);
       return { p, errores, advertencias };
     }
     if (p.familia === 'BRIDA' && p.tipo_union !== undefined && p.tipo_union !== 'BRIDADO') errores.push('Una partida de bridas sueltas sólo lleva unión bridada.');
@@ -556,16 +558,40 @@
       return fusion;
     };
     const lista = Array.isArray(c.partidas) ? c.partidas : [];
-    const filas = lista.map((p, indice) => {
+    // Las partidas de soportería en modo automático (`cantidad_modo: 'AUTO'`) piden su cantidad al ducto de las demás: se calculan al final
+    const esAuto = (p) => esObjeto(p) && p.familia === 'SOPORTE' && p.cantidad_modo === 'AUTO';
+    const calcular = (p, indice, propios) => {
       try {
         if (!esObjeto(p)) throw new U.ErrorValidacion(['La partida no es válida (se esperaba un objeto con sus datos).']);
-        return { indice, ...cotizarPartida(heredar(p), M, problemas) };
+        return { indice, ...cotizarPartida(heredar(propios ? { ...p, ...propios } : p), M, problemas) };
       } catch (err) {
         if (err instanceof U.ErrorValidacion) return { ok: false, indice, errores: err.errores, entrada: p };
         return {
           ok: false, indice, interno: true, errores: [`No se pudo calcular esta partida (falla inesperada: ${String((err && err.message) || err)}). Revise sus datos y las tablas maestras.`], entrada: p,
         };
       }
+    };
+    const filas = lista.map((p, indice) => (esAuto(p) ? null : calcular(p, indice)));
+    lista.forEach((p, indice) => {
+      if (filas[indice] !== null) return;
+      const sep = VAL.aNumero(p.separacion_m);
+      const conteo = SOP.contar(filas.filter(Boolean), M, { separacion_m: Number.isFinite(sep) ? sep : undefined });
+      if (!(conteo.n >= 1)) {
+        filas[indice] = { ok: false, indice, errores: [conteo.sin_tabla ? 'Faltan las reglas de espaciamiento de soportes en las tablas maestras (Proceso › Soportería).' : 'No hay tramos rectos, codos ni injertos en la cotización para calcular los soportes: agréguelos o capture la cantidad a mano.'], entrada: p };
+        return;
+      }
+      const fila = calcular(p, indice, { cantidad: conteo.n });
+      if (fila.ok) fila.soporte.conteo = { modo: 'AUTO', ...conteo };
+      filas[indice] = fila;
+    });
+    // Captura manual: avisa si quedan menos soportes de los que pide la separación máxima
+    filas.forEach((f, indice) => {
+      const p = lista[indice];
+      if (!f.ok || !esObjeto(p) || p.familia !== 'SOPORTE' || p.cantidad_modo !== 'MANUAL') return;
+      const conteo = SOP.contar(filas, M);
+      f.soporte.conteo = { modo: 'MANUAL', ...conteo };
+      const aviso = SOP.avisoManual(f.entrada.cantidad, conteo);
+      if (aviso) f.advertencias.push(aviso);
     });
     // Lista de compras y el sobrante de comprar piezas enteras, que SIEMPRE se cobra (el taller, 7-oct-2026) como partida
     // automática; `piezas_enteras` de versiones anteriores ya no se usa

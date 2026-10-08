@@ -53,6 +53,7 @@
     [/_mm$/, 'mm'], [/_mm2$/, 'mm²'], [/_m_min$/, 'm/min'], [/_min_m2$/, 'min/m²'], [/_min_m$/, 'min/m'], [/_min_kg$/, 'min/kg'], [/_min$/, 'min'], [/_deg$/, '°'],
     [/^salario_diario$/, 'MXN/día'], [/^pago_dia_/, 'MXN/día'], [/^personas_/, 'personas'], [/^dias_/, 'días'], [/^horas_dia$/, 'h/día'], [/_envase_L$/, 'L'], [/^tornillos_multiplo$/, 'juegos'], [/^tornillos_pieza$/, 'juegos'],
     [/^ml_sellador_junta_m$/, 'mL/m'],
+    [/^(horizontal_m|horizontal_max_m|vertical_m)$/, 'm'], [/^(base_vertical|por_accesorio)$/, 'soportes'],
     [/_kg_m3$/, 'kg/m³'], [/_g_cm3$/, 'g/cm³'], [/_L_min$/, 'L/min'], [/_um$/, 'µm'], [/^sv_pct$/, '%'], [/^dias_cobro$/, 'días'], [/ml_por_m/, 'mL/m'], [/^cartucho_ml$/, 'mL'],
   ];
 
@@ -1207,6 +1208,36 @@
     'En mm por oreja (hoy 50).',
     'Una abrazadera que se pide por el diámetro del ducto mide π·(D + t)/2 + 2 orejas: para 11″ con solera de 1/8″, 544 mm.',
     { afecta: ['mat', 'peso'], tip: [0, 150] });
+  E('proceso.soportes.espaciado', 'Espaciamiento de los soportes',
+    'Las reglas con que la partida de soportería, en modo automático, cuenta cuántas ménsulas pide el ducto de la cotización.',
+    'Tramos horizontales: uno cada 2.5 m (máximo 3.0 m; lo ideal es uno por junta, cada 2.4 m). Tramos verticales: máximo cada 3.0 m y un soporte fuerte en la base de la subida. Junto a cada codo y derivación, uno a 30–50 cm.',
+    'Cambian cuántas piezas calcula la soportería automática. La captura manual no las usa, pero avisa si queda por debajo del máximo.',
+    { afecta: ['mo', 'mat'] });
+  E('proceso.soportes.espaciado.horizontal_m', 'Separación recomendada, tramo horizontal',
+    'Cada cuántos metros va un soporte en un tramo horizontal.',
+    'En m. Recomendado: 2.5 m. La práctica ideal de montaje es 2.4 m (una por junta de yarda engargolada), que rigidiza el ensamble. No puede pasar del máximo.',
+    'Menos metros = más ménsulas: un tramo de 10 m lleva 4 a 2.5 m y 5 a 2.4 m. Cada partida de soportería puede traer su propia separación.',
+    { afecta: ['mo', 'mat'], tip: [1, 3] });
+  E('proceso.soportes.espaciado.horizontal_max_m', 'Separación máxima, tramo horizontal',
+    'Lo más que puede separarse un soporte de otro en un tramo horizontal.',
+    'En m. Máximo: 3.0 m. Con la captura manual, si las piezas capturadas dejan el ducto más separado que esto, la partida avisa.',
+    'No cambia el cálculo automático (usa la recomendada); sólo el aviso de la captura manual y el tope de la separación propia de la partida.',
+    { afecta: ['mo', 'mat'], tip: [1.5, 4] });
+  E('proceso.soportes.espaciado.vertical_m', 'Separación máxima, tramo vertical',
+    'Cada cuántos metros va un soporte en un tramo vertical (una subida o bajada).',
+    'En m. Máximo: 3.0 m.',
+    'Menos metros = más ménsulas en las subidas. El tramo recto indica si es vertical en su campo «Posición».',
+    { afecta: ['mo', 'mat'], tip: [1, 3] });
+  E('proceso.soportes.espaciado.base_vertical', 'Soportes en la base de cada subida',
+    'Los soportes que, como mínimo, lleva cada tramo vertical: el soporte fuerte de carga estructural en la base de la subida o cambio de dirección.',
+    'Un número entero. Recomendado: 1.',
+    'Un tramo vertical corto nunca lleva menos que esto; uno largo lleva los que pida la separación máxima.',
+    { afecta: ['mo', 'mat'], tip: [0, 3] });
+  E('proceso.soportes.espaciado.por_accesorio', 'Soportes junto a cada codo y derivación',
+    'Cuántos soportes van junto a cada codo, injerto o reducción con injerto: a no más de 30–50 cm de la entrada o salida, porque ahí pega la partícula y se turba el aire.',
+    'Un número entero. Recomendado: 1.',
+    'Se suman a los de los tramos rectos: 3 codos y 2 injertos son 5 soportes más.',
+    { afecta: ['mo', 'mat'], tip: [0, 3] });
   E('proceso.qc.k_manejo_min_kg', 'Manejo por kilo',
     'Minutos de cargar, envolver y embalar por cada kg de pieza.',
     'En min por kg.',

@@ -138,6 +138,7 @@
       anclajes_pieza: entero('Anclajes por pieza', 0, 100),
       tornillos_pieza: entero('Tornillos por pieza', 0, 100),
       min_pieza: real('Minutos de taller por pieza', 0.1, 10000, 'min', { cero: true }),
+      separacion_m: real('Separación entre soportes', 0.3, 20, 'm', { cero: true }),
     }),
   };
 
@@ -194,7 +195,7 @@
     const lista = [];
     if (fam === 'COMPRADO') lista.push(['articulo_id', claves(sub(M.compras, 'articulos')), 'Artículo del catálogo']);
     if (fam === 'SOPORTE') {
-      lista.push(['barra_id', claves(sub(M.proveedor, 'barras')), 'Barra de la lista del proveedor'], ['articulo_anclaje', claves(sub(M.compras, 'articulos')), 'Anclaje']);
+      lista.push(['cantidad_modo', ['AUTO', 'MANUAL'], 'Cantidad de piezas'], ['barra_id', claves(sub(M.proveedor, 'barras')), 'Barra de la lista del proveedor'], ['articulo_anclaje', claves(sub(M.compras, 'articulos')), 'Anclaje']);
     }
     if (esDeLamina(fam)) {
       lista.push(['ref_diametro', ['INTERIOR', 'EXTERIOR'], 'Dimensión nominal'],
@@ -206,7 +207,7 @@
         ['proceso_corte', claves(sub(sub(M.proceso, 'corte'), 'v_m_min')), 'Proceso de corte'],
         ['perfil_id', claves(sub(M.herrajes, 'perfiles')), 'Perfil de aros']);
       if (fam === 'RECTO' || fam === 'CODO' || fam === 'BRIDA') lista.push(['forma', ['REDONDA', 'RECTANGULAR'], 'Sección']);
-      if (fam === 'RECTO') lista.push(['tipo_costura', claves(sub(M.proceso, 'costuras')), 'Tipo de costura'], ['extremo_ajuste', GEO.EXTREMOS_AJUSTE, 'Extremo final del tramo']);
+      if (fam === 'RECTO') lista.push(['tipo_costura', claves(sub(M.proceso, 'costuras')), 'Tipo de costura'], ['extremo_ajuste', GEO.EXTREMOS_AJUSTE, 'Extremo final del tramo'], ['posicion', ['HORIZONTAL', 'VERTICAL'], 'Posición del tramo']);
       if (fam === 'REDUCCION') lista.push(['excentrica', ['NO', 'CARA_PLANA'], 'Tipo de reducción']);
     }
     lista.push(['riesgo', claves(sub(M.capas, 'imprevistos_pct')), 'Clase de riesgo']);
@@ -510,6 +511,17 @@
     else if (quiere('proceso')) {
       const S = M.proceso.soportes;
       if (!tiene(M.compras && M.compras.articulos, S.anclaje_defecto)) agregar(['proceso', 'soportes', 'anclaje_defecto'], `debe ser un artículo del catálogo de compras; vale ${texto(S.anclaje_defecto)}`);
+      const EP = S.espaciado;
+      if (!esObjeto(EP)) agregar(['proceso', 'soportes', 'espaciado'], 'falta la tabla de espaciamiento de los soportes');
+      else {
+        ['horizontal_m', 'horizontal_max_m', 'vertical_m'].forEach((k) => {
+          if (typeof EP[k] !== 'number' || !(EP[k] > 0 && EP[k] <= 20)) agregar(['proceso', 'soportes', 'espaciado', k], `debe ser de más de 0 a 20 m; vale ${texto(EP[k])}`);
+        });
+        if (typeof EP.horizontal_m === 'number' && typeof EP.horizontal_max_m === 'number' && EP.horizontal_m > EP.horizontal_max_m) agregar(['proceso', 'soportes', 'espaciado', 'horizontal_m'], `la separación recomendada (${EP.horizontal_m} m) no puede pasar del máximo (${EP.horizontal_max_m} m)`);
+        ['por_accesorio', 'base_vertical'].forEach((k) => {
+          if (!Number.isInteger(EP[k]) || EP[k] < 0 || EP[k] > 10) agregar(['proceso', 'soportes', 'espaciado', k], `debe ser un número entero de 0 a 10; vale ${texto(EP[k])}`);
+        });
+      }
       if (!tiene(M.herrajes && M.herrajes.tornillo_precio_ref, S.tornillo)) agregar(['proceso', 'soportes', 'tornillo'], `debe ser un tornillo de «herrajes › tornillo precio ref» (${claves(M.herrajes && M.herrajes.tornillo_precio_ref).join(', ')}); vale ${texto(S.tornillo)}`);
     }
     // Catálogo de compras: el IVA de las compras es menor que 100 %; los múltiplos de compra de tornillos son enteros

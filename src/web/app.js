@@ -541,7 +541,7 @@
         chips.length ? h('div', { class: 'partida-chips' }, chips) : null)),
       h('div', { class: 'partida-der' },
         h('div', { class: 'partida-cifras' },
-          h('div', { class: 'partida-cant' }, `${p.cantidad} × ${f && f.ok ? W.mxn(f.precio.unitario) : '—'}`),
+          h('div', { class: 'partida-cant' }, `${cantidadDe(p, f)} × ${f && f.ok ? W.mxn(f.precio.unitario) : '—'}`),
           h('div', { class: 'partida-importe' }, f && f.ok ? W.mxn(f.precio.importe) : '—')),
         h('div', { class: 'partida-acc' },
           h('button', { type: 'button', class: 'btn-icono', 'aria-label': `Editar ${tituloPartida(p)}`, title: 'Editar', onclick: () => abrirDialogo(p.id) }, W.icono('editar')),
@@ -1070,6 +1070,23 @@
     ];
   }
 
+  /** De dónde sale la cantidad de soportes: cada tramo recto y cada codo o injerto, con la separación usada. */
+  function conteoSoporteDetalle(f) {
+    const c = f.soporte.conteo;
+    if (!c) return null;
+    const sepH = `${W.num(c.separacion_m, 2)} m`;
+    const nombre = (a) => C.soportes.NOMBRE_ACCESORIO[a.familia] || a.familia;
+    const filas = [
+      ...c.tramos.map((t) => [`${t.descripcion} · ${t.posicion === 'VERTICAL' ? 'vertical' : 'horizontal'}`, `${W.num(t.L_m, 2)} m${t.piezas > 1 ? ` × ${t.piezas}` : ''} ÷ ${t.posicion === 'VERTICAL' ? `${W.num(estado.res.maestros.proceso.soportes.espaciado.vertical_m, 2)} m` : sepH}`, String(t.soportes)]),
+      ...c.accesorios.map((a) => [`${a.descripcion} · ${nombre(a)}`, `${a.piezas} × ${estado.res.maestros.proceso.soportes.espaciado.por_accesorio} junto a la pieza (a 30–50 cm)`, String(a.soportes)]),
+      { clase: 'total', celdas: ['Soportes', c.modo === 'AUTO' ? 'cantidad automática' : `mínimo con separación máxima de ${W.num(c.separacion_max_m, 2)} m: ${c.minimo}`, String(c.modo === 'AUTO' ? c.n : c.minimo)] },
+    ];
+    return h('div', null,
+      h('h4', null, c.modo === 'AUTO' ? 'Cantidad automática de soportes' : 'Soportes que pide el ducto'),
+      tabla([{ t: 'Pieza' }, { t: 'Cuenta' }, { t: 'Soportes', num: true }], filas),
+      h('p', { class: 'nota' }, 'Horizontal: uno cada 2.5 m (máximo 3.0 m; lo ideal es uno por junta, cada 2.4 m). Vertical: máximo cada 3.0 m y un soporte fuerte en la base. Con calibre 22 en 11″ conviene una abrazadera tipo cuna (solera de 1″ × 1/8″ o similar) que abrace el tubo, sin apretar la banda de más.'));
+  }
+
   /** Soportería: la barra de la que se cortan las piezas, los anclajes, la tornillería y el tiempo de taller. */
   function detalleSoporte(f) {
     const s = f.soporte;
@@ -1085,6 +1102,7 @@
         kv('Tornillería', s.tornillos ? `${s.tornillos} juegos de ${descTornillo(s.tornillo)}` : 'Ninguna'),
         kv('Tiempo de taller', `${W.num(s.minutos_pieza, 2)} min reales por pieza → ${W.num(s.horas, 2)} h`),
         kv('Peso', W.num(f.peso.neto_total_kg, 2), 'kg')),
+      conteoSoporteDetalle(f),
       h('p', { class: 'nota' }, 'Cada pieza paga la fracción de barra que usa, con la merma de perfil. Cuántas barras completas hay que comprar lo dice la lista de compras (pestaña Compras y gastos). Los minutos son reales (lo que tarda el taller): no se les aplica la eficiencia.'),
     ];
   }
@@ -1354,8 +1372,9 @@
       h('fieldset', null, h('legend', null, 'Descripción y cantidad'),
         h('div', { class: 'grid-campos' },
           crearControl({ id: 'descripcion', etiqueta: 'Descripción', tipo: 'text' }, v.descripcion),
+          ...W.CAMPOS[fam].filter((c) => c.juntoCantidad).map((c) => crearControl(c, v[c.id])),
           crearControl({ id: 'cantidad', etiqueta: W.ETIQUETA_CANTIDAD[fam] || 'Cantidad', tipo: 'int', min: 1, paso: 1 }, v.cantidad))),
-      h('fieldset', null, h('legend', null, W.TITULO_CAMPOS[fam] || 'Dimensiones'), grid(W.CAMPOS[fam].filter((c) => !c.grupo))),
+      h('fieldset', null, h('legend', null, W.TITULO_CAMPOS[fam] || 'Dimensiones'), grid(W.CAMPOS[fam].filter((c) => !c.grupo && !c.juntoCantidad))),
     ];
     // Los cuadros propios (armado por yardas, viáticos), en el orden en que aparecen sus campos
     [...new Set(W.CAMPOS[fam].filter((c) => c.grupo).map((c) => c.grupo))].forEach((g) => {
@@ -1378,6 +1397,7 @@
     }
     cont.replaceChildren(...partes);
     actualizarVisibilidad();
+    sincronizarCantidadSoporte();
     if (fam === 'COMPRADO') sincronizarArticulo(false);
   }
 
@@ -1438,8 +1458,34 @@
     actualizarPreview();
   }
 
+  /** La cantidad con que se cotizó una partida (en soportería automática la calcula el motor, no la captura el usuario). */
+  function cantidadDe(p, f) {
+    return f && f.ok && f.entrada ? f.entrada.cantidad : p.cantidad;
+  }
+
+  /** Cuántos soportes pide el ducto de la cotización para el diálogo (la separación propia de la partida, si la trae). */
+  function conteoSoportes(p) {
+    const sep = Number(p.separacion_m);
+    return C.soportes.contar(estado.res.partidas, estado.res.maestros, { separacion_m: Number.isFinite(sep) && sep > 0 ? sep : undefined });
+  }
+
+  /** Soportería: en modo automático la cantidad es la del ducto (no se captura); en manual se captura. Al pasar a manual queda la última calculada. */
+  function sincronizarCantidadSoporte() {
+    const modo = $('#f_cantidad_modo');
+    const cant = $('#f_cantidad');
+    if (!modo || !cant || dlg.familia !== 'SOPORTE') return;
+    const auto = modo.value === 'AUTO';
+    cant.readOnly = auto;
+    if (auto) {
+      const sep = $('#f_separacion_m');
+      const c = conteoSoportes({ separacion_m: sep ? sep.value : undefined });
+      cant.value = c.n >= 1 ? String(c.n) : '';
+    }
+  }
+
   function actualizarPreview() {
     const cont = $('#dlg-prev');
+    sincronizarCantidadSoporte();
     const p = leerDialogo();
     const tit = h('h3', null, 'Vista previa');
     const bloqueErrores = (msgs) => h('div', { class: 'errores' }, h('p', { class: 'errores-tit' }, W.icono('error'), 'Revise estos datos'), h('ul', null, msgs.map((m) => h('li', null, m))));
@@ -1451,8 +1497,12 @@
     try {
       const defs = { riesgo: estado.cot.riesgo, servicio: estado.cot.servicio, ubicacion: estado.cot.ubicacion };
       if (p.familia === 'RECTO' && estado.res.yarda_mm !== undefined) defs.yarda_mm = estado.res.yarda_mm; // lo que decide la cotización, si la partida no elige
+      const conteo = p.familia === 'SOPORTE' && p.cantidad_modo === 'AUTO' ? conteoSoportes(p) : null;
+      if (conteo && !(conteo.n >= 1)) throw new U.ErrorValidacion(['No hay tramos rectos, codos ni injertos en la cotización para calcular los soportes: agréguelos o pase la cantidad a manual.']);
       const f = C.cotizador.cotizarPartida({ ...defs, ...p }, estado.res.maestros);
       const ind = f.indicadores;
+      const avisoManual = p.familia === 'SOPORTE' && p.cantidad_modo === 'MANUAL' ? C.soportes.avisoManual(p.cantidad, conteoSoportes(p)) : '';
+      const avisos = avisoManual ? [...f.advertencias, avisoManual] : f.advertencias;
       const fig = figuraPlano(f, { px: 300, alto_max: 250 });
       cont.replaceChildren(tit,
         fig ? h('div', { class: 'prev-plano' }, fig) : null,
@@ -1466,9 +1516,10 @@
           f.qto && f.qto.lam.m_bruta_kg > 0 ? kv('Lámina bruta', W.num(f.qto.lam.m_bruta_kg, 2), 'kg') : null,
           f.familia === 'BRIDA' && f.qto.her.aros_sueltos[0] ? kv('Solera por aro', W.num(f.qto.her.aros_sueltos[0].L_aro_mm, 0), 'mm') : null,
           f.compra ? kv('Costo sin IVA', W.mxn(f.compra.unitario_sin_iva), `por ${f.compra.unidad}`) : null,
+          conteo ? kv('Cantidad automática', `${conteo.n} ${conteo.n === 1 ? 'pieza' : 'piezas'}`, C.soportes.resumen(conteo)) : null,
           f.soporte ? kv('Barra', `${W.num(f.soporte.L_total_m, 2)} m de ${f.soporte.barra.descripcion}`) : null,
           f.costos.subtotales.viaticos > 0 ? kv('Viáticos (costo)', W.mxn(f.costos.subtotales.viaticos)) : null),
-        f.advertencias.length ? h('ul', { class: 'avisos' }, f.advertencias.map((a) => h('li', null, W.icono('aviso'), h('span', null, a)))) : h('p', { class: 'nota ok' }, W.icono('check'), 'Datos consistentes'));
+        avisos.length ? h('ul', { class: 'avisos' }, avisos.map((a) => h('li', null, W.icono('aviso'), h('span', null, a)))) : h('p', { class: 'nota ok' }, W.icono('check'), 'Datos consistentes'));
       dlg.error = null;
       resaltarCota();
     } catch (err) {
@@ -1502,6 +1553,7 @@
       if (p.espesor_mm > 0) p.calibre = 'PROPIO';
       if (p.calibre !== undefined) p.calibre = String(p.calibre);
       if (p.caras_pintadas !== undefined) p.caras_pintadas = String(p.caras_pintadas);
+      if (p.familia === 'SOPORTE' && !p.cantidad_modo) p.cantidad_modo = 'MANUAL'; // una partida de antes de la cantidad automática sigue con la suya
     } else {
       dlg.familia = 'RECTO';
       p = W.partidaNueva('RECTO');
@@ -1597,8 +1649,8 @@
     const filas = [fila(['Descripción', 'Familia', 'Material', 'Calibre', 'Cantidad', 'Precio unitario', 'Importe', 'Peso neto total kg'])];
     estado.res.partidas.forEach((f, i) => {
       const p = estado.cot.partidas[i];
-      if (!f.ok) { filas.push(fila([tituloPartida(p), p.familia, '', '', p.cantidad, 'ERROR', '', ''])); return; }
-      filas.push(fila([tituloPartida(p), p.familia, esLamina(p.familia) ? nombreMaterial(p) : '', esLamina(p.familia) ? p.calibre || p.espesor_mm || '' : '', p.cantidad,
+      if (!f.ok) { filas.push(fila([tituloPartida(p), p.familia, '', '', cantidadDe(p, f), 'ERROR', '', ''])); return; }
+      filas.push(fila([tituloPartida(p), p.familia, esLamina(p.familia) ? nombreMaterial(p) : '', esLamina(p.familia) ? p.calibre || p.espesor_mm || '' : '', cantidadDe(p, f),
         f.precio.unitario.toFixed(2), f.precio.importe.toFixed(2), f.peso.neto_total_kg.toFixed(3)]));
     });
     (estado.res.automaticas || []).forEach((f) => filas.push(fila([f.descripcion, f.familia, '', '', 1, f.precio.unitario.toFixed(2), f.precio.importe.toFixed(2), '0.000'])));
@@ -1692,7 +1744,7 @@
         h('dl', null,
           kv('Cliente', c.cliente || '—'), kv('Proyecto', c.proyecto || '—'), kv('Fecha', fechaLarga(c.fecha)), kv('Vigencia', vigencia ? `${vigencia} días naturales` : '—'))),
       tabla([{ t: 'Partida' }, { t: 'Material' }, { t: 'Cant.', num: true }, { t: 'P. unitario', num: true }, { t: 'Importe', num: true }],
-        [...filas.map(({ f, p }) => [h('div', null, h('strong', null, tituloPartida(p)), h('div', { class: 'prop-dim' }, W.resumenDims(p, { diam: c.unidad_diam, long: c.unidad_long }, estado.M))), resumenMaterial(p) || (p.familia === 'INSTALACION' ? 'Servicio' : 'Compra'), String(p.cantidad), W.mxn(f.precio.unitario), W.mxn(f.precio.importe)]),
+        [...filas.map(({ f, p }) => [h('div', null, h('strong', null, tituloPartida(p)), h('div', { class: 'prop-dim' }, W.resumenDims(p, { diam: c.unidad_diam, long: c.unidad_long }, estado.M))), resumenMaterial(p) || (p.familia === 'INSTALACION' ? 'Servicio' : 'Compra'), String(cantidadDe(p, f)), W.mxn(f.precio.unitario), W.mxn(f.precio.importe)]),
           ...(estado.res.automaticas || []).map((f) => [h('div', null, h('strong', null, f.descripcion)), 'Material', '1', W.mxn(f.precio.unitario), W.mxn(f.precio.importe)])]),
       h('dl', { class: 'prop-tot' },
         kv('Subtotal', W.mxn(T.subtotal)),

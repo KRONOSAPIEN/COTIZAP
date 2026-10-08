@@ -67,6 +67,8 @@
     tipo_costura: [['', 'Según el material (galvanizado: engargolado)'], ['A_TOPE', 'Soldada a tope'], ['TRASLAPE', 'Soldada a traslape'], ['PITTSBURGH', 'Engargolado Pittsburgh']],
     excentrica: [['NO', 'Concéntrica'], ['CARA_PLANA', 'Excéntrica · cara plana']],
     // Extremo libre del tramo de ajuste (el de las tablas maestras se ofrece aparte, como «Predeterminado»)
+    posicion: [['HORIZONTAL', 'Horizontal'], ['VERTICAL', 'Vertical (subida o bajada)']],
+    cantidad_modo: [['AUTO', 'Automática: según el ducto de la cotización'], ['MANUAL', 'Manual: la que yo capture']],
     ajuste: [['SUELTA', 'Brida suelta (aro terminado, tornillos y junta)'], ['SIN_BRIDA', 'Sin brida (brida en un solo extremo)'], ['CON_BRIDA', 'Brida de taller (bridas en ambos extremos)']],
     bridas_aparte: [['', 'Se hacen en esta partida (aros, tornillos y junta)'], ['true', 'Son de otra partida (Bridas sueltas o compradas): aquí sólo se unen al ducto']],
     driver: [['PIEZA', 'Por pieza'], ['KG_NETO', 'Por kg neto'], ['KG_BRUTO', 'Por kg bruto'], ['M2_NETO', 'Por m² de lámina'], ['M_CORTE', 'Por m de corte'], ['M_SOLDADURA', 'Por m de soldadura']],
@@ -89,6 +91,10 @@
       { id: 'a_mm', etiqueta: 'Ancho a', tipo: 'dim', visible: rect, defecto: 500 },
       { id: 'b_mm', etiqueta: 'Alto b', tipo: 'dim', visible: rect, defecto: 300 },
       { id: 'L_mm', etiqueta: 'Longitud total', tipo: 'dim', defecto: 3000 },
+      {
+        id: 'posicion', etiqueta: 'Posición del tramo', tipo: 'select', opciones: 'posicion', defecto: 'HORIZONTAL',
+        ayuda: 'Decide cada cuántos metros lleva un soporte (ménsulas automáticas): horizontal cada 2.5 m; vertical máximo cada 3.0 m y un soporte fuerte en la base',
+      },
       { id: 'tipo_costura', etiqueta: 'Costura longitudinal', tipo: 'select', opciones: 'tipo_costura', defecto: '' },
       {
         id: 'yarda_mm', grupo: 'armado', etiqueta: 'Ancho de la yarda', tipo: 'select', opciones: 'yardas', numerico: true, sufijoFuera: ' mm',
@@ -182,6 +188,14 @@
       { id: 'n_uniones', etiqueta: 'Uniones por pieza', tipo: 'int', opcional: true, min: 1, paso: 1, ayuda: 'Vacío = 1. Un codo, un injerto y una yarda armados en una pieza son 2 uniones' },
     ],
     SOPORTE: [ // ménsulas, abrazaderas y postes cortados de una barra de la lista del proveedor
+      {
+        id: 'cantidad_modo', juntoCantidad: true, etiqueta: 'Cuántas piezas', tipo: 'select', opciones: 'cantidad_modo', defecto: 'AUTO',
+        ayuda: 'Automática: una ménsula por tramo recto cada 2.5 m (vertical, cada 3.0 m) y una junto a cada codo e injerto; se recalcula al cambiar el ducto. Manual: la cantidad que usted capture (avisa si queda corta)',
+      },
+      {
+        id: 'separacion_m', juntoCantidad: true, etiqueta: 'Separación entre soportes', tipo: 'num', unidad: 'm', opcional: true, min: 0.3, max: 3, paso: 0.1, visible: (v) => v.cantidad_modo !== 'MANUAL',
+        ayuda: 'Sólo para los tramos horizontales. Vacío = la de las tablas maestras (2.5 m); 2.4 m pone una por junta de yarda. Máximo 3.0 m',
+      },
       { id: 'barra_id', etiqueta: 'Barra de la que se cortan', tipo: 'select', opciones: 'barras', defecto: 'ANG_1_1_4X1_8' },
       {
         id: 'largo_pieza_mm', etiqueta: 'Largo de barra por pieza', tipo: 'dim', eje: 'long', defecto: 1300, opcional: true,
@@ -329,7 +343,7 @@
     function dimensiones() {
     switch (p.familia) {
       case 'RECTO':
-        return `${p.forma === 'RECTANGULAR' ? `${s(p.a_mm)} × ${s(p.b_mm)}` : d(p.D_mm)} × ${l(p.L_mm)}`;
+        return `${p.forma === 'RECTANGULAR' ? `${s(p.a_mm)} × ${s(p.b_mm)}` : d(p.D_mm)} × ${l(p.L_mm)}${p.posicion === 'VERTICAL' ? ' · vertical' : ''}`;
       case 'CODO':
         return `${p.theta_deg}° · ${p.n_gajos ? `${p.n_gajos} gajos` : 'gajos auto'} · ${p.forma === 'RECTANGULAR' ? `${s(p.a_mm)} × ${s(p.b_mm)}` : d(p.D_mm)} · R/D ${p.k_R}`;
       case 'REDUCCION':
@@ -361,7 +375,7 @@
       case 'SOPORTE': {
         const largo = p.largo_pieza_mm !== undefined && p.largo_pieza_mm !== '' ? `${l(p.largo_pieza_mm)} por pieza`
           : Number(p.abrazadera_D_mm) > 0 ? `abrazadera para ducto ${d(p.abrazadera_D_mm)}` : 'sin largo';
-        return `${de((m) => m.proveedor.barras, p.barra_id)} · ${largo}${Number(p.anclajes_pieza) > 0 ? ` · ${plural(p.anclajes_pieza, 'anclaje', 'anclajes')}` : ''}`;
+        return `${de((m) => m.proveedor.barras, p.barra_id)} · ${largo}${Number(p.anclajes_pieza) > 0 ? ` · ${plural(p.anclajes_pieza, 'anclaje', 'anclajes')}` : ''}${p.cantidad_modo === 'AUTO' ? ' · cantidad automática' : ''}`;
       }
       case 'INSTALACION':
         return `${plural(p.personas, 'persona', 'personas')} × ${plural(p.dias, 'día', 'días')}${Number(p.viajes) > 0 ? ` · ${plural(p.viajes, 'viaje', 'viajes')}` : ''}`;

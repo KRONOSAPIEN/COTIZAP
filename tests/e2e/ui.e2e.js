@@ -1572,6 +1572,7 @@ const ok = (cond, msg) => {
     // d) soportería: piezas de una barra de la lista, anclajes del catálogo
     await p.click('#btn-agregar');
     await p.click('.fam:has(span:text-is("Soportería"))');
+    await p.selectOption('#f_cantidad_modo', 'MANUAL'); // estas ménsulas son las 7 del taller, a mano
     ok(await p.locator('.campo[data-campo="articulo_anclaje"]').isHidden(), 'sin anclajes no se pregunta cuál');
     await p.fill('#f_anclajes_pieza', '4');
     ok(await p.locator('.campo[data-campo="articulo_anclaje"]').isVisible(), 'con anclajes se elige el del catálogo');
@@ -1584,6 +1585,7 @@ const ok = (cond, msg) => {
     // una abrazadera se pide por el diámetro del ducto: su largo sale solo
     await p.click('#btn-agregar');
     await p.click('.fam:has(span:text-is("Soportería"))');
+    await p.selectOption('#f_cantidad_modo', 'MANUAL');
     await p.selectOption('#f_barra_id', 'SOL_1_1_4X1_8');
     await p.fill('#f_largo_pieza_mm', '');
     await p.fill('#f_abrazadera_D_mm', '11');
@@ -2087,6 +2089,69 @@ const ok = (cond, msg) => {
     ok(/importe de mangueras/.test(await p.locator('.rapida-error').innerText()), 'un importe ilegible se señala');
     await p.click('#rapida-limpiar');
     ok(await p.inputValue('#r_mangueras') === '' && await p.inputValue('#r_soporteria') === '' && await p.inputValue('#r_viaticos') === '', 'Limpiar vacía los tres');
+    await p.context().close();
+  }
+
+  console.log('30) Ménsulas automáticas: la cantidad sale del ducto (espaciamiento recomendado) y se puede capturar a mano');
+  {
+    const p = await nuevaPagina();
+    // un ducto conocido: 8 m horizontales + 4 m verticales + 3 codos de 11″ = 4 + 2 + 3 = 9 soportes
+    await p.evaluate(() => {
+      const W = window.COTIZAP.web;
+      const base = { material_id: 'GALVANIZADO', calibre: '22', ref_diametro: 'INTERIOR', tipo_union: 'BRIDADO', clase_sellado: 'C', D_mm: 279.4, cantidad: 1 };
+      W.estadoApp.cot.partidas = [
+        { ...base, id: 'r1', familia: 'RECTO', L_mm: 8000 },
+        { ...base, id: 'r2', familia: 'RECTO', L_mm: 4000, posicion: 'VERTICAL' },
+        { ...base, id: 'c1', familia: 'CODO', theta_deg: 90, cantidad: 3 },
+      ];
+      W.recalcular();
+    });
+    await p.waitForTimeout(100);
+    const n0 = await p.locator('#lista-partidas .partida:not(.partida-auto)').count();
+    await p.click('#btn-agregar');
+    await p.click('.fam:has(span:text-is("Soportería"))');
+    ok(await p.inputValue('#f_cantidad_modo') === 'AUTO' && await p.locator('#f_cantidad').evaluate((e) => e.readOnly), 'una soportería nueva nace en automático y la cantidad no se captura');
+    ok(await p.inputValue('#f_cantidad') === '9', 'la cantidad es 9: 4 (8 m ÷ 2.5) + 2 (subida de 4 m ÷ 3.0) + 3 codos');
+    ok(/Cantidad automática[\s\S]*9 piezas/.test(await p.locator('#dlg-prev').innerText()) && /junto a codos e injertos/.test(await p.locator('#dlg-prev').innerText()), 'la vista previa dice de dónde sale');
+    await p.fill('#f_separacion_m', '1.5');
+    ok(await p.inputValue('#f_cantidad') === '11', 'con una separación propia de 1.5 m son 11: 8 m ÷ 1.5 = 5.33 → 6, más 2 y 3');
+    await p.fill('#f_separacion_m', '3.5');
+    ok(/no puede pasar de 3 m/.test(await p.locator('#dlg-prev').innerText()), 'más de 3.0 m se rechaza');
+    await p.fill('#f_separacion_m', '');
+    await p.selectOption('#f_cantidad_modo', 'MANUAL');
+    ok(!(await p.locator('#f_cantidad').evaluate((e) => e.readOnly)) && await p.locator('.campo[data-campo="separacion_m"]').isHidden() && await p.inputValue('#f_cantidad') === '9', 'en manual la cantidad se captura (empieza en la calculada) y no hay separación');
+    await p.fill('#f_cantidad', '3');
+    ok(/menos soportes de los que pide la separación máxima/.test(await p.locator('#dlg-prev').innerText()), 'con 3 piezas avisa que el ducto queda sin apoyo suficiente');
+    await p.selectOption('#f_cantidad_modo', 'AUTO');
+    ok(await p.inputValue('#f_cantidad') === '9', 'al volver a automático se recalcula');
+    await p.fill('#f_descripcion', 'Ménsulas del ducto');
+    await p.click('#dlg-guardar');
+    await p.waitForTimeout(100);
+    ok(await p.locator('#lista-partidas .partida:not(.partida-auto)').count() === n0 + 1, 'se agrega la partida');
+    const fila = p.locator('#lista-partidas .partida:not(.partida-auto)').nth(n0);
+    ok(/9 ×/.test(await fila.locator('.partida-cant').innerText()) && /cantidad automática/.test(await fila.innerText()), 'la lista muestra 9 piezas y que es automática');
+    await fila.click();
+    ok(/Cantidad automática de soportes/i.test(await p.locator('#detalle').innerText()) && /vertical/i.test(await p.locator('#detalle').innerText()) && /codo/i.test(await p.locator('#detalle').innerText()), 'el desglose lista tramos y codos con su cuenta');
+    const R = (fn, arg) => p.evaluate(fn, arg);
+    // se recalcula sola al cambiar el ducto: otro tramo horizontal de 5 m = 2 soportes más
+    await p.evaluate(() => {
+      const W = window.COTIZAP.web;
+      W.estadoApp.cot.partidas.splice(0, 0, { material_id: 'GALVANIZADO', calibre: '22', ref_diametro: 'INTERIOR', tipo_union: 'BRIDADO', clase_sellado: 'C', D_mm: 279.4, cantidad: 1, id: 'r3', familia: 'RECTO', L_mm: 5000 });
+      W.recalcular();
+    });
+    await p.waitForTimeout(100);
+    const cant = await R(() => window.COTIZAP.web.estadoApp.res.partidas.filter((f) => f.ok && f.familia === 'SOPORTE').map((f) => f.entrada.cantidad));
+    ok(cant.length === 1 && cant[0] === 11, `con otro tramo de 5 m las ménsulas pasan solas de 9 a ${cant[0]}`);
+    // una partida de versiones anteriores (sin modo) se abre en manual: no cambia sola
+    await p.evaluate(() => {
+      const W = window.COTIZAP.web;
+      W.estadoApp.cot.partidas.push({ id: 'viejo', familia: 'SOPORTE', barra_id: 'ANG_1_1_4X1_8', largo_pieza_mm: 1300, cantidad: 7 });
+      W.recalcular();
+    });
+    await p.waitForTimeout(100);
+    await p.locator('#lista-partidas .partida:not(.partida-auto)').last().locator('button[aria-label^="Editar"]').click();
+    ok(await p.inputValue('#f_cantidad_modo') === 'MANUAL' && await p.inputValue('#f_cantidad') === '7', 'una soportería de antes se abre en manual con sus 7 piezas');
+    await p.click('#dlg-cancelar');
     await p.context().close();
   }
 

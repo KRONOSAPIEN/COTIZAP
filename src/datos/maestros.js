@@ -367,7 +367,12 @@
       // Soportería (ménsulas, abrazaderas, postes): minutos REALES de taller por pieza (corte, doblez, barreno y punteo) si la partida
       // no los dice; anclaje_defecto: artículo del catálogo de compras que fija cada pieza; tornillo: el juego que la une (de
       // herrajes.tornillo_precio_ref); oreja_abrazadera_mm: cada una de las dos orejas con que una abrazadera de media vuelta se atornilla
-      soportes: { t_fab_pieza_min: 15.0, anclaje_defecto: 'TAQUETE_3_8', tornillo: '5/16x1-1/4', oreja_abrazadera_mm: 50 },
+      soportes: {
+        t_fab_pieza_min: 15.0, anclaje_defecto: 'TAQUETE_3_8', tornillo: '5/16x1-1/4', oreja_abrazadera_mm: 50,
+        // Espaciamiento recomendado entre ménsulas: horizontal cada 2.5 m (máximo 3.0 m; lo ideal es una por junta, cada 2.4 m);
+        // vertical máximo cada 3.0 m con un soporte fuerte en la base de la subida; un soporte junto a cada codo y derivación
+        espaciado: { horizontal_m: 2.5, horizontal_max_m: 3.0, vertical_m: 3.0, base_vertical: 1, por_accesorio: 1 },
+      },
     },
 
     /* ------------------------------------------------------------------ */
