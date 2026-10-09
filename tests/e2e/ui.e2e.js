@@ -2799,6 +2799,85 @@ const ok = (cond, msg) => {
     await p.context().close();
   }
 
+  console.log('36) Trazado isométrico, etapa 3: validar y dimensionar con «Corregir», caudal y velocidad en el lienzo, Ø en cadena y tramo corto');
+  {
+    const EJ = require('../../docs/ejemplos/trazado-isometrico-ejemplo.json');
+    const esperado = JSON.stringify({ ...EJ, resultados: null });
+    const p = await nuevaPagina();
+    const R = (fn, a) => p.evaluate(fn, a);
+    const msg = () => p.locator('#ti-msg').innerText();
+    const sis = () => R(() => JSON.stringify(window.COTIZAP.trazadoIso.aSistema(window.COTIZAP.web.trazadoUI.estado().t, window.COTIZAP.web.estadoApp.M)));
+    const centroDe = (id) => R((tid) => {
+      const s = window.COTIZAP.web.trazadoUI.estado();
+      const t = s.g.tramos.get(tid);
+      const a = s.g.pos.get(t.a);
+      const b = s.g.pos.get(t.b);
+      const q = window.COTIZAP.trazadoTablero.pantalla(s, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 });
+      const r = document.querySelector('#ti-lienzo').getBoundingClientRect();
+      return { x: r.left + (q.x * r.width) / s.ancho, y: r.top + (q.y * r.height) / s.alto };
+    }, id);
+    await p.click('#tab-trazado');
+    await p.click('#ti-ejemplo');
+    // en «Validar y dimensionar» las cotas dicen Ø, caudal y velocidad
+    await p.click('#ti-fase-4');
+    const cotas = await p.locator('#ti-lienzo [data-cota]').evaluateAll((els) => els.map((e) => e.textContent));
+    ok(cotas.some((c) => /^8″ · 2,200 m³\/h · 18[.,]8 m\/s$/.test(c)) && cotas.every((c) => /m³\/h|sin caudal/.test(c)), `las cotas dicen Ø, caudal y velocidad (${cotas.slice(0, 2).join(' | ')})`);
+    // el tronco del colector a 6″: velocidad alta, y «Corregir» la arregla
+    const colector = await R(() => window.COTIZAP.web.trazadoUI.estado().t.tramos.find((t) => t.diametro_in === 8).id);
+    let q = await centroDe(colector);
+    await p.mouse.click(q.x, q.y);
+    await p.selectOption('#ti-t-d', '6');
+    await p.locator('#ti-problemas details').evaluate((d) => { d.open = true; });
+    const fila = p.locator('.ti-prob[data-codigo="VELOCIDAD_ALTA"]');
+    ok(await fila.count() === 1 && /va a 33[.,]5 m\/s \(máximo 23\): con 8″, 18[.,]8 m\/s/.test(await fila.innerText()), 'a 6″ el tronco va a 33.5 m/s: el panel lo dice');
+    const boton = fila.locator('.ti-corregir').first();
+    ok(await boton.innerText() === `Corregir: Cambiar ${colector} a 8″ (18.8 m/s).`, '«Corregir» propone el Ø que pide el caudal');
+    await boton.click();
+    ok(await p.locator('.ti-prob[data-codigo="VELOCIDAD_ALTA"]').count() === 0 && /: hecho\./.test(await msg()), 'un clic lo arregla');
+    await p.click('#ti-fase-5');
+    await p.click('#ti-renumerar');
+    ok(await sis() === esperado, 'corregido y renumerado, vuelve a ser el ejemplo');
+    // subir la subida de la sierra a 8″ se rechaza; la alternativa en cadena se aplica con un clic
+    const sube = await R(() => { const s = window.COTIZAP.web.trazadoUI.estado(); const n = s.t.equipos[1].puertos[0].nodo; return s.t.tramos.find((t) => t.a === n || t.b === n).id; });
+    q = await centroDe(sube);
+    await p.mouse.click(q.x, q.y);
+    await p.selectOption('#ti-t-d', '8');
+    ok(/Hacia el colector el diámetro no baja/.test(await msg()) && await p.locator('#ti-alternativa-btn').isVisible(), 'el Ø que bajaría hacia el colector se rechaza, con una alternativa');
+    ok(/^Corregir: Cambiar en cadena: TR-\d+ y TR-\d+ a 8″$/.test(await p.locator('#ti-alternativa-btn').innerText()), 'la alternativa sube también lo que sigue');
+    await p.click('#ti-alternativa-btn');
+    ok(await R(() => window.COTIZAP.web.trazadoUI.estado().t.tramos.filter((t) => t.tipo === 'RIGIDO' && t.diametro_in === 8).length) === 3, 'y la cadena queda de 8″');
+    // un tramo corto armado con el teclado: nivel a 2.5 m, «2», «@90 0.5», «@180 2»
+    await p.click('#ti-nuevo');
+    await p.focus('#ti-lienzo');
+    for (let i = 0; i < 25; i += 1) await p.keyboard.press('PageUp');
+    await p.keyboard.press('t');
+    const caja = await p.locator('#ti-lienzo').boundingBox();
+    await p.mouse.click(caja.x + caja.width / 2, caja.y + caja.height / 2);
+    await p.keyboard.type('2');
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('@90 0.5');
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('@180 2');
+    await p.keyboard.press('Enter');
+    await p.keyboard.press('Escape');
+    const corto = p.locator('.ti-prob[data-codigo="TRAMO_CORTO"]');
+    await p.locator('#ti-problemas details').evaluate((d) => { d.open = true; });
+    ok(await corto.count() === 1 && /Entre CO-001 y CO-002 quedan 43 mm de recto/.test(await corto.innerText()), 'el tramo de 0.5 m entre dos codos es corto (43 mm de recto)');
+    const arreglos = await corto.locator('.ti-corregir').allInnerTexts();
+    ok(arreglos.length === 3 && /^Corregir: Pegar CO-001 y CO-002 \(unión engargolada, sin bridas en esas caras\)\.$/.test(arreglos[0]) && /^Alargar TR-002 a 0[.,]7 m\.$/.test(arreglos[1]) && /^Aceptar el tramo corto de 43 mm, con bridas\.$/.test(arreglos[2]),
+      `sus arreglos: pegar, alargar o aceptar (${arreglos.join(' | ')})`);
+    await corto.locator('.ti-corregir').first().click();
+    ok(await p.locator('.ti-prob[data-codigo="PIEZAS_PEGADAS"]').count() === 1 && await p.locator('.ti-prob[data-codigo="TRAMO_CORTO"]').count() === 0, 'pegadas: el aviso pasa a nota');
+    q = await centroDe('TR-002');
+    await p.mouse.click(q.x, q.y);
+    ok(await p.locator('#ti-corto-pegar').getAttribute('aria-pressed') === 'true', 'el inspector del tramo muestra la decisión');
+    await p.click('#ti-corto-aceptar');
+    ok(await p.locator('.ti-prob[data-codigo="TRAMO_CORTO_ACEPTADO"]').count() === 1, 'y se cambia desde ahí');
+    const uniones = await R(() => window.COTIZAP.trazadoIso.aSistema(window.COTIZAP.web.trazadoUI.estado().t, window.COTIZAP.web.estadoApp.M, { borrador: true }).tramos.find((t) => t.id === 'TR-002').uniones);
+    ok(uniones.aguas_arriba === 'BRIDA' && uniones.aguas_abajo === 'BRIDA', 'con el tramo corto aceptado, sus uniones son de brida');
+    await p.context().close();
+  }
+
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

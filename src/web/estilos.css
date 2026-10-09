@@ -1247,6 +1247,12 @@ dd.ti-sem-verde, dd.ti-sem-ambar { background: none; font-weight: 600; }
 .ti-prob-aviso .ti-prob-sev { color: var(--warn); }
 .ti-prob-info .ti-prob-sev { color: var(--fg-3); }
 .ti-prob-msg { flex: 1 1 260px; color: var(--fg); }
+.ti-prob-arreglos { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 8px 8px; }
+.ti-corregir { min-height: 30px; padding: 3px 10px; font-size: 12.5px; text-align: left; }
+.ti-alternativa { padding: 0 12px 10px; background: var(--crit-soft); }
+.ti-corto { display: flex; flex-direction: column; gap: 6px; }
+.ti-txt.ti-txt-ok { fill: var(--good); }
+.ti-txt.ti-txt-ambar { fill: var(--warn); }
 /* el lienzo */
 .ti-rejilla-linea { stroke: var(--line-strong); stroke-opacity: 0.45; stroke-width: 1; fill: none; }
 .ti-eje { stroke-width: 2; }

@@ -1,7 +1,7 @@
 # Trazado unifilar isométrico de redes de extracción
 
 > **Especificación funcional y técnica · COTIZAP · 9-oct-2026.** Para desarrolladores full-stack, diseñadores de producto CAD y proyectistas de ingeniería industrial.
-> La acompañan el esquema de datos [`docs/trazado-isometrico.schema.json`](trazado-isometrico.schema.json), el ejemplo resuelto [`docs/ejemplos/trazado-isometrico-ejemplo.json`](ejemplos/trazado-isometrico-ejemplo.json), la prueba de contrato [`tests/trazado_isometrico_contrato.test.js`](../tests/trazado_isometrico_contrato.test.js) el modelo de la etapa 1, [`src/motor/trazado_iso.js`](../src/motor/trazado_iso.js), con sus pruebas (§5.1), y el tablero jugable de la etapa 2, la pestaña «Trazado isométrico» de COTIZAP ([`src/web/trazado_tablero.js`](../src/web/trazado_tablero.js) y [`src/web/trazado_iso_ui.js`](../src/web/trazado_iso_ui.js), §5.2). La prueba verifica que el ejemplo cumple el esquema y cada regla de §2 (posiciones, ángulos, manguera, accesorios contra el motor de COTIZAP, caudales, velocidades, choques y fricción), y que este documento trae el esquema y el ejemplo tal como están en sus archivos.
+> La acompañan el esquema de datos [`docs/trazado-isometrico.schema.json`](trazado-isometrico.schema.json), el ejemplo resuelto [`docs/ejemplos/trazado-isometrico-ejemplo.json`](ejemplos/trazado-isometrico-ejemplo.json), la prueba de contrato [`tests/trazado_isometrico_contrato.test.js`](../tests/trazado_isometrico_contrato.test.js) el modelo de la etapa 1, [`src/motor/trazado_iso.js`](../src/motor/trazado_iso.js), con sus pruebas (§5.1), el tablero jugable de la etapa 2, la pestaña «Trazado isométrico» de COTIZAP ([`src/web/trazado_tablero.js`](../src/web/trazado_tablero.js) y [`src/web/trazado_iso_ui.js`](../src/web/trazado_iso_ui.js), §5.2), y la validación con «Corregir» de la etapa 3 (§5.3). La prueba verifica que el ejemplo cumple el esquema y cada regla de §2 (posiciones, ángulos, manguera, accesorios contra el motor de COTIZAP, caudales, velocidades, choques y fricción), y que este documento trae el esquema y el ejemplo tal como están en sus archivos.
 
 ## Índice
 
@@ -538,6 +538,7 @@ En el ejemplo, desde lo alto de la subida del cepillo:
 | PT_DESALINEADO | BLOQUEANTE | El rígido no sale del PT en la dirección de la manguera | «El ducto sale del punto de transición N-006 en la dirección de la manguera (+Z).» | — |
 | PIEZA_NO_FABRICABLE | BLOQUEANTE | El motor de COTIZAP no puede fabricar la pieza de un nodo | «El motor no puede fabricar el codo de N-005: …» | — |
 | FLUJO_DESCONOCIDO | BLOQUEANTE (operación) | Una derivación sobre un tramo sin sentido conocido (§2.5.7) | «Conecte primero el tramo TR-001 al colector para saber hacia dónde va el aire.» | — |
+| DIAMETRO_BLOQUEADO | BLOQUEANTE (operación) | Un cambio de Ø en cadena (§2.6) llega a un tramo con candado | «TR-005 tiene candado en 6″: quítelo para cambiar la cadena a 8″.» | Quitar el candado |
 | MOVER_NO_POSIBLE | BLOQUEANTE (operación) | Mover segmento con un vecino que no es paralelo o que quedaría corto | «El tramo TR-002 no es paralelo al movimiento: no puede alargarse ni acortarse para seguir a TR-003.» | Cambiar el largo |
 | ACCESORIOS_NO_CABEN | ERROR | Neta < 0 | «Los accesorios del tramo TR-006 ocupan más que su largo.» | Alargar o pegar |
 | CHOQUE_DUCTOS · CHOQUE_EQUIPO | ERROR | §2.10 | «TR-002 y TR-007 se cruzan: sus ejes pasan a 120 mm y necesitan 330 mm.» | Mover segmento o cambiar el nivel |
@@ -555,6 +556,7 @@ En el ejemplo, desde lo alto de la subida del cepillo:
 | CHOQUE_MANGUERA | AVISO | §2.10 | «La manguera TR-004 pasa a 40 mm de Sierra de banco.» | — |
 | EQUIPO_SIN_PUERTOS | AVISO | Un equipo sin tomas ni bocas | — | Agregar sus tomas o quitarlo |
 | TRONCO_MENOR_QUE_RAMAL | AVISO | §2.6 | — | — |
+| PIEZAS_PEGADAS · TRAMO_CORTO_ACEPTADO | INFO | Lo que se decidió de un tramo corto (§5.3) | «CO-001 y CO-002 se arman pegadas (unión engargolada, sin bridas en esas caras) con 43 mm de recto en TR-002.» | — |
 | REDUCCION_INSERTADA · ADAPTADOR_INSERTADO · CODO_INSERTADO · DERIVACION_INSERTADA · DIAMETRO_AUTOMATICO · MANGUERA_RESUELTA | INFO | Lo que la herramienta puso sola | «Manguera en S de dos curvas de 39.31°: radio 552.5 mm, 958 mm.» | — |
 
 Donde COTIZAP ya tiene la regla se conserva su mensaje:
@@ -2071,7 +2073,7 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
 | --- | --- | --- | --- |
 | 1 · Modelo **(hecha, §5.1)** | El esquema de §3. Equipos y puertos con posición; puntos fijos y compensación; direcciones inclinadas; orientación del flujo desde cualquier arranque; el imán (§2.5.4) y la manguera (§2.8.2) como funciones puras con pruebas | `src/motor/trazado_iso.js` (nuevo) | `unifilar_cad.js`: árbol, giros, fusión, choques (`distanciaSegmentos`), `aLectura` |
 | 2 · Tablero **(hecha, §5.2)** | Fases, colocación de equipos y tomas, plano de trabajo y sus teclas, caja de valores, imán y tiradores de la manguera, cubo de vista | `src/web/trazado_tablero.js` (el juego, sin pantalla) y `src/web/trazado_iso_ui.js` (la pestaña «Trazado isométrico») | Las ideas del tablero de Dibujar unifilar: cámara, gestos, etiquetas sin encimar, deshacer |
-| 3 · Validar y dimensionar | Caudales, velocidades, dimensionamiento con candados, catálogo de §2.11, panel de problemas con «Corregir» | Motor y tablero | `revisar` y las reglas del unifilar |
+| 3 · Validar y dimensionar **(hecha, §5.3)** | Caudales, velocidades, dimensionamiento con candados, catálogo de §2.11, panel de problemas con «Corregir» | Motor (`correcciones`, `corregir`, `decidirCorto`, Ø en cadena) y tablero | `revisar` y las reglas del unifilar (pegar las piezas o fabricar el tramo corto) |
 | 4 · Cálculo | Pérdidas locales con su tabla de coeficientes, presión por toma, balanceo y selección del ventilador; llena `resultados` | `src/motor/perdidas.js` (nuevo) | El JSON de §3 |
 
 ### 5.1 Etapa 1, hecha: el modelo
@@ -2151,7 +2153,44 @@ Es la pestaña **Trazado isométrico** de COTIZAP: otro apartado, al lado de la 
 6. **El rombo y el círculo** de la manguera coinciden mientras no hay desvío: decide el primer arrastre (a lo largo del eje de la toma, el rombo; de lado, el círculo).
 7. **El color del fantasma:** verde si se puede; ámbar si se puede pero deja un aviso o un error del catálogo (por ejemplo, un choque); rojo con el motivo si el modelo lo rechaza. Una red que todavía no llega al colector y el extremo de la cadena no lo pintan de ámbar: son normales mientras se traza.
 8. **Rapidez:** cada fantasma nuevo se prueba en el modelo (`trazar` y `revisar`) y se guarda en una caché mientras dura el trazo. Con trazos de decenas de tramos tarda unos milisegundos; con 481 tramos, de 20 a 60 ms. La rejilla gruesa de choques de §2.10 lo bajaría en trazos grandes.
-9. **Pendiente:** el menú radial de 400 ms en el teléfono (§4.5), la regla de niveles con nombre, la compuerta y la tapa (sus bloques salen con candado y el porqué), «Corregir» en el panel de problemas (etapa 3), la rejilla gruesa de choques y pasar el trazo a partidas.
+9. **Pendiente:** el menú radial de 400 ms en el teléfono (§4.5), la regla de niveles con nombre, la compuerta y la tapa (sus bloques salen con candado y el porqué), la rejilla gruesa de choques y pasar el trazo a partidas. «Corregir» llegó con la etapa 3 (§5.3).
+
+### 5.3 Etapa 3, hecha: validar y dimensionar
+
+Los caudales (la suma de las tomas aguas arriba), las velocidades y el dimensionamiento con candados ya venían del modelo (§2.6). La etapa 3 agrega lo que faltaba para validar de verdad: **«Corregir»**. Cada problema del catálogo que tiene arreglo lo ofrece en el panel de problemas, como en el wireframe de §4.1. El arreglo se prueba antes de ofrecerlo: se aplica a una copia del trazo y sólo sale si el modelo lo acepta, si el problema desaparece y si no deja más errores de los que había. Un clic lo aplica, y se deshace como cualquier operación.
+
+| Problema | Arreglos que ofrece |
+| --- | --- |
+| VELOCIDAD_ALTA · VELOCIDAD_BAJA | «Cambiar TR-003 a 8″ (18.8 m/s)», el Ø que pide el caudal (§2.6), en cadena; en una manguera, el Ø de su toma; «Dimensionar todo por caudal» |
+| ACCESORIOS_NO_CABEN | Alargar el tramo hasta que quede el recto mínimo (o, si no se puede, hasta que quepan las piezas) |
+| TRAMO_CORTO | «Pegar CO-001 y CO-002» (las reglas del unifilar: unión soldada, o engargolada en galvanizado, sin bridas en esas caras), alargar el tramo, o «Aceptar el tramo corto» con bridas |
+| DERIVACION_CERCA_DE_CODO · DERIVACIONES_CERCANAS | Alargar el tramo hasta la distancia recomendada |
+| ALTURA_LIBRE | Subir el segmento lo que falta |
+| CHOQUE_DUCTOS · CHOQUE_EQUIPO | Mover un segmento lo justo, hacia donde sus vecinos lo dejan (§1.3 paso 10) |
+| EQUIPOS_ENCIMADOS | Separar un equipo lo justo, en la rejilla del piso |
+| SUBRED_SIN_COLECTOR · TOMA_SIN_CONEXION | Conectar el extremo libre (o la toma) con el imán a la boca libre o al tronco más cercano que ya llega a un colector; una toma sin acople, acoplarla con brida o con manguera |
+| EXTREMO_ABIERTO | Llevarlo con el imán a una toma libre (o, si su red no llega al colector, al tronco) |
+| EQUIPO_SIN_PUERTOS | Agregar su toma (o la boca) arriba, o quitar el equipo |
+
+**Lo demás que salió con la etapa:**
+
+- **Tramo corto.** `decidirCorto` guarda la decisión en el tramo. Con PEGAR, el tramo exporta sus uniones como SOLDADA o ENGARGOLADA; con ACEPTAR, sale la nota TRAMO_CORTO_ACEPTADO. Las dos regresan con `desdeSistema`, y la decisión se quita sola si el tramo deja de ser corto. El inspector del tramo muestra «Pegar las piezas», «Tramo corto con bridas» y «Sin decidir».
+- **Ø en cadena.** `cambiarDiametro(…, { cadena: true })` cambia también lo que lo impediría. Al subir un tramo, sube lo que sigue hacia el colector (y el tronco que entra, si es un ramal). Al bajar, baja lo que viene de las tomas. Un candado lo detiene (DIAMETRO_BLOQUEADO). En el inspector, cuando un Ø se rechaza por DIAMETRO_DECRECE o RAMAL_MAYOR, el mensaje trae «Corregir: Cambiar en cadena…».
+- **Manguera.** `resolverManguera` da `altura_min_mm`, la altura del PT con la que la manguera cabe con su radio mínimo. El semáforo rojo lo dice: «Con este desvío, suba el punto de transición a 600 mm o más».
+- **El lienzo en «Validar y dimensionar».** Las cotas dicen Ø, caudal y velocidad: en verde si la velocidad cae en el rango, en ámbar si no.
+
+**Cómo se verifica:**
+
+- `tests/trazado_iso.test.js`: las decisiones del tramo corto (y su ida y vuelta por el JSON), el Ø en cadena y el candado, y cada arreglo del catálogo en su caso, que quita su problema sin dejar errores. Con el tronco del ejemplo a 6″, «Corregir» y renumerar devuelven exactamente el ejemplo. La caminata al azar también decide tramos cortos y aplica arreglos.
+- `tests/trazado_tablero.test.js`: «Corregir» desde el tablero con su caché y deshacer, la alternativa en cadena, la decisión del tramo corto y la altura mínima de la manguera.
+- `tests/e2e/ui.e2e.js`, sección 36: las cotas con caudal y velocidad, «Corregir» de un clic que regresa al ejemplo, la alternativa en cadena, y un tramo corto armado con el teclado (`2`, `@90 0.5`, `@180 2`) que se pega y luego se acepta desde el inspector.
+
+**Precisiones:**
+
+1. **Sin arreglo automático** (se corrigen a mano): REDUCCION_BRUSCA, T_90_ALTA_PERDIDA, MANGUERA_LARGA, MANGUERA_TORCIDA, CHOQUE_MANGUERA, TRONCO_MENOR_QUE_RAMAL (cambiar cuál es el tronco es geometría) y TOMA_SIN_DATOS (el caudal es un dato del proyecto, no se inventa). Lo BLOQUEANTE nunca queda en el trazo: el fantasma no lo deja hacer y dice por qué.
+2. **Pegar** sigue la regla del unifilar (unión soldada, o engargolada si la costura del material es engargolada). En el trazo la geometría no cambia: el recto que queda se arma con las piezas.
+3. **Rapidez.** Los arreglos se buscan al pintar el panel, con unos 150 ms por pintada; los que no alcanzan muestran «Buscar arreglo». Se guardan mientras el trazo no cambie.
+4. **Pendiente:** el cálculo de pérdidas (etapa 4) y pasar el trazo a partidas.
 
 ---
 

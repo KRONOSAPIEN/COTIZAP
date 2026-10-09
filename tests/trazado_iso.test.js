@@ -752,6 +752,137 @@ test('Reducir desde un punto o desde un codo: el Ø baja de ahí hacia las tomas
   falla(() => T.reducir(t0, M, { tramo: entre(t0, puerto(t0, 'EQ-03').nodo, puerto(t0, 'EQ-03').acople.nodo_transicion), s_mm: 100 }, 4), 'DATO_INVALIDO', /manguera/);
 });
 
+/** Un tramo corto entre dos codos: horizontal, 0.5 m (o el largo dado) y de regreso, a 2.5 m de altura. */
+function tramoCorto(largo) {
+  let t = T.nuevo(M);
+  t = T.trazar(t, M, { posicion_mm: { x: 0, y: 0, z: 2500 } }, { direccion: dir(0), largo_mm: 2000 });
+  t = T.trazar(t, M, t.ultimo.nodo, { direccion: dir(90), largo_mm: largo || 500 });
+  return T.trazar(t, M, t.ultimo.nodo, { direccion: dir(180), largo_mm: 2000 });
+}
+const codigos = (t, sev) => T.revisar(t, M).filter((v) => !sev || sev.includes(v.severidad)).map((v) => v.codigo);
+const problema = (t, codigo) => T.revisar(t, M).find((v) => v.codigo === codigo);
+
+test('Tramo corto: pegar las piezas o aceptarlo; la decisión viaja en el JSON y se quita sola si deja de ser corto', () => {
+  const t0 = tramoCorto();
+  assert.ok(codigos(t0).includes('TRAMO_CORTO'));
+  const p = T.decidirCorto(t0, M, 'TR-002', 'PEGAR');
+  assert.equal(p.tramos.find((x) => x.id === 'TR-002').corto, 'PEGAR');
+  assert.ok(!codigos(p).includes('TRAMO_CORTO'));
+  const info = problema(p, 'PIEZAS_PEGADAS');
+  assert.equal(info.severidad, 'INFO');
+  assert.match(info.mensaje, /CO-001 y CO-002 se arman pegadas \(unión engargolada, sin bridas en esas caras\) con 43 mm de recto en TR-002/);
+  const s = T.aSistema(p, M, { borrador: true });
+  assert.deepEqual(s.tramos.find((x) => x.id === 'TR-002').uniones, { aguas_arriba: 'ENGARGOLADA', aguas_abajo: 'ENGARGOLADA' }, 'en galvanizado la unión es engargolada');
+  assert.deepEqual(validarEsquema(s, ESQUEMA), []);
+  // de regreso desde el JSON (las uniones dicen que se pegó)
+  const r = T.desdeSistema(s, M);
+  assert.deepEqual(r.errores, []);
+  assert.equal(r.modelo.tramos.find((x) => x.id === 'TR-002').corto, 'PEGAR');
+  // en acero al carbón, soldada
+  const ac = T.decidirCorto(T.cambiarMaterial(t0, M, 'ACERO_CARBON', 16, { todos: true }), M, 'TR-002', 'PEGAR');
+  assert.equal(T.aSistema(ac, M, { borrador: true }).tramos.find((x) => x.id === 'TR-002').uniones.aguas_abajo, 'SOLDADA');
+  // aceptar: nota en el JSON, y también regresa
+  const a = T.decidirCorto(t0, M, 'TR-002', 'ACEPTAR');
+  assert.ok(codigos(a).includes('TRAMO_CORTO_ACEPTADO') && !codigos(a).includes('TRAMO_CORTO'));
+  const sa = T.aSistema(a, M, { borrador: true });
+  assert.equal(T.desdeSistema(sa, M).modelo.tramos.find((x) => x.id === 'TR-002').corto, 'ACEPTAR');
+  assert.equal(T.validar(JSON.parse(JSON.stringify(a)), M).modelo.tramos.find((x) => x.id === 'TR-002').corto, 'ACEPTAR', 'y se guarda con el trazo');
+  // quitar la decisión; deja de ser corto al alargarlo
+  assert.ok(codigos(T.decidirCorto(p, M, 'TR-002', null)).includes('TRAMO_CORTO'));
+  const largo = T.cambiarLargo(p, M, 'TR-002', 1000);
+  assert.equal(largo.tramos.find((x) => x.id === 'TR-002').corto, undefined, 'al alargarlo ya no es corto: la decisión se va');
+  // lo que no se puede
+  falla(() => T.decidirCorto(t0, M, 'TR-001', 'PEGAR'), 'DATO_INVALIDO', /no es un tramo corto/);
+  falla(() => T.decidirCorto(t0, M, 'TR-002', 'SOLDAR'), 'DATO_INVALIDO');
+  // un tramo corto con pieza en un solo extremo se acepta pero no se pega
+  let u = T.trazar(T.nuevo(M), M, { posicion_mm: { x: 0, y: 0, z: 2500 } }, { direccion: dir(0), largo_mm: 2000 });
+  u = T.trazar(u, M, u.ultimo.nodo, { direccion: dir(90), largo_mm: 300 });
+  const cu = problema(u, 'TRAMO_CORTO');
+  assert.ok(cu, 'el último tramo, con el codo en un solo extremo, es corto');
+  falla(() => T.decidirCorto(u, M, cu.elementos[0], 'PEGAR'), 'DATO_INVALIDO', /una pieza en cada extremo/);
+  assert.ok(T.decidirCorto(u, M, cu.elementos[0], 'ACEPTAR'));
+});
+
+test('Cambiar el Ø en cadena: hacia el colector no baja, un ramal no pasa de su tronco, y el candado lo detiene', () => {
+  const t0 = terminado(ejemploDesdeLasTomas());
+  const sube = entre(t0, puerto(t0, 'EQ-02').nodo, nodoEn(t0, 10750, 0, 3000));
+  const sierra = entre(t0, nodoEn(t0, 10750, 0, 3000), nodoEn(t0, 4250, 0, 3000));
+  falla(() => T.cambiarDiametro(t0, M, sube, 8), 'DIAMETRO_DECRECE', /el tramo anterior/);
+  const c = T.cambiarDiametro(t0, M, sube, 8, { cadena: true });
+  assert.deepEqual(c.ultimo.tramos, [sube, sierra], 'la subida y la horizontal hasta el injerto (el tronco ya es de 8″)');
+  // bajar el tronco del colector a 5″: bajan también el tronco de la sierra (y su subida) y el ramal sigue de 5″
+  const colector = entre(t0, nodoEn(t0, 4250, 0, 3000), puerto(t0, 'EQ-01').nodo);
+  const b = T.cambiarDiametro(t0, M, colector, 5, { cadena: true });
+  assert.deepEqual([...b.ultimo.tramos].sort(), [colector, sierra, sube].sort());
+  // subir el ramal a 8″: el tronco que entra (6″) sube con él
+  const ramal = entre(t0, nodoEn(t0, 7000, -2750, 3000), nodoEn(t0, 4250, 0, 3000));
+  const ramal2 = T.cambiarDiametro(t0, M, ramal, 8, { cadena: true });
+  assert.ok(ramal2.ultimo.tramos.includes(sierra), 'el tronco que entra sube con el ramal');
+  // el candado detiene la cadena con su porqué
+  const conCandado = T.cambiarDiametro(t0, M, sierra, 6, { bloquear: true });
+  falla(() => T.cambiarDiametro(conCandado, M, sube, 8, { cadena: true }), 'DIAMETRO_BLOQUEADO', /tiene candado en 6″: quítelo/);
+});
+
+test('Corregir: cada arreglo se prueba en el modelo, quita su problema y no deja errores nuevos', () => {
+  const aplica = (t, codigo, re) => {
+    const p = problema(t, codigo);
+    assert.ok(p, `hay ${codigo}`);
+    const cs = T.correcciones(t, M, p);
+    assert.ok(cs.length, `${codigo} tiene arreglo`);
+    if (re) assert.match(cs[0].texto, re);
+    cs.forEach((c) => {
+      const m = T.corregir(t, M, c);
+      assert.equal(m.ultimo.operacion, 'corregir');
+      assert.ok(!T.revisar(m, M).some((v) => v.codigo === p.codigo && JSON.stringify([...v.elementos].sort()) === JSON.stringify([...p.elementos].sort())), `${c.texto} quita el problema`);
+      assert.ok(T.revisar(m, M).filter((v) => v.severidad === 'ERROR').length <= T.revisar(t, M).filter((v) => v.severidad === 'ERROR').length + (p.codigo === 'TOMA_SIN_CONEXION' || p.codigo === 'EQUIPO_SIN_PUERTOS' ? 2 : 0), `${c.texto} no deja más errores`);
+      assert.deepEqual(T.validar(JSON.parse(JSON.stringify(m)), M).errores, []);
+    });
+    return cs;
+  };
+  // velocidad alta en el tronco del ejemplo a 6″: «Cambiar a 8″» o dimensionar
+  const ej = terminado(ejemploDesdeLasTomas());
+  const colector = entre(ej, nodoEn(ej, 4250, 0, 3000), puerto(ej, 'EQ-01').nodo);
+  const cs = aplica(T.cambiarDiametro(ej, M, colector, 6), 'VELOCIDAD_ALTA', new RegExp(`^Cambiar ${colector} a 8″ \\(18\\.8 m/s\\)\\.$`));
+  assert.equal(JSON.stringify(T.aSistema(T.renumerar(T.corregir(T.cambiarDiametro(ej, M, colector, 6), M, cs[0]), M), M)), JSON.stringify(sinResultados), 'corregido y renumerado, es el ejemplo');
+  assert.ok(cs.some((c) => c.op === 'aplicarDimensiones'));
+  // tramo corto: pegar, alargar o aceptar; accesorios que no caben: alargar
+  const corto = aplica(tramoCorto(), 'TRAMO_CORTO', /^Pegar CO-001 y CO-002 \(unión engargolada/);
+  assert.deepEqual(corto.map((c) => c.op), ['decidirCorto', 'cambiarLargo', 'decidirCorto']);
+  aplica(tramoCorto(300), 'ACCESORIOS_NO_CABEN', /^Alargar TR-002 a 0\.7 m\.$/);
+  // choque: mover un segmento lo justo
+  let c = T.trazar(T.nuevo(M), M, { posicion_mm: { x: -3000, y: 0, z: 3000 } }, { direccion: dir(0), largo_mm: 6000 });
+  c = T.trazar(c, M, { posicion_mm: { x: 0, y: -3000, z: 2000 } }, { direccion: dir(0, 90), largo_mm: 1000 });
+  c = T.trazar(c, M, c.ultimo.nodo, { direccion: dir(90), largo_mm: 6000 });
+  c = T.trazar(c, M, c.ultimo.nodo, { direccion: dir(0, -90), largo_mm: 1000 });
+  aplica(c, 'CHOQUE_DUCTOS', /^Mover TR-003 300 mm hacia abajo\.$/);
+  // equipos encimados y sin puertos
+  let e = T.ponerEquipo(T.nuevo(M), M, { tipo: 'MAQUINA', posicion_mm: { x: 0, y: 0, z: 0 }, caja_mm: { largo: 1200, ancho: 800, alto: 1200 } });
+  e = T.ponerEquipo(e, M, { tipo: 'MAQUINA', nombre: 'Lijadora', posicion_mm: { x: 800, y: 0, z: 0 }, caja_mm: { largo: 1200, ancho: 800, alto: 1200 } });
+  aplica(e, 'EQUIPOS_ENCIMADOS', /^Mover Lijadora 500 mm hacia \+X\.$/);
+  aplica(e, 'EQUIPO_SIN_PUERTOS', /^Agregar una toma de 6″ arriba de Máquina\.$/);
+  // altura libre: subir el segmento
+  let a = T.trazar(T.nuevo(M), M, { posicion_mm: { x: 0, y: 0, z: 3000 } }, { direccion: dir(0, -90), largo_mm: 1500 });
+  a = T.trazar(a, M, a.ultimo.nodo, { direccion: dir(0), largo_mm: 3000 });
+  a = T.trazar(a, M, a.ultimo.nodo, { direccion: dir(0, 90), largo_mm: 1500 });
+  aplica(a, 'ALTURA_LIBRE', /^Subir TR-002 700 mm \(queda a 2124 mm del piso\)\.$/);
+  // subred sin colector y toma sin ducto: conectar con el imán
+  aplica(T.borrarTramo(ej, M, entre(ej, nodoEn(ej, 7000, -2750, 3000), nodoEn(ej, 4250, 0, 3000))), 'SUBRED_SIN_COLECTOR', /^Conectar N-\d+ al tramo TR-\d+: injerto a (45|30)°/);
+  // toma sin acople: brida o manguera; extremo abierto que llega a una toma libre
+  let x = T.ponerEquipo(T.nuevo(M), M, { tipo: 'COLECTOR', posicion_mm: { x: 0, y: 0, z: 0 }, caja_mm: { largo: 1500, ancho: 1500, alto: 4000 } });
+  x = T.agregarPuerto(x, M, 'EQ-01', { posicion_local_mm: { x: 750, y: 0, z: 3000 }, diametro_in: 6 });
+  x = T.trazar(x, M, 'N-001', { direccion: dir(0), largo_mm: 5000 });
+  x = T.ponerEquipo(x, M, { tipo: 'MAQUINA', posicion_mm: { x: 9000, y: 0, z: 0 }, caja_mm: { largo: 1200, ancho: 800, alto: 1200 } });
+  x = T.agregarPuerto(x, M, 'EQ-02', { posicion_local_mm: { x: 0, y: 0, z: 1200 }, diametro_in: 6, caudal_m3_h: 1300 });
+  assert.deepEqual(aplica(x, 'TOMA_SIN_CONEXION').map((q) => q.op), ['acoplarBrida', 'acoplarManguera']);
+  const xb = T.acoplarBrida(x, M, 'PU-02');
+  const fin = aplica(xb, 'EXTREMO_ABIERTO', /^Conectar N-002 con la toma PU-02 \(Máquina\): llegada: \+X 3\.25 m y −Z 1\.8 m, 1 codo\.$/);
+  assert.deepEqual(T.revisar(T.corregir(xb, M, fin[0]), M).filter((v) => v.severidad !== 'INFO'), [], 'conectado, sin problemas');
+  // lo que no tiene arreglo automático, o no es un problema del trazo
+  assert.deepEqual(T.correcciones(ej, M, { codigo: 'REDUCCION_BRUSCA', severidad: 'AVISO', elementos: ['RE-001'] }), []);
+  assert.deepEqual(T.correcciones(ej, M, { codigo: 'TRAMO_CORTO', severidad: 'AVISO', elementos: ['TR-001'] }), [], 'un problema que no está en la revisión no tiene arreglo');
+  falla(() => T.corregir(ej, M, { op: 'borrarTodo', args: [] }), 'DATO_INVALIDO');
+});
+
 test('Una caminata de operaciones al azar nunca deja el trazo inválido ni lanza otra cosa que TrazadoError', () => {
   let semilla = 20261009;
   const azar = () => { semilla = (semilla * 1103515245 + 12345) % 2147483648; return semilla / 2147483648; };
@@ -772,6 +903,8 @@ test('Una caminata de operaciones al azar nunca deja el trazo inválido ni lanza
     () => T.aplicarDimensiones(t, M),
     () => { const n = uno(t.nodos); if (!n) return t; const c = T.calcular(t, M).piezasDe.get(n.id); return c && c[0].tipo === 'CODO' ? T.cambiarAngulo(t, M, n.id, uno([30, 45, 60, 90])) : t; },
     () => { const tr = uno(t.tramos.filter((x) => x.tipo === 'RIGIDO')); return tr ? T.reducir(t, M, azar() < 0.5 ? tr.a : { tramo: tr.id, s_mm: uno([50, 300, 1000]) }, uno([3, 4, 5])) : t; },
+    () => { const tr = uno(t.tramos.filter((x) => x.tipo === 'RIGIDO')); return tr ? T.decidirCorto(t, M, tr.id, uno(['PEGAR', 'ACEPTAR', null])) : t; },
+    () => { const p = uno(T.revisar(t, M).filter((v) => T.CORREGIBLES.includes(v.codigo))); if (!p) return t; const c = uno(T.correcciones(t, M, p, { max: 2 })); return c ? T.corregir(t, M, c) : t; },
   ];
   for (let i = 0; i < 160; i += 1) {
     try {

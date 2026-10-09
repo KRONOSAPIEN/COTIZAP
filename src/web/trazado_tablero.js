@@ -544,7 +544,10 @@
     if (!r) return { color: 'ROJO', texto: 'Sin manguera.' };
     const forma = { RECTA: 'recta', S: 'en S', CODO: 'en curva', LIBRE: 'libre' }[r.forma];
     const datos = `${forma}${r.radio_mm ? ` · R ${n(r.radio_mm)} mm (mín. ${n(r.radio_min_mm, 1)})` : ''}${r.angulo_curva_deg ? ` · ${n(r.angulo_curva_deg, 2)}°` : ''} · ${n(r.largo_mm)} mm`;
-    if (!r.posible) return { color: 'ROJO', texto: r.motivo };
+    if (!r.posible) {
+      const hmin = r.altura_min_mm && Number.isFinite(r.altura_min_mm) && r.altura_min_mm > r.altura_mm + 1e-6 ? Math.ceil(r.altura_min_mm / PASO_MANGUERA_MM) * PASO_MANGUERA_MM : null;
+      return { color: 'ROJO', texto: `${r.motivo}${hmin ? ` Con este desvío, suba el punto de transición a ${n(hmin)} mm o más.` : ''}`, altura_min_mm: hmin };
+    }
     if (r.larga) return { color: 'AMBAR', texto: `Manguera ${datos}: pasa del largo máximo (${n(pol.manguera.largo_max_mm)} mm).` };
     return { color: 'VERDE', texto: `Manguera ${datos}.` };
   }
@@ -1096,6 +1099,50 @@
     return decir(s, `Distancia ${metros(norma(d))}: ΔX ${n(d.x)} mm, ΔY ${n(d.y)} mm, ΔZ ${n(d.z)} mm.`, false);
   }
 
+  /* ------------------------------------------------------------------ corregir (etapa 3: §1.4 paso 3, §2.11) */
+
+  const claveDe = (p) => `${p.codigo}|${[...p.elementos].sort().join(',')}`;
+  /** Los arreglos automáticos de un problema (del modelo, ya probados), guardados mientras el trazo no cambie. */
+  function correccionesDe(s, problema) {
+    if (!TZ.CORREGIBLES.includes(problema.codigo)) return [];
+    if (!s.correc || s.correc.t !== s.t) s.correc = { t: s.t, mapa: new Map() };
+    const k = claveDe(problema);
+    if (!s.correc.mapa.has(k)) s.correc.mapa.set(k, TZ.correcciones(s.t, s.M, problema));
+    return s.correc.mapa.get(k);
+  }
+  /** ¿Ya se buscaron los arreglos de este problema con el trazo de hoy? */
+  const correccionesListas = (s, problema) => !!(s.correc && s.correc.t === s.t && s.correc.mapa.has(claveDe(problema)));
+  /** Aplica un arreglo (con deshacer); selecciona lo que tocó. */
+  function corregir(s, c) {
+    const m = hacer(s, (t) => TZ.corregir(t, s.M, c), `${c.texto.replace(/\.$/, '')}: hecho.`);
+    if (!m) return false;
+    const tr = (m.ultimo.tramos || []).find((id) => s.g.tramos.has(id));
+    if (tr) s.sel = { tipo: 'TRAMO', id: tr };
+    return true;
+  }
+  /**
+   * Cambiar el Ø de un tramo desde el inspector. Si el modelo lo rechaza porque hacia el colector el Ø bajaría o un ramal
+   * pasaría de su tronco, devuelve la alternativa en cadena (§2.6) ya probada: { alternativa: { texto, tramos } }.
+   */
+  function cambiarDiametroTramo(s, tramoId, D) {
+    if (hacer(s, (t) => TZ.cambiarDiametro(t, s.M, tramoId, D), `${tramoId}: ${pulg(D)}.`)) return { ok: true };
+    const msg = s.msg;
+    let m;
+    try { m = TZ.cambiarDiametro(s.t, s.M, tramoId, D, { cadena: true }); } catch (e) { if (e instanceof TZ.TrazadoError) return { ok: false }; throw e; }
+    const otros = m.ultimo.tramos.slice(1);
+    if (!otros.length) return { ok: false };
+    decir(s, msg, true);
+    return { ok: false, alternativa: { texto: `Cambiar en cadena: ${tramoId} y ${otros.join(', ')} a ${pulg(D)}`, tramos: m.ultimo.tramos } };
+  }
+  function cambiarDiametroEnCadena(s, tramoId, D) {
+    return !!hacer(s, (t) => TZ.cambiarDiametro(t, s.M, tramoId, D, { cadena: true }), (m) => `${m.ultimo.tramos.join(', ')}: ${pulg(D)}.`);
+  }
+  /** La decisión de un tramo corto: PEGAR, ACEPTAR o null. */
+  function decidirCorto(s, tramoId, decision) {
+    const que = { PEGAR: 'se arman pegadas, sin bridas en esas caras', ACEPTAR: 'tramo corto aceptado, con bridas' }[decision];
+    return !!hacer(s, (t) => TZ.decidirCorto(t, s.M, tramoId, decision), `${tramoId}: ${que || 'sin decidir'}.`);
+  }
+
   /* ------------------------------------------------------------------ lo que se muestra en el inspector */
 
   const velocidadSemaforo = (s, v) => (v === null ? null : v < s.t.politicas.velocidad_min_m_s - 1e-9 || v > s.t.politicas.velocidad_max_m_s + 1e-9 ? 'AMBAR' : 'VERDE');
@@ -1110,7 +1157,13 @@
     const dir = rig ? (arriba ? TZ.direccionDeVector(g.aire(t)) : g.seg.get(id).dir) : null;
     const Q = g.Q.get(id);
     const v = g.v.get(id);
+    const oc = g.ocupa.get(id) || [];
+    const neta = g.neta.get(id);
+    const corto = rig && oc.length && neta >= -1e-3 && neta < s.t.politicas.recto_min_entre_accesorios_mm - 1e-6
+      ? { neta, piezas: [...new Set(oc.map((o) => o.pieza.id || o.pieza.tipo))], dosLados: new Set(oc.map((o) => o.nodo)).size === 2, decision: t.corto || null }
+      : null;
     return {
+      corto,
       id, tipo: t.tipo, diametro_in: t.diametro_in, bloqueado: t.diametro_bloqueado, material: t.material, calibre: t.calibre, largo_mm: L, neta_mm: g.neta.get(id),
       descuentos: g.ocupa.get(id).map((o) => ({ pieza: o.pieza.id || o.pieza.tipo, tipo: o.pieza.tipo, mm: o.mm })),
       direccion: dir ? TZ.textoDireccion(dir) : null, sentido: arriba ? `de ${arriba} a ${g.abajo.get(id)}` : null, caudal: Q, velocidad: v, semaforo: velocidadSemaforo(s, v),
@@ -1213,6 +1266,7 @@
     mangueraDe, acoplar, semaforoManguera, alturaPorArrastre, desvioPorArrastre, previaManguera, moverManguera,
     arranqueDe, empezar, teclasSostenidas, planoDeTrabajo, leerCaja, teclear, fantasma, alinear, confirmar, cancelar, fijar, siguienteOpcion, cambiarDiametroActivo, cambiarNivel,
     reducirEn, desplazamientoSegmento, moverSegmento, borrar, medir,
+    correccionesDe, correccionesListas, corregir, cambiarDiametroTramo, cambiarDiametroEnCadena, decidirCorto,
     infoTramo, piezasDe, velocidadSemaforo, exportar, importar, ejemplo,
   };
 }));

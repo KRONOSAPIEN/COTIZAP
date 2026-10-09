@@ -505,3 +505,54 @@ test('Deshacer guarda hasta 100 pasos; un cambio rechazado no se guarda', () => 
   assert.equal(s.hist.length, n);
   assert.equal(s.error, true);
 });
+
+test('Etapa 3: «Corregir» desde el tablero (con deshacer), el Ø en cadena como alternativa y la decisión del tramo corto', () => {
+  const s = TB.crear(M, TB.ejemplo(M), { ancho: 1200, alto: 700 });
+  // el tronco del colector a 6″: velocidad alta, con su arreglo
+  const colector = s.t.tramos.find((t) => t.diametro_in === 8).id;
+  TB.hacer(s, (t) => TZ.cambiarDiametro(t, M, colector, 6), '');
+  const p = s.problemas.find((v) => v.codigo === 'VELOCIDAD_ALTA');
+  const cs = TB.correccionesDe(s, p);
+  assert.ok(TB.correccionesListas(s, p));
+  assert.equal(TB.correccionesDe(s, p), cs, 'se guardan mientras el trazo no cambie');
+  assert.equal(cs[0].texto, `Cambiar ${colector} a 8″ (18.8 m/s).`);
+  assert.ok(TB.corregir(s, cs[0]));
+  assert.equal(s.msg, `Cambiar ${colector} a 8″ (18.8 m/s): hecho. Reducción con injerto a 45° en N-002 (RI-002).`);
+  assert.ok(!s.problemas.some((v) => v.codigo === 'VELOCIDAD_ALTA'));
+  assert.ok(!TB.correccionesListas(s, p), 'con el trazo nuevo se buscan de nuevo');
+  TB.deshacer(s);
+  assert.ok(s.problemas.some((v) => v.codigo === 'VELOCIDAD_ALTA'), 'y se deshace');
+  TB.rehacer(s);
+  // subir la subida de la sierra a 8″ se rechaza; la alternativa en cadena sí se puede
+  const sube = s.t.tramos.find((t) => t.a === s.t.equipos[1].puertos[0].nodo || t.b === s.t.equipos[1].puertos[0].nodo).id;
+  const r = TB.cambiarDiametroTramo(s, sube, 8);
+  assert.equal(r.ok, false);
+  assert.equal(s.error, true);
+  assert.match(s.msg, /Hacia el colector el diámetro no baja/);
+  assert.match(r.alternativa.texto, new RegExp(`^Cambiar en cadena: ${sube} y TR-\\d+ a 8″$`));
+  assert.ok(TB.cambiarDiametroEnCadena(s, sube, 8));
+  assert.ok(s.t.tramos.filter((t) => t.tipo === 'RIGIDO' && t.diametro_in === 8).length >= 3);
+  // un tramo corto entre dos codos: el inspector sabe que es corto y qué se puede decidir
+  const c = TB.crear(M, null, { ancho: 1200, alto: 700 });
+  TB.hacer(c, (t) => TZ.trazar(t, M, { posicion_mm: { x: 0, y: 0, z: 2500 } }, { direccion: { azimut_deg: 0, elevacion_deg: 0 }, largo_mm: 2000 }), '');
+  TB.hacer(c, (t) => TZ.trazar(t, M, t.ultimo.nodo, { direccion: { azimut_deg: 90, elevacion_deg: 0 }, largo_mm: 500 }), '');
+  TB.hacer(c, (t) => TZ.trazar(t, M, t.ultimo.nodo, { direccion: { azimut_deg: 180, elevacion_deg: 0 }, largo_mm: 2000 }), '');
+  const info = TB.infoTramo(c, 'TR-002');
+  assert.deepEqual({ ...info.corto, neta: Math.round(info.corto.neta) }, { neta: 43, piezas: ['CO-001', 'CO-002'], dosLados: true, decision: null });
+  assert.ok(TB.decidirCorto(c, 'TR-002', 'PEGAR'));
+  assert.equal(c.msg, 'TR-002: se arman pegadas, sin bridas en esas caras.');
+  assert.equal(TB.infoTramo(c, 'TR-002').corto.decision, 'PEGAR');
+  assert.ok(c.problemas.some((v) => v.codigo === 'PIEZAS_PEGADAS') && !c.problemas.some((v) => v.codigo === 'TRAMO_CORTO'));
+  assert.equal(TB.infoTramo(c, 'TR-001').corto, null);
+});
+
+test('La manguera imposible dice hasta dónde subir el punto de transición', () => {
+  const pol = TZ.politicasDe(M, 'POLVO');
+  const x = { P_t: V3(0, 0, 0), u_t: V3(0, 0, 1), P_r: V3(0, 400, 500), u_r: V3(0, 0, 1), diametro_in: 5, manguera: pol.manguera };
+  const r = TZ.resolverManguera(x);
+  cerca(r.altura_min_mm, 580.526, 1e-3, 'h = 2·puño + √(4·e·R mín − e²)');
+  const sem = TB.semaforoManguera(r, pol);
+  assert.equal(sem.color, 'ROJO');
+  assert.match(sem.texto, /pide un radio de 156 mm; la manguera de 5″ necesita 190\.5 mm\. Con este desvío, suba el punto de transición a 600 mm o más\.$/);
+  assert.equal(TZ.resolverManguera({ ...x, P_r: V3(0, 400, 600) }).posible, true, 'a 600 mm ya cabe');
+});

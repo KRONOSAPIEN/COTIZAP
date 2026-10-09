@@ -297,12 +297,16 @@
       let nx = -(b.y - a.y) / L;
       let ny = (b.x - a.x) / L;
       if (ny > 0 || (ny === 0 && nx > 0)) { nx = -nx; ny = -ny; }
-      const txt = `${pulg(t.diametro_in)} · ${metros(g.seg.get(t.id).L)}`;
+      const validar = s.fase === 4;
+      const Q = g.Q.get(t.id);
+      const v = g.v.get(t.id);
+      const sem = Q ? TB().velocidadSemaforo(s, v) : null;
+      const txt = validar ? `${pulg(t.diametro_in)} · ${Q === null ? 'sin caudal' : `${n0(Q)} m³/h · ${W.num(v, 1)} m/s`}` : `${pulg(t.diametro_in)} · ${metros(g.seg.get(t.id).L)}`;
       const w = anchoTexto(txt, 12);
       const off = ancho / 2 + 10;
       const cand = [];
       [0.5, 0.35, 0.65, 0.22, 0.78].forEach((f) => [1, -1].forEach((ld) => cand.push([a.x + (b.x - a.x) * f + nx * off * ld - w / 2, a.y + (b.y - a.y) * f + ny * off * ld - 8])));
-      cotas.push({ t, txt, err: err.has(t.id), cand, corto: L < 80, w });
+      cotas.push({ t, txt, err: err.has(t.id), cand, corto: L < 80, w, sem: validar ? sem : null });
     });
     items.filter((x) => x.pintar).sort((p, q) => q.prof - p.prof).forEach((x) => x.pintar(escena));
     // puertos y puntos de transición
@@ -351,7 +355,7 @@
     });
     cotas.forEach((c) => {
       const r = lugar.elegir(c.cand.map(([x, y]) => ({ x, y, w: c.w, h: 16 })), !c.corto);
-      if (r) etiquetas.append(svg('text', { x: f1(r.x), y: f1(r.y + 12), class: `ti-txt${c.err ? ' ti-txt-err' : ''}`, 'data-cota': c.t.id }, c.txt));
+      if (r) etiquetas.append(svg('text', { x: f1(r.x), y: f1(r.y + 12), class: `ti-txt${c.err ? ' ti-txt-err' : c.sem === 'AMBAR' ? ' ti-txt-ambar' : c.sem === 'VERDE' ? ' ti-txt-ok' : ''}`, 'data-cota': c.t.id }, c.txt));
     });
     const defs = svg('defs', null, svg('marker', { id: 'ti-punta', viewBox: '0 0 10 10', refX: '8', refY: '5', markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse' }, svg('path', { d: 'M0 0L10 5L0 10z', class: 'ti-punta' })));
     el.replaceChildren(defs, grid, escena, sobre, etiquetas, gizmo(), svg('g', { id: 'ti-capa' }));
@@ -1046,13 +1050,26 @@
     return h('section', { class: 'ti-ins' },
       titulo(`Tramo ${id}`, `${info.direccion}${info.sentido ? ` · aire ${info.sentido}` : ' · sin sentido todavía'}`),
       h('div', { class: 'ti-rejilla-campos' },
-        campo('Ø', selector('ti-t-d', diametros(), info.diametro_in, (v) => aplicar((m) => T.cambiarDiametro(m, M(), id, Number(v)), `${id}: ${pulg(Number(v))}.`), 'Diámetro del tramo')),
+        campo('Ø', selector('ti-t-d', diametros(), info.diametro_in, (v) => {
+          const r = TB().cambiarDiametroTramo(s, id, Number(v));
+          if (r.ok) { cambio(); return; }
+          ui.alternativa = r.alternativa ? { texto: r.alternativa.texto, hacer: () => TB().cambiarDiametroEnCadena(s, id, Number(v)) } : null;
+          pintarEstado();
+          pintarInspector();
+        }, 'Diámetro del tramo')),
         h('label', { class: 'ti-check', for: 'ti-t-candado', title: 'El dimensionamiento por caudal no cambia un Ø con candado' }, candado, h('span', { html: ico(ICONOS.candado) }), 'Candado'),
         campo('Largo a ejes (m)', entrada('ti-t-largo', Math.round(info.largo_mm) / 1000, (v) => {
           const L = TB().leerCaja(v).largo;
           if (L === undefined) { TB().decir(s, 'Escriba el largo en m (3.25) o en mm (3250mm).', true); pintarEstado(); return; }
           aplicar((m) => T.cambiarLargo(m, M(), id, L), (m) => `${id}: ${metros(L)}${m.ultimo.compensacion && m.ultimo.compensacion.length ? `; se compensó en ${m.ultimo.compensacion.map((c) => `${c.tramo} (${c.delta_mm > 0 ? '+' : ''}${n0(c.delta_mm)} mm)`).join(', ')}` : ''}.`);
         }))),
+      info.corto ? h('div', { class: 'ti-corto' },
+        h('p', { class: `ti-semaforo ${info.corto.decision ? 'ti-sem-verde' : 'ti-sem-ambar'}` }, `Tramo corto: ${W.num(Math.max(0, info.corto.neta), 0)} mm de recto ${info.corto.piezas.length > 1 ? `entre ${info.corto.piezas.join(' y ')}` : `después de ${info.corto.piezas[0]}`} (mínimo ${s.t.politicas.recto_min_entre_accesorios_mm} mm).`),
+        h('div', { class: 'ti-seg', role: 'group', 'aria-label': 'Qué se hace con el tramo corto' },
+          info.corto.dosLados ? h('button', { type: 'button', class: `ti-seg-btn${info.corto.decision === 'PEGAR' ? ' ti-seg-activo' : ''}`, id: 'ti-corto-pegar', 'aria-pressed': info.corto.decision === 'PEGAR' ? 'true' : 'false', onclick: () => { if (TB().decidirCorto(s, id, 'PEGAR')) cambio(); else pintarEstado(); } }, 'Pegar las piezas') : null,
+          h('button', { type: 'button', class: `ti-seg-btn${info.corto.decision === 'ACEPTAR' ? ' ti-seg-activo' : ''}`, id: 'ti-corto-aceptar', 'aria-pressed': info.corto.decision === 'ACEPTAR' ? 'true' : 'false', onclick: () => { if (TB().decidirCorto(s, id, 'ACEPTAR')) cambio(); else pintarEstado(); } }, 'Tramo corto con bridas'),
+          info.corto.decision ? h('button', { type: 'button', class: 'ti-seg-btn', id: 'ti-corto-quitar', onclick: () => { if (TB().decidirCorto(s, id, null)) cambio(); else pintarEstado(); } }, 'Sin decidir') : null),
+        h('p', { class: 'ti-nota' }, 'Pegar: las piezas se arman unidas con el recto que queda (soldadas, o engargoladas en galvanizado), sin bridas en esas caras.')) : null,
       h('dl', { class: 'ti-datos' },
         h('dt', null, 'Neta'), h('dd', null, `${metros(Math.round(info.neta_mm))}${info.descuentos.length ? ` = ${metros(Math.round(info.largo_mm))} − ${info.descuentos.map((d) => `${W.num(d.mm / 1000, 3)} ${d.pieza}`).join(' − ')}` : ''}`),
         h('dt', null, 'Caudal'), h('dd', null, info.caudal === null ? '—' : `${n0(info.caudal)} m³/h`),
@@ -1154,7 +1171,8 @@
       d.cambios.length ? h('div', { class: 'ti-acciones' },
         h('button', { type: 'button', class: 'btn btn-primario', id: 'ti-dim-todo', onclick: () => aplicar((t) => T.aplicarDimensiones(t, M()), 'Dimensionado por caudal.') }, 'Aplicar todo'),
         h('button', { type: 'button', class: 'btn btn-sec', onclick: () => aplicar((t) => T.aplicarDimensiones(t, M(), [...marcados]), 'Dimensionado por caudal (los marcados).') }, 'Aplicar los marcados')) : null,
-      h('p', { class: 'ti-nota' }, 'Abajo, en «Problemas», la revisión completa: clic en uno lo selecciona y lo centra.'));
+      h('p', { class: 'ti-nota' }, 'En esta fase las cotas del lienzo dicen Ø, caudal y velocidad (verde dentro del rango, ámbar fuera).'),
+      h('p', { class: 'ti-nota' }, 'Abajo, en «Problemas», la revisión completa: clic en uno lo selecciona y lo centra; «Corregir» aplica el arreglo (se puede deshacer).'));
   }
 
   function inspectorSalida() {
@@ -1263,6 +1281,14 @@
     if (caja) caja.textContent = `▸ ${s.caja}${s.traza ? '_' : ''}`;
     const msg = $('#ti-msg');
     if (msg) { msg.textContent = s.msg; msg.classList.toggle('ti-msg-error', !!s.error); }
+    const alt = $('#ti-alternativa');
+    if (alt) {
+      if (ui.alternativa && s.error) {
+        const a = ui.alternativa;
+        W.reemplazar(alt, h('button', { type: 'button', class: 'btn btn-primario ti-corregir', id: 'ti-alternativa-btn', onclick: () => { ui.alternativa = null; if (a.hacer()) cambio(); else pintarEstado(); } }, `Corregir: ${a.texto}`));
+        alt.hidden = false;
+      } else { ui.alternativa = null; alt.replaceChildren(); alt.hidden = true; }
+    }
     const dsh = $('#ti-deshacer');
     if (dsh) dsh.disabled = !s.hist.length;
     const rhc = $('#ti-rehacer');
@@ -1285,12 +1311,30 @@
       TB().desplazar(s, s.ancho / 2 - q.x, s.alto / 2 - q.y);
       pintar();
     };
+    // los arreglos se buscan en el modelo (se prueban antes de ofrecerlos); con poco tiempo por pintada, el resto con un botón
+    const inicio = Date.now();
+    const arreglos = (p) => {
+      if (!TZ().CORREGIBLES.includes(p.codigo)) return null;
+      if (!TB().correccionesListas(s, p) && Date.now() - inicio > 150) return 'BUSCAR';
+      return TB().correccionesDe(s, p);
+    };
+    const botones = (p) => {
+      const cs = arreglos(p);
+      if (cs === null) return null;
+      if (cs === 'BUSCAR') return h('div', { class: 'ti-prob-arreglos' }, h('button', { type: 'button', class: 'btn btn-sec ti-corregir', onclick: () => { TB().correccionesDe(s, p); pintarProblemas(); } }, 'Buscar arreglo'));
+      if (!cs.length) return h('div', { class: 'ti-prob-arreglos' }, h('span', { class: 'ti-nota' }, 'Sin arreglo automático: corríjalo a mano.'));
+      return h('div', { class: 'ti-prob-arreglos', role: 'group', 'aria-label': `Arreglos de ${p.codigo}` }, cs.map((c, i) => h('button', {
+        type: 'button', class: `btn ${i === 0 ? 'btn-primario' : 'btn-sec'} ti-corregir`, 'data-op': c.op,
+        onclick: () => { if (TB().corregir(s, c)) cambio(); else { pintarEstado(); pintarProblemas(); } },
+      }, i === 0 ? `Corregir: ${c.texto}` : c.texto)));
+    };
     W.reemplazar(el, h('details', { open: abierto },
       h('summary', null, `Problemas (${ps.length})`, info.length ? h('span', { class: 'ti-info-n' }, ` · ${info.length} nota${info.length > 1 ? 's' : ''}`) : null),
-      ps.length || info.length ? h('ul', { class: 'ti-prob-lista' }, [...ps, ...info].slice(0, 80).map((p) => h('li', { class: `ti-prob ti-prob-${p.severidad.toLowerCase()}` },
+      ps.length || info.length ? h('ul', { class: 'ti-prob-lista' }, [...ps, ...info].slice(0, 80).map((p) => h('li', { class: `ti-prob ti-prob-${p.severidad.toLowerCase()}`, 'data-codigo': p.codigo },
         h('button', { type: 'button', class: 'ti-prob-btn', onclick: () => ir(p) },
           h('span', { class: 'ti-prob-sev' }, { BLOQUEANTE: '■ BLOQUEANTE', ERROR: '● ERROR', AVISO: '▲ AVISO', INFO: 'i INFO' }[p.severidad]),
-          h('code', null, p.codigo), h('span', { class: 'ti-prob-msg' }, `${p.mensaje}${p.sugerencia ? ` ${p.sugerencia}` : ''}`))))) : h('p', { class: 'ti-nota' }, 'Sin problemas.')));
+          h('code', null, p.codigo), h('span', { class: 'ti-prob-msg' }, `${p.mensaje}${p.sugerencia ? ` ${p.sugerencia}` : ''}`)),
+        p.severidad === 'INFO' ? null : botones(p)))) : h('p', { class: 'ti-nota' }, 'Sin problemas.')));
   }
 
   /* ------------------------------------------------------------------ pintar todo */
@@ -1361,7 +1405,8 @@
           h('div', { class: 'ti-estado' },
             h('span', { class: 'ti-coords', id: 'ti-coords' }, '—'), h('span', { class: 'ti-sep', id: 'ti-ajuste' }), h('span', { class: 'ti-sep', id: 'ti-plano' }),
             h('span', { class: 'ti-sep ti-d', id: 'ti-d' }), h('span', { class: 'ti-sep ti-caja', id: 'ti-caja', title: 'Caja de valores: 3.25, 3250mm, <45, @135, ^45 y Entrar' }, '▸')),
-          h('p', { class: 'ti-msg', id: 'ti-msg', role: 'status', 'aria-live': 'polite' })),
+          h('p', { class: 'ti-msg', id: 'ti-msg', role: 'status', 'aria-live': 'polite' }),
+          h('div', { class: 'ti-alternativa', id: 'ti-alternativa', hidden: true })),
         h('aside', { class: 'ti-inspector', id: 'ti-inspector', 'aria-label': 'Inspector' })),
       h('section', { class: 'ti-problemas', id: 'ti-problemas', 'aria-label': 'Problemas' }));
     $('#ti-nuevo').addEventListener('click', () => {

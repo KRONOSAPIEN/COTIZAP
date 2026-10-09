@@ -63,6 +63,7 @@
   const PREFIJO = { CODO: 'CO', REDUCCION: 'RE', ADAPTADOR: 'AD', INJERTO: 'IN', REDUCCION_INJERTO: 'RI', PANTALON: 'PA', T_90: 'TE', COMPUERTA: 'CP' };
   const ORDEN_PIEZA = ['CODO', 'REDUCCION', 'ADAPTADOR', 'INJERTO', 'REDUCCION_INJERTO', 'T_90', 'PANTALON', 'COMPUERTA'];
   const SEVERIDADES = ['BLOQUEANTE', 'ERROR', 'AVISO', 'INFO'];
+  const PASO_EQUIPO_MM = 100; // los equipos se separan en la rejilla del piso
 
   class TrazadoError extends Error {
     constructor(codigo, mensaje, elementos, sugerencia) {
@@ -296,10 +297,12 @@
     const h = punto(d, ut);
     const ev = resta(d, por(ut, h));
     const e = norma(ev);
-    const base = { radio_min_mm: Rmin, desvio_mm: e, altura_mm: h, puno_mm: p, torcida: false, motivo: null };
+    // altura_min_mm: con puertos paralelos, la altura del PT a partir de la cual la manguera ya cabe con su radio mínimo
+    const base = { radio_min_mm: Rmin, desvio_mm: e, altura_mm: h, puno_mm: p, torcida: false, motivo: null, altura_min_mm: null };
     const fin = (r) => ({ ...base, ...r, larga: !!r.posible && r.largo_mm > x.manguera.largo_max_mm + 1e-9 });
     const cosg = punto(ut, ur);
     if (cosg > 1 - 1e-9) {
+      base.altura_min_mm = 2 * p + (e < TOL_MM ? 0 : Math.sqrt(Math.max(0, 4 * e * Rmin - e * e)));
       if (h <= 0) return fin({ forma: 'RECTA', radio_mm: null, angulo_curva_deg: null, curvas: 0, tramo_recto_mm: 0, normal_plano: null, largo_mm: Math.abs(h), posible: false, motivo: 'El punto de transición tiene que quedar adelante de la toma, en la dirección de su cuello.' });
       const hp = h - 2 * p;
       if (e < TOL_MM) {
@@ -923,6 +926,7 @@
         const u1 = unitario(resta(posDe.get(x.id), posDe.get(o1)));
         const u2 = unitario(resta(posDe.get(o2), posDe.get(x.id)));
         if (anguloEntre(u1, u2) > TOL_ANG) continue;
+        delete t1.corto; // fundido es más largo: ya no es corto
         if (t1.a === x.id) t1.a = o2; else t1.b = o2;
         m.tramos = m.tramos.filter((t) => t !== t2);
         m.nodos = m.nodos.filter((y) => y !== x);
@@ -967,6 +971,7 @@
       const b = g.problemas.find((x) => x.elementos.some((e) => fuera.has(e))) || g.problemas[0];
       falla(b.codigo, b.mensaje, b.elementos, b.sugerencia);
     }
+    limpiarDecisiones(m, g);
     const info = asignarPiezas(m, g);
     if (m.ultimo) {
       m.ultimo.tramos = [...new Set((m.ultimo.tramos || []).map((id) => fusion.get(id) || id))].filter((id) => m.tramos.some((t) => t.id === id));
@@ -975,6 +980,25 @@
     return m;
   }
   const marcar = (m, operacion, x) => { m.ultimo = { operacion, nodo: null, tramos: [], info: [], ...x }; };
+
+  /** Si un tramo es corto (0 ≤ neta < el recto mínimo) y tiene piezas: las piezas de sus extremos (sin repetir) y sus nodos. */
+  function cortoDe(m, g, t) {
+    if (!rigido(t)) return null;
+    const neta = g.neta.get(t.id);
+    const oc = g.ocupa.get(t.id) || [];
+    if (!(neta >= -1e-3 && neta < m.politicas.recto_min_entre_accesorios_mm - 1e-6 && oc.length)) return null;
+    return { neta, piezas: [...new Map(oc.map((o) => [o.pieza.id || o.pieza.tipo, o.pieza])).values()], nodos: new Set(oc.map((o) => o.nodo)) };
+  }
+  /** Las decisiones de tramo corto que ya no aplican (el tramo dejó de ser corto, o ya no tiene piezas en los dos extremos) se quitan. */
+  function limpiarDecisiones(m, g) {
+    m.tramos.forEach((t) => {
+      if (t.corto === undefined) return;
+      const c = cortoDe(m, g, t);
+      if (!c || !['PEGAR', 'ACEPTAR'].includes(t.corto) || (t.corto === 'PEGAR' && c.nodos.size < 2)) delete t.corto;
+    });
+  }
+  /** Cómo se unen las piezas pegadas: soldadas, o engargoladas si el material lleva costura engargolada. */
+  const unionPegada = (M, material) => (((M.proceso.costuras || {})[(M.materiales[material] || {}).costura] || {}).soldada === false ? 'ENGARGOLADA' : 'SOLDADA');
 
   /* ------------------------------------------------------------------ proyecto, políticas y material */
 
@@ -1840,9 +1864,55 @@
     const m = inicio(t0);
     const t = tramoDe(m, tramoId);
     dato(rigido(t), 'El Ø de la manguera es el de su toma.', [t.id]);
+    const D0 = t.diametro_in;
+    // la red de antes del cambio: con el Ø nuevo una derivación podría quedar inválida y no saldría en el cálculo
+    const g = opciones && opciones.cadena ? calcular(m, M) : null;
     t.diametro_in = diametroValido(m, D, `El tramo ${t.id}`);
     if (opciones && opciones.bloquear !== undefined) t.diametro_bloqueado = !!opciones.bloquear;
-    marcar(m, 'cambiarDiametro', { tramos: [t.id] });
+    const cambios = [t.id];
+    if (g && D !== D0) {
+      // §2.6: hacia el colector el Ø no baja y un ramal no pasa de su tronco; lo que lo impida cambia con él (sin pasar candados)
+      if (!g.conocido(t.id)) falla('FLUJO_DESCONOCIDO', `Conecte primero ${t.id} al colector para saber qué tramos siguen.`, [t.id]);
+      const fijar = (tr) => {
+        if (tr.diametro_in === D) return;
+        if (tr.diametro_bloqueado) falla('DIAMETRO_BLOQUEADO', `${tr.id} tiene candado en ${pulgadas(tr.diametro_in)}: quítelo para cambiar la cadena a ${pulgadas(D)}.`, [tr.id, t.id]);
+        tr.diametro_in = D;
+        cambios.push(tr.id);
+      };
+      if (D > D0) {
+        const der = g.derivaciones.find((x) => x.ramal === t.id);
+        if (der && g.tramos.get(der.tIn).diametro_in < D) fijar(g.tramos.get(der.tIn));
+        for (let u = g.abajo.get(t.id); u !== undefined && g.sale.has(u);) {
+          const tr = g.tramos.get(g.sale.get(u));
+          if (!rigido(tr) || tr.diametro_in >= D) break;
+          fijar(tr);
+          u = g.abajo.get(tr.id);
+        }
+      } else {
+        const bajar = (u) => g.entran(u).forEach((tr) => { if (rigido(tr) && tr.diametro_in > D) { fijar(tr); bajar(g.arriba.get(tr.id)); } });
+        bajar(g.arriba.get(t.id));
+      }
+    }
+    marcar(m, 'cambiarDiametro', { tramos: cambios });
+    return terminar(m, M);
+  }
+  /**
+   * Tramo corto entre piezas (§2.2, aviso TRAMO_CORTO): PEGAR arma las piezas de sus dos extremos con el recto que queda,
+   * soldadas o engargoladas según el material y sin bridas en esas caras; ACEPTAR fabrica el tramo corto con bridas; null
+   * quita la decisión. Si el tramo deja de ser corto, la decisión se quita sola.
+   */
+  function decidirCorto(t0, M, tramoId, decision) {
+    const m = inicio(t0);
+    const t = tramoDe(m, tramoId);
+    dato(decision === null || decision === 'PEGAR' || decision === 'ACEPTAR', 'La decisión del tramo corto es PEGAR, ACEPTAR o null.');
+    const c = cortoDe(m, calcular(m, M), t);
+    if (decision === null) delete t.corto;
+    else {
+      dato(!!c, `${t.id} no es un tramo corto entre piezas.`, [t.id]);
+      dato(decision !== 'PEGAR' || c.nodos.size === 2, `Para pegar, ${t.id} necesita una pieza en cada extremo.`, [t.id]);
+      t.corto = decision;
+    }
+    marcar(m, 'decidirCorto', { tramos: [t.id] });
     return terminar(m, M);
   }
   /**
@@ -2114,7 +2184,10 @@
       const oc = g.ocupa.get(x.id);
       if (neta >= -1e-3 && neta < pol.recto_min_entre_accesorios_mm - 1e-6 && oc.length) {
         const piezas = [...new Set(oc.map((o) => idPieza(o.pieza)))];
-        add('TRAMO_CORTO', 'AVISO', [x.id, ...piezas], `${piezas.length > 1 ? `Entre ${lista(piezas, 'y')}` : `Después de ${piezas[0]}`} quedan ${n(Math.max(0, neta))} mm de recto en ${x.id} (mínimo ${n(pol.recto_min_entre_accesorios_mm)}).`, 'Pegue las piezas (armado de piezas) o fabrique el tramo corto.');
+        const donde = `${piezas.length > 1 ? `Entre ${lista(piezas, 'y')}` : `Después de ${piezas[0]}`} quedan ${n(Math.max(0, neta))} mm de recto en ${x.id}`;
+        if (x.corto === 'PEGAR') add('PIEZAS_PEGADAS', 'INFO', [x.id, ...piezas], `${lista(piezas, 'y')} se arman pegadas (unión ${unionPegada(M, x.material) === 'SOLDADA' ? 'soldada' : 'engargolada'}, sin bridas en esas caras) con ${n(Math.max(0, neta))} mm de recto en ${x.id}.`);
+        else if (x.corto === 'ACEPTAR') add('TRAMO_CORTO_ACEPTADO', 'INFO', [x.id, ...piezas], `Tramo corto aceptado: ${donde.charAt(0).toLowerCase()}${donde.slice(1)}, con bridas.`);
+        else add('TRAMO_CORTO', 'AVISO', [x.id, ...piezas], `${donde} (mínimo ${n(pol.recto_min_entre_accesorios_mm)}).`, 'Pegue las piezas (armado de piezas) o fabrique el tramo corto.');
       }
       const u = g.seg.get(x.id).u;
       if (Math.abs(u.z) < 0.999) {
@@ -2167,6 +2240,248 @@
     return out.map((v, i) => ({ v, i })).sort((a, b) => SEVERIDADES.indexOf(a.v.severidad) - SEVERIDADES.indexOf(b.v.severidad) || a.i - b.i).map(({ v }) => v);
   }
 
+  /* ------------------------------------------------------------------ correcciones (§1.4 paso 3, §2.11 «Corrección») */
+
+  /** Las operaciones con las que se arregla un problema: las mismas del trazo, por nombre y sin (t0, M). */
+  const OPERACIONES = {
+    cambiarDiametro, cambiarLargo, moverSegmento, moverEquipo, conectar, acoplarBrida, acoplarManguera, decidirCorto, agregarPuerto, quitarEquipo,
+    aplicarDimensiones, editarPuerto,
+  };
+  const claveProblema = (p) => `${p.codigo}|${[...p.elementos].sort().join(',')}`;
+  const esMalo = (v) => v.severidad === 'ERROR' || v.severidad === 'BLOQUEANTE';
+  const CORREGIBLES = ['VELOCIDAD_BAJA', 'VELOCIDAD_ALTA', 'ACCESORIOS_NO_CABEN', 'TRAMO_CORTO', 'DERIVACION_CERCA_DE_CODO', 'DERIVACIONES_CERCANAS', 'ALTURA_LIBRE',
+    'CHOQUE_DUCTOS', 'CHOQUE_EQUIPO', 'EQUIPOS_ENCIMADOS', 'SUBRED_SIN_COLECTOR', 'TOMA_SIN_CONEXION', 'EXTREMO_ABIERTO', 'EQUIPO_SIN_PUERTOS'];
+
+  /**
+   * Los arreglos automáticos de un problema de `revisar` (la columna «Corrección» de §2.11), ya probados: cada uno se aplica
+   * a una copia del trazo y sólo se ofrece si el modelo lo acepta, si el problema desaparece y si no deja más errores de los
+   * que había. Devuelve hasta opciones.max (3) arreglos { codigo, texto, op, args }; `corregir` aplica uno.
+   *
+   * VELOCIDAD_*: el Ø que pide el caudal (en cadena, §2.6) o dimensionar todo. ACCESORIOS_NO_CABEN y las distancias de las
+   * derivaciones: alargar el tramo. TRAMO_CORTO: pegar las piezas, alargar o aceptarlo. ALTURA_LIBRE: subir el segmento.
+   * CHOQUE_*: mover un segmento lo justo. EQUIPOS_ENCIMADOS: separar un equipo. SUBRED_SIN_COLECTOR, TOMA_SIN_CONEXION y
+   * EXTREMO_ABIERTO: conectar con el imán (a la boca o al tronco, o del extremo a una toma libre) o acoplar la toma.
+   * EQUIPO_SIN_PUERTOS: agregar su toma o quitarlo.
+   */
+  function correcciones(t, M, problema, opciones) {
+    const o = esObjeto(opciones) ? opciones : {};
+    const max = Number.isInteger(o.max) && o.max > 0 ? Math.min(o.max, 6) : 3;
+    dato(esObjeto(problema) && typeof problema.codigo === 'string' && Array.isArray(problema.elementos), 'Falta el problema.');
+    if (!CORREGIBLES.includes(problema.codigo)) return [];
+    const g = calcular(t, M);
+    const pol = t.politicas;
+    const k = claveProblema(problema);
+    const antes = revisar(t, M, g);
+    if (!antes.some((v) => claveProblema(v) === k)) return [];
+    const malosAntes = antes.filter(esMalo).length - (esMalo(problema) ? 1 : 0);
+    const out = [];
+    const vistos = new Set();
+    const probar = (texto, op, args, permitir) => {
+      if (out.length >= max) return false;
+      const clave = JSON.stringify([op, args]);
+      if (vistos.has(clave)) return false;
+      vistos.add(clave);
+      let m;
+      try { m = OPERACIONES[op](t, M, ...clonar(args)); } catch (e) { if (e instanceof TrazadoError) return false; throw e; }
+      const vals = revisar(m, M);
+      if (vals.some((v) => claveProblema(v) === k)) return false;
+      if (vals.filter((v) => esMalo(v) && !(permitir && permitir(v, m))).length > malosAntes) return false;
+      out.push({ codigo: problema.codigo, texto: typeof texto === 'function' ? texto(m) : texto, op, args: clonar(args) });
+      return true;
+    };
+    const [e0] = problema.elementos;
+    const tr = g.tramos.get(e0) || null;
+    const Lde = (id) => g.seg.get(id).L;
+    // el largo a ejes con el que el tramo queda con `recto` mm de neto, al paso
+    const largoPara = (id, recto) => Math.ceil((Lde(id) - g.neta.get(id) + recto - 1e-6) / pol.paso_largo_mm) * pol.paso_largo_mm;
+    const alargar = (id, recto) => {
+      const Ln = largoPara(id, recto);
+      if (Ln > Lde(id) + 1e-6) probar(`Alargar ${id} a ${metros(Ln)}.`, 'cambiarLargo', [id, Ln]);
+    };
+    // las direcciones en que se puede mover un segmento: las de sus vecinos perpendiculares a él, en los dos sentidos
+    const direccionesDeMover = (id) => {
+      const x = g.tramos.get(id);
+      const u = g.seg.get(id).u;
+      const ds = [];
+      [x.a, x.b].forEach((nid) => g.ady.get(nid).forEach(({ tramo }) => {
+        if (tramo.id === id || !rigido(tramo)) return;
+        const d = g.fuera(tramo, nid);
+        if (Math.abs(punto(d, u)) > 1e-9) return;
+        [d, por(d, -1)].forEach((w) => { if (!ds.some((q) => norma(resta(q, w)) < 1e-9)) ds.push(w); });
+      }));
+      return ds;
+    };
+    const textoMover = (w) => { const d = direccionDeVector(w); return d ? (d.elevacion_deg === 90 ? 'hacia arriba' : d.elevacion_deg === -90 ? 'hacia abajo' : `hacia ${textoDireccion(d)}`) : ''; };
+    // conectar con el imán: de cada arranque a los objetivos más cercanos (bocas libres, tronco que llega a un colector o tomas libres)
+    const conectarCon = (arranques, objetivos) => {
+      const lista0 = [];
+      arranques.forEach((a) => objetivos.forEach((ob) => {
+        const P0 = g.pos.get(a);
+        const d = ob.nodo !== undefined ? norma(resta(g.pos.get(ob.nodo), P0)) : CAD.distanciaSegmentos(P0, P0, g.pos.get(g.tramos.get(ob.tramo).a), g.pos.get(g.tramos.get(ob.tramo).b));
+        lista0.push({ a, ob, d });
+      }));
+      lista0.sort((p, q) => p.d - q.d).slice(0, 6).forEach(({ a, ob }) => {
+        if (out.length >= Math.min(max, 2)) return;
+        let rs = [];
+        try { rs = rutas(t, M, a, ob.objetivo, { max: 2 }); } catch (e) { if (!(e instanceof TrazadoError)) throw e; }
+        rs.forEach((r) => probar(`Conectar ${ob.nombre(a)}: ${r.texto.charAt(0).toLowerCase()}${r.texto.slice(1)}`, 'conectar', [a, { segmentos: r.segmentos, objetivo: r.objetivo }]));
+      });
+    };
+    const compDe = (nid) => g.comps[g.compDe.get(nid)];
+    const haciaColector = (excluir) => {
+      const obs = [];
+      g.puertos.forEach((pu) => {
+        const p = pu.puerto;
+        if (p.rol === 'ENTRADA' && p.acople && p.acople.tipo === 'BRIDA' && !g.ady.get(p.nodo).length) obs.push({ nodo: p.nodo, objetivo: { nodo: p.nodo }, nombre: (a) => `${a} a la boca ${p.id}` });
+      });
+      t.tramos.forEach((x) => {
+        if (!rigido(x) || !g.conocido(x.id) || excluir.has(x.id)) return;
+        const c = compDe(x.a);
+        if (c && c.flujo === 'COLECTOR') obs.push({ tramo: x.id, objetivo: { tramo: x.id }, nombre: (a) => `${a} al tramo ${x.id}` });
+      });
+      return obs;
+    };
+    const tomasLibres = () => {
+      const obs = [];
+      g.puertos.forEach((pu) => {
+        const p = pu.puerto;
+        if (p.rol !== 'TOMA' || !p.acople) return;
+        const nd = p.acople.tipo === 'MANGUERA' ? p.acople.nodo_transicion : p.nodo;
+        if (!g.ady.get(nd).some((x) => rigido(x.tramo))) obs.push({ nodo: nd, objetivo: { nodo: nd }, nombre: (a) => `${a} con la toma ${p.id} (${pu.equipo.nombre})` });
+      });
+      return obs;
+    };
+    switch (problema.codigo) {
+      case 'VELOCIDAD_BAJA':
+      case 'VELOCIDAD_ALTA': {
+        if (!tr) break;
+        const Q = g.Q.get(e0);
+        const com = pol.diametros_comerciales_in;
+        const ok = com.filter((d) => velocidad(Q, d) >= pol.velocidad_min_m_s - 1e-9);
+        const mejor = ok.length ? ok[ok.length - 1] : com[0];
+        if (mejor !== tr.diametro_in && rigido(tr)) {
+          probar((m) => `Cambiar ${e0} a ${pulgadas(mejor)} (${n(velocidad(Q, mejor), 1)} m/s)${m.ultimo.tramos.length > 1 ? ` y con él ${lista(m.ultimo.tramos.slice(1), 'y')}` : ''}.`, 'cambiarDiametro', [e0, mejor, { cadena: true }]);
+        }
+        if (mejor !== tr.diametro_in && flexible(tr)) {
+          const pid = g.puertoDeNodo.get(tr.a);
+          probar(`Cambiar la toma ${pid} y su manguera a ${pulgadas(mejor)} (${n(velocidad(Q, mejor), 1)} m/s).`, 'editarPuerto', [pid, { diametro_in: mejor }]);
+        }
+        const d = dimensionar(t, M);
+        if (d.cambios.length) probar(`Dimensionar todo por caudal (${d.cambios.length} tramo${d.cambios.length > 1 ? 's' : ''}).`, 'aplicarDimensiones', [null]);
+        break;
+      }
+      case 'ACCESORIOS_NO_CABEN':
+        if (tr) { alargar(e0, pol.recto_min_entre_accesorios_mm); alargar(e0, 0); }
+        break;
+      case 'TRAMO_CORTO': {
+        const c = tr && cortoDe(t, g, tr);
+        if (!c) break;
+        if (c.nodos.size === 2) probar(`Pegar ${lista(c.piezas.map((p) => p.id || p.tipo), 'y')} (unión ${unionPegada(M, tr.material) === 'SOLDADA' ? 'soldada' : 'engargolada'}, sin bridas en esas caras).`, 'decidirCorto', [e0, 'PEGAR']);
+        alargar(e0, pol.recto_min_entre_accesorios_mm);
+        probar(`Aceptar el tramo corto de ${n(Math.max(0, c.neta))} mm, con bridas.`, 'decidirCorto', [e0, 'ACEPTAR']);
+        break;
+      }
+      case 'DERIVACION_CERCA_DE_CODO':
+        if (tr) alargar(e0, pol.recto_antes_de_derivacion_D * tr.diametro_in * IN);
+        break;
+      case 'DERIVACIONES_CERCANAS':
+        if (tr) alargar(e0, pol.distancia_min_entre_derivaciones_D * tr.diametro_in * IN);
+        break;
+      case 'ALTURA_LIBRE': {
+        if (!tr) break;
+        const fondo = Math.min(g.pos.get(tr.a).z, g.pos.get(tr.b).z) - (tr.diametro_in * IN) / 2;
+        const dz = Math.ceil((pol.altura_libre_min_mm - fondo - 1e-6) / pol.paso_largo_mm) * pol.paso_largo_mm;
+        if (dz > 0) probar(`Subir ${e0} ${n(dz)} mm (queda a ${n(fondo + dz)} mm del piso).`, 'moverSegmento', [e0, V3(0, 0, dz)]);
+        break;
+      }
+      case 'CHOQUE_DUCTOS':
+      case 'CHOQUE_EQUIPO': {
+        const tramos = problema.elementos.filter((id) => g.tramos.has(id) && rigido(g.tramos.get(id)));
+        const otro = problema.codigo === 'CHOQUE_EQUIPO' ? t.equipos.find((e) => problema.elementos.includes(e.id)) : null;
+        tramos.forEach((id) => {
+          const x = g.tramos.get(id);
+          let falta;
+          if (otro) falta = (x.diametro_in * IN) / 2 + pol.holgura_min_mm - distanciaCaja(g.pos.get(x.a), g.pos.get(x.b), otro);
+          else {
+            const y = g.tramos.get(tramos.find((q) => q !== id) || problema.elementos.find((q) => q !== id));
+            falta = y ? ((x.diametro_in + y.diametro_in) * IN) / 2 + pol.holgura_min_mm - CAD.distanciaSegmentos(g.pos.get(x.a), g.pos.get(x.b), g.pos.get(y.a), g.pos.get(y.b)) : pol.paso_largo_mm;
+          }
+          const k0 = Math.max(1, Math.ceil((falta - 1e-6) / pol.paso_largo_mm));
+          const dirs = direccionesDeMover(id);
+          const antesDe = out.length;
+          for (let kk = k0; kk <= k0 + 10 && out.length === antesDe; kk += 1) {
+            for (const w of dirs) {
+              const v = r3v(por(w, kk * pol.paso_largo_mm));
+              if (probar(`Mover ${id} ${n(kk * pol.paso_largo_mm)} mm ${textoMover(w)}.`, 'moverSegmento', [id, v])) break;
+            }
+          }
+        });
+        break;
+      }
+      case 'EQUIPOS_ENCIMADOS': {
+        const es = problema.elementos.map((id) => t.equipos.find((e) => e.id === id)).filter(Boolean);
+        if (es.length !== 2) break;
+        const opciones0 = [];
+        [[es[1], es[0]], [es[0], es[1]]].forEach(([e, fijo]) => [V3(1, 0, 0), V3(-1, 0, 0), V3(0, 1, 0), V3(0, -1, 0)].forEach((d) => {
+          for (let kk = 1; kk <= 200; kk += 1) {
+            const pos = suma(e.posicion_mm, por(d, kk * PASO_EQUIPO_MM));
+            if (!cajasSeEnciman({ ...e, posicion_mm: pos }, fijo, pol.holgura_min_mm)) { opciones0.push({ e, d, kk, pos }); break; }
+          }
+        }));
+        opciones0.sort((a, b) => a.kk - b.kk).forEach(({ e, d, kk, pos }) => probar(`Mover ${e.nombre} ${n(kk * PASO_EQUIPO_MM)} mm hacia ${textoDireccion(direccionDeVector(d))}.`, 'moverEquipo', [e.id, { posicion_mm: r3v(pos) }]));
+        break;
+      }
+      case 'SUBRED_SIN_COLECTOR': {
+        if (!tr) break;
+        const c = compDe(tr.a);
+        const extremos = c.nodos.filter((u) => !g.puertoDeNodo.has(u) && !g.pt.has(u) && g.ady.get(u).length === 1);
+        conectarCon(extremos, haciaColector(new Set(c.tramos)));
+        break;
+      }
+      case 'TOMA_SIN_CONEXION': {
+        const pu = g.puertos.get(e0);
+        if (!pu) break;
+        // el paso siguiente de la misma toma (ya acoplada, sin ducto; su manguera sola) no cuenta como error nuevo
+        const mismo = (v, m) => (v.codigo === 'TOMA_SIN_CONEXION' && v.elementos[0] === e0)
+          || (v.codigo === 'SUBRED_SIN_COLECTOR' && v.elementos.every((id) => m.tramos.some((x) => x.id === id && flexible(x) && x.a === pu.puerto.nodo)));
+        if (!pu.puerto.acople) {
+          probar(`Acoplar ${e0} con brida (el ducto sale alineado con su cuello).`, 'acoplarBrida', [e0], mismo);
+          probar(`Acoplar ${e0} con manguera.`, 'acoplarManguera', [e0, { altura_mm: 500 }], mismo);
+          break;
+        }
+        const nd = problema.elementos[1];
+        if (nd && g.pos.has(nd)) conectarCon([nd], haciaColector(new Set()));
+        break;
+      }
+      case 'EXTREMO_ABIERTO': {
+        if (!g.pos.has(e0)) break;
+        const c = compDe(e0);
+        if (c && c.flujo === 'COLECTOR') conectarCon([e0], tomasLibres());
+        else conectarCon([e0], haciaColector(new Set(c ? c.tramos : [])));
+        break;
+      }
+      case 'EQUIPO_SIN_PUERTOS': {
+        const e = t.equipos.find((x) => x.id === e0);
+        if (!e) break;
+        const rol = e.tipo === 'COLECTOR' || e.tipo === 'VENTILADOR' ? 'ENTRADA' : 'TOMA';
+        const D = pol.diametros_comerciales_in.includes(6) ? 6 : pol.diametros_comerciales_in[0];
+        const nuevos = (v) => v.codigo === 'TOMA_SIN_CONEXION' || v.codigo === 'TOMA_SIN_DATOS';
+        probar(`Agregar ${rol === 'ENTRADA' ? 'una boca' : 'una toma'} de ${pulgadas(D)} arriba de ${e.nombre}.`, 'agregarPuerto', [e.id, { rol, posicion_local_mm: V3(0, 0, e.caja_mm.alto), diametro_in: D }], nuevos);
+        probar(`Quitar ${e.nombre}.`, 'quitarEquipo', [e.id]);
+        break;
+      }
+      default:
+    }
+    return out;
+  }
+  /** Aplica un arreglo de `correcciones`. */
+  function corregir(t0, M, c) {
+    dato(esObjeto(c) && typeof c.op === 'string' && Object.prototype.hasOwnProperty.call(OPERACIONES, c.op) && Array.isArray(c.args), 'La corrección no es válida.');
+    const m = OPERACIONES[c.op](t0, M, ...clonar(c.args));
+    m.ultimo = { ...m.ultimo, operacion: 'corregir', correccion: c.op };
+    return m;
+  }
+
   /* ------------------------------------------------------------------ exportar e importar (§3) */
 
   /**
@@ -2214,7 +2529,8 @@
         const abajo = g.abajo.get(x.id) || x.b;
         const L = rigido(x) ? g.seg.get(x.id).L : (g.mang.get(x.id) || { largo_mm: 0 }).largo_mm;
         const r = g.mang.get(x.id);
-        const uniones = rigido(x) ? { aguas_arriba: union(g, arriba), aguas_abajo: union(g, abajo) } : { aguas_arriba: 'ABRAZADERA', aguas_abajo: 'ABRAZADERA' };
+        const pegada = rigido(x) && x.corto === 'PEGAR' ? unionPegada(M, x.material) : null;
+        const uniones = pegada ? { aguas_arriba: pegada, aguas_abajo: pegada } : rigido(x) ? { aguas_arriba: union(g, arriba), aguas_abajo: union(g, abajo) } : { aguas_arriba: 'ABRAZADERA', aguas_abajo: 'ABRAZADERA' };
         return {
           id: x.id, tipo: x.tipo, nodo_aguas_arriba: arriba, nodo_aguas_abajo: abajo, direccion: rigido(x) ? direccionDeVector(resta(g.pos.get(abajo), g.pos.get(arriba))) : null,
           longitud_ejes_mm: r3(L), descuentos: g.ocupa.get(x.id).map((o) => ({ accesorio: pz.get(o.pieza), mm: r3(o.mm) })), longitud_neta_mm: r3(g.neta.get(x.id)),
@@ -2280,7 +2596,11 @@
           const k = `${x.material}|${x.calibre}`;
           materiales.set(k, (materiales.get(k) || 0) + 1);
         }
-        m.tramos.push({ id: x.id, tipo: x.tipo, a: x.nodo_aguas_arriba, b: x.nodo_aguas_abajo, diametro_in: x.diametro_in, diametro_bloqueado: x.diametro_bloqueado === true, material: x.tipo === 'RIGIDO' ? x.material : 'MANGUERA', calibre: x.tipo === 'RIGIDO' ? x.calibre : null });
+        const un = esObjeto(x.uniones) ? x.uniones : {};
+        const pegado = x.tipo === 'RIGIDO' && ['SOLDADA', 'ENGARGOLADA'].includes(un.aguas_arriba) && un.aguas_arriba === un.aguas_abajo;
+        const aceptado = x.tipo === 'RIGIDO' && Array.isArray(s.validaciones) && s.validaciones.some((v) => esObjeto(v) && v.codigo === 'TRAMO_CORTO_ACEPTADO' && Array.isArray(v.elementos) && v.elementos[0] === x.id);
+        m.tramos.push({ id: x.id, tipo: x.tipo, a: x.nodo_aguas_arriba, b: x.nodo_aguas_abajo, diametro_in: x.diametro_in, diametro_bloqueado: x.diametro_bloqueado === true, material: x.tipo === 'RIGIDO' ? x.material : 'MANGUERA', calibre: x.tipo === 'RIGIDO' ? x.calibre : null,
+          ...(pegado ? { corto: 'PEGAR' } : aceptado ? { corto: 'ACEPTAR' } : {}) });
       });
       if (materiales.size) { const [k] = [...materiales.entries()].sort((a, b) => b[1] - a[1])[0]; const [mat, cal] = k.split('|'); m.material = { material: mat, calibre: Number(cal) }; }
       s.equipos.forEach((e) => {
@@ -2375,7 +2695,8 @@
         dato((tr.tipo === 'RIGIDO' || tr.tipo === 'FLEXIBLE') && nodos.has(tr.a) && nodos.has(tr.b) && tr.a !== tr.b, `El tramo ${tr.id} no une dos nodos del trazo.`);
         diametroValido(m, tr.diametro_in, `El tramo ${tr.id}`);
         if (tr.tipo === 'RIGIDO') dato(MATERIALES.includes(tr.material) && Number.isInteger(tr.calibre) && (M.calibres[M.materiales[tr.material].tabla_calibre] || {})[String(tr.calibre)] !== undefined, `El tramo ${tr.id} no trae material y calibre válidos.`);
-        m.tramos.push({ id: tr.id, tipo: tr.tipo, a: tr.a, b: tr.b, diametro_in: tr.diametro_in, diametro_bloqueado: tr.diametro_bloqueado === true, material: tr.tipo === 'RIGIDO' ? tr.material : 'MANGUERA', calibre: tr.tipo === 'RIGIDO' ? tr.calibre : null });
+        m.tramos.push({ id: tr.id, tipo: tr.tipo, a: tr.a, b: tr.b, diametro_in: tr.diametro_in, diametro_bloqueado: tr.diametro_bloqueado === true, material: tr.tipo === 'RIGIDO' ? tr.material : 'MANGUERA', calibre: tr.tipo === 'RIGIDO' ? tr.calibre : null,
+          ...(tr.tipo === 'RIGIDO' && (tr.corto === 'PEGAR' || tr.corto === 'ACEPTAR') ? { corto: tr.corto } : {}) });
       });
       const tramos = new Set(m.tramos.map((y) => y.id));
       const puertosDe = new Map();
@@ -2427,6 +2748,7 @@
       normalizar(m);
       const g = calcular(m, M);
       if (g.problemas.length) return { modelo: null, errores: [...new Set(g.problemas.map((p) => p.mensaje))].slice(0, 12) };
+      limpiarDecisiones(m, g);
       asignarPiezas(m, g);
       m.ultimo = null;
       return { modelo: m, errores: [] };
@@ -2520,6 +2842,7 @@
     ponerEquipo, editarEquipo, moverEquipo, quitarEquipo, agregarPuerto, editarPuerto, quitarPuerto,
     acoplarBrida, acoplarManguera, moverTransicion, desacoplar,
     candidatas, textoCandidatas, elegirDireccion, ajustarLargo, trazar, conectar, rutas,
-    cambiarLargo, moverSegmento, cambiarAngulo, cambiarDiametro, reducir, anclar, borrarTramo, dimensionar, aplicarDimensiones,
+    cambiarLargo, moverSegmento, cambiarAngulo, cambiarDiametro, reducir, decidirCorto, anclar, borrarTramo, dimensionar, aplicarDimensiones,
+    CORREGIBLES, correcciones, corregir,
   };
 }));
