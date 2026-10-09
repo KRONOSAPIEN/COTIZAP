@@ -14,6 +14,7 @@ const assert = require('node:assert/strict');
 const { crearMaestros } = require('../src/datos/maestros');
 const C = require('../src/motor/cotizador');
 const CAD = require('../src/motor/unifilar_cad');
+const { validarEsquema } = require('./esquema_json');
 
 const raiz = path.join(__dirname, '..');
 const leer = (r) => fs.readFileSync(path.join(raiz, r), 'utf8');
@@ -35,37 +36,7 @@ const unitario = (a) => por(a, 1 / norma(a));
 const angulo = (a, b) => grad(Math.acos(Math.max(-1, Math.min(1, dot(a, b) / (norma(a) * norma(b))))));
 const cercaV = (a, b, tol, msg) => ['x', 'y', 'z'].forEach((k) => cerca(a[k], b[k], tol, `${msg} ${k}`));
 
-/** Validador mínimo de JSON Schema: $ref, anyOf, const, enum, type, required, properties, additionalProperties, items, minItems, minimum, maximum, multipleOf, pattern. */
-function validar(v, s, ruta, errores) {
-  if (s.$ref) return validar(v, s.$ref.split('/').slice(1).reduce((o, k) => o[k], ESQUEMA), ruta, errores);
-  if (s.anyOf) {
-    if (!s.anyOf.some((alt) => !validar(v, alt, ruta, []).length)) errores.push(`${ruta}: no cumple ninguna alternativa`);
-    return errores;
-  }
-  if (s.const !== undefined && v !== s.const) errores.push(`${ruta}: ${JSON.stringify(v)} ≠ ${JSON.stringify(s.const)}`);
-  const tipos = s.type === undefined ? null : [].concat(s.type);
-  const tipoDe = (x) => (x === null ? 'null' : Array.isArray(x) ? 'array' : Number.isInteger(x) ? 'integer' : typeof x);
-  if (tipos && !tipos.some((t) => t === tipoDe(v) || (t === 'number' && tipoDe(v) === 'integer'))) { errores.push(`${ruta}: tipo ${tipoDe(v)}, se esperaba ${tipos}`); return errores; }
-  if (s.enum && !s.enum.includes(v)) errores.push(`${ruta}: ${JSON.stringify(v)} no está en ${JSON.stringify(s.enum)}`);
-  if (typeof v === 'number') {
-    if (s.minimum !== undefined && v < s.minimum) errores.push(`${ruta}: ${v} < ${s.minimum}`);
-    if (s.maximum !== undefined && v > s.maximum) errores.push(`${ruta}: ${v} > ${s.maximum}`);
-    if (s.multipleOf !== undefined && Math.abs(v / s.multipleOf - Math.round(v / s.multipleOf)) > 1e-9) errores.push(`${ruta}: ${v} no es múltiplo de ${s.multipleOf}`);
-  }
-  if (typeof v === 'string' && s.pattern && !new RegExp(s.pattern).test(v)) errores.push(`${ruta}: «${v}» no cumple ${s.pattern}`);
-  if (Array.isArray(v)) {
-    if (s.minItems !== undefined && v.length < s.minItems) errores.push(`${ruta}: menos de ${s.minItems} elementos`);
-    if (s.items) v.forEach((x, i) => validar(x, s.items, `${ruta}[${i}]`, errores));
-  }
-  if (v && typeof v === 'object' && !Array.isArray(v)) {
-    (s.required || []).forEach((k) => { if (!(k in v)) errores.push(`${ruta}: falta ${k}`); });
-    Object.keys(v).forEach((k) => {
-      if (s.properties && s.properties[k]) validar(v[k], s.properties[k], `${ruta}.${k}`, errores);
-      else if (s.additionalProperties === false) errores.push(`${ruta}: sobra ${k}`);
-    });
-  }
-  return errores;
-}
+const validar = (v, s, ruta, errores) => errores.concat(validarEsquema(v, s));
 
 const POL = EJ.politicas;
 const T = new Map(EJ.tramos.map((t) => [t.id, t]));

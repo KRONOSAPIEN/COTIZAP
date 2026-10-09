@@ -10,7 +10,7 @@
     "version": { "const": "1.0" },
     "proyecto": { "$ref": "#/$defs/proyecto" },
     "politicas": { "$ref": "#/$defs/politicas" },
-    "equipos": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/equipo" } },
+    "equipos": { "type": "array", "items": { "$ref": "#/$defs/equipo" } },
     "nodos": { "type": "array", "items": { "$ref": "#/$defs/nodo" } },
     "tramos": { "type": "array", "items": { "$ref": "#/$defs/tramo" } },
     "accesorios": { "type": "array", "items": { "$ref": "#/$defs/accesorio" } },
@@ -173,7 +173,7 @@
           "properties": { "largo": { "type": "number", "minimum": 0 }, "ancho": { "type": "number", "minimum": 0 }, "alto": { "type": "number", "minimum": 0 } }
         },
         "perdida_Pa": { "$ref": "#/$defs/numero_o_null", "description": "Caída de presión propia (el filtro del colector); null en una máquina." },
-        "puertos": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/puerto" } }
+        "puertos": { "type": "array", "items": { "$ref": "#/$defs/puerto" }, "description": "Un equipo sin puertos se avisa (EQUIPO_SIN_PUERTOS)." }
       }
     },
     "puerto": {
@@ -192,7 +192,7 @@
         "caudal_m3_h": { "$ref": "#/$defs/numero_o_null", "description": "TOMA: el caudal de diseño. ENTRADA o SALIDA: null (se calcula)." },
         "coef_entrada_K": { "$ref": "#/$defs/numero_o_null", "description": "Pérdida de entrada de la toma en presiones dinámicas; null si no aplica." },
         "nodo": { "$ref": "#/$defs/id_nodo" },
-        "conexion": { "$ref": "#/$defs/conexion" }
+        "conexion": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/conexion" }], "description": "null: la toma todavía no tiene acople (TOMA_SIN_CONEXION, sólo en un borrador)." }
       }
     },
     "conexion": {
@@ -297,7 +297,8 @@
         "nodo": { "$ref": "#/$defs/id_nodo" },
         "conexiones": {
           "type": "array",
-          "minItems": 2,
+          "minItems": 1,
+          "description": "Los tramos que llegan a la pieza. Un ADAPTADOR lleva sólo su tramo: el otro lado es el puerto.",
           "items": {
             "type": "object",
             "additionalProperties": false,

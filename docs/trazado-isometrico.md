@@ -1,7 +1,7 @@
 # Trazado unifilar isométrico de redes de extracción
 
 > **Especificación funcional y técnica · COTIZAP · 9-oct-2026.** Para desarrolladores full-stack, diseñadores de producto CAD y proyectistas de ingeniería industrial.
-> La acompañan el esquema de datos [`docs/trazado-isometrico.schema.json`](trazado-isometrico.schema.json), el ejemplo resuelto [`docs/ejemplos/trazado-isometrico-ejemplo.json`](ejemplos/trazado-isometrico-ejemplo.json) y la prueba de contrato [`tests/trazado_isometrico_contrato.test.js`](../tests/trazado_isometrico_contrato.test.js). La prueba verifica que el ejemplo cumple el esquema y cada regla de §2 (posiciones, ángulos, manguera, accesorios contra el motor de COTIZAP, caudales, velocidades, choques y fricción), y que este documento trae el esquema y el ejemplo tal como están en sus archivos.
+> La acompañan el esquema de datos [`docs/trazado-isometrico.schema.json`](trazado-isometrico.schema.json), el ejemplo resuelto [`docs/ejemplos/trazado-isometrico-ejemplo.json`](ejemplos/trazado-isometrico-ejemplo.json), la prueba de contrato [`tests/trazado_isometrico_contrato.test.js`](../tests/trazado_isometrico_contrato.test.js) y el modelo de la etapa 1, [`src/motor/trazado_iso.js`](../src/motor/trazado_iso.js), con sus pruebas (§5.1). La prueba verifica que el ejemplo cumple el esquema y cada regla de §2 (posiciones, ángulos, manguera, accesorios contra el motor de COTIZAP, caudales, velocidades, choques y fricción), y que este documento trae el esquema y el ejemplo tal como están en sus archivos.
 
 ## Índice
 
@@ -76,7 +76,7 @@ Las reglas leen sus límites de las políticas. En COTIZAP salen de las tablas m
 | `angulos_codo_deg` | 30, 45, 60, 90 | Taller (`proceso.angulos_codo_deg`) | Codos que se fabrican |
 | `radio_codo_D` | 1.5 | Taller (`k_R_defecto`) | R = 1.5·D |
 | `angulos_injerto_deg` | 30, 45 | Taller (`proceso.angulos_injerto_deg`) | Ángulo β del ramal contra el tronco |
-| `permite_t_90` | no | Diseño | En polvo una T a 90° pierde mucho y asienta material |
+| `permite_t_90` | no en polvo y abrasivo; sí en ventilación y humos | Diseño (por confirmar, §5) | En polvo una T a 90° pierde mucho y asienta material |
 | `permite_pantalon` | no | Taller (el pantalón se retiró) | Y simétrica |
 | `angulos_pantalon_deg` | 30 | Referencia | Ángulo de cada pierna contra el eje |
 | `entradas_permitidas` | SUPERIOR, LATERAL | Diseño | Nunca por abajo en tronco horizontal |
@@ -87,7 +87,7 @@ Las reglas leen sus límites de las políticas. En COTIZAP salen de las tablas m
 | `distancia_min_entre_derivaciones_D` | 1 | Referencia | Entre dos injertos del mismo tronco |
 | `holgura_min_mm` | 50 | Referencia (brida de 1½″ y margen) | Entre ductos y contra equipos |
 | `altura_libre_min_mm` | 2 100 | Referencia | Bajo un tramo horizontal |
-| `velocidad_min_m_s` · `velocidad_max_m_s` | 18 · 23 (aserrín) | Referencia, por material | Transporte sin asentar y sin desgaste |
+| `velocidad_min_m_s` · `velocidad_max_m_s` | 18 · 23 en polvo (aserrín); 20 · 25 abrasivo; 5 · 12 ventilación; 10 · 15 humos | Referencia, por servicio (por confirmar) | Transporte sin asentar y sin desgaste |
 | `semiangulo_reduccion_deg` | 15 | Taller (`semiangulo_max_deg`) | Pendiente máxima del cono |
 | `reduccion_horizontal` | excéntrica de cara plana abajo (polvo y abrasivo); concéntrica (ventilación y humos) | Diseño | Forma de la reducción en un tramo horizontal |
 | `relacion_reduccion_min` | 0.5 | Taller (aviso de COTIZAP) | D₂/D₁ menor que esto se avisa |
@@ -170,7 +170,7 @@ Al seleccionar una toma, el inspector muestra **Acople** con dos opciones: [Mang
 4. Se registran los barrenos de la brida del equipo (número, círculo y Ø) si se conocen; si no, se preguntan al cotizar.
 5. La toma con brida es un **punto fijo** (§1.3, paso 10).
 
-**Sin acople:** la toma queda pendiente (AVISO) y no impide trazar.
+**Sin acople:** la toma queda pendiente (ERROR TOMA_SIN_CONEXION): no impide trazar, pero sí exportar.
 
 ### 1.3 Fase 3 · Trazado unifilar isométrico (juego de construcción)
 
@@ -214,9 +214,9 @@ Al seleccionar una toma, el inspector muestra **Acople** con dos opciones: [Mang
     | Edición | Qué hace | Cuándo no se puede |
     | --- | --- | --- |
     | **Cambiar el largo** de un tramo | Traslada lo que queda del lado libre | Si los dos lados llegan a puntos fijos. Entonces el inspector propone **compensar**: reparte el cambio entre tramos paralelos de la misma cadena (§2.2) o lo rechaza con el porqué (FIJO_SE_MUEVE) |
-    | **Mover segmento** (M y arrastrar) | Desplaza un tramo en paralelo; sus dos vecinos se alargan o acortan | Si los vecinos no son paralelos al movimiento (por ejemplo, el tramo de en medio de una U se sube o se baja) |
+    | **Mover segmento** (M y arrastrar) | Desplaza un tramo en paralelo; sus dos vecinos se alargan o acortan | Si un vecino no es paralelo al movimiento o quedaría más corto que el mínimo (MOVER_NO_POSIBLE). Subir el tramo de en medio de una U parada alarga sus dos vecinos verticales; en una U acostada sus vecinos son horizontales y no se puede |
     | **Cambiar el ángulo** de un codo | Gira el lado libre | Con las mismas condiciones de los puntos fijos |
-    | **Mover un equipo** | Mueve sus tomas: una manguera se vuelve a resolver; una brida se compensa en su ramal | Si no hay con qué compensar: queda en rojo |
+    | **Mover un equipo** | Mueve sus tomas: una manguera se vuelve a resolver; una brida se compensa en su ramal | Si no hay con qué compensar se rechaza (FIJO_SE_MUEVE); si la manguera ya no alcanza, MANGUERA_IMPOSIBLE |
 
 11. **Borrar.** Supr quita el tramo seleccionado y los accesorios que quedan sin uso. Lo que queda aguas arriba es una subred sin colector (ERROR hasta reconectarla). Mayús+Supr quita el ramal completo hasta sus tomas (las máquinas se quedan).
 12. **Deshacer.** Ctrl+Z y Ctrl+Y; cada operación, con lo que insertó solo, es un paso (hasta 100).
@@ -367,7 +367,7 @@ Un punto capturado fija el largo exacto, sin redondear, sólo si queda sobre el 
 
 - **Largo,** con α = `semiangulo_reduccion_deg`:
   - Concéntrica: L = (D₁ − D₂) / (2·tan α).
-  - Excéntrica de cara plana: L = (D₁ − D₂) / tan α. Es el doble, para que la cara inclinada no pase de α. Hoy COTIZAP fabrica la excéntrica (CARA_PLANA) con el largo de la concéntrica, y su cara inclinada queda cerca de 28°: está por confirmar con el taller (§5).
+  - Excéntrica de cara plana: L = (D₁ − D₂) / tan α. Es el doble, para que la cara inclinada no pase de α. Hoy COTIZAP fabrica la excéntrica (CARA_PLANA) con el largo de la concéntrica, y su cara inclinada queda cerca de 28°: está por confirmar con el taller (§5). En el JSON, el `semiangulo_deg` de una excéntrica es el de su cara inclinada.
 - **Reducción brusca:** D₂/D₁ < `relacion_reduccion_min` es AVISO.
 
 ### 2.5 Derivaciones
@@ -478,13 +478,13 @@ En el ejemplo, desde lo alto de la subida del cepillo:
 
   | Caso | Forma | Cálculo | Es posible si |
   | --- | --- | --- | --- |
-  | e = 0 | RECTA | L = h | — |
+  | e = 0 | RECTA | L = h | h ≥ 2·puño |
   | e > 0 | S de dos arcos iguales y contrarios | **R = (e² + h′²) / (4·e)**, **α = 2·atan(e / h′)**, **L = 2·R·α + 2·puño** | h′ > 0 y R ≥ `radio_min_D`·D. Con L > `largo_max_mm` se puede, con AVISO MANGUERA_LARGA |
 
   Comprobación: dos arcos de radio R y ángulo α avanzan 2R·sen α y se desvían 2R·(1 − cos α). Hay otras soluciones, con radios menores y un tramo recto entre los arcos, pero la S más suave es como se acomoda la manguera y es la que se usa para la pérdida.
 
   En el ejemplo: e = 250 mm, h = 900 mm, puño de 100 mm, h′ = 700 mm. Salen R = 552.5 mm, α = 39.31° y L = 958.1 mm, contra un mínimo de 190.5 mm para 5″.
-- **Puertos perpendiculares,** por ejemplo una salida lateral que luego sube: los dos ejes deben cruzarse en un punto K. Con a = ‖K − P_t‖ y b = ‖P_r − K‖, ambos ≥ R mín + puño, es un arco de 90° (forma CODO) con R = min(a, b) − puño y L = (a − R) + (b − R) + π·R/2.
+- **Ejes que se cruzan,** por ejemplo una salida lateral que luego sube: los dos ejes se cruzan en un punto K, a un ángulo γ entre û_t y û_r. Con a = ‖K − P_t‖ y b = ‖P_r − K‖ es un arco (forma CODO) tangente a los dos: **R = (min(a, b) − puño) / tan(γ/2)**, T = R·tan(γ/2) y **L = (a − T) + (b − T) + R·γ**, posible si R ≥ R mín. A 90°: R = min(a, b) − puño y L = (a − R) + (b − R) + π·R/2.
 - **Caso general** (otros ángulos o puertos que no están en un plano): forma LIBRE. Es una curva de Bézier cúbica tangente a û_t y a û_r, con manijas de ⅓ de la distancia, muestreada en 64 puntos. El radio de curvatura debe ser ≥ R mín en todos y el largo es la suma de las cuerdas. Si no está en un plano: AVISO MANGUERA_TORCIDA.
 - El rígido empieza **liso** (LISA) en el PT y la manguera es un tramo FLEXIBLE con abrazaderas, su rugosidad y las curvas que pierden según R/D.
 - **Mover la máquina o el PT** vuelve a resolver la manguera. El PT no es punto fijo; el ducto rígido que sale de él sí sigue las reglas.
@@ -506,7 +506,7 @@ En el ejemplo, desde lo alto de la subida del cepillo:
 | --- | --- | --- |
 | Ducto contra ducto | Para dos tramos rígidos que no comparten nodo, la distancia mínima entre sus ejes ≥ (D₁ + D₂)/2 + `holgura_min_mm`. Los codos se toman como sus dos tangentes (del lado seguro) | ERROR CHOQUE_DUCTOS |
 | Ducto contra equipo | Distancia del eje a la caja girada del equipo ≥ D/2 + holgura, salvo el equipo al que llega el tramo | ERROR CHOQUE_EQUIPO |
-| Manguera contra equipo | — | AVISO |
+| Manguera contra equipo | Los puntos de la manguera contra las cajas de los otros equipos, con D/2 + holgura | AVISO CHOQUE_MANGUERA |
 | Piso y altura libre | §2.7 | — |
 
 - **Cálculo:**
@@ -533,6 +533,12 @@ En el ejemplo, desde lo alto de la subida del cepillo:
 | BAJO_PISO | BLOQUEANTE | z < D/2 | «El ducto quedaría bajo el piso.» | — |
 | LARGO_FUERA_DE_RANGO | BLOQUEANTE | L < mínimo o > 100 m | «El largo de un tramo va de 0.1 m a 100 m.» | — |
 | FIJO_SE_MUEVE | BLOQUEANTE | Una edición movería un punto fijo sin con qué compensar | «La sierra (brida) quedaría a 250 mm de su ducto: ningún tramo paralelo puede compensarlo.» | Mover segmento |
+| DIRECCION_FUERA_DE_REJILLA | BLOQUEANTE | Un tramo que no va en una dirección de la rejilla del proyecto (un trazo de fuera, o una rejilla más gruesa) | «El tramo TR-006 no va en una dirección de la rejilla.» | — |
+| DOS_COLECTORES | BLOQUEANTE | Una red que llegaría a dos bocas de colector | «Esta red llegaría a dos bocas de colector: cada red llega a una sola boca.» | — |
+| PT_DESALINEADO | BLOQUEANTE | El rígido no sale del PT en la dirección de la manguera | «El ducto sale del punto de transición N-006 en la dirección de la manguera (+Z).» | — |
+| PIEZA_NO_FABRICABLE | BLOQUEANTE | El motor de COTIZAP no puede fabricar la pieza de un nodo | «El motor no puede fabricar el codo de N-005: …» | — |
+| FLUJO_DESCONOCIDO | BLOQUEANTE (operación) | Una derivación sobre un tramo sin sentido conocido (§2.5.7) | «Conecte primero el tramo TR-001 al colector para saber hacia dónde va el aire.» | — |
+| MOVER_NO_POSIBLE | BLOQUEANTE (operación) | Mover segmento con un vecino que no es paralelo o que quedaría corto | «El tramo TR-002 no es paralelo al movimiento: no puede alargarse ni acortarse para seguir a TR-003.» | Cambiar el largo |
 | ACCESORIOS_NO_CABEN | ERROR | Neta < 0 | «Los accesorios del tramo TR-006 ocupan más que su largo.» | Alargar o pegar |
 | CHOQUE_DUCTOS · CHOQUE_EQUIPO | ERROR | §2.10 | «TR-002 y TR-007 se cruzan: sus ejes pasan a 120 mm y necesitan 330 mm.» | Mover segmento o cambiar el nivel |
 | EQUIPOS_ENCIMADOS | ERROR | Cajas que se cruzan | — | — |
@@ -543,11 +549,13 @@ En el ejemplo, desde lo alto de la subida del cepillo:
 | DERIVACION_CERCA_DE_CODO · DERIVACIONES_CERCANAS | AVISO | §2.5.5 | — | — |
 | ALTURA_LIBRE | AVISO | §2.7 | — | — |
 | REDUCCION_BRUSCA | AVISO | D₂/D₁ < 0.5 | — | — |
-| T_90_ALTA_PERDIDA | AVISO | Una T permitida (ventilación) | — | — |
+| T_90_ALTA_PERDIDA | AVISO | Una T permitida (ventilación o humos); COTIZAP todavía no la cotiza | — | — |
 | MANGUERA_LARGA · MANGUERA_TORCIDA | AVISO | §2.8.2 | — | — |
 | EXTREMO_ABIERTO | AVISO | Un extremo libre sin equipo | — | Equipo o tapa |
+| CHOQUE_MANGUERA | AVISO | §2.10 | «La manguera TR-004 pasa a 40 mm de Sierra de banco.» | — |
+| EQUIPO_SIN_PUERTOS | AVISO | Un equipo sin tomas ni bocas | — | Agregar sus tomas o quitarlo |
 | TRONCO_MENOR_QUE_RAMAL | AVISO | §2.6 | — | — |
-| REDUCCION_INSERTADA · ADAPTADOR_INSERTADO · CODO_INSERTADO · DIAMETRO_AUTOMATICO · MANGUERA_RESUELTA | INFO | Lo que la herramienta puso sola | «Manguera en S de dos curvas de 39.31°: radio 552.5 mm, 958 mm.» | — |
+| REDUCCION_INSERTADA · ADAPTADOR_INSERTADO · CODO_INSERTADO · DERIVACION_INSERTADA · DIAMETRO_AUTOMATICO · MANGUERA_RESUELTA | INFO | Lo que la herramienta puso sola | «Manguera en S de dos curvas de 39.31°: radio 552.5 mm, 958 mm.» | — |
 
 Donde COTIZAP ya tiene la regla se conserva su mensaje:
 
@@ -594,7 +602,7 @@ flowchart TB
 
 ### 3.2 Decisiones
 
-- **Objetos cerrados y todo requerido.** Lo opcional va como null y no hay recursión. Así sirve para salidas estructuradas de un modelo (como el esquema de la lectura de unifilares) y se valida estrictamente.
+- **Objetos cerrados y todo requerido.** Lo opcional va como null y no hay recursión. Así sirve para salidas estructuradas de un modelo (como el esquema de la lectura de unifilares) y se valida estrictamente. Un borrador (§5.1) también lo cumple: una toma sin acople lleva `conexion: null`, un adaptador lleva una sola conexión (el otro lado es el puerto) y un equipo puede no tener puertos todavía.
 - **Posición absoluta y dirección paramétrica a la vez.** Cada nodo trae su posición y cada tramo su dirección de la rejilla y su largo a ejes. Es redundante a propósito: el cálculo y la exportación leen posiciones, la edición lee direcciones y largos, y el invariante de §3.3 las ata.
 - **Tramos orientados en el sentido del aire.** El caudal se acumula siguiendo `nodo_aguas_abajo`.
 - **Accesorios en los nodos con sus conexiones por rol** (ENTRADA, SALIDA, RAMAL). Su `geometria` trae lo que pide su modelo de pérdida y lo que pide fabricarlo; `familia_cotizap` lo liga a la partida.
@@ -685,7 +693,7 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
     "version": { "const": "1.0" },
     "proyecto": { "$ref": "#/$defs/proyecto" },
     "politicas": { "$ref": "#/$defs/politicas" },
-    "equipos": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/equipo" } },
+    "equipos": { "type": "array", "items": { "$ref": "#/$defs/equipo" } },
     "nodos": { "type": "array", "items": { "$ref": "#/$defs/nodo" } },
     "tramos": { "type": "array", "items": { "$ref": "#/$defs/tramo" } },
     "accesorios": { "type": "array", "items": { "$ref": "#/$defs/accesorio" } },
@@ -848,7 +856,7 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
           "properties": { "largo": { "type": "number", "minimum": 0 }, "ancho": { "type": "number", "minimum": 0 }, "alto": { "type": "number", "minimum": 0 } }
         },
         "perdida_Pa": { "$ref": "#/$defs/numero_o_null", "description": "Caída de presión propia (el filtro del colector); null en una máquina." },
-        "puertos": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/puerto" } }
+        "puertos": { "type": "array", "items": { "$ref": "#/$defs/puerto" }, "description": "Un equipo sin puertos se avisa (EQUIPO_SIN_PUERTOS)." }
       }
     },
     "puerto": {
@@ -867,7 +875,7 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
         "caudal_m3_h": { "$ref": "#/$defs/numero_o_null", "description": "TOMA: el caudal de diseño. ENTRADA o SALIDA: null (se calcula)." },
         "coef_entrada_K": { "$ref": "#/$defs/numero_o_null", "description": "Pérdida de entrada de la toma en presiones dinámicas; null si no aplica." },
         "nodo": { "$ref": "#/$defs/id_nodo" },
-        "conexion": { "$ref": "#/$defs/conexion" }
+        "conexion": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/conexion" }], "description": "null: la toma todavía no tiene acople (TOMA_SIN_CONEXION, sólo en un borrador)." }
       }
     },
     "conexion": {
@@ -972,7 +980,8 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
         "nodo": { "$ref": "#/$defs/id_nodo" },
         "conexiones": {
           "type": "array",
-          "minItems": 2,
+          "minItems": 1,
+          "description": "Los tramos que llegan a la pieza. Un ADAPTADOR lleva sólo su tramo: el otro lado es el puerto.",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -2060,17 +2069,60 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
 
 | Etapa | Qué | Dónde | Se apoya en |
 | --- | --- | --- | --- |
-| 1 · Modelo | El esquema de §3. Equipos y puertos con posición; puntos fijos y compensación; direcciones inclinadas; orientación del flujo desde cualquier arranque; el imán (§2.5.4) y la manguera (§2.8.2) como funciones puras con pruebas | `src/motor/trazado_iso.js` (nuevo) | `unifilar_cad.js`: árbol, giros, fusión, choques (`distanciaSegmentos`), `aLectura` |
+| 1 · Modelo **(hecha, §5.1)** | El esquema de §3. Equipos y puertos con posición; puntos fijos y compensación; direcciones inclinadas; orientación del flujo desde cualquier arranque; el imán (§2.5.4) y la manguera (§2.8.2) como funciones puras con pruebas | `src/motor/trazado_iso.js` (nuevo) | `unifilar_cad.js`: árbol, giros, fusión, choques (`distanciaSegmentos`), `aLectura` |
 | 2 · Tablero | Fases, colocación de equipos y tomas, plano de trabajo y sus teclas, caja de valores, imán y tiradores de la manguera, cubo de vista | `src/web/unifilar_cad_ui.js` (ampliado) | El tablero SVG actual: cámara, gestos, etiquetas sin encimar, deshacer |
 | 3 · Validar y dimensionar | Caudales, velocidades, dimensionamiento con candados, catálogo de §2.11, panel de problemas con «Corregir» | Motor y tablero | `revisar` y las reglas del unifilar |
 | 4 · Cálculo | Pérdidas locales con su tabla de coeficientes, presión por toma, balanceo y selección del ventilador; llena `resultados` | `src/motor/perdidas.js` (nuevo) | El JSON de §3 |
+
+### 5.1 Etapa 1, hecha: el modelo
+
+`src/motor/trazado_iso.js` es el modelo puro del trazado: no dibuja ni guarda. Cada operación recibe un trazo y devuelve uno nuevo sin tocar el que recibió, o lo rechaza con `TrazadoError`: su `codigo` es el del catálogo de §2.11 y trae el porqué, los elementos y una sugerencia. Funciona en Node y en el navegador, como el resto del motor, y las medidas de cada pieza salen del motor de COTIZAP.
+
+| Qué | Funciones | Sección |
+| --- | --- | --- |
+| Proyecto, aire y políticas | `nuevo`, `cambiarProyecto`, `cambiarPoliticas`, `cambiarMaterial`, `aire`, `politicasDe`, `validarPoliticas` | §0.5, §1.0, §3.4 |
+| Equipos y puertos | `ponerEquipo`, `editarEquipo`, `moverEquipo`, `quitarEquipo`, `agregarPuerto`, `editarPuerto`, `quitarPuerto` | §1.1 |
+| Acoples | `acoplarBrida`, `acoplarManguera`, `moverTransicion`, `desacoplar`, `resolverManguera`, `puntosManguera` | §1.2, §2.8 |
+| Proyección y rejilla | `proyectar`, `rayoDeVista`, `alPlano`, `planoHorizontal`, `planoVertical`, `rejilla`, `direccionDeVector`, `textoDireccion` | §0.4, §2.1 |
+| Trazar | `candidatas`, `textoCandidatas`, `elegirDireccion`, `ajustarLargo`, `trazar`, `conectar` | §1.3, §2.1 |
+| Imán | `rutas` | §2.5.4 |
+| Editar con puntos fijos | `cambiarLargo`, `moverSegmento`, `cambiarAngulo`, `cambiarDiametro`, `anclar`, `borrarTramo` | §1.3 pasos 10 y 11, §2.2 |
+| Dimensionar | `dimensionar`, `aplicarDimensiones` | §2.6 |
+| Revisar y salir | `calcular`, `revisar`, `resumen`, `aSistema`, `desdeSistema`, `validar`, `renumerar` | §2.11, §3 |
+
+El trazo se guarda tal cual (posiciones de los nodos, tramos con su Ø y su material, equipos con sus puertos y acoples, y los identificadores de las piezas). Las direcciones, los largos, el sentido del aire, las piezas, los descuentos, la longitud neta, los caudales y las velocidades se recalculan en cada operación (`calcular`), así que no pueden quedar desfasados.
+
+**Cómo se verifica** (`tests/trazado_iso.test.js`):
+
+- El recorrido de §1.6 hecho con estas funciones da exactamente `docs/ejemplos/trazado-isometrico-ejemplo.json`, sin `resultados`, que son de la etapa 4. Trazado al revés (desde la boca del colector hacia las máquinas, con el ramal dibujado hacia fuera del tronco) da el mismo JSON.
+- El JSON del ejemplo se lee de regreso con `desdeSistema` y se vuelve a escribir igual.
+- Lo demás, caso por caso: la proyección y su inversa; la rejilla (170, 26 y 6 direcciones); la manguera en sus cuatro formas; las 33 direcciones que salen de un extremo horizontal; cada regla que rechaza, con su código y su mensaje; el imán (las entradas de lado a 45° y 30° del ejemplo, la entrada por arriba, nunca por abajo); la compensación con una y con dos direcciones; los equipos que se mueven; la revisión; la pureza; y la lectura de datos rotos.
+- Una caminata de 160 operaciones al azar: después de cada una el trazo se vuelve a validar y su JSON cumple el esquema.
+- Con 481 tramos: `calcular` tarda 2.6 ms, `trazar` 12 ms y `revisar` 16 ms. La rejilla gruesa de §2.10 queda para el arrastre de la etapa 2.
+
+**Precisiones que salieron al programarlo** (el resto del documento ya las incluye):
+
+1. **Borrador.** El esquema acepta un borrador: `conexion` de un puerto puede ser null (toma sin acople), un ADAPTADOR lleva una sola conexión (el otro lado es el puerto) y un equipo puede no tener puertos (AVISO EQUIPO_SIN_PUERTOS). `aSistema` no exporta con un BLOQUEANTE o un ERROR, salvo con `borrador: true`.
+2. **Códigos nuevos.** DIRECCION_FUERA_DE_REJILLA, DOS_COLECTORES, PT_DESALINEADO y PIEZA_NO_FABRICABLE (BLOQUEANTE); FLUJO_DESCONOCIDO y MOVER_NO_POSIBLE (rechazan una operación); CHOQUE_MANGUERA y EQUIPO_SIN_PUERTOS (AVISO); DERIVACION_INSERTADA (INFO). Un dato sin sentido (un número negativo, un identificador que no existe) es DATO_INVALIDO, y exportar con problemas es NO_EXPORTABLE.
+3. **Sentido provisional.** Mientras una red no llega a un colector se orienta hacia su único extremo libre, si tiene tomas. Con dos o más extremos libres no se sabe hacia dónde va el aire, y no se le puede injertar nada.
+4. **Por servicio** (referencias por confirmar): velocidades de 18 a 23 m/s en polvo, de 20 a 25 en abrasivo, de 5 a 12 en ventilación y de 10 a 15 en humos; la T a 90° está permitida en ventilación y humos. COTIZAP todavía no cotiza la T a 90°, porque sus injertos son a 30° o 45°: sus medidas salen de las fórmulas del injerto y su `familia_cotizap` es null.
+5. **La manguera en curva** sirve para ejes que se cruzan a cualquier ángulo (§2.8.2). La recta necesita al menos sus dos puños.
+6. **Las medidas.** El injerto simple usa los largos de las reglas del unifilar: ramal ⌈(t_max + 100)/50⌉·50 y cuerpo ⌈(d/sen β + 150)/50⌉·50. La reducción y la reducción con injerto usan los del motor.
+7. **Mover un equipo con brida** que no se puede compensar se rechaza (FIJO_SE_MUEVE), y lo mismo una manguera que ya no alcanza (MANGUERA_IMPOSIBLE). Las otras tomas del mismo equipo se mueven con él.
+8. **Renumerar.** `renumerar` da identificadores limpios en el orden de la red: los nodos desde la boca, con el tronco antes que el ramal; los tramos desde cada toma hacia el colector; las piezas en el orden de sus nodos. Así sale la numeración del ejemplo. Las partidas y respuestas que usaban los identificadores anteriores dejan de servir.
+9. **Para las etapas siguientes:**
+   - el tablero (etapa 2);
+   - pasar el trazo a partidas: las reglas del unifilar todavía leen sólo tramos horizontales y verticales, y falta extenderlas a los inclinados;
+   - el pantalón: el taller lo retiró, y el modelo lo rechaza aunque la política lo permita;
+   - la descarga del ventilador (SALIDA);
+   - el cálculo de pérdidas (etapa 4).
 
 **Por confirmar con el taller** antes de fijar las políticas:
 
 1. Largo de la reducción excéntrica: igual que la concéntrica (hoy) o el doble (§2.4).
 2. Holgura entre ductos y altura libre.
 3. Radio mínimo, largo máximo y rugosidad de la manguera que se compra.
-4. Velocidades por material.
+4. Velocidades por servicio y por material.
 5. Si en trabajos de ventilación se permiten la T a 90° y el pantalón.
 6. Si se prefiere la entrada por arriba o de lado cuando las dos caben.
 
