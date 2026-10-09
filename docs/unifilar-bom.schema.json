@@ -31,7 +31,7 @@
   },
   "$defs": {
     "confianza": { "type": "number", "minimum": 0, "maximum": 1, "description": "0 = no se sabe, 1 = certeza. Umbrales en §6 del documento." },
-    "id_red": { "type": "string", "pattern": "^(N|A|T)-[0-9]{3}$" },
+    "id_red": { "type": "string", "pattern": "^(N|A|T)-[0-9]{3,4}$" },
     "id_pieza": { "type": "string", "pattern": "^(DUCT|CODO|RED|RINJ|INJ|PANT|TRAN|EQ|JNT|SOP)-[0-9]{2,3}$" },
     "medida": {
       "type": "object",
@@ -128,7 +128,7 @@
     "texto": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "contenido_crudo", "contenido_normalizado", "tipo", "bbox_px", "confianza_ocr", "asociado_a"],
+      "required": ["id", "contenido_crudo", "contenido_normalizado", "tipo", "bbox_px", "confianza_ocr", "asociado_a", "origen"],
       "properties": {
         "id": { "$ref": "#/$defs/id_red" },
         "contenido_crudo": { "type": "string" },
@@ -136,7 +136,8 @@
         "tipo": { "type": "string", "enum": ["DIAMETRO", "LONGITUD", "ANGULO", "CALIBRE", "MATERIAL", "EQUIPO", "NOTA", "ILEGIBLE"] },
         "bbox_px": { "$ref": "#/$defs/caja" },
         "confianza_ocr": { "$ref": "#/$defs/confianza" },
-        "asociado_a": { "type": ["string", "null"], "description": "La arista, el nodo o el equipo al que se asoció; null = global o sin asociar." }
+        "asociado_a": { "type": ["string", "null"], "description": "La arista, el nodo o el equipo al que se asoció; null = global o sin asociar." },
+        "origen": { "type": "string", "enum": ["OCR", "USUARIO"], "description": "OCR: se leyó del croquis. USUARIO: lo puso el ingeniero en el dibujo del unifilar (docs/dibujo-unifilar.md)." }
       }
     },
     "cota_total": {
@@ -154,7 +155,7 @@
       "additionalProperties": false,
       "required": ["id", "tipo", "nombre", "nodo_id", "conexion", "texto_id", "confianza", "boca_diametro"],
       "properties": {
-        "id": { "type": "string", "pattern": "^EQ-[0-9]{2}$" },
+        "id": { "type": "string", "pattern": "^EQ-[0-9]{2,3}$" },
         "tipo": { "type": "string", "enum": ["COLECTOR", "MAQUINA", "CAMPANA", "COMPUERTA", "VENTILADOR", "OTRO"] },
         "nombre": { "type": "string" },
         "nodo_id": { "$ref": "#/$defs/id_red" },

@@ -594,6 +594,119 @@ circle.uf-d-duda { fill: var(--warn); }
   .uf-refs { margin-left: 0; flex-basis: 100%; }
 }
 
+/* -------------------------------------------------------------------------- dibujar el unifilar (CAD sencillo) */
+.uf-dibujar { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px 14px; border-radius: 10px; background: var(--accent-soft); }
+.uf-dibujar h3, .uf-json h3, .uf-foto h3 { font-size: 15px; }
+dialog.uf-dlg-cad { width: min(1440px, calc(100vw - 24px)); height: calc(100dvh - 24px); }
+.uf-cuerpo.uf-cuerpo-cad { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); gap: 0; padding: 0; overflow: hidden; }
+.cad-izq { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--line); }
+.cad-barra-marco { flex: none; border-bottom: 1px solid var(--line); background: var(--surface); }
+.cad-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 10px; }
+.cad-grupo { display: flex; flex-wrap: wrap; gap: 4px; padding-right: 10px; border-right: 1px solid var(--line); }
+.cad-herr, .cad-vista-btn {
+  position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 3px 9px 3px 5px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--fg); font: 600 12.5px var(--font-ui); cursor: pointer; white-space: nowrap;
+}
+.cad-herr:hover, .cad-vista-btn:hover { background: var(--surface-2); }
+.cad-herr .ico-fam { width: 33px; height: 22px; }
+.cad-herr .icono { color: var(--accent); }
+.cad-herr-activa { background: var(--accent-soft); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.cad-herr-n-0 { visibility: hidden; }
+.cad-d-oculto { visibility: hidden; }
+.cad-herr-n { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--accent-fg); font-size: 11px; line-height: 18px; text-align: center; }
+.cad-grupo select { width: auto; min-height: 36px; padding: 4px 26px 4px 8px; font-size: 12.5px; max-width: 220px; }
+.cad-d { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--fg-2); }
+.cad-d select { width: auto; min-height: 34px; padding: 4px 26px 4px 8px; }
+.cad-controles { position: absolute; top: 8px; right: 8px; }
+.cad-vista { display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--sombra); }
+.cad-vista-btn { padding: 3px 10px; }
+.cad-tablero-marco { position: relative; flex: 1 1 auto; min-height: 0; background: var(--surface-2); }
+.cad-tablero { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; user-select: none; -webkit-user-select: none; cursor: crosshair; outline: none; }
+.cad-tablero:focus-visible { box-shadow: inset 0 0 0 3px var(--accent); }
+.cad-escala { position: absolute; left: 10px; bottom: 8px; font-size: 11.5px; color: var(--fg-3); pointer-events: none; background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
+.cad-estado { flex: none; min-height: 40px; margin: 0; padding: 9px 12px; font-size: 13px; color: var(--fg-2); border-top: 1px solid var(--line); background: var(--surface); }
+.cad-estado-error { color: var(--crit); background: var(--crit-soft); }
+.cad-rejilla line { stroke: var(--line); stroke-width: 1; }
+.cad-rejilla line.cad-rejilla-eje { stroke: var(--line-strong); stroke-width: 1.5; }
+.cad-tramo { stroke: var(--accent); stroke-linecap: round; opacity: 0.82; fill: none; }
+.cad-tramo-v { stroke: var(--s6); }
+.cad-vertical-planta { fill: var(--s6); fill-opacity: 0.25; stroke-width: 2; }
+.cad-tramo-aviso { stroke: var(--warn); }
+.cad-tramo-err { stroke: var(--crit); }
+.cad-tramo-hover { opacity: 1; }
+.cad-tramo-sel { stroke: var(--s2); opacity: 1; }
+.cad-eje { stroke: var(--surface); stroke-width: 1; stroke-dasharray: 6 4; opacity: 0.7; pointer-events: none; }
+.cad-txt { font: 600 12px var(--font-ui); fill: var(--fg); paint-order: stroke; stroke: var(--surface-2); stroke-width: 3.5px; stroke-linejoin: round; pointer-events: none; }
+.cad-txt-err { fill: var(--crit); }
+.cad-txt-eq { font-weight: 500; fill: var(--fg-2); font-size: 11.5px; }
+.cad-nodo { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+.cad-nodo-libre { fill: var(--accent); stroke: var(--surface); }
+.cad-nodo-aviso { stroke: var(--warn); stroke-width: 3; }
+.cad-nodo-err { stroke: var(--crit); stroke-width: 3; }
+.cad-nodo-hover { stroke-width: 4; }
+.cad-nodo-sel { stroke: var(--s2); stroke-width: 4; }
+.cad-equipo { fill: var(--surface); stroke: var(--fg-2); stroke-width: 1.5; }
+.cad-equipo-colector { fill: var(--accent); stroke: var(--accent); }
+.cad-equipo-txt { font: 700 11px var(--font-ui); fill: var(--fg); pointer-events: none; }
+.cad-equipo-colector + .cad-equipo-txt { fill: var(--accent-fg); }
+.cad-pieza { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; }
+.cad-pieza-err { stroke: var(--crit); }
+.cad-pieza-txt { font: 600 11px var(--font-ui); fill: var(--fg); pointer-events: none; }
+.cad-fantasma { stroke: var(--s2); stroke-linecap: round; opacity: 0.45; stroke-dasharray: 10 6; fill: none; pointer-events: none; }
+.cad-fantasma-mal { stroke: var(--crit); }
+.cad-fantasma-ini, .cad-fantasma-fin { fill: var(--s2); pointer-events: none; }
+.cad-fantasma-txt { font-size: 13px; }
+.cad-panel { min-height: 0; overflow: auto; padding: 12px 14px 18px; display: flex; flex-direction: column; gap: 14px; background: var(--surface); }
+.cad-panel h3 { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-2); }
+.cad-panel h4 { font-size: 13.5px; }
+.cad-general, .cad-sel, .cad-resumen, .cad-problemas { display: flex; flex-direction: column; gap: 8px; }
+.cad-sel { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.cad-sel-vacia { background: none; border-style: dashed; }
+.cad-fila { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+.cad-campo { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cad-campo label { font-size: 12px; font-weight: 600; color: var(--fg-2); }
+.cad-campo select, .cad-campo input { min-height: 34px; padding: 5px 8px; }
+.cad-campo-nota { font-size: 11.5px; color: var(--fg-3); }
+.cad-en-linea { display: flex; gap: 6px; }
+.cad-en-linea input { flex: 1 1 auto; min-width: 0; }
+.cad-en-linea .btn { min-height: 34px; padding: 4px 10px; }
+.cad-nota { font-size: 13px; color: var(--fg-2); }
+.cad-pieza-info { font-size: 13px; }
+.cad-piezas { margin: 0; padding-left: 18px; font-size: 13px; }
+.cad-forma { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.cad-forma .btn { align-self: flex-start; }
+.cad-sel > .btn-peligro { align-self: flex-start; }
+.cad-alertas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
+.cad-alertas li { padding: 6px 9px; border-radius: 8px; border-left: 3px solid var(--warn); background: var(--warn-soft); }
+.cad-alertas li.cad-al-err { border-left-color: var(--crit); background: var(--crit-soft); }
+.cad-al-btn { all: unset; cursor: pointer; display: block; width: 100%; }
+.cad-al-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.cad-al-et { font-weight: 700; }
+.cad-cuenta { display: flex; flex-direction: column; gap: 2px; margin: 0; }
+.cad-cuenta-fila { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 3px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.cad-cuenta-fila dt { display: flex; align-items: center; gap: 6px; color: var(--fg-2); }
+.cad-cuenta-fila dt .ico-fam { width: 30px; height: 20px; }
+.cad-cuenta-fila dd { margin: 0; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.cad-costo { font-size: 13.5px; }
+.cad-costo strong { font-size: 16px; }
+.cad-acc { font-size: 13px; }
+.cad-acc .btn-texto { font-size: 13px; padding: 2px 4px; }
+.cad-ayuda summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--fg-2); }
+.cad-ayuda ul { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--fg-2); display: flex; flex-direction: column; gap: 4px; }
+@media (max-width: 859px) {
+  dialog.uf-dlg-cad { width: 100vw; height: 100dvh; }
+  .uf-cuerpo.uf-cuerpo-cad { display: block; overflow: auto; }
+  .cad-izq { border-right: 0; border-bottom: 1px solid var(--line); min-height: auto; }
+  .cad-barra { flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x proximity; }
+  .cad-grupo { flex-wrap: nowrap; }
+  .cad-herr-txt { display: none; }
+  .cad-herr { padding: 3px 6px; }
+  .cad-tablero-marco { flex: none; height: max(300px, 52dvh); }
+  .cad-panel { overflow: visible; }
+  .cad-btn-ico .cad-btn-txt { display: none; }
+  .cad-btn-ico { padding: 8px 10px; }
+}
+
 #toasts { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: center; width: min(92vw, 420px); pointer-events: none; }
 .toast { pointer-events: auto; display: flex; align-items: center; gap: 12px; background: var(--fg); color: var(--bg); padding: 10px 14px; border-radius: 10px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3); }
 .toast .btn-texto { color: var(--bg); text-decoration: underline; }

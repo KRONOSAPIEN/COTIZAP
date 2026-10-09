@@ -1,7 +1,7 @@
 # Lectura de croquis unifilares con visión: del dibujo al despiece cotizable
 
 > **Documento de diseño · COTIZAP · 8-oct-2026.** Para quienes programarán el pipeline de visión y para los analistas de ingeniería que lo integran con el cotizador.
-> Lo acompañan el esquema de salida [`docs/unifilar-bom.schema.json`](unifilar-bom.schema.json), las reglas de §4.4 a §7 ya programadas en [`src/motor/unifilar.js`](../src/motor/unifilar.js) —las usa el botón **Importar unifilar** de la cotización detallada (§10)—, el caso de prueba [`docs/ejemplos/unifilar-caso-prueba.json`](ejemplos/unifilar-caso-prueba.json) —el despiece que dan esas reglas a la lectura de [`src/datos/unifilar_ejemplo.js`](../src/datos/unifilar_ejemplo.js); se regenera con `npm run caso:unifilar`— y la prueba de contrato [`tests/unifilar_contrato.test.js`](../tests/unifilar_contrato.test.js), que verifica que el caso cumple el esquema, que su red es un árbol consistente, que su despiece cuadra con el motor (aros, ménsulas, longitudes), que es lo que dan las reglas y que este documento trae el esquema y el caso tal como están en sus archivos.
+> Lo acompañan el esquema de salida [`docs/unifilar-bom.schema.json`](unifilar-bom.schema.json), las reglas de §4.4 a §7 ya programadas en [`src/motor/unifilar.js`](../src/motor/unifilar.js) —las usan **Importar unifilar** y **Dibujar unifilar** en la cotización detallada (§10)—, el caso de prueba [`docs/ejemplos/unifilar-caso-prueba.json`](ejemplos/unifilar-caso-prueba.json) —el despiece que dan esas reglas a la lectura de [`src/datos/unifilar_ejemplo.js`](../src/datos/unifilar_ejemplo.js); se regenera con `npm run caso:unifilar`— y la prueba de contrato [`tests/unifilar_contrato.test.js`](../tests/unifilar_contrato.test.js), que verifica que el caso cumple el esquema, que su red es un árbol consistente, que su despiece cuadra con el motor (aros, ménsulas, longitudes), que es lo que dan las reglas y que este documento trae el esquema y el caso tal como están en sus archivos.
 
 ## Índice
 
@@ -352,8 +352,8 @@ En la aplicación (§9.1) se releen, en una sola llamada con un recorte ampliado
 
 | Prefijo | Qué | Ejemplo |
 | --- | --- | --- |
-| `N-###` · `A-###` · `T-###` | Nodo, arista y texto de la red | `N-003`, `A-005`, `T-011` |
-| `EQ-##` | Equipo | `EQ-01` (colector) |
+| `N-###` · `A-###` · `T-###` | Nodo, arista y texto de la red (un dibujo grande puede llegar a 4 cifras) | `N-003`, `A-005`, `T-011` |
+| `EQ-##` | Equipo (hasta 3 cifras) | `EQ-01` (colector) |
 | `DUCT-###` | Tramo recto (uno por arista) | `DUCT-005` |
 | `CODO-###` · `RED-###` · `RINJ-###` · `INJ-###` · `PANT-###` · `TRAN-###` | Accesorios (uno por nodo que lo pide) | `RINJ-001` |
 | `JNT-###` | Elemento de unión | `JNT-013` |
@@ -401,7 +401,7 @@ Es el archivo [`docs/unifilar-bom.schema.json`](unifilar-bom.schema.json) (JSON 
   },
   "$defs": {
     "confianza": { "type": "number", "minimum": 0, "maximum": 1, "description": "0 = no se sabe, 1 = certeza. Umbrales en §6 del documento." },
-    "id_red": { "type": "string", "pattern": "^(N|A|T)-[0-9]{3}$" },
+    "id_red": { "type": "string", "pattern": "^(N|A|T)-[0-9]{3,4}$" },
     "id_pieza": { "type": "string", "pattern": "^(DUCT|CODO|RED|RINJ|INJ|PANT|TRAN|EQ|JNT|SOP)-[0-9]{2,3}$" },
     "medida": {
       "type": "object",
@@ -498,7 +498,7 @@ Es el archivo [`docs/unifilar-bom.schema.json`](unifilar-bom.schema.json) (JSON 
     "texto": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "contenido_crudo", "contenido_normalizado", "tipo", "bbox_px", "confianza_ocr", "asociado_a"],
+      "required": ["id", "contenido_crudo", "contenido_normalizado", "tipo", "bbox_px", "confianza_ocr", "asociado_a", "origen"],
       "properties": {
         "id": { "$ref": "#/$defs/id_red" },
         "contenido_crudo": { "type": "string" },
@@ -506,7 +506,8 @@ Es el archivo [`docs/unifilar-bom.schema.json`](unifilar-bom.schema.json) (JSON 
         "tipo": { "type": "string", "enum": ["DIAMETRO", "LONGITUD", "ANGULO", "CALIBRE", "MATERIAL", "EQUIPO", "NOTA", "ILEGIBLE"] },
         "bbox_px": { "$ref": "#/$defs/caja" },
         "confianza_ocr": { "$ref": "#/$defs/confianza" },
-        "asociado_a": { "type": ["string", "null"], "description": "La arista, el nodo o el equipo al que se asoció; null = global o sin asociar." }
+        "asociado_a": { "type": ["string", "null"], "description": "La arista, el nodo o el equipo al que se asoció; null = global o sin asociar." },
+        "origen": { "type": "string", "enum": ["OCR", "USUARIO"], "description": "OCR: se leyó del croquis. USUARIO: lo puso el ingeniero en el dibujo del unifilar (docs/dibujo-unifilar.md)." }
       }
     },
     "cota_total": {
@@ -524,7 +525,7 @@ Es el archivo [`docs/unifilar-bom.schema.json`](unifilar-bom.schema.json) (JSON 
       "additionalProperties": false,
       "required": ["id", "tipo", "nombre", "nodo_id", "conexion", "texto_id", "confianza", "boca_diametro"],
       "properties": {
-        "id": { "type": "string", "pattern": "^EQ-[0-9]{2}$" },
+        "id": { "type": "string", "pattern": "^EQ-[0-9]{2,3}$" },
         "tipo": { "type": "string", "enum": ["COLECTOR", "MAQUINA", "CAMPANA", "COMPUERTA", "VENTILADOR", "OTRO"] },
         "nombre": { "type": "string" },
         "nodo_id": { "$ref": "#/$defs/id_red" },
@@ -820,6 +821,10 @@ En **Cotización detallada → Importar unifilar** se escoge la **foto del croqu
 
 **Lo que todavía no hace** (queda como diseño en este documento): detectar solas las esquinas de la hoja (§4.1: se marcan a mano), la visión clásica de apoyo (§2: se agrega sólo donde la evaluación muestre fallas) y, sobre todo, **el conjunto de evaluación**: la herramienta para medir ya está (§12), pero faltan los croquis reales del taller con su lectura corregida.
 
+### 10.2 En la aplicación: «Dibujar unifilar»
+
+La otra manera de llegar al mismo despiece, sin foto: el ingeniero **arma la red con trazos** en un tablero (isométrico o en planta) que crece desde el colector, con las familias del cotizador como herramientas —tramo recto, codo, sube o baja, injerto simple, reducción, reducción con injerto y los equipos del final de cada ramal—. El tablero sólo deja hacer lo que el taller fabrica (codos a `proceso.angulos_codo_deg`, injertos a `proceso.angulos_injerto_deg` a favor del flujo, el diámetro no crece alejándose del colector) y cuenta las piezas con estas mismas reglas mientras se dibuja. Al dar «Listo» el dibujo se convierte en una **lectura de este esquema con todo de origen `USUARIO`** (diámetros, cotas a ejes y un texto `ANGULO` en cada codo e injerto; `fuente.archivo = "dibujo"`) y las partidas se agregan a la cotización; lo que quede por preguntar (la boca del colector, accesorios encimados, un extremo sin equipo) se responde en la misma revisión de §10.1 y regresa al dibujo al editarlo. Dibujar el croquis de §11 da las mismas 22 partidas que leerlo. El diseño completo está en [`docs/dibujo-unifilar.md`](dibujo-unifilar.md).
+
 ## 11. Caso de prueba
 
 ### 11.1 El croquis
@@ -1079,31 +1084,31 @@ Es el archivo [`docs/ejemplos/unifilar-caso-prueba.json`](ejemplos/unifilar-caso
     ],
     "cotas_totales": [{ "id": "CT-001", "aristas": ["A-004", "A-006", "A-007"], "longitud": { "valor": 8.1, "unidad": "m", "origen": "OCR", "confianza": 0.9, "texto_id": "T-025" } }],
     "textos": [
-      { "id": "T-001", "contenido_crudo": "Ø12\"", "contenido_normalizado": "12", "tipo": "DIAMETRO", "bbox_px": { "x": 380, "y": 1560, "w": 92, "h": 40 }, "confianza_ocr": 0.96, "asociado_a": "A-001" },
-      { "id": "T-002", "contenido_crudo": "L=3.0m", "contenido_normalizado": "3.0", "tipo": "LONGITUD", "bbox_px": { "x": 300, "y": 1630, "w": 120, "h": 38 }, "confianza_ocr": 0.94, "asociado_a": "A-001" },
-      { "id": "T-003", "contenido_crudo": "12\"", "contenido_normalizado": "12", "tipo": "DIAMETRO", "bbox_px": { "x": 700, "y": 1180, "w": 70, "h": 36 }, "confianza_ocr": 0.91, "asociado_a": "A-002" },
-      { "id": "T-004", "contenido_crudo": "4.5 m", "contenido_normalizado": "4.5", "tipo": "LONGITUD", "bbox_px": { "x": 760, "y": 1300, "w": 96, "h": 36 }, "confianza_ocr": 0.95, "asociado_a": "A-002" },
-      { "id": "T-005", "contenido_crudo": "Ø6", "contenido_normalizado": "6", "tipo": "DIAMETRO", "bbox_px": { "x": 960, "y": 1150, "w": 60, "h": 34 }, "confianza_ocr": 0.97, "asociado_a": "A-003" },
-      { "id": "T-006", "contenido_crudo": "1.8m", "contenido_normalizado": "1.8", "tipo": "LONGITUD", "bbox_px": { "x": 890, "y": 1230, "w": 80, "h": 34 }, "confianza_ocr": 0.9, "asociado_a": "A-003" },
-      { "id": "T-007", "contenido_crudo": "45°", "contenido_normalizado": "45", "tipo": "ANGULO", "bbox_px": { "x": 1110, "y": 1090, "w": 58, "h": 32 }, "confianza_ocr": 0.93, "asociado_a": "N-003" },
-      { "id": "T-008", "contenido_crudo": "Ø10\"", "contenido_normalizado": "10", "tipo": "DIAMETRO", "bbox_px": { "x": 1300, "y": 830, "w": 88, "h": 38 }, "confianza_ocr": 0.95, "asociado_a": "A-004" },
-      { "id": "T-009", "contenido_crudo": "3.6 m", "contenido_normalizado": "3.6", "tipo": "LONGITUD", "bbox_px": { "x": 1350, "y": 950, "w": 96, "h": 36 }, "confianza_ocr": 0.92, "asociado_a": "A-004" },
-      { "id": "T-010", "contenido_crudo": "5\"", "contenido_normalizado": "5", "tipo": "DIAMETRO", "bbox_px": { "x": 1500, "y": 760, "w": 46, "h": 34 }, "confianza_ocr": 0.88, "asociado_a": "A-005" },
-      { "id": "T-011", "contenido_crudo": "1.? m", "contenido_normalizado": null, "tipo": "ILEGIBLE", "bbox_px": { "x": 1470, "y": 830, "w": 86, "h": 36 }, "confianza_ocr": 0.41, "asociado_a": "A-005" },
-      { "id": "T-012", "contenido_crudo": "2.0 m", "contenido_normalizado": "2.0", "tipo": "LONGITUD", "bbox_px": { "x": 1740, "y": 700, "w": 96, "h": 36 }, "confianza_ocr": 0.9, "asociado_a": "A-006" },
-      { "id": "T-013", "contenido_crudo": "Ø8\"", "contenido_normalizado": "8", "tipo": "DIAMETRO", "bbox_px": { "x": 2050, "y": 420, "w": 80, "h": 38 }, "confianza_ocr": 0.94, "asociado_a": "A-007" },
-      { "id": "T-014", "contenido_crudo": "2.5m", "contenido_normalizado": "2.5", "tipo": "LONGITUD", "bbox_px": { "x": 2100, "y": 520, "w": 86, "h": 36 }, "confianza_ocr": 0.93, "asociado_a": "A-007" },
-      { "id": "T-015", "contenido_crudo": "1.5 m", "contenido_normalizado": "1.5", "tipo": "LONGITUD", "bbox_px": { "x": 2300, "y": 500, "w": 96, "h": 36 }, "confianza_ocr": 0.92, "asociado_a": "A-008" },
-      { "id": "T-016", "contenido_crudo": "45°", "contenido_normalizado": "45", "tipo": "ANGULO", "bbox_px": { "x": 2310, "y": 330, "w": 58, "h": 32 }, "confianza_ocr": 0.9, "asociado_a": "N-008" },
-      { "id": "T-017", "contenido_crudo": "COLECTOR", "contenido_normalizado": "COLECTOR", "tipo": "EQUIPO", "bbox_px": { "x": 330, "y": 1900, "w": 170, "h": 40 }, "confianza_ocr": 0.97, "asociado_a": "EQ-01" },
-      { "id": "T-018", "contenido_crudo": "MAQ. A", "contenido_normalizado": "MAQUINA", "tipo": "EQUIPO", "bbox_px": { "x": 930, "y": 1300, "w": 120, "h": 38 }, "confianza_ocr": 0.92, "asociado_a": "EQ-02" },
-      { "id": "T-019", "contenido_crudo": "MANG 6\"", "contenido_normalizado": "MANGUERA 6", "tipo": "NOTA", "bbox_px": { "x": 930, "y": 1345, "w": 130, "h": 36 }, "confianza_ocr": 0.89, "asociado_a": "EQ-02" },
-      { "id": "T-020", "contenido_crudo": "MAQ. B", "contenido_normalizado": "MAQUINA", "tipo": "EQUIPO", "bbox_px": { "x": 1300, "y": 880, "w": 120, "h": 38 }, "confianza_ocr": 0.91, "asociado_a": "EQ-03" },
-      { "id": "T-021", "contenido_crudo": "MANG 5\"", "contenido_normalizado": "MANGUERA 5", "tipo": "NOTA", "bbox_px": { "x": 1300, "y": 925, "w": 130, "h": 36 }, "confianza_ocr": 0.87, "asociado_a": "EQ-03" },
-      { "id": "T-022", "contenido_crudo": "CAMPANA", "contenido_normalizado": "CAMPANA", "tipo": "EQUIPO", "bbox_px": { "x": 2220, "y": 700, "w": 150, "h": 40 }, "confianza_ocr": 0.95, "asociado_a": "EQ-04" },
-      { "id": "T-023", "contenido_crudo": "GALV CAL 22", "contenido_normalizado": "GALVANIZADO 22", "tipo": "CALIBRE", "bbox_px": { "x": 120, "y": 120, "w": 230, "h": 44 }, "confianza_ocr": 0.93, "asociado_a": null },
-      { "id": "T-024", "contenido_crudo": "x", "contenido_normalizado": null, "tipo": "ILEGIBLE", "bbox_px": { "x": 1820, "y": 1500, "w": 22, "h": 22 }, "confianza_ocr": 0.3, "asociado_a": null },
-      { "id": "T-025", "contenido_crudo": "8.1 m", "contenido_normalizado": "8.1", "tipo": "LONGITUD", "bbox_px": { "x": 1700, "y": 470, "w": 96, "h": 36 }, "confianza_ocr": 0.9, "asociado_a": "CT-001" }
+      { "id": "T-001", "contenido_crudo": "Ø12\"", "contenido_normalizado": "12", "tipo": "DIAMETRO", "bbox_px": { "x": 380, "y": 1560, "w": 92, "h": 40 }, "confianza_ocr": 0.96, "asociado_a": "A-001", "origen": "OCR" },
+      { "id": "T-002", "contenido_crudo": "L=3.0m", "contenido_normalizado": "3.0", "tipo": "LONGITUD", "bbox_px": { "x": 300, "y": 1630, "w": 120, "h": 38 }, "confianza_ocr": 0.94, "asociado_a": "A-001", "origen": "OCR" },
+      { "id": "T-003", "contenido_crudo": "12\"", "contenido_normalizado": "12", "tipo": "DIAMETRO", "bbox_px": { "x": 700, "y": 1180, "w": 70, "h": 36 }, "confianza_ocr": 0.91, "asociado_a": "A-002", "origen": "OCR" },
+      { "id": "T-004", "contenido_crudo": "4.5 m", "contenido_normalizado": "4.5", "tipo": "LONGITUD", "bbox_px": { "x": 760, "y": 1300, "w": 96, "h": 36 }, "confianza_ocr": 0.95, "asociado_a": "A-002", "origen": "OCR" },
+      { "id": "T-005", "contenido_crudo": "Ø6", "contenido_normalizado": "6", "tipo": "DIAMETRO", "bbox_px": { "x": 960, "y": 1150, "w": 60, "h": 34 }, "confianza_ocr": 0.97, "asociado_a": "A-003", "origen": "OCR" },
+      { "id": "T-006", "contenido_crudo": "1.8m", "contenido_normalizado": "1.8", "tipo": "LONGITUD", "bbox_px": { "x": 890, "y": 1230, "w": 80, "h": 34 }, "confianza_ocr": 0.9, "asociado_a": "A-003", "origen": "OCR" },
+      { "id": "T-007", "contenido_crudo": "45°", "contenido_normalizado": "45", "tipo": "ANGULO", "bbox_px": { "x": 1110, "y": 1090, "w": 58, "h": 32 }, "confianza_ocr": 0.93, "asociado_a": "N-003", "origen": "OCR" },
+      { "id": "T-008", "contenido_crudo": "Ø10\"", "contenido_normalizado": "10", "tipo": "DIAMETRO", "bbox_px": { "x": 1300, "y": 830, "w": 88, "h": 38 }, "confianza_ocr": 0.95, "asociado_a": "A-004", "origen": "OCR" },
+      { "id": "T-009", "contenido_crudo": "3.6 m", "contenido_normalizado": "3.6", "tipo": "LONGITUD", "bbox_px": { "x": 1350, "y": 950, "w": 96, "h": 36 }, "confianza_ocr": 0.92, "asociado_a": "A-004", "origen": "OCR" },
+      { "id": "T-010", "contenido_crudo": "5\"", "contenido_normalizado": "5", "tipo": "DIAMETRO", "bbox_px": { "x": 1500, "y": 760, "w": 46, "h": 34 }, "confianza_ocr": 0.88, "asociado_a": "A-005", "origen": "OCR" },
+      { "id": "T-011", "contenido_crudo": "1.? m", "contenido_normalizado": null, "tipo": "ILEGIBLE", "bbox_px": { "x": 1470, "y": 830, "w": 86, "h": 36 }, "confianza_ocr": 0.41, "asociado_a": "A-005", "origen": "OCR" },
+      { "id": "T-012", "contenido_crudo": "2.0 m", "contenido_normalizado": "2.0", "tipo": "LONGITUD", "bbox_px": { "x": 1740, "y": 700, "w": 96, "h": 36 }, "confianza_ocr": 0.9, "asociado_a": "A-006", "origen": "OCR" },
+      { "id": "T-013", "contenido_crudo": "Ø8\"", "contenido_normalizado": "8", "tipo": "DIAMETRO", "bbox_px": { "x": 2050, "y": 420, "w": 80, "h": 38 }, "confianza_ocr": 0.94, "asociado_a": "A-007", "origen": "OCR" },
+      { "id": "T-014", "contenido_crudo": "2.5m", "contenido_normalizado": "2.5", "tipo": "LONGITUD", "bbox_px": { "x": 2100, "y": 520, "w": 86, "h": 36 }, "confianza_ocr": 0.93, "asociado_a": "A-007", "origen": "OCR" },
+      { "id": "T-015", "contenido_crudo": "1.5 m", "contenido_normalizado": "1.5", "tipo": "LONGITUD", "bbox_px": { "x": 2300, "y": 500, "w": 96, "h": 36 }, "confianza_ocr": 0.92, "asociado_a": "A-008", "origen": "OCR" },
+      { "id": "T-016", "contenido_crudo": "45°", "contenido_normalizado": "45", "tipo": "ANGULO", "bbox_px": { "x": 2310, "y": 330, "w": 58, "h": 32 }, "confianza_ocr": 0.9, "asociado_a": "N-008", "origen": "OCR" },
+      { "id": "T-017", "contenido_crudo": "COLECTOR", "contenido_normalizado": "COLECTOR", "tipo": "EQUIPO", "bbox_px": { "x": 330, "y": 1900, "w": 170, "h": 40 }, "confianza_ocr": 0.97, "asociado_a": "EQ-01", "origen": "OCR" },
+      { "id": "T-018", "contenido_crudo": "MAQ. A", "contenido_normalizado": "MAQUINA", "tipo": "EQUIPO", "bbox_px": { "x": 930, "y": 1300, "w": 120, "h": 38 }, "confianza_ocr": 0.92, "asociado_a": "EQ-02", "origen": "OCR" },
+      { "id": "T-019", "contenido_crudo": "MANG 6\"", "contenido_normalizado": "MANGUERA 6", "tipo": "NOTA", "bbox_px": { "x": 930, "y": 1345, "w": 130, "h": 36 }, "confianza_ocr": 0.89, "asociado_a": "EQ-02", "origen": "OCR" },
+      { "id": "T-020", "contenido_crudo": "MAQ. B", "contenido_normalizado": "MAQUINA", "tipo": "EQUIPO", "bbox_px": { "x": 1300, "y": 880, "w": 120, "h": 38 }, "confianza_ocr": 0.91, "asociado_a": "EQ-03", "origen": "OCR" },
+      { "id": "T-021", "contenido_crudo": "MANG 5\"", "contenido_normalizado": "MANGUERA 5", "tipo": "NOTA", "bbox_px": { "x": 1300, "y": 925, "w": 130, "h": 36 }, "confianza_ocr": 0.87, "asociado_a": "EQ-03", "origen": "OCR" },
+      { "id": "T-022", "contenido_crudo": "CAMPANA", "contenido_normalizado": "CAMPANA", "tipo": "EQUIPO", "bbox_px": { "x": 2220, "y": 700, "w": 150, "h": 40 }, "confianza_ocr": 0.95, "asociado_a": "EQ-04", "origen": "OCR" },
+      { "id": "T-023", "contenido_crudo": "GALV CAL 22", "contenido_normalizado": "GALVANIZADO 22", "tipo": "CALIBRE", "bbox_px": { "x": 120, "y": 120, "w": 230, "h": 44 }, "confianza_ocr": 0.93, "asociado_a": null, "origen": "OCR" },
+      { "id": "T-024", "contenido_crudo": "x", "contenido_normalizado": null, "tipo": "ILEGIBLE", "bbox_px": { "x": 1820, "y": 1500, "w": 22, "h": 22 }, "confianza_ocr": 0.3, "asociado_a": null, "origen": "OCR" },
+      { "id": "T-025", "contenido_crudo": "8.1 m", "contenido_normalizado": "8.1", "tipo": "LONGITUD", "bbox_px": { "x": 1700, "y": 470, "w": 96, "h": 36 }, "confianza_ocr": 0.9, "asociado_a": "CT-001", "origen": "OCR" }
     ]
   },
   "equipos": [

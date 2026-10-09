@@ -8,8 +8,11 @@
  * cotización con el identificador de su pieza (`unifilar_id`); cada respuesta del ingeniero vuelve a correr las reglas y, si
  * las partidas ya están en la cotización, las reemplaza.
  *
- * Lo importado vive en la cotización: estado.cot.unifilar = { lectura, respuestas, importado }. La foto no se guarda: sólo
- * dura mientras la página está abierta.
+ * La lectura también puede salir del DIBUJO (web/unifilar_cad_ui.js): la ductería armada con trazos en el tablero, que al dar
+ * «Listo» pasa por las mismas reglas y preguntas.
+ *
+ * Lo importado vive en la cotización: estado.cot.unifilar = { lectura, respuestas, importado }; el dibujo, en
+ * estado.cot.dibujo_unifilar. La foto no se guarda: sólo dura mientras la página está abierta.
  * Depende de app.js (W.estadoApp, W.recalcular, W.toast, W.tituloPartida, W.idNuevo, W.copiarTexto).
  */
 (function (root) {
@@ -24,6 +27,7 @@
   const UF = () => C.unifilar;
   const V = () => C.unifilarVision;
   const IMG = () => C.imagen;
+  const CAD = () => C.unifilarCad;
   const MAX_TRABAJO = 3000; // lado mayor con que se prepara la foto (los recortes que se mandan no piden más)
   const MAX_TEXTO = 5e6; // caracteres: una lectura real pesa decenas de kB
   const NS = 'http://www.w3.org/2000/svg';
@@ -69,6 +73,7 @@
   let prep = null;
   let verif = { activa: false };
   let avisosAbiertos = false; // tras una verificación visual con hallazgos, «Avisos» se muestra abierto
+  let vistaPrevia = 'carga'; // a dónde regresa «Volver» desde el dibujo
 
   const guardada = () => E().cot.unifilar || null;
   const fuente = () => borrador || guardada();
@@ -129,16 +134,36 @@
 
   /* ------------------------------------------------------------------ diálogo */
 
-  function abrir() {
+  function abrir(modo) {
     borrador = null;
     errores = [];
     nota = '';
     vista = guardada() ? 'revision' : 'carga';
-    pintar();
+    if (modo === 'dibujo') abrirDibujo();
+    else pintar();
     const d = $('#dlg-unifilar');
     if (!d.open) { if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', ''); }
-    const foco = vista === 'carga' ? $('#uf-texto') : $('.uf-preguntas [data-clave]') || $('#uf-cerrar');
+    const foco = vista === 'cad' ? $('#cad-tablero') : vista === 'carga' ? $('#uf-texto') : $('.uf-preguntas [data-clave]') || $('#uf-cerrar');
     if (foco) foco.focus();
+  }
+
+  /**
+   * El dibujo: abre el tablero con el dibujo guardado en la cotización (o uno nuevo). Si la lectura actual salió del dibujo,
+   * lo que se respondió al revisarla (material, bocas, mangueras…) pasa al dibujo.
+   */
+  function abrirDibujo() {
+    const f = fuente();
+    const respuestas = f && CAD().esDeDibujo(f.lectura) ? f.respuestas : null;
+    vistaPrevia = vista === 'cad' ? vistaPrevia : vista;
+    W.unifilarCadUI.abrir({
+      listo: (lect, resp) => aceptarLectura(lect, resp, true),
+      volver: () => { vista = vistaPrevia === 'revision' && fuente() ? 'revision' : 'carga'; pintar(); },
+    }, respuestas);
+    vista = 'cad';
+    errores = [];
+    pintar();
+    const t = $('#cad-tablero');
+    if (t) t.focus({ preventScroll: true });
   }
   function cerrar() {
     const d = $('#dlg-unifilar');
@@ -149,6 +174,12 @@
   function pintar(enfocar) {
     const cuerpo = $('#uf-cuerpo');
     const pie = $('#uf-pie');
+    const enDibujo = vista === 'cad';
+    $('#dlg-unifilar').classList.toggle('uf-dlg-cad', enDibujo);
+    cuerpo.classList.toggle('uf-cuerpo-cad', enDibujo);
+    const f = fuente();
+    $('#uf-titulo').textContent = enDibujo ? 'Dibujar el unifilar' : vista === 'revision' && f && CAD().esDeDibujo(f.lectura) ? 'Despiece del dibujo' : 'Importar unifilar';
+    if (enDibujo) { W.unifilarCadUI.pintar(cuerpo, pie); return; }
     if (vista === 'carga') pintarCarga(cuerpo, pie);
     else if (vista === 'foto' && prep) pintarFoto(cuerpo, pie);
     else pintarRevision(cuerpo, pie);
@@ -194,8 +225,15 @@
       lector.onload = () => { $('#uf-texto').value = String(lector.result); leerTexto(String(lector.result)); };
       lector.readAsText(f);
     });
+    const dib = W.unifilarCadUI && W.unifilarCadUI.hayDibujo() ? CAD().validar(E().cot.dibujo_unifilar, E().M).modelo : null;
     W.reemplazar(cuerpo,
       errores.length ? h('div', { class: 'uf-errores', role: 'alert' }, h('strong', null, 'No se pudo leer:'), h('ul', null, errores.map((e) => h('li', null, e)))) : null,
+      h('section', { class: 'uf-dibujar', 'aria-labelledby': 'uf-tit-dibujar' },
+        h('h3', { id: 'uf-tit-dibujar' }, 'Dibujar el unifilar'),
+        h('p', { class: 'uf-ayuda' }, 'Arme la ductería con trazos desde el colector: tramos rectos, codos, subidas y bajadas, injertos, reducciones y los equipos del final de cada ramal. ',
+          'El tablero sólo deja hacer lo que fabrica el taller y cuenta las piezas mientras dibuja; al dar «Listo» pasan por las mismas reglas y preguntas.'),
+        h('button', { type: 'button', class: 'btn btn-primario', id: 'uf-dibujar', disabled: lectura.activa, onclick: abrirDibujo },
+          dib && dib.tramos.length ? `Seguir el dibujo (${dib.tramos.length} ${dib.tramos.length === 1 ? 'tramo' : 'tramos'})` : 'Dibujar el unifilar')),
       bloqueFoto(),
       h('section', { class: 'uf-json', 'aria-labelledby': 'uf-tit-json' },
         h('h3', { id: 'uf-tit-json' }, 'O pegar la lectura en JSON'),
@@ -232,20 +270,37 @@
     aceptarLectura(r.lectura);
   }
 
-  /** Una lectura ya revisada pasa a la revisión (y a la cotización si no hay partidas importadas que reemplazar). */
-  function aceptarLectura(lect) {
+  /**
+   * Una lectura ya revisada pasa a la revisión (y a la cotización si no hay partidas importadas que reemplazar). respuestas:
+   * las que ya trae (las del dibujo). agregarYa: las partidas se agregan de una vez si se puede (el «Listo» del dibujo); si ya
+   * hay partidas importadas, se muestran para reemplazarlas.
+   */
+  function aceptarLectura(lect, respuestas0, agregarYa) {
     avisosAbiertos = false;
-    if (!despiece({ lectura: lect, respuestas: {} })) { errores = ['Las reglas no pudieron despiezar esta lectura. Revise que la red esté completa.']; pintar(); return; }
-    const nueva = { lectura: lect, respuestas: {}, importado: false };
+    const respuestas = UF().respuestasValidas(respuestas0 || {});
+    if (!despiece({ lectura: lect, respuestas })) { errores = ['Las reglas no pudieron despiezar esta lectura. Revise que la red esté completa.']; vista = 'carga'; pintar(); return; }
+    const nueva = { lectura: lect, respuestas, importado: false };
     const g = guardada();
-    if (g && g.importado) borrador = nueva; // no toca las partidas importadas hasta que se reemplacen
-    else {
+    nota = '';
+    if (g && g.importado) {
+      borrador = nueva; // no toca las partidas importadas hasta que se reemplacen
+      if (agregarYa) nota = `Ya hay ${importadas().length} partidas del unifilar en la cotización: revise el despiece nuevo y use «Reemplazar» para cambiarlas.`;
+    } else {
       borrador = null;
       E().cot.unifilar = nueva;
+      const bom = agregarYa ? despiece(nueva) : null;
+      if (bom && bom.resumen.estado !== 'NO_COTIZABLE') {
+        nueva.importado = true;
+        const n = aplicar(bom);
+        const primera = E().cot.partidas.find((p) => p.unifilar_id);
+        if (primera) E().sel = primera.id;
+        const pend = UF().pendientes(bom).length;
+        nota = `Se agregaron ${n} partidas a la cotización.${pend ? ` Responda ${pend === 1 ? 'la pregunta' : `las ${pend} preguntas`} para afinarlas: al contestar, las partidas se actualizan solas.` : ''}`;
+        W.toast(`${n} ${n === 1 ? 'partida agregada' : 'partidas agregadas'} desde el dibujo`);
+      } else if (agregarYa) nota = 'Responda lo que bloquea para poder agregar las partidas.';
       W.recalcular();
     }
     vista = 'revision';
-    nota = '';
     pintar('');
   }
 
@@ -807,6 +862,7 @@
     const reemplaza = !!borrador || (f.importado && importadas().length);
     const ed = editadas();
     const [estadoTxt, estadoNota] = ESTADO[R.estado];
+    const deDibujo = CAD().esDeDibujo(f.lectura);
     W.reemplazar(cuerpo,
       h('div', { class: `uf-estado uf-estado-${R.estado.toLowerCase()}` },
         h('strong', null, `Despiece ${estadoTxt.toLowerCase()}`), h('span', null, estadoNota)),
@@ -836,7 +892,7 @@
       h('p', { class: 'uf-pie-txt' },
         h('button', { type: 'button', class: 'btn-texto', id: 'uf-copiar', onclick: () => W.copiarTexto(JSON.stringify(bom, null, 2), 'Despiece copiado en JSON') }, 'Copiar el despiece en JSON'),
         ' · ',
-        h('button', { type: 'button', class: 'btn-texto', id: 'uf-copiar-lectura', onclick: () => W.copiarTexto(JSON.stringify(f.lectura, null, 2), 'Lectura copiada en JSON') }, 'Copiar la lectura de Claude'),
+        h('button', { type: 'button', class: 'btn-texto', id: 'uf-copiar-lectura', onclick: () => W.copiarTexto(JSON.stringify(f.lectura, null, 2), 'Lectura copiada en JSON') }, deDibujo ? 'Copiar la lectura del dibujo' : 'Copiar la lectura de Claude'),
         ' · el esquema está en docs/unifilar-bom.schema.json; para medir la lectura, docs/evaluacion'));
     const bloqueado = R.estado === 'NO_COTIZABLE';
     const pendienteAplicar = reemplaza && (borrador || ed.length);
@@ -847,6 +903,7 @@
         ? h('button', { type: 'button', class: 'btn btn-primario', id: 'uf-agregar', disabled: bloqueado, onclick: agregar }, 'Actualizar partidas')
         : h('button', { type: 'button', class: 'btn btn-primario', id: 'uf-listo', onclick: cerrar }, 'Listo');
     W.reemplazar(pie,
+      deDibujo && W.unifilarCadUI.hayDibujo() ? h('button', { type: 'button', class: 'btn btn-sec', id: 'uf-editar-dibujo', onclick: abrirDibujo }, 'Editar el dibujo') : null,
       h('button', { type: 'button', class: 'btn btn-sec', id: 'uf-otra', onclick: () => { vista = 'carga'; errores = []; pintar(); $('#uf-texto').focus(); } }, 'Otra lectura'),
       guardada() && !borrador ? h('button', { type: 'button', class: 'btn btn-sec', id: 'uf-descartar', onclick: descartar }, guardada().importado ? 'Quitar de la cotización' : 'Descartar la lectura') : null,
       h('span', { class: 'uf-pie-esp' }),
@@ -857,8 +914,9 @@
   function iniciar() {
     const d = $('#dlg-unifilar');
     if (!d) return;
-    $('#btn-unifilar').addEventListener('click', abrir);
-    $('#aviso-unifilar-abrir').addEventListener('click', abrir);
+    $('#btn-unifilar').addEventListener('click', () => abrir());
+    $('#btn-dibujar').addEventListener('click', () => abrir('dibujo'));
+    $('#aviso-unifilar-abrir').addEventListener('click', () => abrir());
     $('#uf-cerrar').addEventListener('click', cerrar);
     d.addEventListener('close', () => { borrador = null; if (lectura.ctl) lectura.ctl.abort(); if (verif.ctl) verif.ctl.abort(); });
     d.addEventListener('click', (e) => { if (e.target === d) cerrar(); });

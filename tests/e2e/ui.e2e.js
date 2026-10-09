@@ -2456,6 +2456,163 @@ const ok = (cond, msg) => {
     await p.context().close();
   }
 
+  console.log('34) Dibujar el unifilar: trazos con las familias del taller, piezas que salen solas, «Listo» → partidas; el dibujo se guarda y se vuelve a editar');
+  {
+    const p = await nuevaPagina();
+    const R = (fn, arg) => p.evaluate(fn, arg);
+    const dib = () => R(() => window.COTIZAP.web.estadoApp.cot.dibujo_unifilar);
+    const estado = () => p.locator('#cad-estado').innerText();
+    const centro = (sel) => R((s) => { const r = document.querySelector(s).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }, sel);
+    // un punto a lo largo de un tramo dibujado (f de 0 a 1), en coordenadas de la página
+    const enTramo = (id, f) => R(([t, k]) => {
+      const l = document.querySelector(`#cad-tablero line.cad-tramo[data-tramo="${t}"]`);
+      const r = l.ownerSVGElement.getBoundingClientRect();
+      const vb = l.ownerSVGElement.viewBox.baseVal;
+      const x = +l.getAttribute('x1') + k * (l.getAttribute('x2') - l.getAttribute('x1'));
+      const y = +l.getAttribute('y1') + k * (l.getAttribute('y2') - l.getAttribute('y1'));
+      return { x: r.x + (x * r.width) / vb.width, y: r.y + (y * r.height) / vb.height };
+    }, [id, f]);
+    const arrastrar = async (de, dx, dy) => {
+      await p.mouse.move(de.x, de.y);
+      await p.mouse.down();
+      for (let i = 1; i <= 10; i += 1) await p.mouse.move(de.x + (dx * i) / 10, de.y + (dy * i) / 10);
+      const durante = await estado();
+      await p.mouse.up();
+      return durante;
+    };
+    const tocar = async (sel) => { const c = await centro(sel); await p.mouse.click(c.x, c.y); };
+    await p.click('#btn-nueva');
+    await p.click('#btn-dibujar');
+    ok(await p.locator('#dlg-unifilar[open].uf-dlg-cad #cad-tablero').isVisible() && await p.locator('#uf-titulo').innerText() === 'Dibujar el unifilar', '«Dibujar unifilar» abre el tablero en el diálogo del unifilar');
+    ok(await p.locator('#cad-tablero [data-nodo="N-001"].cad-equipo-colector').count() === 1 && /Arrastre desde el colector/.test(await estado()), 'empieza con el colector y dice cómo trazar');
+    const herramientas = await p.locator('.cad-herr').evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label')));
+    ok(JSON.stringify(herramientas) === JSON.stringify(['Tramo recto', 'Codo', 'Sube o baja', 'Injerto simple', 'Reducción', 'Reducción con injerto', 'Equipo', 'Seleccionar', 'Borrar']), 'las herramientas son las familias del taller, los equipos y editar');
+    // la subida: herramienta «Sube o baja», arrastrando hacia arriba desde el colector
+    await p.click('#cad-h-vertical');
+    const d1 = await arrastrar(await centro('#cad-tablero [data-nodo="N-001"]'), 0, -150);
+    ok(/ m · 12″ · sube desde el colector/.test(d1), 'mientras arrastra dice el largo, el Ø y la pieza');
+    let m = await dib();
+    ok(m.tramos.length === 1 && m.tramos[0].dir === 'SUBE' && m.tramos[0].largo_mm % 100 === 0 && m.tramos[0].largo_mm >= 1000, `la subida queda en pasos de 0.1 m (${m.tramos[0].largo_mm} mm)`);
+    // el tronco: «Tramo recto» hacia el eje X del isométrico
+    await p.click('#cad-h-tramo');
+    await arrastrar(await centro('#cad-tablero [data-nodo="N-002"]'), 260, -150);
+    m = await dib();
+    ok(m.tramos.length === 2 && m.tramos[1].dir === 'H' && m.tramos[1].az_deg === 0 && /codo de 90°/.test(await estado()), 'el tramo horizontal sale con codo de 90° (eje X)');
+    // con el teclado: desde el final, codo de 45° a la izquierda, 3 m y 10″
+    await p.selectOption('#cad-elemento', `NODO|${m.tramos[1].a}`);
+    ok(await p.locator('#cad-f-dir option').count() === 11, 'desde el final de un tramo: recto, 8 codos, subir y bajar');
+    ok(await p.locator('#cad-f-d option[value="14"]').count() === 0 && await p.locator('#cad-f-d option[value="12"]').count() === 1, 'el Ø del tramo nuevo no puede pasar del anterior');
+    await p.selectOption('#cad-f-dir', { label: 'Codo de 45° a la izquierda' });
+    await p.fill('#cad-f-largo', '3');
+    await p.selectOption('#cad-f-d', '10');
+    await p.click('#cad-f-agregar');
+    m = await dib();
+    ok(m.tramos.length === 3 && m.tramos[2].az_deg === 45 && m.tramos[2].largo_mm === 3000 && m.tramos[2].D_in === 10, 'el tramo nuevo: codo de 45°, 3 m y 10″');
+    const piezas = await p.locator('#cad-tablero .cad-pieza-txt').allTextContents();
+    ok(piezas.includes('Codo 90°') && piezas.includes('Codo 45° + Red. 12″→10″'), `las piezas salen solas en cada punto (${piezas.join(' · ')})`);
+    // un injerto a la mitad del tronco de 12″: herramienta «Injerto simple», Ø 6″
+    await p.click('#cad-h-injerto');
+    await p.selectOption('#cad-d', '6');
+    const d4 = await arrastrar(await enTramo(m.tramos[1].id, 0.5), 150, 0);
+    m = await dib();
+    const ramal = m.tramos.find((t) => t.D_in === 6);
+    ok(/injerto a 45° a la derecha/.test(d4) && ramal && ramal.az_deg === 315 && m.tramos.length === 5, 'el injerto parte el tronco y sale a 45° a favor del flujo');
+    ok(await p.locator('#cad-h-injerto .cad-herr-n').innerText() === '1' && await p.locator('#cad-h-injerto').getAttribute('aria-label') === 'Injerto simple: 1 en el dibujo', 'la herramienta cuenta lo que hay en el dibujo');
+    // la reducción: Ø 8″ y tocar el tramo de 10″
+    await p.click('#cad-h-reduccion');
+    await p.selectOption('#cad-d', '8');
+    const q = await enTramo(m.tramos.find((t) => t.D_in === 10).id, 0.6);
+    await p.mouse.click(q.x, q.y);
+    m = await dib();
+    ok(m.tramos.filter((t) => t.D_in === 8).length === 1 && /Reducción a 8″/.test(await estado()), 'tocar un tramo con «Reducción» lo parte y lo reduce de ahí en adelante');
+    // los equipos al final de cada ramal
+    ok(await p.locator('#cad-tablero circle.cad-nodo-libre').count() === 2, 'dos extremos libres');
+    await p.selectOption('#cad-clase', 'MAQUINA_MANGUERA');
+    ok(await p.locator('#cad-h-equipo[aria-pressed="true"]').count() === 1, 'escoger el equipo elige la herramienta');
+    await tocar(`#cad-tablero [data-nodo="${ramal.a}"]`);
+    await p.selectOption('#cad-clase', 'CAMPANA');
+    await tocar(`#cad-tablero [data-nodo="${m.tramos.find((t) => t.D_in === 8).a}"]`);
+    m = await dib();
+    ok(m.equipos.map((e) => `${e.clase}:${e.nombre}`).join() === 'COLECTOR:Colector,MAQUINA_MANGUERA:Máquina 1,CAMPANA:Campana 1', 'una máquina con manguera y una campana, con su nombre');
+    await tocar(`#cad-tablero [data-nodo="${ramal.de}"]`);
+    ok(/no es un extremo: los equipos van al final de un ramal/.test(await estado()) && await p.locator('#cad-estado.cad-estado-error').count() === 1, 'un equipo a la mitad del ducto no se puede: dice por qué');
+    // deshacer y rehacer
+    await p.locator('#cad-tablero').focus();
+    await p.keyboard.press('Control+z');
+    ok((await dib()).equipos.length === 2, 'Ctrl+Z deshace la campana');
+    await p.click('#cad-rehacer');
+    ok((await dib()).equipos.length === 3, '«Rehacer» la vuelve a poner');
+    // lo que sale del dibujo, mientras se dibuja
+    const cuenta = await p.locator('#cad-cuenta').innerText();
+    ok(/Codos\s+2/.test(cuenta) && /Reducciones\s+2/.test(cuenta) && /Injertos simples\s+1/.test(cuenta) && /Mangueras\s+1 tramo/.test(cuenta), `cuenta las piezas con las reglas del unifilar (${cuenta.replace(/\s+/g, ' ').slice(0, 160)}…)`);
+    ok(/^\$[\d,]+\.\d\d$/.test(await p.locator('#cad-costo').innerText()), 'y da el costo directo');
+    ok(/Despiece preliminar/.test(await p.locator('.cad-resumen').innerText()) && /La boca de «Colector» no trae medida/.test(await p.locator('.cad-problemas').innerText()), 'lo que se preguntará (la boca del colector) ya se ve en «Por resolver»');
+    // un largo cambiado en el panel mueve lo que sigue
+    await p.selectOption('#cad-elemento', 'TRAMO|A-001');
+    await p.fill('#cad-t-largo', '4.5');
+    await p.press('#cad-t-largo', 'Enter');
+    ok(await R((n) => window.COTIZAP.unifilarCad.geometria(window.COTIZAP.web.estadoApp.cot.dibujo_unifilar).pos.get(n).z, ramal.a) === 4500, 'la subida a 4.5 m sube todo lo que sigue');
+    ok(/DUCT-001: 4\.50 m a ejes − 0\.\d\d m \(CODO-001\) = 4\.\d\d m netos/.test(await p.locator('.cad-pieza-info').innerText()), 'el panel del tramo da su cota a ejes, lo que ocupan los accesorios y lo neto');
+    // planta y teclas
+    await p.click('#cad-vista-planta');
+    ok(/planta/.test(await p.locator('#cad-escala').innerText()) && await p.locator('#cad-tablero circle.cad-vertical-planta').count() === 1, 'en planta la subida se ve como un círculo');
+    await p.locator('#cad-tablero').focus();
+    await p.keyboard.press('b');
+    ok(await p.locator('#cad-h-borrar[aria-pressed="true"]').count() === 1, 'la tecla B elige «Borrar»');
+    await p.click('#cad-vista-iso');
+    // «Listo»: las piezas pasan a la cotización de una vez
+    const nCad = await R(() => window.COTIZAP.web.unifilarCadUI.estado().partidas.length);
+    await p.click('#cad-listo');
+    await p.waitForSelector('.uf-estado');
+    ok(/Despiece preliminar/.test(await p.locator('.uf-estado').innerText()) && new RegExp(`Se agregaron ${nCad} partidas a la cotización`).test(await p.locator('#uf-cuerpo').innerText()), `«Listo» convierte el dibujo en ${nCad} partidas y las agrega`);
+    const fams = await R(() => [...new Set(window.COTIZAP.web.estadoApp.cot.partidas.filter((x) => x.unifilar_id).map((x) => x.familia))].sort().join());
+    ok(fams === 'CODO,COMPRADO,RAMAL,RECTO,REDUCCION,SOPORTE' && await p.locator('#uf-listo').count() === 1, `las familias del cotizador (${fams}); el botón ya es «Listo»`);
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.unifilar.lectura.metadatos.fuente.archivo) === 'dibujo' && /Copiar la lectura del dibujo/.test(await p.locator('#uf-copiar-lectura').innerText()), 'la lectura dice que salió del dibujo');
+    // responder la boca en la revisión y volver al dibujo: la respuesta pasa al dibujo
+    await p.fill('.uf-preguntas [data-codigo="CONEXION_EQUIPO"] input', '12');
+    await p.click('.uf-preguntas [data-codigo="CONEXION_EQUIPO"] button');
+    ok(await p.locator('.uf-preguntas .uf-alerta').count() === 0, 'respondida la boca, no quedan preguntas');
+    await p.click('#uf-editar-dibujo');
+    ok((await dib()).equipos[0].boca_in === 12 && await p.locator('#cad-tablero').isVisible(), '«Editar el dibujo» vuelve al tablero con la boca respondida');
+    // quitar el injerto (y su máquina) y dar «Listo»: se proponen las partidas para reemplazar
+    await p.click('#cad-h-borrar');
+    const r1 = await enTramo(ramal.id, 0.5);
+    await p.mouse.click(r1.x, r1.y);
+    m = await dib();
+    ok(!m.tramos.some((t) => t.D_in === 6) && m.equipos.length === 2 && /Se quitaron 1 tramo y 1 equipo/.test(await estado()), '«Borrar» quita el injerto con su máquina');
+    const antes = await R(() => window.COTIZAP.web.estadoApp.cot.partidas.filter((x) => x.unifilar_id).length);
+    await p.click('#cad-listo');
+    await p.waitForSelector('#uf-agregar');
+    ok(/^Reemplazar con \d+ partidas$/.test(await p.locator('#uf-agregar').innerText()) && new RegExp(`Ya hay ${antes} partidas del unifilar`).test(await p.locator('#uf-cuerpo').innerText()), 'con partidas ya importadas, «Listo» propone reemplazarlas');
+    await p.click('#uf-agregar');
+    const despues = await R(() => window.COTIZAP.web.estadoApp.cot.partidas.filter((x) => x.unifilar_id).map((x) => x.familia));
+    ok(despues.length < antes && !despues.includes('RAMAL') && !despues.includes('COMPRADO'), 'se reemplazaron: sin el injerto ni la manguera');
+    // el dibujo se guarda con la cotización
+    await p.reload();
+    await p.waitForSelector('#lista-partidas .partida');
+    ok(JSON.stringify(await dib()) === JSON.stringify(m), 'al recargar la página sigue el dibujo');
+    await p.click('#btn-unifilar');
+    ok(await p.locator('#uf-editar-dibujo').count() === 1, 'y la revisión ofrece «Editar el dibujo»');
+    await p.click('#uf-editar-dibujo');
+    await p.click('#cad-ejemplo');
+    ok(await p.locator('#cad-tablero .cad-equipo').count() === 4 && /croquis de ejemplo/.test(await estado()), '«Probar con el ejemplo» dibuja el croquis de ejemplo');
+    await p.click('#cad-listo');
+    ok(await p.locator('#uf-agregar').innerText() === 'Reemplazar con 22 partidas' && /Despiece definitiva/.test(await p.locator('.uf-estado').innerText()), 'el ejemplo dibujado: las 22 partidas del croquis, sin preguntas');
+    await p.click('#uf-agregar');
+    // un dibujo guardado que no sirve se descarta (no rompe la página)
+    await R(() => { const c = JSON.parse(localStorage.getItem('cotizap.cotizacion.v1')); c.dibujo_unifilar = { version: 1, tramos: [{ id: 'A-001', de: 'N-001', a: 'N-001' }], equipos: [] }; localStorage.setItem('cotizap.cotizacion.v1', JSON.stringify(c)); });
+    await p.reload();
+    await p.waitForSelector('#lista-partidas .partida');
+    ok(await dib() === undefined && await p.locator('#lista-partidas .chip-unifilar').count() === 22, 'un dibujo guardado roto se descarta; las partidas siguen');
+    // en el teléfono: el tablero arriba, el panel abajo, sin desplazamiento horizontal
+    await p.setViewportSize({ width: 390, height: 844 });
+    await p.click('#btn-dibujar');
+    const anchos = await R(() => [document.documentElement.scrollWidth, document.querySelector('#uf-cuerpo').scrollWidth, document.querySelector('#uf-cuerpo').clientWidth]);
+    ok(anchos[0] <= 390 && anchos[1] <= anchos[2], `sin desplazamiento horizontal en el teléfono (${anchos.join(' / ')})`);
+    ok(await p.locator('#cad-tablero').isVisible() && (await p.locator('#cad-tablero').boundingBox()).height >= 300, 'el tablero mide al menos 300 px de alto');
+    await p.context().close();
+  }
+
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

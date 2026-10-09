@@ -177,6 +177,9 @@
     const uf = esObjeto(c.unifilar) ? C.unifilar.leer(c.unifilar.lectura) : null;
     if (uf && !uf.errores.length) cot.unifilar = { lectura: uf.lectura, respuestas: C.unifilar.respuestasValidas(c.unifilar.respuestas), importado: c.unifilar.importado === true };
     else delete cot.unifilar;
+    // El dibujo del unifilar (unifilar_cad_ui.js): sólo si es un árbol válido desde el colector
+    const dib = c.dibujo_unifilar !== undefined && C.unifilarCad ? C.unifilarCad.validar(c.dibujo_unifilar, M).modelo : null;
+    if (dib) cot.dibujo_unifilar = dib; else delete cot.dibujo_unifilar;
     const vistos = new Set();
     cot.partidas = c.partidas.filter(esObjeto).map((p) => {
       const q = { ...C.validacion.migrarPartida({ ...p }) }; // lo guardado con campos de versiones anteriores pasa a los de hoy

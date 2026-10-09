@@ -151,6 +151,8 @@
           tipo: typeof t.tipo === 'string' ? t.tipo : 'NOTA',
           bbox_px: esObjeto(t.bbox_px) ? { x: +t.bbox_px.x || 0, y: +t.bbox_px.y || 0, w: +t.bbox_px.w || 0, h: +t.bbox_px.h || 0 } : { x: 0, y: 0, w: 0, h: 0 },
           confianza_ocr: finito(t.confianza_ocr) ? Math.max(0, Math.min(1, t.confianza_ocr)) : 0, asociado_a: typeof t.asociado_a === 'string' ? t.asociado_a : null,
+          // USUARIO: lo puso el ingeniero (el dibujo del unifilar), no se leyó
+          origen: t.origen === 'USUARIO' ? 'USUARIO' : 'OCR',
         })),
       },
       equipos: equipos.map((e) => ({
@@ -275,7 +277,7 @@
     };
     const notaVertical = (aid) => textos.find((t) => t.asociado_a === aid && t.confianza_ocr >= CONF_MIN && NOTA_VERTICAL.test(`${t.contenido_normalizado || ''} ${t.contenido_crudo || ''}`));
     // la confianza de un ángulo anotado, como medida (para avisar si es dudoso)
-    const comoMedida = (t) => ({ valor: parseFloat(t.contenido_normalizado), origen: 'OCR', confianza: t.confianza_ocr, texto_id: t.id });
+    const comoMedida = (t) => ({ valor: parseFloat(t.contenido_normalizado), origen: t.origen === 'USUARIO' ? 'USUARIO' : 'OCR', confianza: t.confianza_ocr, texto_id: t.id });
 
     // --- 2. material y calibre
     const matR = resp('metadatos', 'material');
@@ -531,7 +533,8 @@
           const red = agregarReduccion(nid, p, h[0], Math.max(Dp, Dh), Math.min(Dp, Dh), false);
           if (red) {
             n.accesorio_id = red.id;
-            alerta('INFO', 'TRANSICION_INSERTADA', [nid, red.id], `La etiqueta cambia de ${pulgadas(Dp)} a ${pulgadas(Dh)} sin accesorio dibujado.`, `Se insertó una reducción concéntrica de ${pulgadas(Math.max(Dp, Dh))} a ${pulgadas(Math.min(Dp, Dh))} (semiángulo de 15°, ${r1(red.L)} mm).`);
+            const dibujados = ap.diametro.origen === 'USUARIO' && A.get(h[0]).diametro.origen === 'USUARIO';
+            alerta('INFO', 'TRANSICION_INSERTADA', [nid, red.id], dibujados ? `El diámetro cambia de ${pulgadas(Dp)} a ${pulgadas(Dh)} en ${nid}.` : `La etiqueta cambia de ${pulgadas(Dp)} a ${pulgadas(Dh)} sin accesorio dibujado.`, `Se insertó una reducción concéntrica de ${pulgadas(Math.max(Dp, Dh))} a ${pulgadas(Math.min(Dp, Dh))} (semiángulo de 15°, ${r1(red.L)} mm).`);
           }
           return;
         }
@@ -545,7 +548,7 @@
           resuelta('ANGULO_INFERIDO', [nid], `Codo en ${nid}: ${theta}°.`, pregunta('OPCIONES', nid, 'angulo_deg', 'deg', opcionesAngulo(ANG_CODO), theta));
         } else if (ann) {
           theta = ANG_CODO.includes(ann.valor) ? ann.valor : masCercano(ann.valor, ANG_CODO);
-          ang = conAngulo(theta, 'OCR', ann.texto.confianza_ocr, ann.texto);
+          ang = conAngulo(theta, ann.texto.origen === 'USUARIO' ? 'USUARIO' : 'OCR', ann.texto.confianza_ocr, ann.texto);
           if (!ANG_CODO.includes(ann.valor)) {
             alerta('CONFIRMAR', 'ANGULO_NO_PERMITIDO', [nid, ann.texto.id], `El codo en ${nid} está anotado a ${ann.valor}°.`, `El taller hace codos a ${ANG_CODO.join('°, ')}°: se usa ${theta}°.`, `¿De cuántos grados es el codo en ${nid}?`,
               pregunta('OPCIONES', nid, 'angulo_deg', 'deg', opcionesAngulo(ANG_CODO), theta));
@@ -622,7 +625,7 @@
           resuelta('ANGULO_DERIVACION_NO_PERMITIDO', [nid], `Injerto en ${nid} a ${beta}°.`, pregunta('OPCIONES', nid, 'angulo_deg', 'deg', opcionesAngulo(ANG_INJ), beta));
         } else if (ann) {
           beta = ANG_INJ.includes(ann.valor) ? ann.valor : masCercano(ann.valor, ANG_INJ);
-          ang = conAngulo(beta, 'OCR', ann.texto.confianza_ocr, ann.texto);
+          ang = conAngulo(beta, ann.texto.origen === 'USUARIO' ? 'USUARIO' : 'OCR', ann.texto.confianza_ocr, ann.texto);
           if (!ANG_INJ.includes(ann.valor)) {
             alerta('CONFIRMAR', 'ANGULO_DERIVACION_NO_PERMITIDO', [nid, ann.texto.id], `La derivación en ${nid} está anotada a ${ann.valor}°.`, `El taller sólo hace injertos a ${ANG_INJ.join('° o ')}°: se usa ${beta}°.`, `¿A cuántos grados va el injerto en ${nid}?`,
               pregunta('OPCIONES', nid, 'angulo_deg', 'deg', opcionesAngulo(ANG_INJ), beta));
@@ -717,7 +720,7 @@
           if (finito(bocaR) && bocaR > 0) resuelta('CONEXION_EQUIPO', [e.id], `«${e.nombre}»: boca de ${pulgadas(bocaR)}.`, pregunta('NUMERO', e.id, 'boca_in', 'in', [], bocaR));
           else if (bocaLeida) {
             // anotada en el croquis: el diámetro se usa; el patrón de barrenos lo dice el equipo
-            alerta('ADVERTENCIA', 'CONEXION_EQUIPO', [e.id, n.id, bm.texto_id].filter(Boolean), `La boca de «${e.nombre}» está anotada de ${pulgadas(bocaLeida)}.`, 'Se usa; confirme con el equipo su patrón de barrenos (la otra media junta la pone el equipo).',
+            alerta('ADVERTENCIA', 'CONEXION_EQUIPO', [e.id, n.id, bm.texto_id].filter(Boolean), bm.origen === 'USUARIO' ? `La boca de «${e.nombre}» es de ${pulgadas(bocaLeida)}.` : `La boca de «${e.nombre}» está anotada de ${pulgadas(bocaLeida)}.`, 'Se usa; confirme con el equipo su patrón de barrenos (la otra media junta la pone el equipo).',
               `¿Se confirma la boca de ${pulgadas(bocaLeida)} de «${e.nombre}»?`, pregunta('NUMERO', e.id, 'boca_in', 'in', [], bocaLeida));
           } else {
             alerta('CONFIRMAR', 'CONEXION_EQUIPO', [e.id, n.id], `La boca de «${e.nombre}» no trae medida ni barrenos.`, `Se supone boca de ${pulgadas(Dd)} con brida compatible; la otra media junta la pone el equipo.`, `¿De qué diámetro es la boca de «${e.nombre}»? (confirme también su patrón de barrenos)`,

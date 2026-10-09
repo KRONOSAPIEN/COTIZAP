@@ -15,6 +15,7 @@ const SOP = require('../src/motor/soportes');
 const R = require('../src/motor/rapida');
 const UF = require('../src/motor/unifilar');
 const EJEMPLO = require('../src/datos/unifilar_ejemplo');
+const CAD = require('../src/motor/unifilar_cad');
 
 const raiz = path.join(__dirname, '..');
 const leer = (r) => fs.readFileSync(path.join(raiz, r), 'utf8');
@@ -48,6 +49,28 @@ function validar(v, s, ruta, errores) {
   }
   return errores;
 }
+
+test('El despiece que sale del dibujo del unifilar también cumple el esquema (textos de origen USUARIO, equipos y uniones)', () => {
+  const M = crearMaestros();
+  // el ejemplo dibujado y otro con lo que el ejemplo no tiene: bajada, máquina con brida y boca, extremo abierto, accesorios pegados
+  let m = CAD.agregarTramo(CAD.nuevo(M), M, 'N-001', { dir: 'H', az_deg: 0, largo_mm: 6000, D_in: 12 }).modelo;
+  m = CAD.injertar(m, M, 'A-001', 3000, { az_deg: 45, largo_mm: 650, D_in: 8 }).modelo;
+  m = CAD.agregarTramo(m, M, 'N-004', { dir: 'H', az_deg: 90, largo_mm: 2000, D_in: 8 }).modelo;
+  m = CAD.agregarTramo(m, M, 'N-005', { dir: 'BAJA', largo_mm: 2500, D_in: 8 }).modelo;
+  m = CAD.ponerEquipo(m, 'N-006', 'MAQUINA_BRIDA').modelo;
+  m = CAD.editarEquipo(m, 'EQ-02', { boca_in: 6 });
+  m = CAD.ponerEquipo(m, 'N-002', 'ABIERTO').modelo; // el final del tronco
+  m = CAD.aplicarRespuestas(m, M, { 'A-003': { encimado: 'UNION' } });
+  [CAD.dibujoEjemplo(M), m].forEach((dibujo, i) => {
+    const { lectura, respuestas } = CAD.aLectura(dibujo, M, { fecha: '2026-10-09T00:00:00Z' });
+    const bom = UF.despiezar(lectura, M, respuestas);
+    assert.deepEqual(validar(bom, ESQUEMA, '$', []), [], `dibujo ${i}`);
+    assert.ok(bom.red.textos.every((t) => t.origen === 'USUARIO' && t.tipo === 'ANGULO'));
+  });
+  const bom = UF.despiezar(CAD.aLectura(m, M, {}).lectura, M, CAD.aLectura(m, M, {}).respuestas);
+  assert.ok(bom.elementos_union.some((j) => j.tipo === 'UNION_ENGARGOLADA'), 'los accesorios pegados');
+  assert.ok(bom.accesorios.some((a) => a.tipo === 'REDUCCION' && a.nodo_id === 'N-006'), 'la reducción a la boca de 6″');
+});
 
 /** Los bloques ```json de un documento Markdown. */
 const bloquesJson = (md) => [...md.matchAll(/```json\n([\s\S]*?)\n```/g)].map((m) => m[1]);
