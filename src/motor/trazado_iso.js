@@ -1845,6 +1845,62 @@
     marcar(m, 'cambiarDiametro', { tramos: [t.id] });
     return terminar(m, M);
   }
+  /**
+   * Reduce el ducto desde un punto hacia las tomas (§4.3, bloque Reducción): desde { tramo, s_mm } parte el tramo ahí (pegado
+   * a un extremo, a menos del largo mínimo, toma el tramo entero); desde un nodo (un codo o una derivación) toma el tramo que
+   * le llega por el tronco. Ese tramo y los que le siguen aguas arriba por codos y uniones, hasta una toma, un punto de
+   * transición, un extremo, una derivación o un Ø con candado, quedan del Ø D, menor: la reducción sale sola en el punto.
+   * Hace falta el sentido del aire. m.ultimo.tramos son los que cambiaron (el primero, el del punto).
+   */
+  function reducir(t0, M, desde, D) {
+    const m = inicio(t0);
+    diametroValido(m, D, 'La reducción');
+    let g = calcular(m, M);
+    let primero;
+    let nodo;
+    if (esObjeto(desde) && desde.tramo !== undefined) {
+      const t = tramoDe(m, desde.tramo);
+      dato(rigido(t), 'Una manguera no se reduce: su Ø es el de su toma.', [t.id]);
+      if (!g.conocido(t.id)) falla('FLUJO_DESCONOCIDO', `Conecte primero el tramo ${t.id} al colector para saber hacia dónde reducir.`, [t.id]);
+      dato(finito(desde.s_mm), 'Falta en qué punto del tramo va la reducción.');
+      const L = g.seg.get(t.id).L;
+      const lim = m.politicas.largo_min_tramo_mm;
+      const arriba = g.arriba.get(t.id);
+      if (desde.s_mm < lim - 1e-9 || desde.s_mm > L - lim + 1e-9) {
+        primero = t;
+        nodo = g.abajo.get(t.id);
+      } else {
+        nodo = partir(m, g, t.id, desde.s_mm);
+        primero = t.a === arriba ? t : m.tramos.find((x) => x.a === nodo && x.id !== t.id);
+        g = calcular(m, M);
+      }
+    } else {
+      dato(typeof desde === 'string', 'La reducción va en un punto de un tramo o en un nodo.');
+      nodoDe(m, desde);
+      nodo = desde;
+      const der = g.derivaciones.find((x) => x.nodo === nodo);
+      const entran = g.entran(nodo).filter(rigido);
+      if (!g.ady.get(nodo).length) falla('DATO_INVALIDO', `En ${nodo} no hay ducto.`, [nodo]);
+      if (!g.ady.get(nodo).every((x) => g.conocido(x.tramo.id))) falla('FLUJO_DESCONOCIDO', `Conecte primero el ducto de ${nodo} al colector para saber hacia dónde reducir.`, [nodo]);
+      if (!entran.length) falla('DATO_INVALIDO', `A ${nodo} no le llega ducto de aguas arriba: la reducción va en un tramo, o en el codo o la derivación donde cambia el Ø.`, [nodo]);
+      primero = der ? g.tramos.get(der.tIn) : entran[0];
+    }
+    const actual = primero.diametro_in;
+    dato(D < actual, `Para reducir, el Ø nuevo debe ser menor que el del tramo ${primero.id} (${pulgadas(actual)}).`, [primero.id]);
+    const cambian = [primero];
+    let u = g.arriba.get(primero.id);
+    for (;;) {
+      if (g.puertoDeNodo.has(u) || g.pt.has(u)) break;
+      const entran = g.entran(u);
+      if (entran.length !== 1 || g.ady.get(u).length !== 2 || !rigido(entran[0]) || entran[0].diametro_bloqueado || entran[0].diametro_in !== actual) break;
+      cambian.push(entran[0]);
+      u = g.arriba.get(entran[0].id);
+    }
+    cambian.forEach((x) => { tramoDe(m, x.id).diametro_in = D; });
+    marcar(m, 'reducir', { nodo, tramos: cambian.map((x) => x.id) });
+    return terminar(m, M);
+  }
+
   /** Ancla un nodo (punto fijo; no se funde) o lo suelta. */
   function anclar(t0, M, nodoId, si) {
     const m = inicio(t0);
@@ -2464,6 +2520,6 @@
     ponerEquipo, editarEquipo, moverEquipo, quitarEquipo, agregarPuerto, editarPuerto, quitarPuerto,
     acoplarBrida, acoplarManguera, moverTransicion, desacoplar,
     candidatas, textoCandidatas, elegirDireccion, ajustarLargo, trazar, conectar, rutas,
-    cambiarLargo, moverSegmento, cambiarAngulo, cambiarDiametro, anclar, borrarTramo, dimensionar, aplicarDimensiones,
+    cambiarLargo, moverSegmento, cambiarAngulo, cambiarDiametro, reducir, anclar, borrarTramo, dimensionar, aplicarDimensiones,
   };
 }));

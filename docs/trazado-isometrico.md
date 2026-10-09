@@ -1,7 +1,7 @@
 # Trazado unifilar isométrico de redes de extracción
 
 > **Especificación funcional y técnica · COTIZAP · 9-oct-2026.** Para desarrolladores full-stack, diseñadores de producto CAD y proyectistas de ingeniería industrial.
-> La acompañan el esquema de datos [`docs/trazado-isometrico.schema.json`](trazado-isometrico.schema.json), el ejemplo resuelto [`docs/ejemplos/trazado-isometrico-ejemplo.json`](ejemplos/trazado-isometrico-ejemplo.json), la prueba de contrato [`tests/trazado_isometrico_contrato.test.js`](../tests/trazado_isometrico_contrato.test.js) y el modelo de la etapa 1, [`src/motor/trazado_iso.js`](../src/motor/trazado_iso.js), con sus pruebas (§5.1). La prueba verifica que el ejemplo cumple el esquema y cada regla de §2 (posiciones, ángulos, manguera, accesorios contra el motor de COTIZAP, caudales, velocidades, choques y fricción), y que este documento trae el esquema y el ejemplo tal como están en sus archivos.
+> La acompañan el esquema de datos [`docs/trazado-isometrico.schema.json`](trazado-isometrico.schema.json), el ejemplo resuelto [`docs/ejemplos/trazado-isometrico-ejemplo.json`](ejemplos/trazado-isometrico-ejemplo.json), la prueba de contrato [`tests/trazado_isometrico_contrato.test.js`](../tests/trazado_isometrico_contrato.test.js) el modelo de la etapa 1, [`src/motor/trazado_iso.js`](../src/motor/trazado_iso.js), con sus pruebas (§5.1), y el tablero jugable de la etapa 2, la pestaña «Trazado isométrico» de COTIZAP ([`src/web/trazado_tablero.js`](../src/web/trazado_tablero.js) y [`src/web/trazado_iso_ui.js`](../src/web/trazado_iso_ui.js), §5.2). La prueba verifica que el ejemplo cumple el esquema y cada regla de §2 (posiciones, ángulos, manguera, accesorios contra el motor de COTIZAP, caudales, velocidades, choques y fricción), y que este documento trae el esquema y el ejemplo tal como están en sus archivos.
 
 ## Índice
 
@@ -2008,7 +2008,7 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
 | Tramo recto | Tramo recto | Arrastrar desde un puerto, un extremo o un tramo | T | Tramo, y codo o injerto si da vuelta |
 | Codo | Codo | Arrastrar desde un extremo; clic en un codo | C | Sólo giros de codo; en un codo, cambiar θ |
 | Sube o baja | Tramo recto vertical | Arrastrar hacia arriba o abajo | V | Vertical con codo de 90° |
-| Reducción | Reducción | Clic en un tramo | R | El tramo baja de Ø desde ese punto (concéntrica o excéntrica, §2.4) |
+| Reducción | Reducción | Clic en un tramo (o en el codo) | R | Desde ese punto hacia las tomas el ducto baja al Ø activo (concéntrica o excéntrica, §2.4) |
 | Injerto simple | Injerto simple | Arrastrar desde un tramo | I | Ramal a 30° o 45°, por arriba o de lado |
 | Reducción con injerto | Reducción con injerto | Arrastrar desde un tramo | J | Ramal y el tronco reducido aguas arriba |
 | T a 90° · Pantalón | Pantalón | — | — | Con candado mientras la política lo prohíba |
@@ -2070,7 +2070,7 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
 | Etapa | Qué | Dónde | Se apoya en |
 | --- | --- | --- | --- |
 | 1 · Modelo **(hecha, §5.1)** | El esquema de §3. Equipos y puertos con posición; puntos fijos y compensación; direcciones inclinadas; orientación del flujo desde cualquier arranque; el imán (§2.5.4) y la manguera (§2.8.2) como funciones puras con pruebas | `src/motor/trazado_iso.js` (nuevo) | `unifilar_cad.js`: árbol, giros, fusión, choques (`distanciaSegmentos`), `aLectura` |
-| 2 · Tablero | Fases, colocación de equipos y tomas, plano de trabajo y sus teclas, caja de valores, imán y tiradores de la manguera, cubo de vista | `src/web/unifilar_cad_ui.js` (ampliado) | El tablero SVG actual: cámara, gestos, etiquetas sin encimar, deshacer |
+| 2 · Tablero **(hecha, §5.2)** | Fases, colocación de equipos y tomas, plano de trabajo y sus teclas, caja de valores, imán y tiradores de la manguera, cubo de vista | `src/web/trazado_tablero.js` (el juego, sin pantalla) y `src/web/trazado_iso_ui.js` (la pestaña «Trazado isométrico») | Las ideas del tablero de Dibujar unifilar: cámara, gestos, etiquetas sin encimar, deshacer |
 | 3 · Validar y dimensionar | Caudales, velocidades, dimensionamiento con candados, catálogo de §2.11, panel de problemas con «Corregir» | Motor y tablero | `revisar` y las reglas del unifilar |
 | 4 · Cálculo | Pérdidas locales con su tabla de coeficientes, presión por toma, balanceo y selección del ventilador; llena `resultados` | `src/motor/perdidas.js` (nuevo) | El JSON de §3 |
 
@@ -2086,7 +2086,7 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
 | Proyección y rejilla | `proyectar`, `rayoDeVista`, `alPlano`, `planoHorizontal`, `planoVertical`, `rejilla`, `direccionDeVector`, `textoDireccion` | §0.4, §2.1 |
 | Trazar | `candidatas`, `textoCandidatas`, `elegirDireccion`, `ajustarLargo`, `trazar`, `conectar` | §1.3, §2.1 |
 | Imán | `rutas` | §2.5.4 |
-| Editar con puntos fijos | `cambiarLargo`, `moverSegmento`, `cambiarAngulo`, `cambiarDiametro`, `anclar`, `borrarTramo` | §1.3 pasos 10 y 11, §2.2 |
+| Editar con puntos fijos | `cambiarLargo`, `moverSegmento`, `cambiarAngulo`, `cambiarDiametro`, `reducir`, `anclar`, `borrarTramo` | §1.3 pasos 10 y 11, §2.2, §4.3 |
 | Dimensionar | `dimensionar`, `aplicarDimensiones` | §2.6 |
 | Revisar y salir | `calcular`, `revisar`, `resumen`, `aSistema`, `desdeSistema`, `validar`, `renumerar` | §2.11, §3 |
 
@@ -2111,7 +2111,7 @@ El trazo se guarda tal cual (posiciones de los nodos, tramos con su Ø y su mate
 7. **Mover un equipo con brida** que no se puede compensar se rechaza (FIJO_SE_MUEVE), y lo mismo una manguera que ya no alcanza (MANGUERA_IMPOSIBLE). Las otras tomas del mismo equipo se mueven con él.
 8. **Renumerar.** `renumerar` da identificadores limpios en el orden de la red: los nodos desde la boca, con el tronco antes que el ramal; los tramos desde cada toma hacia el colector; las piezas en el orden de sus nodos. Así sale la numeración del ejemplo. Las partidas y respuestas que usaban los identificadores anteriores dejan de servir.
 9. **Para las etapas siguientes:**
-   - el tablero (etapa 2);
+   - el tablero (etapa 2, hecho: §5.2);
    - pasar el trazo a partidas: las reglas del unifilar todavía leen sólo tramos horizontales y verticales, y falta extenderlas a los inclinados;
    - el pantalón: el taller lo retiró, y el modelo lo rechaza aunque la política lo permita;
    - la descarga del ventilador (SALIDA);
@@ -2125,6 +2125,33 @@ El trazo se guarda tal cual (posiciones de los nodos, tramos con su Ø y su mate
 4. Velocidades por servicio y por material.
 5. Si en trabajos de ventilación se permiten la T a 90° y el pantalón.
 6. Si se prefiere la entrada por arriba o de lado cuando las dos caben.
+
+### 5.2 Etapa 2, hecha: el tablero
+
+Es la pestaña **Trazado isométrico** de COTIZAP: otro apartado, al lado de la cotización rápida y la detallada, que no cambia nada de ellas ni de Dibujar unifilar. Se pensó para crecer `unifilar_cad_ui.js`, pero ese tablero vive dentro del diálogo de Importar unifilar y dibuja otro modelo; el trazado isométrico necesita el ancho de una pestaña y su propio modelo, así que va aparte. Se guarda con la cotización (`trazado_iso`) y se valida con `validar` al abrirla: uno roto se descarta sin tocar lo demás.
+
+| Pieza | Qué hace |
+| --- | --- |
+| `src/web/trazado_tablero.js` | El juego sin pantalla, probado en Node: la cámara (NE, SE, SO, NO, planta y elevaciones; de mm a px y de regreso), qué hay bajo el puntero (§2.1.6), la cara de la caja con su ajuste (centro, medio de arista, rejilla de 50 mm), los tiradores de la manguera, el plano de trabajo (§2.1.2) con ↑ → ← H V, Tab y Mayús, la caja de valores, el fantasma con su color probado contra el modelo, la alineación con los nodos, el imán, el modo cadena, reducción y reducción con injerto, mover segmento, medir, borrar, deshacer (100 pasos), las fases con sus pendientes, exportar e importar, y `ejemplo` (el de §1.6) |
+| `src/web/trazado_iso_ui.js` | Lo que se ve: barra de fases, paleta de bloques con contadores y candados, lienzo SVG (rejilla, cajas con sus caras visibles por profundidad, ductos con su ancho real y la flecha del aire, mangueras, piezas y cotas sin encimar, gizmo, cubo de vista), inspector por selección y por fase, barra de estado con la caja de valores y el panel de problemas; los gestos (ratón, pluma, dedo, dos dedos) y el teclado de §4.4 |
+| `reducir` (modelo) | La operación que faltaba para el bloque Reducción: desde un punto de un tramo, o desde un codo o una derivación, el Ø baja hacia las tomas por codos y uniones hasta una toma, un punto de transición, una derivación o un candado |
+
+**Cómo se verifica:**
+
+- `tests/trazado_tablero.test.js` juega el recorrido de §1.6 sólo con coordenadas de pantalla y teclas: los equipos se colocan tocando el piso, la boca se pone girando la vista (la cara +X no se ve en NE), la sierra se lleva de 10 800 a 10 750 con Mayús+←, el rombo y el círculo dejan la S de 39.31°, el tronco sale con ↑, «1.8» y Entrar, el imán llega a la boca y al tronco (con Tab entre sus tres propuestas). Da exactamente el JSON del ejemplo. Además: la cámara y su inversa, el encuadre, lo que hay bajo el puntero, el ajuste en la cara, la caja de valores, el plano de trabajo y sus teclas, el fantasma (rojo, ámbar, alineado), el imán y Mayús, la reducción, la reducción con injerto, mover segmento, medir, borrar el ramal, las fases, exportar e importar y el límite de deshacer.
+- `tests/e2e/ui.e2e.js`, sección 35, hace lo mismo en el navegador con el ratón y el teclado de verdad y compara el JSON; luego recarga la página, prueba lo que no se puede, deshacer, arrastrar desde la paleta, el panel de problemas, el cubo de vista, un trazado guardado roto y el teléfono sin desplazamiento horizontal.
+
+**Precisiones que salieron al hacerlo:**
+
+1. **La tecla F** encuadra (§4.4), salvo con una toma seleccionada: entonces la acopla con manguera (§4.3); **B** la acopla con brida. **V** es la herramienta Sube o baja, salvo mientras se traza: entonces fija el plano vertical.
+2. **Mayús** sostenida conserva la dirección del fantasma y el largo va de 10 en 10 mm (§1.3 paso 5 y §2.1.5 piden las dos cosas con la misma tecla); Alt va de 1 en 1.
+3. **Caja de valores:** un número sin unidad hasta 100 es en m (`3.25`); mayor, en mm (`750`); también `3250mm` y `325cm`. Varios valores se separan con espacio (`2.5 @135`).
+4. **Sin arrastre** (clic en el arranque y una medida tecleada), con un eje fijo, gana la dirección positiva (+X, +Y o +Z).
+5. **Las caras que no se ven** no se pueden tocar: la boca en la cara +X del colector del ejemplo se pone girando la vista (E) o desde el inspector del equipo (cara y dos coordenadas).
+6. **El rombo y el círculo** de la manguera coinciden mientras no hay desvío: decide el primer arrastre (a lo largo del eje de la toma, el rombo; de lado, el círculo).
+7. **El color del fantasma:** verde si se puede; ámbar si se puede pero deja un aviso o un error del catálogo (por ejemplo, un choque); rojo con el motivo si el modelo lo rechaza. Una red que todavía no llega al colector y el extremo de la cadena no lo pintan de ámbar: son normales mientras se traza.
+8. **Rapidez:** cada fantasma nuevo se prueba en el modelo (`trazar` y `revisar`) y se guarda en una caché mientras dura el trazo. Con trazos de decenas de tramos tarda unos milisegundos; con 481 tramos, de 20 a 60 ms. La rejilla gruesa de choques de §2.10 lo bajaría en trazos grandes.
+9. **Pendiente:** el menú radial de 400 ms en el teléfono (§4.5), la regla de niveles con nombre, la compuerta y la tapa (sus bloques salen con candado y el porqué), «Corregir» en el panel de problemas (etapa 3), la rejilla gruesa de choques y pasar el trazo a partidas.
 
 ---
 

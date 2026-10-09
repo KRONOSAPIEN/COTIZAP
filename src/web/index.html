@@ -23,6 +23,7 @@
   <nav class="tabs" role="tablist" aria-label="Secciones">
     <button type="button" role="tab" id="tab-rapida" data-tab="rapida" aria-selected="false" aria-controls="panel-rapida" aria-label="Cotización rápida"><span class="tab-largo">Cotización rápida</span><span class="tab-corto" aria-hidden="true">Rápida</span></button>
     <button type="button" role="tab" id="tab-cotizacion" data-tab="cotizacion" aria-selected="true" aria-controls="panel-cotizacion" aria-label="Cotización detallada"><span class="tab-largo">Cotización detallada</span><span class="tab-corto" aria-hidden="true">Detallada</span></button>
+    <button type="button" role="tab" id="tab-trazado" data-tab="trazado" aria-selected="false" aria-controls="panel-trazado" aria-label="Trazado isométrico"><span class="tab-largo">Trazado isométrico</span><span class="tab-corto" aria-hidden="true">Trazado</span></button>
     <button type="button" role="tab" id="tab-planos" data-tab="planos" aria-selected="false" aria-controls="panel-planos">Planos</button>
     <button type="button" role="tab" id="tab-compras" data-tab="compras" aria-selected="false" aria-controls="panel-compras">Compras y gastos</button>
     <button type="button" role="tab" id="tab-maestros" data-tab="maestros" aria-selected="false" aria-controls="panel-maestros">Tablas maestras</button>
@@ -139,6 +140,22 @@
       </form>
       <div id="rapida-resultado" class="rapida-res" aria-live="polite"></div>
     </div>
+  </section>
+
+  <section id="panel-trazado" class="panel" role="tabpanel" aria-labelledby="tab-trazado" hidden>
+    <div class="planos-cab">
+      <div>
+        <h2>Trazado isométrico</h2>
+        <p>Arme la red de extracción como un juego de construcción: coloque los equipos, póngales sus tomas, acóplelas con manguera o brida y trace hasta el colector. Las piezas salen solas, ajustadas a lo que el taller fabrica, y lo que no se puede se dice con su porqué. Se guarda con la cotización.</p>
+      </div>
+      <div class="planos-acc">
+        <button type="button" class="btn btn-sec" id="ti-nuevo">Nuevo trazado</button>
+        <button type="button" class="btn btn-sec" id="ti-ejemplo">Abrir el ejemplo</button>
+        <button type="button" class="btn btn-sec" id="ti-deshacer" title="Deshacer (Ctrl+Z)">Deshacer</button>
+        <button type="button" class="btn btn-sec" id="ti-rehacer" title="Rehacer (Ctrl+Y)">Rehacer</button>
+      </div>
+    </div>
+    <div id="ti-raiz" class="ti"></div>
   </section>
 
   <section id="panel-planos" class="panel" role="tabpanel" aria-labelledby="tab-planos" hidden>
@@ -318,6 +335,7 @@
 <script src="../motor/unifilar_vision.js"></script>
 <script src="../motor/imagen.js"></script>
 <script src="../motor/unifilar_cad.js"></script>
+<script src="../motor/trazado_iso.js"></script>
 <script src="dom.js"></script>
 <script src="esquemas.js"></script>
 <script src="planos.js"></script>
@@ -328,6 +346,8 @@
 <script src="rapida_ui.js"></script>
 <script src="unifilar_cad_ui.js"></script>
 <script src="unifilar_ui.js"></script>
+<script src="trazado_tablero.js"></script>
+<script src="trazado_iso_ui.js"></script>
 <script src="almacen.js"></script>
 <script src="app.js"></script>
 </body>

@@ -298,10 +298,9 @@ main { padding: 16px 24px 48px; max-width: 1540px; margin-inline: auto; }
   main { padding-inline: 16px; padding-top: 12px; }
   .barra { position: static; padding: 10px 16px; gap: 8px 12px; }
   .marca-sub { display: none; }
-  /* cinco pestañas en dos renglones: tres arriba y dos abajo; aun en 320 px el texto cabe (se parte en dos renglones) */
-  .tabs { flex: 1 1 100%; margin: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .tabs [role="tab"] { grid-column: span 2; min-width: 0; text-align: center; padding-inline: 4px; line-height: 1.15; font-size: 13px; }
-  .tabs [role="tab"]:nth-child(n + 4) { grid-column: span 3; }
+  /* seis pestañas en dos renglones de tres; aun en 320 px el texto cabe (se parte en dos renglones) */
+  .tabs { flex: 1 1 100%; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .tabs [role="tab"] { min-width: 0; text-align: center; padding-inline: 4px; line-height: 1.15; font-size: 13px; }
   .acciones { flex: 1 1 100%; }
   .acciones .btn { flex: 1; padding: 6px 8px; min-height: 36px; font-size: 13px; }
   .datos { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; gap: 10px 12px; }
@@ -1118,4 +1117,244 @@ kbd { font: 500 11.5px var(--font-mono); padding: 1px 6px; border: 1px solid var
 @media (max-width: 719px) {
   .cg-bloque-cab .cg-acc { justify-content: flex-start; }
   .cg-marca-et { font-size: 11px; }
+}
+
+/* -------------------------------------------------------------------------- trazado isométrico (trazado_iso_ui.js) */
+:root {
+  --eje-x: #c8372d;
+  --eje-y: #23874a;
+  --eje-z: #2a5fd0;
+  --ti-sel: #d9670f;
+  --ti-cara-arriba: #f7f9fb;
+  --ti-cara-x: #dde4ec;
+  --ti-cara-y: #c9d3de;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --eje-x: #f07a70;
+    --eje-y: #5fc98a;
+    --eje-z: #7ea6f2;
+    --ti-sel: #f39a4f;
+    --ti-cara-arriba: #2a3a4b;
+    --ti-cara-x: #223040;
+    --ti-cara-y: #1b2734;
+  }
+}
+:root[data-theme="dark"] {
+  --eje-x: #f07a70;
+  --eje-y: #5fc98a;
+  --eje-z: #7ea6f2;
+  --ti-sel: #f39a4f;
+  --ti-cara-arriba: #2a3a4b;
+  --ti-cara-x: #223040;
+  --ti-cara-y: #1b2734;
+}
+.ti { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.ti-fases { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ti-fases-lista { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; flex: 1 1 auto; }
+.ti-fase { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 4px 12px 4px 6px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--fg-2); font: 600 13px var(--font-ui); cursor: pointer; }
+.ti-fase:hover { background: var(--surface-2); color: var(--fg); }
+.ti-fase-num { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--surface-3); color: var(--fg); font-variant-numeric: tabular-nums; }
+.ti-fase-activa { border-color: var(--accent); background: var(--accent-soft); color: var(--fg); box-shadow: inset 0 0 0 1px var(--accent); }
+.ti-fase-activa .ti-fase-num { background: var(--accent); color: var(--accent-fg); }
+.ti-fase-n { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--warn-soft); color: var(--warn); font-size: 11.5px; line-height: 20px; text-align: center; font-variant-numeric: tabular-nums; }
+.ti-cuerpo { display: grid; grid-template-columns: 210px minmax(0, 1fr) 300px; gap: 10px; min-height: 560px; }
+.ti-paleta, .ti-inspector { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
+.ti-paleta { padding: 8px; display: flex; flex-direction: column; gap: 10px; overflow: auto; max-height: 76vh; }
+.ti-grupo { display: flex; flex-direction: column; gap: 3px; }
+.ti-grupo-tit { font: 600 11px var(--font-ui); letter-spacing: 0.07em; text-transform: uppercase; color: var(--fg-3); padding: 2px 4px; }
+.ti-bloque { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto auto; align-items: center; gap: 6px; min-height: 34px; padding: 3px 6px; border-radius: 8px; border: 1px solid transparent; background: none; color: var(--fg); font: 500 13px var(--font-ui); text-align: left; cursor: pointer; }
+.ti-bloque:hover { background: var(--surface-2); }
+.ti-bloque .icono { color: var(--accent); }
+.ti-bloque .ico { width: 20px; height: 20px; }
+.ti-bloque-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ti-bloque-activo { background: var(--accent-soft); border-color: var(--accent); }
+.ti-bloque-apagado { color: var(--fg-3); cursor: help; }
+.ti-bloque-apagado .icono { color: var(--fg-3); }
+.ti-tecla { font: 500 10.5px var(--font-mono); color: var(--fg-3); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.ti-n { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--surface-3); color: var(--fg-2); font-size: 11px; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; }
+.ti-n-0 { visibility: hidden; }
+.ti-candado .ico { width: 15px; height: 15px; color: var(--fg-3); }
+.ti-centro { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.ti-lienzo-marco { position: relative; flex: 1 1 auto; min-height: 460px; background: var(--surface-2); }
+.ti-lienzo { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; user-select: none; -webkit-user-select: none; cursor: crosshair; outline: none; }
+.ti-lienzo:focus-visible { box-shadow: inset 0 0 0 3px var(--accent); }
+.ti-vistas { position: absolute; top: 8px; left: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--sombra); max-width: calc(100% - 110px); }
+.ti-vista-btn { min-height: 30px; padding: 3px 10px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: 600 12.5px var(--font-ui); cursor: pointer; }
+.ti-vista-btn:hover { background: var(--surface-2); }
+.ti-vista-activa { background: var(--accent-soft); border-color: var(--accent); }
+.ti-vistas .btn-icono { width: 32px; height: 32px; }
+.ti-cubo { position: absolute; top: 6px; right: 6px; width: 96px; height: 96px; }
+.ti-cubo-cara { cursor: pointer; }
+.ti-cubo-cara polygon { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; }
+.ti-cubo-cara:hover polygon { fill: var(--accent-soft); stroke: var(--accent); }
+.ti-cubo-cara text { font: 600 8px var(--font-ui); fill: var(--fg-2); pointer-events: none; }
+.ti-escala { position: absolute; right: 10px; bottom: 8px; font-size: 11.5px; color: var(--fg-3); pointer-events: none; background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
+.ti-estado { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; padding: 6px 10px; border-top: 1px solid var(--line); font: 500 12.5px var(--font-ui); color: var(--fg-2); background: var(--surface); }
+.ti-coords { font-family: var(--font-mono); font-size: 12px; white-space: pre; min-width: 190px; color: var(--fg); }
+.ti-sep { padding: 0 10px; border-left: 1px solid var(--line); }
+.ti-d { display: inline-flex; align-items: center; gap: 6px; }
+.ti-d select { width: auto; min-height: 30px; padding: 2px 24px 2px 8px; font-size: 12.5px; }
+.ti-caja { font-family: var(--font-mono); color: var(--fg); min-width: 90px; }
+.ti-msg { min-height: 38px; margin: 0; padding: 9px 12px; font-size: 13px; color: var(--fg-2); border-top: 1px solid var(--line); background: var(--surface); }
+.ti-msg-error { color: var(--crit); background: var(--crit-soft); }
+.ti-inspector { padding: 12px 14px; overflow: auto; max-height: 76vh; }
+.ti-ins { display: flex; flex-direction: column; gap: 10px; }
+.ti-ins h4 { margin: 4px 0 0; }
+.ti-ins-tit h3 { font-size: 15px; }
+.ti-ins-sub { font-size: 12.5px; color: var(--fg-2); margin-top: 2px; }
+.ti-rejilla-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; align-items: end; }
+.ti-campo input, .ti-campo select { min-height: 34px; padding: 5px 8px; }
+.ti-nota { font-size: 12.5px; color: var(--fg-2); }
+.ti-semaforo { font-size: 13px; font-weight: 600; padding: 6px 9px; border-radius: 8px; }
+.ti-sem-verde { color: var(--good); background: var(--good-soft); }
+.ti-sem-ambar { color: var(--warn); background: var(--warn-soft); }
+.ti-sem-rojo { color: var(--crit); background: var(--crit-soft); }
+dd.ti-sem-verde, dd.ti-sem-ambar { background: none; font-weight: 600; }
+.ti-seg { display: flex; gap: 0; }
+.ti-seg-btn { flex: 1 1 0; min-height: 34px; padding: 4px 10px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--fg); font: 600 13px var(--font-ui); cursor: pointer; }
+.ti-seg-btn:first-child { border-radius: 8px 0 0 8px; }
+.ti-seg-btn:last-child { border-radius: 0 8px 8px 0; border-left: 0; }
+.ti-seg-activo { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.ti-acciones { display: flex; flex-wrap: wrap; gap: 6px; }
+.ti-acciones .btn { min-height: 34px; padding: 5px 10px; font-size: 13px; }
+.ti-lista { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.ti-lista .enlace { text-align: left; font-size: 13px; padding: 2px 4px; }
+.ti-avisos li { color: var(--warn); }
+.ti-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--fg-2); min-height: 34px; }
+.ti-check input { width: 18px; height: 18px; }
+.ti-check .ico { width: 15px; height: 15px; }
+.ti-datos { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px; font-size: 13px; }
+.ti-datos dt { color: var(--fg-2); }
+.ti-datos dd { font-variant-numeric: tabular-nums; }
+.ti-nueva-toma { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ti-nueva-toma select { width: auto; min-height: 34px; padding: 4px 24px 4px 8px; font-size: 13px; }
+.ti-mini { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--fg-2); }
+.ti-mini input { width: 64px; min-height: 34px; padding: 4px 6px; }
+.ti-politicas summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--fg-2); }
+.ti-politicas > *:not(summary) { margin-top: 8px; }
+.ti-pasos { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--fg-2); display: flex; flex-direction: column; gap: 4px; }
+#ti-json { width: 100%; font: 12px var(--font-mono); }
+.ti-problemas { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
+.ti-problemas summary { cursor: pointer; font-weight: 700; font-size: 13px; }
+.ti-info-n { font-weight: 500; color: var(--fg-3); }
+.ti-prob-lista { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; max-height: 260px; overflow: auto; }
+.ti-prob-btn { all: unset; cursor: pointer; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; width: 100%; padding: 5px 8px; border-radius: 8px; font-size: 12.5px; box-sizing: border-box; }
+.ti-prob-btn:hover { background: var(--surface-2); }
+.ti-prob-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ti-prob-sev { font-weight: 700; white-space: nowrap; }
+.ti-prob-error .ti-prob-sev, .ti-prob-bloqueante .ti-prob-sev { color: var(--crit); }
+.ti-prob-aviso .ti-prob-sev { color: var(--warn); }
+.ti-prob-info .ti-prob-sev { color: var(--fg-3); }
+.ti-prob-msg { flex: 1 1 260px; color: var(--fg); }
+/* el lienzo */
+.ti-rejilla-linea { stroke: var(--line-strong); stroke-opacity: 0.45; stroke-width: 1; fill: none; }
+.ti-eje { stroke-width: 2; }
+.ti-eje-x { stroke: var(--eje-x); }
+.ti-eje-y { stroke: var(--eje-y); }
+.ti-eje-z { stroke: var(--eje-z); }
+.ti-eje-txt, .ti-gizmo-txt { font: 700 11px var(--font-ui); }
+.ti-eje-x-txt { fill: var(--eje-x); }
+.ti-eje-y-txt { fill: var(--eje-y); }
+.ti-eje-z-txt { fill: var(--eje-z); }
+.ti-gizmo-fondo { fill: var(--surface); stroke: var(--line); opacity: 0.92; }
+.ti-gizmo-eje { stroke-width: 2.5; stroke-linecap: round; }
+.ti-plano-rect { fill: var(--accent); fill-opacity: 0.07; stroke: var(--accent); stroke-opacity: 0.4; stroke-dasharray: 4 4; pointer-events: none; }
+.ti-plano-txt { font: 600 11px var(--font-ui); fill: var(--accent); pointer-events: none; }
+.ti-cara { stroke: var(--fg-3); stroke-width: 1; stroke-linejoin: round; }
+.ti-cara-arriba { fill: var(--ti-cara-arriba); }
+.ti-cara-x { fill: var(--ti-cara-x); }
+.ti-cara-y { fill: var(--ti-cara-y); }
+.ti-equipo-colector .ti-cara { stroke: var(--accent); }
+.ti-equipo-colector .ti-cara-arriba { fill: var(--accent-soft); }
+.ti-equipo.ti-hover .ti-cara { stroke: var(--accent); stroke-width: 1.8; }
+.ti-equipo.ti-sel .ti-cara { stroke: var(--ti-sel); stroke-width: 2.5; }
+.ti-equipo.ti-err .ti-cara { stroke: var(--crit); stroke-width: 2; }
+.ti-equipo-fantasma { fill: var(--accent); fill-opacity: 0.12; stroke: var(--accent); stroke-dasharray: 5 4; pointer-events: none; }
+.ti-tramo { stroke: var(--accent); stroke-linecap: butt; opacity: 0.85; fill: none; }
+.ti-tramo-punta { fill: var(--accent); fill-opacity: 0.35; stroke-width: 2; }
+.ti-tramo.ti-aviso { stroke: var(--warn); }
+.ti-tramo.ti-err { stroke: var(--crit); }
+.ti-tramo.ti-hover { opacity: 1; }
+.ti-tramo.ti-sel { stroke: var(--ti-sel); opacity: 1; }
+.ti-tramo-eje { stroke: var(--surface); stroke-width: 1; stroke-dasharray: 6 4; opacity: 0.7; pointer-events: none; }
+.ti-flecha { fill: var(--surface); pointer-events: none; }
+.ti-manguera { stroke: var(--s6); stroke-linecap: round; stroke-linejoin: round; fill: none; opacity: 0.55; }
+.ti-manguera.ti-sel { stroke: var(--ti-sel); opacity: 0.8; }
+.ti-manguera-eje { stroke: var(--s6); stroke-width: 1.2; stroke-dasharray: 3 3; fill: none; pointer-events: none; }
+.ti-puerto-marca { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5; }
+.ti-puerto-libre .ti-puerto-marca { fill: var(--surface); stroke: var(--warn); stroke-width: 2.5; }
+.ti-puerto-entrada .ti-puerto-marca { fill: var(--good); }
+.ti-puerto.ti-sel .ti-puerto-marca { stroke: var(--ti-sel); stroke-width: 3; }
+.ti-puerto.ti-err .ti-puerto-marca { stroke: var(--crit); stroke-width: 2.5; }
+.ti-puerto-flecha { stroke: var(--accent); stroke-width: 2; }
+.ti-punta { fill: var(--accent); }
+.ti-pt { fill: var(--surface); stroke: var(--s6); stroke-width: 2.2; }
+.ti-pt.ti-sel { stroke: var(--ti-sel); }
+.ti-nodo { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+.ti-nodo-libre { fill: var(--accent); stroke: var(--surface); }
+.ti-nodo-ancla { stroke: var(--fg); stroke-width: 3; }
+.ti-nodo.ti-aviso { stroke: var(--warn); stroke-width: 3; }
+.ti-nodo.ti-err { stroke: var(--crit); stroke-width: 3; }
+.ti-nodo.ti-sel { stroke: var(--ti-sel); stroke-width: 4; }
+.ti-pieza { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; }
+.ti-pieza-err { stroke: var(--crit); }
+.ti-pieza-txt { font: 600 11px var(--font-ui); fill: var(--fg); pointer-events: none; }
+.ti-txt { font: 600 12px var(--font-ui); fill: var(--fg); paint-order: stroke; stroke: var(--surface-2); stroke-width: 3.5px; stroke-linejoin: round; pointer-events: none; }
+.ti-txt-err { fill: var(--crit); }
+.ti-txt-eq { font-weight: 600; fill: var(--fg-2); }
+/* lo que se mueve con el puntero (§4.6: verde continuo, ámbar con triángulo, rojo punteado; imán punteado con números) */
+.ti-fantasma { stroke-linecap: round; opacity: 0.6; fill: none; pointer-events: none; }
+.ti-fantasma.ti-ok { stroke: var(--good); }
+.ti-fantasma.ti-ambar { stroke: var(--warn); }
+.ti-fantasma.ti-rojo { stroke: var(--crit); stroke-dasharray: 8 6; }
+.ti-fantasma-ini { fill: var(--accent); stroke: var(--surface); stroke-width: 2; pointer-events: none; }
+.ti-fantasma-fin { stroke: var(--surface); stroke-width: 2; pointer-events: none; }
+.ti-fantasma-fin.ti-ok { fill: var(--good); }
+.ti-fantasma-fin.ti-ambar { fill: var(--warn); }
+.ti-fantasma-fin.ti-rojo { fill: var(--crit); }
+.ti-triangulo { fill: var(--warn); stroke: var(--surface); stroke-width: 1.5; pointer-events: none; }
+.ti-guia { stroke-width: 1.5; stroke-dasharray: 3 4; pointer-events: none; }
+.ti-iman { stroke: var(--accent); stroke-linecap: round; fill: none; opacity: 0.25; stroke-dasharray: 9 7; pointer-events: none; }
+.ti-iman-elegida { opacity: 0.6; }
+.ti-iman-punto { fill: none; stroke: var(--accent); stroke-width: 2.5; pointer-events: none; }
+.ti-globo rect { fill: var(--surface); stroke: var(--line-strong); }
+.ti-globo text { font: 600 12.5px var(--font-ui); fill: var(--fg); }
+.ti-globo.ti-ok rect { stroke: var(--good); }
+.ti-globo.ti-ambar rect { stroke: var(--warn); fill: var(--warn-soft); }
+.ti-globo.ti-rojo rect { stroke: var(--crit); fill: var(--crit-soft); }
+.ti-globo.ti-rojo text { fill: var(--crit); }
+.ti-globo.ti-iman-num rect { stroke: var(--accent); fill: var(--accent-soft); }
+.ti-globo { pointer-events: none; }
+.ti-tirador-eje { stroke: var(--s6); stroke-width: 1.2; stroke-dasharray: 3 3; pointer-events: none; }
+.ti-rombo, .ti-circulo { fill: var(--surface); stroke-width: 2.5; cursor: grab; }
+.ti-rombo.ti-ok, .ti-circulo.ti-ok { stroke: var(--good); }
+.ti-rombo.ti-ambar, .ti-circulo.ti-ambar { stroke: var(--warn); }
+.ti-rombo.ti-rojo, .ti-circulo.ti-rojo { stroke: var(--crit); }
+.ti-manguera-previa { fill: none; stroke-linecap: round; opacity: 0.5; pointer-events: none; }
+.ti-manguera-previa.ti-ok { stroke: var(--good); }
+.ti-manguera-previa.ti-ambar { stroke: var(--warn); }
+.ti-manguera-previa.ti-rojo { stroke: var(--crit); stroke-dasharray: 6 5; }
+.ti-medir { stroke: var(--fg); stroke-width: 1.5; stroke-dasharray: 5 4; pointer-events: none; }
+.ti-medir-punto { fill: var(--fg); pointer-events: none; }
+@media (max-width: 1279px) {
+  .ti-cuerpo { grid-template-columns: 180px minmax(0, 1fr); }
+  .ti-inspector { grid-column: 1 / -1; max-height: none; }
+}
+@media (max-width: 859px) {
+  .ti-cuerpo { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+  .ti-paleta { flex-direction: row; overflow-x: auto; max-height: none; scroll-snap-type: x proximity; padding: 6px; }
+  .ti-grupo { flex-direction: row; flex: none; align-items: center; }
+  .ti-grupo-tit { display: none; }
+  .ti-bloque { grid-template-columns: 22px auto; flex: none; }
+  .ti-bloque .ti-tecla, .ti-bloque .ti-n, .ti-bloque .ti-candado { display: none; }
+  .ti-lienzo-marco { min-height: 0; height: max(320px, 58dvh); flex: none; }
+  .ti-vistas { max-width: calc(100% - 112px); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .ti-vista-btn { padding: 3px 7px; flex: none; }
+  .ti-vistas .btn-icono { flex: none; }
+  .ti-fases-lista { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .ti-fases-lista li { flex: none; }
+  .ti-coords { min-width: 0; }
+  .ti-fase-txt { display: none; }
+  .ti-fase-activa .ti-fase-txt { display: inline; }
 }

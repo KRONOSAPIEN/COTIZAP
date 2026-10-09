@@ -1988,14 +1988,14 @@ const ok = (cond, msg) => {
     ok(await p.inputValue('#r_diam') === '' && await p.inputValue('#r_dias_fab') === '' && /Capture el diámetro/.test(await p.locator('#rapida-resultado').innerText()), '«Limpiar» deja la cotización rápida en blanco');
     await p.context().close();
 
-    // e) en el celular: cinco pestañas en dos renglones y sin desplazamiento horizontal
+    // e) en el celular: seis pestañas en dos renglones y sin desplazamiento horizontal
     const m = await nuevaPagina({ viewport: { width: 320, height: 700 }, isMobile: true, hasTouch: true });
     await m.click('#tab-rapida');
     await m.fill('#r_diam', '11');
     await m.fill('#r_metros', '40');
     const cajas = await m.locator('.tabs [role="tab"]').evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { y: Math.round(r.top), w: r.width, cabe: e.scrollWidth <= e.clientWidth + 1 }; }));
-    ok(cajas.length === 5 && new Set(cajas.map((c) => c.y)).size === 2 && cajas.every((c) => c.cabe) && await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
-      'en 320 px: las cinco pestañas en dos renglones, cada texto cabe, y nada se sale de la pantalla');
+    ok(cajas.length === 6 && new Set(cajas.map((c) => c.y)).size === 2 && cajas.every((c) => c.cabe) && await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+      'en 320 px: las seis pestañas en dos renglones de tres, cada texto cabe, y nada se sale de la pantalla');
     const lam = await m.locator('.lam-svg').boundingBox();
     ok(lam && lam.width > 200 && lam.x >= 0 && lam.x + lam.width <= 321, 'en 320 px la lámina dibujada cabe a lo ancho');
     await m.context().close();
@@ -2008,8 +2008,8 @@ const ok = (cond, msg) => {
     const marca = await caja('.marca');
     const tabs = await caja('.tabs');
     ok(Math.abs(marca.y - tabs.y) < 20 && (await caja('.barra')).height < 80, 'en 1366 px el encabezado es un solo renglón: la marca y las pestañas');
-    ok((await p.locator('.tabs [role="tab"]').evaluateAll((els) => els.map((e) => e.id))).join(',') === 'tab-rapida,tab-cotizacion,tab-planos,tab-compras,tab-maestros'
-      && await p.getByRole('tab', { name: 'Cotización detallada' }).count() === 1, 'pestañas en el orden de trabajo: rápida, detallada, planos, compras y gastos, tablas maestras');
+    ok((await p.locator('.tabs [role="tab"]').evaluateAll((els) => els.map((e) => e.id))).join(',') === 'tab-rapida,tab-cotizacion,tab-trazado,tab-planos,tab-compras,tab-maestros'
+      && await p.getByRole('tab', { name: 'Cotización detallada' }).count() === 1, 'pestañas en el orden de trabajo: rápida, detallada, trazado isométrico, planos, compras y gastos, tablas maestras');
     ok(await p.locator('#panel-cotizacion #btn-nueva').isVisible() && await p.locator('#panel-cotizacion #btn-io').isVisible() && await p.locator('.barra #btn-nueva').count() === 0,
       'Nueva, Guardar y cargar e Imprimir propuesta están en la cotización detallada (no en el encabezado)');
     ok(await p.locator('#aviso-ilustrativo').isVisible() && await p.locator('#aviso-ejemplo').isVisible(), 'en la cotización detallada se ven los avisos de valores ilustrativos y de ejemplo');
@@ -2610,6 +2610,192 @@ const ok = (cond, msg) => {
     const anchos = await R(() => [document.documentElement.scrollWidth, document.querySelector('#uf-cuerpo').scrollWidth, document.querySelector('#uf-cuerpo').clientWidth]);
     ok(anchos[0] <= 390 && anchos[1] <= anchos[2], `sin desplazamiento horizontal en el teléfono (${anchos.join(' / ')})`);
     ok(await p.locator('#cad-tablero').isVisible() && (await p.locator('#cad-tablero').boundingBox()).height >= 300, 'el tablero mide al menos 300 px de alto');
+    await p.context().close();
+  }
+
+  console.log('35) Trazado isométrico jugable: el recorrido de §1.6 con ratón y teclado da el JSON del ejemplo; fases, problemas, imán, tiradores y guardado');
+  {
+    const EJ = require('../../docs/ejemplos/trazado-isometrico-ejemplo.json');
+    const esperado = JSON.stringify({ ...EJ, resultados: null });
+    const p = await nuevaPagina();
+    const R = (fn, a) => p.evaluate(fn, a);
+    await p.click('#tab-trazado');
+    ok(await p.locator('#panel-trazado').isVisible() && await p.locator('#ti-lienzo').isVisible(), 'la pestaña «Trazado isométrico» es otro apartado, con su lienzo');
+    ok(await p.locator('#aviso-ilustrativo').isHidden() && await p.locator('#aviso-error').isHidden(), 'en el trazado no salen los avisos de precios ni de partidas');
+    const pant = (x, y, z) => R(([x0, y0, z0]) => {
+      const s = window.COTIZAP.web.trazadoUI.estado();
+      const q = window.COTIZAP.trazadoTablero.pantalla(s, { x: x0, y: y0, z: z0 });
+      const r = document.querySelector('#ti-lienzo').getBoundingClientRect();
+      return { x: r.left + (q.x * r.width) / s.ancho, y: r.top + (q.y * r.height) / s.alto };
+    }, [x, y, z]);
+    const dentro = async (x, y, z) => { const q = await pant(x, y, z); const r = await p.locator('#ti-lienzo').boundingBox(); return q.x > r.x + 120 && q.x < r.x + r.width - 120 && q.y > r.y + 110 && q.y < r.y + r.height - 60; };
+    const lienzo = () => p.focus('#ti-lienzo');
+    const aLaVista = async (x, y, z) => { for (let i = 0; i < 6 && !(await dentro(x, y, z)); i += 1) { await lienzo(); await p.keyboard.press('-'); } };
+    const clic = async (x, y, z) => { await aLaVista(x, y, z); const q = await pant(x, y, z); await p.mouse.click(q.x, q.y); };
+    const arrastrar = async (a, b) => { await p.mouse.move(a.x, a.y); await p.mouse.down(); await p.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2); await p.mouse.move(b.x, b.y); await p.mouse.up(); };
+    const msg = () => p.locator('#ti-msg').innerText();
+    const campo = async (sel, v) => { await p.fill(sel, String(v)); await p.press(sel, 'Enter'); };
+    const trazo = () => R(() => window.COTIZAP.web.trazadoUI.estado().t);
+    // Fase 1: proyecto
+    ok(await p.locator('#ti-fase-1 .ti-fase-n').innerText() === '1', 'sin colector, «Equipos y tomas» cuenta 1 pendiente');
+    await campo('#ti-pr-nombre', 'Ejemplo: sierra y cepillo a un colector');
+    await campo('#ti-pr-id', 'EJ-TRAZADO-01');
+    await campo('#ti-pr-mat', 'Aserrín y viruta de madera');
+    await campo('#ti-pr-alt', '2240');
+    await campo('#ti-pr-origen', 'Centro de la base del colector, sobre el piso terminado');
+    ok(/ρ = 0[.,]9169 kg\/m³/.test(await p.locator('#ti-pr-aire').innerText()), 'a 2 240 m y 20 °C el aire tiene ρ = 0.9169 kg/m³');
+    // Fase 2: el colector y su boca en la cara +X (se ve en SE: E gira la vista)
+    await p.click('#ti-b-colector');
+    await clic(0, 0, 0);
+    ok(/^Colector en X 0, Y 0\./.test(await msg()) && await p.locator('#ti-fase-1').getAttribute('aria-current') === 'step', 'el colector se apoya en la rejilla del piso; la barra de fases va en «Equipos y tomas»');
+    await campo('#ti-e-nombre', 'Colector de polvo');
+    await campo('#ti-e-perdida', '1250');
+    await lienzo();
+    await p.keyboard.press('e');
+    ok(await R(() => window.COTIZAP.web.trazadoUI.estado().vista) === 'SE', 'E gira el isométrico (NE → SE)');
+    await p.selectOption('#ti-d-activo', '8');
+    await lienzo();
+    await p.keyboard.press('p');
+    await clic(750, 0, 3000);
+    ok(await msg() === 'Boca PU-01 de Colector de polvo en su cara +X, Ø 8″, con brida.', 'la boca va en la cara que se tocó, con brida');
+    await campo('#ti-p-nombre', 'Boca del colector');
+    await lienzo();
+    await p.keyboard.press('q');
+    // la sierra: cae en la rejilla de 100 mm y se lleva a X = 10 750 con Mayús+←
+    await p.click('#ti-b-maquina');
+    await clic(10750, 0, 0);
+    await lienzo();
+    for (let i = 0; i < 5; i += 1) await p.keyboard.press('Shift+ArrowLeft');
+    ok((await trazo()).equipos[1].posicion_mm.x === 10750, 'Mayús+← mueve el equipo 10 mm');
+    await campo('#ti-e-nombre', 'Sierra de banco');
+    await p.selectOption('#ti-d-activo', '6');
+    await lienzo();
+    await p.keyboard.press('p');
+    await clic(10750, 0, 1200);
+    await campo('#ti-p-nombre', 'Toma superior');
+    await campo('#ti-p-q', '1300');
+    ok(/19[.,]8 m\/s ✓/.test(await p.locator('#ti-inspector').innerText()), 'la toma de 6″ con 1 300 m³/h: 19.8 m/s, en verde');
+    await lienzo();
+    await p.keyboard.press('b');
+    await campo('#ti-b-numero', '6');
+    await campo('#ti-b-circulo_mm', '190');
+    await campo('#ti-b-diametro_mm', '9.5');
+    // el cepillo, con manguera; los tiradores la dejan en S
+    await p.click('#ti-b-maquina');
+    await clic(7000, -3000, 0);
+    await campo('#ti-e-nombre', 'Cepillo');
+    await campo('#ti-e-largo', '1000');
+    await campo('#ti-e-ancho', '600');
+    await campo('#ti-e-alto', '1000');
+    await p.selectOption('#ti-d-activo', '5');
+    await lienzo();
+    await p.keyboard.press('p');
+    await clic(7000, -3000, 1000);
+    await campo('#ti-p-nombre', 'Toma superior');
+    await campo('#ti-p-q', '900');
+    await lienzo();
+    await p.keyboard.press('f');
+    ok(await p.locator('#ti-acople-manguera').getAttribute('aria-pressed') === 'true' && await p.locator('.ti-rombo').count() === 1 && await p.locator('.ti-circulo').count() === 1, 'F acopla con manguera: aparecen el rombo y el círculo');
+    const h0 = await R(() => window.COTIZAP.trazadoTablero.mangueraDe(window.COTIZAP.web.trazadoUI.estado(), 'PU-03').h);
+    await arrastrar(await pant(7000, -3000, 1000 + h0), await pant(7000, -3000, 1900));
+    ok(/a 900 mm sobre la toma/.test(await msg()), 'arrastrar el rombo sube el punto de transición a 900 mm');
+    await arrastrar(await pant(7000, -3000, 1900), await pant(7000, -2750, 1900));
+    ok(/S de dos curvas de 39[.,]31°: radio 552[.,]5 mm \(mínimo 190[.,]5 mm\), 958 mm/.test(await msg()) && /Manguera en S/.test(await p.locator('#ti-manguera-sem').innerText()), 'el círculo lo desvía 250 mm: la S de 39.31° y 552.5 mm, en verde');
+    // Fase 3: el tronco (↑, 1.8, Entrar) y el imán a la boca
+    await lienzo();
+    await p.keyboard.press('t');
+    await clic(10750, 0, 1200);
+    const m0 = await msg();
+    ok(m0 === 'Desde la toma PU-02 el ducto puede salir en +Z. Mueva el puntero y haga clic, o teclee el largo y Entrar. Esc termina.', `presionar en la toma con brida empieza el trazo (y dice qué se puede): ${m0}`);
+    await p.keyboard.press('ArrowUp');
+    await p.keyboard.type('1.8');
+    ok(await p.locator('#ti-caja').innerText() === '▸ 1.8_' && /eje Z/.test(await p.locator('#ti-plano').innerText()), 'la caja de valores muestra lo tecleado; ↑ fija el eje Z');
+    await p.keyboard.press('Enter');
+    ok(await msg() === 'Tramo TR-002: 1.8 m · 6″ · recto.', 'Entrar: la subida de 1.8 m');
+    let b = await pant(750, 0, 3000);
+    await p.mouse.move(b.x - 60, b.y - 20);
+    await p.mouse.move(b.x, b.y);
+    await p.waitForFunction(() => document.querySelectorAll('.ti-iman-elegida').length === 1, null, { timeout: 2000 }).catch(() => {});
+    ok(await p.locator('.ti-iman-elegida').count() === 1 && /Imán: la boca PU-01/.test(await p.locator('#ti-ajuste').innerText()), 'cerca de la boca, el imán propone la llegada (punteada)');
+    await p.mouse.click(b.x, b.y);
+    ok(/^Llegada: −X 10 m, 1 codo\. Adaptador de 8″ a 6″ en N-001 \(AD-001\)\. Codo de 90° en N-005 \(CO-001\)\.$/.test(await msg()), 'clic: llega alineado con el cuello; el codo y el adaptador salen solos');
+    // el ramal: desde el PT, ↑ 1.1 y el imán al tronco (Tab alterna las propuestas)
+    await clic(7000, -2750, 1900);
+    await p.keyboard.press('ArrowUp');
+    await p.keyboard.type('1.1');
+    await p.keyboard.press('Enter');
+    b = await pant(4300, 0, 3000);
+    await p.mouse.move(b.x + 40, b.y + 30);
+    await p.mouse.move(b.x, b.y);
+    // la capa se vuelve a pintar en el siguiente cuadro: se espera a que el globo diga lo esperado (hasta 2 s)
+    const globo = async (re) => { for (let i = 0; i < 40; i += 1) { const t = await p.locator('#ti-capa .ti-globo').last().textContent(); if (re.test(t)) return true; await p.waitForTimeout(50); } return false; };
+    ok(await globo(/Injerto a 45°, de lado \(izquierda\): rumbo 135° 3[.,]889 m, 1 codo\. \(Tab: 1 de 3\)/), 'cerca del tronco: injerto a 45° de lado, 3.889 m (1 de 3)');
+    await p.keyboard.press('Tab');
+    ok(await globo(/Injerto a 30°.*rumbo 150° 5[.,]5 m/), 'Tab: la alternativa a 30° con 5.5 m');
+    await p.keyboard.press('Tab');
+    await p.keyboard.press('Tab');
+    await p.mouse.click(b.x, b.y);
+    ok(/Injerto a 45° en N-007 \(IN-001\)/.test(await msg()), 'clic acepta: sale el injerto a 45°');
+    // Fase 4 y 5: dimensionar, renumerar, el JSON
+    await p.click('#ti-fase-4');
+    await p.click('#ti-dim-todo');
+    ok(/TR-005: 6″ → 8″, 33[.,]5 → 18[.,]8 m\/s\. Reducción con injerto a 45° en N-007 \(RI-001\)/.test(await msg()), 'dimensionar por caudal: el tronco a 8″ y la reducción con injerto');
+    await p.click('#ti-fase-5');
+    await p.click('#ti-renumerar');
+    const sis = () => R(() => JSON.stringify(window.COTIZAP.trazadoIso.aSistema(window.COTIZAP.web.trazadoUI.estado().t, window.COTIZAP.web.estadoApp.M)));
+    ok(await sis() === esperado, 'el JSON del sistema es exactamente el del ejemplo resuelto (§1.6)');
+    ok(await p.locator('.ti-fase-n').count() === 0 && /Listo para exportar/.test(await p.locator('#ti-salida-estado').innerText()), 'ninguna fase con pendientes; listo para exportar');
+    await p.click('#ti-copiar');
+    await p.waitForTimeout(150);
+    const copiado = await R(async () => { const d = document.querySelector('#dlg-io'); if (d && d.open) return document.querySelector('#io-texto').value; try { return await navigator.clipboard.readText(); } catch (e) { return null; } });
+    ok(copiado && JSON.stringify(JSON.parse(copiado)) === esperado, '«Copiar el JSON» copia el sistema');
+    await p.keyboard.press('Escape');
+    // se guarda con la cotización
+    await p.reload();
+    await p.waitForSelector('#lista-partidas .partida');
+    await p.click('#tab-trazado');
+    ok(await sis() === esperado, 'al recargar la página sigue el trazado');
+    // lo que no se puede, con su porqué; deshacer
+    await lienzo();
+    await p.keyboard.press('t');
+    await clic(750, 0, 3000);
+    ok(/Desde la boca PU-01 ya no puede salir otro ducto/.test(await msg()) && await p.locator('#ti-msg.ti-msg-error').count() === 1, 'desde la boca ocupada no se traza, y se dice por qué');
+    await lienzo();
+    await p.keyboard.press('Escape');
+    const nAntes = (await trazo()).tramos.length;
+    await p.click('#ti-nuevo');
+    ok((await trazo()).equipos.length === 0 && await p.locator('#ti-fase-1 .ti-fase-n').innerText() === '1', '«Nuevo trazado» empieza vacío');
+    await lienzo();
+    await p.keyboard.press('Control+z');
+    ok((await trazo()).tramos.length === nAntes, 'Ctrl+Z recupera el trazado anterior');
+    await p.click('#ti-nuevo');
+    // arrastrar un equipo de la paleta al lienzo; el panel de problemas lleva al equipo
+    const bloque = await p.locator('#ti-b-maquina').boundingBox();
+    const centro = await p.locator('#ti-lienzo').boundingBox();
+    await p.mouse.move(bloque.x + 20, bloque.y + 10);
+    await p.mouse.down();
+    await p.mouse.move(centro.x + centro.width / 2, centro.y + centro.height / 2, { steps: 6 });
+    await p.mouse.up();
+    ok((await trazo()).equipos.length === 1 && /^Máquina en X/.test(await msg()), 'arrastrar «Máquina» de la paleta al lienzo la coloca');
+    await p.click('#ti-fase-0');
+    await p.locator('#ti-problemas summary').click();
+    await p.locator('.ti-prob-btn', { hasText: 'EQUIPO_SIN_PUERTOS' }).click();
+    ok(await p.locator('#ti-e-nombre').inputValue() === 'Máquina', 'un clic en el problema selecciona el equipo');
+    // el cubo de vista: la cara de arriba da la planta
+    await p.locator('#ti-cubo [data-vista="PLANTA"]').click();
+    ok(await R(() => window.COTIZAP.web.trazadoUI.estado().vista) === 'PLANTA' && await p.locator('#ti-vista-planta').getAttribute('aria-pressed') === 'true', 'el cubo de vista: arriba = planta');
+    // un trazado guardado que el modelo no acepta se descarta sin romper la página
+    await R(() => { const c = JSON.parse(localStorage.getItem('cotizap.cotizacion.v1')); c.trazado_iso = { version: 1, nodos: [{ id: 'N-001' }], tramos: [], equipos: [] }; localStorage.setItem('cotizap.cotizacion.v1', JSON.stringify(c)); });
+    await p.reload();
+    await p.waitForSelector('#lista-partidas .partida');
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.trazado_iso) === undefined, 'un trazado guardado roto se descarta');
+    // en el teléfono: lienzo arriba, paleta deslizable, sin desplazamiento horizontal
+    await p.setViewportSize({ width: 390, height: 844 });
+    await p.click('#tab-trazado');
+    await p.click('#ti-ejemplo');
+    const anchos = await R(() => [document.documentElement.scrollWidth, document.querySelector('#panel-trazado').scrollWidth]);
+    ok(anchos[0] <= 390 && anchos[1] <= 390, `sin desplazamiento horizontal en el teléfono (${anchos.join(' / ')})`);
+    ok((await p.locator('#ti-lienzo').boundingBox()).height >= 300, 'el lienzo mide al menos 300 px de alto');
     await p.context().close();
   }
 

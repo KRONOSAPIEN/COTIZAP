@@ -97,7 +97,8 @@
       const guardada = estado.cot;
       estado.cot = cotizacionValida({
         ...cotizacionEjemplo(),
-        ...Object.fromEntries(['unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'ubicacion', 'fecha', 'vigencia_dias', 'parametros', 'yarda_mm', 'venta_pactada', 'venta_pactada_con_iva', 'gastos'].filter((k) => guardada[k] !== undefined).map((k) => [k, guardada[k]])),
+        // el trazado isométrico es trabajo propio aunque la cotización siga siendo la de muestra: se conserva
+        ...Object.fromEntries(['unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'ubicacion', 'fecha', 'vigencia_dias', 'parametros', 'yarda_mm', 'venta_pactada', 'venta_pactada_con_iva', 'gastos', 'trazado_iso'].filter((k) => guardada[k] !== undefined).map((k) => [k, guardada[k]])),
       }, estado.M);
     }
     estado.sel = estado.cot.partidas.length ? estado.cot.partidas[0].id : null;
@@ -180,6 +181,9 @@
     // El dibujo del unifilar (unifilar_cad_ui.js): sólo si es un árbol válido desde el colector
     const dib = c.dibujo_unifilar !== undefined && C.unifilarCad ? C.unifilarCad.validar(c.dibujo_unifilar, M).modelo : null;
     if (dib) cot.dibujo_unifilar = dib; else delete cot.dibujo_unifilar;
+    // El trazado isométrico (trazado_iso_ui.js): sólo si el modelo lo acepta (forma, referencias y nada que el taller no fabrique)
+    const tz = c.trazado_iso !== undefined && C.trazadoIso ? C.trazadoIso.validar(c.trazado_iso, M).modelo : null;
+    if (tz) cot.trazado_iso = tz; else delete cot.trazado_iso;
     const vistos = new Set();
     cot.partidas = c.partidas.filter(esObjeto).map((p) => {
       const q = { ...C.validacion.migrarPartida({ ...p }) }; // lo guardado con campos de versiones anteriores pasa a los de hoy
@@ -1783,6 +1787,7 @@
     if (t === 'maestros' && W.maestrosUI) W.maestrosUI.render();
     if (t === 'planos' && W.planosUI) W.planosUI.render();
     if (t === 'rapida' && W.rapidaUI) W.rapidaUI.render();
+    if (W.trazadoUI) W.trazadoUI.render(); // se monta una vez; sólo pinta cuando su pestaña se ve
     if (estado.res) renderAvisos();
     const el = destino ? $(destino) : null;
     if (el) el.scrollIntoView({ block: 'start', behavior: root.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
@@ -1796,12 +1801,12 @@
   function renderAvisos() {
     const t = estado.tab;
     const deLaCotizacion = ['cotizacion', 'planos', 'compras'].includes(t);
-    $('#aviso-ilustrativo').hidden = !!estado.M.meta.revisado || t === 'maestros' || t === 'rapida';
+    $('#aviso-ilustrativo').hidden = !!estado.M.meta.revisado || t === 'maestros' || t === 'rapida' || t === 'trazado';
     $('#aviso-ejemplo').hidden = !estado.cot.ejemplo || !deLaCotizacion;
     const nErr = estado.res.totales.n_partidas_error;
     const avisos = estado.res.avisos || [];
     const el = $('#aviso-error');
-    el.hidden = (!nErr && !avisos.length) || t === 'rapida';
+    el.hidden = (!nErr && !avisos.length) || t === 'rapida' || t === 'trazado';
     el.querySelector('.aviso-txt').textContent = [
       nErr ? `${nErr} ${nErr === 1 ? 'partida no se puede calcular' : 'partidas no se pueden calcular'}: revise sus datos o las tablas maestras.` : '',
       ...avisos,
@@ -1821,6 +1826,7 @@
     if (W.unifilarUI) W.unifilarUI.render();
     if (W.planosUI && estado.tab === 'planos') W.planosUI.render(); // los planos se dibujan sólo a la vista
     if (W.rapidaUI && estado.tab === 'rapida') W.rapidaUI.render(); // las tablas maestras o la unidad pudieron cambiar
+    if (W.trazadoUI && estado.tab === 'trazado') W.trazadoUI.render(); // la cotización pudo cambiar (nueva, cargada o un ejemplo)
   }
   W.render = render;
   W.persistir = persistir;

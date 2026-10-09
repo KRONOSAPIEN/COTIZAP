@@ -715,6 +715,43 @@ test('Lo que viene de fuera se valida: formas raras, referencias rotas y trazos 
   ].forEach((f, i) => assert.throws(f, T.TrazadoError, `caso ${i}`));
 });
 
+test('Reducir desde un punto o desde un codo: el Ø baja de ahí hacia las tomas, sin pasar derivaciones ni candados', () => {
+  const t0 = terminado(ejemploDesdeLasTomas());
+  const sierra = entre(t0, nodoEn(t0, 10750, 0, 3000), nodoEn(t0, 4250, 0, 3000));
+  // a 2 m del codo de la sierra: la horizontal se parte, y la parte de aguas arriba y la subida quedan de 5″
+  const g0 = T.calcular(t0, M);
+  const s = g0.tramos.get(sierra).a === nodoEn(t0, 10750, 0, 3000) ? 2000 : g0.seg.get(sierra).L - 2000;
+  const t = T.reducir(t0, M, { tramo: sierra, s_mm: s }, 5);
+  assert.equal(t.ultimo.operacion, 'reducir');
+  assert.equal(t.ultimo.tramos.length, 2, 'la parte de aguas arriba y la subida');
+  const g = T.calcular(t, M);
+  const J = t.ultimo.nodo;
+  assert.deepEqual(g.pos.get(J), { x: 8750, y: 0, z: 3000 });
+  assert.ok(g.piezasDe.get(J).some((p) => p.tipo === 'REDUCCION' && p.D1 === 6 && p.D2 === 5));
+  assert.ok(g.piezas.some((p) => p.tipo === 'ADAPTADOR' && p.D_puerto === 6), 'la toma de 6″ lleva su adaptador a 5″');
+  assert.equal(g.tramos.get(entre(t, nodoEn(t, 4250, 0, 3000), J)).diametro_in, 6, 'aguas abajo sigue de 6″');
+  // pegado a un extremo: el tramo entero
+  const te = T.reducir(t0, M, { tramo: sierra, s_mm: 50 }, 5);
+  assert.equal(te.tramos.length, t0.tramos.length, 'no se parte');
+  // desde el codo de la sierra: el tramo que le llega (la subida)
+  const tc = T.reducir(t0, M, nodoEn(t0, 10750, 0, 3000), 5);
+  assert.deepEqual(tc.ultimo.tramos, [entre(t0, nodoEn(t0, 10750, 0, 1200), nodoEn(t0, 10750, 0, 3000))]);
+  // desde la derivación: el tronco que llega, sin pasar al ramal; el candado detiene la cadena
+  const td = T.reducir(t0, M, nodoEn(t0, 4250, 0, 3000), 5);
+  assert.equal(td.ultimo.tramos[0], sierra);
+  // la subida con candado no baja; entonces su 6″ llegaría a un 5″ hacia el colector, y se rechaza con el porqué
+  const conCandado = T.cambiarDiametro(t0, M, entre(t0, nodoEn(t0, 10750, 0, 1200), nodoEn(t0, 10750, 0, 3000)), 6, { bloquear: true });
+  falla(() => T.reducir(conCandado, M, { tramo: sierra, s_mm: s }, 5), 'DIAMETRO_DECRECE', /el tramo anterior \(TR-\d+\) es de 6″ y el siguiente \(TR-\d+\) de 5″/);
+  // lo que no se puede
+  falla(() => T.reducir(t0, M, { tramo: sierra, s_mm: s }, 8), 'DATO_INVALIDO', /debe ser menor/);
+  falla(() => T.reducir(t0, M, { tramo: sierra, s_mm: s }, 7.5), 'DATO_INVALIDO', /comerciales/);
+  falla(() => T.reducir(t0, M, puerto(t0, 'EQ-02').nodo, 5), 'DATO_INVALIDO', /no le llega ducto de aguas arriba/);
+  falla(() => T.reducir(t0, M, nodoEn(t0, 750, 0, 3000), 5), 'DIAMETRO_DECRECE', /Hacia el colector el diámetro no baja/);
+  const suelto = T.trazar(T.nuevo(M), M, { posicion_mm: { x: 0, y: 0, z: 3000 } }, { direccion: dir(0), largo_mm: 3000 });
+  falla(() => T.reducir(suelto, M, { tramo: 'TR-001', s_mm: 1500 }, 4), 'FLUJO_DESCONOCIDO');
+  falla(() => T.reducir(t0, M, { tramo: entre(t0, puerto(t0, 'EQ-03').nodo, puerto(t0, 'EQ-03').acople.nodo_transicion), s_mm: 100 }, 4), 'DATO_INVALIDO', /manguera/);
+});
+
 test('Una caminata de operaciones al azar nunca deja el trazo inválido ni lanza otra cosa que TrazadoError', () => {
   let semilla = 20261009;
   const azar = () => { semilla = (semilla * 1103515245 + 12345) % 2147483648; return semilla / 2147483648; };
@@ -734,6 +771,7 @@ test('Una caminata de operaciones al azar nunca deja el trazo inválido ni lanza
     () => { const e = uno(t.equipos); if (!e) return t; return T.moverEquipo(t, M, e.id, { posicion_mm: { ...e.posicion_mm, x: Math.round(azar() * 20) * 500 } }); },
     () => T.aplicarDimensiones(t, M),
     () => { const n = uno(t.nodos); if (!n) return t; const c = T.calcular(t, M).piezasDe.get(n.id); return c && c[0].tipo === 'CODO' ? T.cambiarAngulo(t, M, n.id, uno([30, 45, 60, 90])) : t; },
+    () => { const tr = uno(t.tramos.filter((x) => x.tipo === 'RIGIDO')); return tr ? T.reducir(t, M, azar() < 0.5 ? tr.a : { tramo: tr.id, s_mm: uno([50, 300, 1000]) }, uno([3, 4, 5])) : t; },
   ];
   for (let i = 0; i < 160; i += 1) {
     try {
