@@ -1,0 +1,813 @@
+{
+  "version": "1.0",
+  "proyecto": {
+    "id": "EJ-TRAZADO-01",
+    "nombre": "Ejemplo: sierra y cepillo a un colector",
+    "servicio": "POLVO",
+    "material_transportado": "Aserrín y viruta de madera",
+    "aire": {
+      "temperatura_C": 20,
+      "altitud_m": 2240,
+      "presion_Pa": 77155,
+      "densidad_kg_m3": 0.9169,
+      "viscosidad_Pa_s": 0.00001813
+    },
+    "unidades": {
+      "longitud": "mm",
+      "diametro": "in",
+      "caudal": "m3/h",
+      "presion": "Pa",
+      "velocidad": "m/s"
+    },
+    "ejes": "X_ESTE_Y_NORTE_Z_ARRIBA",
+    "origen": "Centro de la base del colector, sobre el piso terminado",
+    "vista_iso": "NE"
+  },
+  "politicas": {
+    "angulos_codo_deg": [
+      30,
+      45,
+      60,
+      90
+    ],
+    "radio_codo_D": 1.5,
+    "angulos_injerto_deg": [
+      30,
+      45
+    ],
+    "permite_t_90": false,
+    "permite_pantalon": false,
+    "angulos_pantalon_deg": [
+      30
+    ],
+    "entradas_permitidas": [
+      "SUPERIOR",
+      "LATERAL"
+    ],
+    "rejilla": {
+      "paso_azimut_deg": 15,
+      "elevaciones_deg": [
+        -90,
+        -60,
+        -45,
+        -30,
+        0,
+        30,
+        45,
+        60,
+        90
+      ]
+    },
+    "paso_largo_mm": 100,
+    "largo_min_tramo_mm": 100,
+    "recto_min_entre_accesorios_mm": 150,
+    "recto_antes_de_derivacion_D": 2,
+    "distancia_min_entre_derivaciones_D": 1,
+    "holgura_min_mm": 50,
+    "altura_libre_min_mm": 2100,
+    "velocidad_min_m_s": 18,
+    "velocidad_max_m_s": 23,
+    "semiangulo_reduccion_deg": 15,
+    "reduccion_horizontal": "EXCENTRICA_PLANA_ABAJO",
+    "relacion_reduccion_min": 0.5,
+    "manguera": {
+      "radio_min_D": 1.5,
+      "largo_max_mm": 3000,
+      "puno_mm": 100,
+      "rugosidad_mm": 1.5
+    },
+    "rugosidad_mm": {
+      "GALVANIZADO": 0.09,
+      "ACERO_CARBON": 0.045,
+      "INOX_304": 0.015,
+      "INOX_316": 0.015
+    },
+    "diametros_comerciales_in": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      14,
+      16,
+      18,
+      20,
+      22,
+      24
+    ]
+  },
+  "equipos": [
+    {
+      "id": "EQ-01",
+      "tipo": "COLECTOR",
+      "nombre": "Colector de polvo",
+      "posicion_mm": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "rotacion_z_deg": 0,
+      "caja_mm": {
+        "largo": 1500,
+        "ancho": 1500,
+        "alto": 4000
+      },
+      "perdida_Pa": 1250,
+      "puertos": [
+        {
+          "id": "PU-01",
+          "rol": "ENTRADA",
+          "nombre": "Boca del colector",
+          "posicion_local_mm": {
+            "x": 750,
+            "y": 0,
+            "z": 3000
+          },
+          "direccion_local": {
+            "azimut_deg": 0,
+            "elevacion_deg": 0
+          },
+          "posicion_mm": {
+            "x": 750,
+            "y": 0,
+            "z": 3000
+          },
+          "direccion": {
+            "azimut_deg": 0,
+            "elevacion_deg": 0
+          },
+          "diametro_in": 8,
+          "caudal_m3_h": null,
+          "coef_entrada_K": null,
+          "nodo": "N-001",
+          "conexion": {
+            "tipo": "BRIDA",
+            "nodo_transicion": null,
+            "tramo_flexible": null,
+            "adaptador": null,
+            "barrenos": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "EQ-02",
+      "tipo": "MAQUINA",
+      "nombre": "Sierra de banco",
+      "posicion_mm": {
+        "x": 10750,
+        "y": 0,
+        "z": 0
+      },
+      "rotacion_z_deg": 0,
+      "caja_mm": {
+        "largo": 1200,
+        "ancho": 800,
+        "alto": 1200
+      },
+      "perdida_Pa": null,
+      "puertos": [
+        {
+          "id": "PU-02",
+          "rol": "TOMA",
+          "nombre": "Toma superior",
+          "posicion_local_mm": {
+            "x": 0,
+            "y": 0,
+            "z": 1200
+          },
+          "direccion_local": {
+            "azimut_deg": 0,
+            "elevacion_deg": 90
+          },
+          "posicion_mm": {
+            "x": 10750,
+            "y": 0,
+            "z": 1200
+          },
+          "direccion": {
+            "azimut_deg": 0,
+            "elevacion_deg": 90
+          },
+          "diametro_in": 6,
+          "caudal_m3_h": 1300,
+          "coef_entrada_K": 0.5,
+          "nodo": "N-004",
+          "conexion": {
+            "tipo": "BRIDA",
+            "nodo_transicion": null,
+            "tramo_flexible": null,
+            "adaptador": null,
+            "barrenos": {
+              "numero": 6,
+              "circulo_mm": 190,
+              "diametro_mm": 9.5
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "EQ-03",
+      "tipo": "MAQUINA",
+      "nombre": "Cepillo",
+      "posicion_mm": {
+        "x": 7000,
+        "y": -3000,
+        "z": 0
+      },
+      "rotacion_z_deg": 0,
+      "caja_mm": {
+        "largo": 1000,
+        "ancho": 600,
+        "alto": 1000
+      },
+      "perdida_Pa": null,
+      "puertos": [
+        {
+          "id": "PU-03",
+          "rol": "TOMA",
+          "nombre": "Toma superior",
+          "posicion_local_mm": {
+            "x": 0,
+            "y": 0,
+            "z": 1000
+          },
+          "direccion_local": {
+            "azimut_deg": 0,
+            "elevacion_deg": 90
+          },
+          "posicion_mm": {
+            "x": 7000,
+            "y": -3000,
+            "z": 1000
+          },
+          "direccion": {
+            "azimut_deg": 0,
+            "elevacion_deg": 90
+          },
+          "diametro_in": 5,
+          "caudal_m3_h": 900,
+          "coef_entrada_K": 0.5,
+          "nodo": "N-007",
+          "conexion": {
+            "tipo": "MANGUERA",
+            "nodo_transicion": "N-006",
+            "tramo_flexible": "TR-004",
+            "adaptador": null,
+            "barrenos": null
+          }
+        }
+      ]
+    }
+  ],
+  "nodos": [
+    {
+      "id": "N-001",
+      "tipo": "PUERTO",
+      "posicion_mm": {
+        "x": 750,
+        "y": 0,
+        "z": 3000
+      },
+      "puerto": "PU-01",
+      "accesorios": [],
+      "tramos": [
+        "TR-003"
+      ]
+    },
+    {
+      "id": "N-002",
+      "tipo": "DERIVACION",
+      "posicion_mm": {
+        "x": 4250,
+        "y": 0,
+        "z": 3000
+      },
+      "puerto": null,
+      "accesorios": [
+        "RI-001"
+      ],
+      "tramos": [
+        "TR-002",
+        "TR-003",
+        "TR-006"
+      ]
+    },
+    {
+      "id": "N-003",
+      "tipo": "VERTICE",
+      "posicion_mm": {
+        "x": 10750,
+        "y": 0,
+        "z": 3000
+      },
+      "puerto": null,
+      "accesorios": [
+        "CO-001"
+      ],
+      "tramos": [
+        "TR-001",
+        "TR-002"
+      ]
+    },
+    {
+      "id": "N-004",
+      "tipo": "PUERTO",
+      "posicion_mm": {
+        "x": 10750,
+        "y": 0,
+        "z": 1200
+      },
+      "puerto": "PU-02",
+      "accesorios": [],
+      "tramos": [
+        "TR-001"
+      ]
+    },
+    {
+      "id": "N-005",
+      "tipo": "VERTICE",
+      "posicion_mm": {
+        "x": 7000,
+        "y": -2750,
+        "z": 3000
+      },
+      "puerto": null,
+      "accesorios": [
+        "CO-002"
+      ],
+      "tramos": [
+        "TR-005",
+        "TR-006"
+      ]
+    },
+    {
+      "id": "N-006",
+      "tipo": "TRANSICION",
+      "posicion_mm": {
+        "x": 7000,
+        "y": -2750,
+        "z": 1900
+      },
+      "puerto": null,
+      "accesorios": [],
+      "tramos": [
+        "TR-004",
+        "TR-005"
+      ]
+    },
+    {
+      "id": "N-007",
+      "tipo": "PUERTO",
+      "posicion_mm": {
+        "x": 7000,
+        "y": -3000,
+        "z": 1000
+      },
+      "puerto": "PU-03",
+      "accesorios": [],
+      "tramos": [
+        "TR-004"
+      ]
+    }
+  ],
+  "tramos": [
+    {
+      "id": "TR-001",
+      "tipo": "RIGIDO",
+      "nodo_aguas_arriba": "N-004",
+      "nodo_aguas_abajo": "N-003",
+      "direccion": {
+        "azimut_deg": 0,
+        "elevacion_deg": 90
+      },
+      "longitud_ejes_mm": 1800,
+      "descuentos": [
+        {
+          "accesorio": "CO-001",
+          "mm": 228.6
+        }
+      ],
+      "longitud_neta_mm": 1571.4,
+      "diametro_in": 6,
+      "diametro_interior_mm": 152.4,
+      "diametro_bloqueado": false,
+      "material": "GALVANIZADO",
+      "calibre": 22,
+      "rugosidad_mm": 0.09,
+      "uniones": {
+        "aguas_arriba": "BRIDA_EQUIPO",
+        "aguas_abajo": "BRIDA"
+      },
+      "flexible": null,
+      "caudal_m3_h": 1300,
+      "velocidad_m_s": 19.796
+    },
+    {
+      "id": "TR-002",
+      "tipo": "RIGIDO",
+      "nodo_aguas_arriba": "N-003",
+      "nodo_aguas_abajo": "N-002",
+      "direccion": {
+        "azimut_deg": 180,
+        "elevacion_deg": 0
+      },
+      "longitud_ejes_mm": 6500,
+      "descuentos": [
+        {
+          "accesorio": "CO-001",
+          "mm": 228.6
+        },
+        {
+          "accesorio": "RI-001",
+          "mm": 105.71
+        }
+      ],
+      "longitud_neta_mm": 6165.69,
+      "diametro_in": 6,
+      "diametro_interior_mm": 152.4,
+      "diametro_bloqueado": false,
+      "material": "GALVANIZADO",
+      "calibre": 22,
+      "rugosidad_mm": 0.09,
+      "uniones": {
+        "aguas_arriba": "BRIDA",
+        "aguas_abajo": "BRIDA"
+      },
+      "flexible": null,
+      "caudal_m3_h": 1300,
+      "velocidad_m_s": 19.796
+    },
+    {
+      "id": "TR-003",
+      "tipo": "RIGIDO",
+      "nodo_aguas_arriba": "N-002",
+      "nodo_aguas_abajo": "N-001",
+      "direccion": {
+        "azimut_deg": 180,
+        "elevacion_deg": 0
+      },
+      "longitud_ejes_mm": 3500,
+      "descuentos": [
+        {
+          "accesorio": "RI-001",
+          "mm": 105.71
+        }
+      ],
+      "longitud_neta_mm": 3394.29,
+      "diametro_in": 8,
+      "diametro_interior_mm": 203.2,
+      "diametro_bloqueado": false,
+      "material": "GALVANIZADO",
+      "calibre": 22,
+      "rugosidad_mm": 0.09,
+      "uniones": {
+        "aguas_arriba": "BRIDA",
+        "aguas_abajo": "BRIDA_EQUIPO"
+      },
+      "flexible": null,
+      "caudal_m3_h": 2200,
+      "velocidad_m_s": 18.844
+    },
+    {
+      "id": "TR-004",
+      "tipo": "FLEXIBLE",
+      "nodo_aguas_arriba": "N-007",
+      "nodo_aguas_abajo": "N-006",
+      "direccion": null,
+      "longitud_ejes_mm": 958.083,
+      "descuentos": [],
+      "longitud_neta_mm": 958.083,
+      "diametro_in": 5,
+      "diametro_interior_mm": 127,
+      "diametro_bloqueado": false,
+      "material": "MANGUERA",
+      "calibre": null,
+      "rugosidad_mm": 1.5,
+      "uniones": {
+        "aguas_arriba": "ABRAZADERA",
+        "aguas_abajo": "ABRAZADERA"
+      },
+      "flexible": {
+        "forma": "S",
+        "radio_mm": 552.5,
+        "angulo_curva_deg": 39.308,
+        "curvas": 2,
+        "desvio_mm": 250,
+        "altura_mm": 900,
+        "tramo_recto_mm": 0,
+        "puno_mm": 100,
+        "normal_plano": {
+          "x": -1,
+          "y": 0,
+          "z": 0
+        }
+      },
+      "caudal_m3_h": 900,
+      "velocidad_m_s": 19.735
+    },
+    {
+      "id": "TR-005",
+      "tipo": "RIGIDO",
+      "nodo_aguas_arriba": "N-006",
+      "nodo_aguas_abajo": "N-005",
+      "direccion": {
+        "azimut_deg": 0,
+        "elevacion_deg": 90
+      },
+      "longitud_ejes_mm": 1100,
+      "descuentos": [
+        {
+          "accesorio": "CO-002",
+          "mm": 190.5
+        }
+      ],
+      "longitud_neta_mm": 909.5,
+      "diametro_in": 5,
+      "diametro_interior_mm": 127,
+      "diametro_bloqueado": false,
+      "material": "GALVANIZADO",
+      "calibre": 22,
+      "rugosidad_mm": 0.09,
+      "uniones": {
+        "aguas_arriba": "LISA",
+        "aguas_abajo": "BRIDA"
+      },
+      "flexible": null,
+      "caudal_m3_h": 900,
+      "velocidad_m_s": 19.735
+    },
+    {
+      "id": "TR-006",
+      "tipo": "RIGIDO",
+      "nodo_aguas_arriba": "N-005",
+      "nodo_aguas_abajo": "N-002",
+      "direccion": {
+        "azimut_deg": 135,
+        "elevacion_deg": 0
+      },
+      "longitud_ejes_mm": 3889.087,
+      "descuentos": [
+        {
+          "accesorio": "CO-002",
+          "mm": 190.5
+        },
+        {
+          "accesorio": "RI-001",
+          "mm": 326.541
+        }
+      ],
+      "longitud_neta_mm": 3372.046,
+      "diametro_in": 5,
+      "diametro_interior_mm": 127,
+      "diametro_bloqueado": false,
+      "material": "GALVANIZADO",
+      "calibre": 22,
+      "rugosidad_mm": 0.09,
+      "uniones": {
+        "aguas_arriba": "BRIDA",
+        "aguas_abajo": "BRIDA"
+      },
+      "flexible": null,
+      "caudal_m3_h": 900,
+      "velocidad_m_s": 19.735
+    }
+  ],
+  "accesorios": [
+    {
+      "id": "CO-001",
+      "tipo": "CODO",
+      "nodo": "N-003",
+      "conexiones": [
+        {
+          "rol": "ENTRADA",
+          "tramo": "TR-001",
+          "diametro_in": 6
+        },
+        {
+          "rol": "SALIDA",
+          "tramo": "TR-002",
+          "diametro_in": 6
+        }
+      ],
+      "geometria": {
+        "angulo_deg": 90,
+        "radio_eje_mm": 228.6,
+        "tangente_mm": 228.6,
+        "gajos": 5,
+        "normal_plano": {
+          "x": 0,
+          "y": -1,
+          "z": 0
+        },
+        "giro_entrada_deg": null,
+        "entrada": null,
+        "forma": null,
+        "semiangulo_deg": null,
+        "largo_mm": null,
+        "largo_ramal_mm": null
+      },
+      "perdida": {
+        "modelo": "CODO_GAJOS",
+        "K_paso": null,
+        "K_ramal": null,
+        "referencia": "Codo de gajos: K(θ, R/D, gajos)"
+      },
+      "familia_cotizap": "CODO"
+    },
+    {
+      "id": "CO-002",
+      "tipo": "CODO",
+      "nodo": "N-005",
+      "conexiones": [
+        {
+          "rol": "ENTRADA",
+          "tramo": "TR-005",
+          "diametro_in": 5
+        },
+        {
+          "rol": "SALIDA",
+          "tramo": "TR-006",
+          "diametro_in": 5
+        }
+      ],
+      "geometria": {
+        "angulo_deg": 90,
+        "radio_eje_mm": 190.5,
+        "tangente_mm": 190.5,
+        "gajos": 5,
+        "normal_plano": {
+          "x": -0.7071,
+          "y": -0.7071,
+          "z": 0
+        },
+        "giro_entrada_deg": null,
+        "entrada": null,
+        "forma": null,
+        "semiangulo_deg": null,
+        "largo_mm": null,
+        "largo_ramal_mm": null
+      },
+      "perdida": {
+        "modelo": "CODO_GAJOS",
+        "K_paso": null,
+        "K_ramal": null,
+        "referencia": "Codo de gajos: K(θ, R/D, gajos)"
+      },
+      "familia_cotizap": "CODO"
+    },
+    {
+      "id": "RI-001",
+      "tipo": "REDUCCION_INJERTO",
+      "nodo": "N-002",
+      "conexiones": [
+        {
+          "rol": "ENTRADA",
+          "tramo": "TR-002",
+          "diametro_in": 6
+        },
+        {
+          "rol": "SALIDA",
+          "tramo": "TR-003",
+          "diametro_in": 8
+        },
+        {
+          "rol": "RAMAL",
+          "tramo": "TR-006",
+          "diametro_in": 5
+        }
+      ],
+      "geometria": {
+        "angulo_deg": 45,
+        "radio_eje_mm": null,
+        "tangente_mm": null,
+        "gajos": null,
+        "normal_plano": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "giro_entrada_deg": 270,
+        "entrada": "LATERAL",
+        "forma": "CONCENTRICA",
+        "semiangulo_deg": 6.851,
+        "largo_mm": 211.419,
+        "largo_ramal_mm": 326.541
+      },
+      "perdida": {
+        "modelo": "CONFLUENCIA_RAMAL",
+        "K_paso": null,
+        "K_ramal": null,
+        "referencia": "Confluencia a 45° con cono: K(β, Q_ramal/Q_salida, A_ramal/A_salida, A_entrada/A_salida)"
+      },
+      "familia_cotizap": "REDUCCION_INJERTO"
+    }
+  ],
+  "validaciones": [
+    {
+      "codigo": "MANGUERA_RESUELTA",
+      "severidad": "INFO",
+      "elementos": [
+        "TR-004",
+        "PU-03"
+      ],
+      "mensaje": "Manguera en S de dos curvas de 39.31°: radio 552.5 mm (mínimo 190.5 mm), 958 mm de largo.",
+      "sugerencia": null
+    }
+  ],
+  "resultados": {
+    "metodo": "Fricción: Darcy-Weisbach con Swamee-Jain sobre la longitud neta. Pérdidas locales: pendientes de la tabla de coeficientes.",
+    "por_tramo": [
+      {
+        "tramo": "TR-001",
+        "caudal_m3_h": 1300,
+        "velocidad_m_s": 19.796,
+        "presion_dinamica_Pa": 179.66,
+        "reynolds": 152577,
+        "factor_friccion": 0.0199,
+        "perdida_friccion_Pa": 36.81,
+        "perdida_local_Pa": null
+      },
+      {
+        "tramo": "TR-002",
+        "caudal_m3_h": 1300,
+        "velocidad_m_s": 19.796,
+        "presion_dinamica_Pa": 179.66,
+        "reynolds": 152577,
+        "factor_friccion": 0.0199,
+        "perdida_friccion_Pa": 144.42,
+        "perdida_local_Pa": null
+      },
+      {
+        "tramo": "TR-003",
+        "caudal_m3_h": 2200,
+        "velocidad_m_s": 18.844,
+        "presion_dinamica_Pa": 162.8,
+        "reynolds": 193656,
+        "factor_friccion": 0.0187,
+        "perdida_friccion_Pa": 50.81,
+        "perdida_local_Pa": null
+      },
+      {
+        "tramo": "TR-004",
+        "caudal_m3_h": 900,
+        "velocidad_m_s": 19.735,
+        "presion_dinamica_Pa": 178.56,
+        "reynolds": 126757,
+        "factor_friccion": 0.0408,
+        "perdida_friccion_Pa": 54.91,
+        "perdida_local_Pa": null
+      },
+      {
+        "tramo": "TR-005",
+        "caudal_m3_h": 900,
+        "velocidad_m_s": 19.735,
+        "presion_dinamica_Pa": 178.56,
+        "reynolds": 126757,
+        "factor_friccion": 0.0208,
+        "perdida_friccion_Pa": 26.54,
+        "perdida_local_Pa": null
+      },
+      {
+        "tramo": "TR-006",
+        "caudal_m3_h": 900,
+        "velocidad_m_s": 19.735,
+        "presion_dinamica_Pa": 178.56,
+        "reynolds": 126757,
+        "factor_friccion": 0.0208,
+        "perdida_friccion_Pa": 98.39,
+        "perdida_local_Pa": null
+      }
+    ],
+    "por_toma": [
+      {
+        "puerto": "PU-02",
+        "camino": [
+          "TR-001",
+          "TR-002",
+          "TR-003"
+        ],
+        "perdida_friccion_Pa": 232.04,
+        "perdida_total_Pa": null
+      },
+      {
+        "puerto": "PU-03",
+        "camino": [
+          "TR-004",
+          "TR-005",
+          "TR-006",
+          "TR-003"
+        ],
+        "perdida_friccion_Pa": 230.65,
+        "perdida_total_Pa": null
+      }
+    ],
+    "balance": []
+  }
+}

@@ -1,0 +1,415 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cotizap.local/esquemas/trazado-isometrico.schema.json",
+  "title": "Red de extracción trazada en isométrico (docs/trazado-isometrico.md §3)",
+  "description": "Árbol dirigido hacia el colector: equipos con sus puertos, nodos con posición absoluta, tramos rígidos y flexibles orientados en el sentido del aire, accesorios en los nodos y lo necesario para calcular pérdidas y balancear. Objetos cerrados y todo requerido (lo opcional va como null).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "proyecto", "politicas", "equipos", "nodos", "tramos", "accesorios", "validaciones", "resultados"],
+  "properties": {
+    "version": { "const": "1.0" },
+    "proyecto": { "$ref": "#/$defs/proyecto" },
+    "politicas": { "$ref": "#/$defs/politicas" },
+    "equipos": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/equipo" } },
+    "nodos": { "type": "array", "items": { "$ref": "#/$defs/nodo" } },
+    "tramos": { "type": "array", "items": { "$ref": "#/$defs/tramo" } },
+    "accesorios": { "type": "array", "items": { "$ref": "#/$defs/accesorio" } },
+    "validaciones": { "type": "array", "items": { "$ref": "#/$defs/validacion" } },
+    "resultados": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/resultados" }] }
+  },
+  "$defs": {
+    "id_equipo": { "type": "string", "pattern": "^EQ-[0-9]{2,3}$" },
+    "id_puerto": { "type": "string", "pattern": "^PU-[0-9]{2,3}$" },
+    "id_nodo": { "type": "string", "pattern": "^N-[0-9]{3,4}$" },
+    "id_tramo": { "type": "string", "pattern": "^TR-[0-9]{3,4}$" },
+    "id_accesorio": { "type": "string", "pattern": "^(CO|RE|AD|IN|RI|PA|TE|CP)-[0-9]{3,4}$" },
+    "id_elemento": { "type": "string", "pattern": "^(EQ|PU|N|TR|CO|RE|AD|IN|RI|PA|TE|CP)-[0-9]{2,4}$" },
+    "nodo_o_null": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/id_nodo" }] },
+    "tramo_o_null": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/id_tramo" }] },
+    "accesorio_o_null": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/id_accesorio" }] },
+    "puerto_o_null": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/id_puerto" }] },
+    "numero_o_null": { "type": ["number", "null"] },
+    "vector_mm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "description": "Milímetros. X al este, Y al norte, Z hacia arriba; Z = 0 es el piso terminado.",
+      "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "z": { "type": "number" } }
+    },
+    "vector_unitario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": { "x": { "type": "number", "minimum": -1, "maximum": 1 }, "y": { "type": "number", "minimum": -1, "maximum": 1 }, "z": { "type": "number", "minimum": -1, "maximum": 1 } }
+    },
+    "direccion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["azimut_deg", "elevacion_deg"],
+      "description": "Una dirección de la rejilla: u = (cos e·cos a, cos e·sen a, sen e). Azimut contra las manecillas desde +X, en pasos de politicas.rejilla.paso_azimut_deg; en una vertical (±90°) el azimut es 0.",
+      "properties": {
+        "azimut_deg": { "type": "number", "minimum": 0, "maximum": 345, "multipleOf": 15 },
+        "elevacion_deg": { "type": "number", "enum": [-90, -60, -45, -30, 0, 30, 45, 60, 90] }
+      }
+    },
+    "union": {
+      "type": "string",
+      "enum": ["BRIDA", "BRIDA_EQUIPO", "ENGARGOLADA", "SOLDADA", "ABRAZADERA", "LISA", "ABIERTA"],
+      "description": "Cómo termina un tramo: brida del taller, contra la brida de un equipo, pegado a un accesorio (engargolado o soldado), con abrazadera (manguera), liso para la manguera o abierto."
+    },
+    "proyecto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "nombre", "servicio", "material_transportado", "aire", "unidades", "ejes", "origen", "vista_iso"],
+      "properties": {
+        "id": { "type": "string" },
+        "nombre": { "type": "string" },
+        "servicio": { "type": "string", "enum": ["POLVO", "ABRASIVO", "VENTILACION", "HUMOS"] },
+        "material_transportado": { "type": ["string", "null"] },
+        "aire": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["temperatura_C", "altitud_m", "presion_Pa", "densidad_kg_m3", "viscosidad_Pa_s"],
+          "properties": {
+            "temperatura_C": { "type": "number" },
+            "altitud_m": { "type": "number" },
+            "presion_Pa": { "type": "number", "minimum": 0 },
+            "densidad_kg_m3": { "type": "number", "minimum": 0 },
+            "viscosidad_Pa_s": { "type": "number", "minimum": 0 }
+          }
+        },
+        "unidades": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["longitud", "diametro", "caudal", "presion", "velocidad"],
+          "properties": {
+            "longitud": { "const": "mm" },
+            "diametro": { "type": "string", "enum": ["in", "mm"] },
+            "caudal": { "const": "m3/h" },
+            "presion": { "const": "Pa" },
+            "velocidad": { "const": "m/s" }
+          }
+        },
+        "ejes": { "const": "X_ESTE_Y_NORTE_Z_ARRIBA" },
+        "origen": { "type": "string", "description": "Qué punto de la nave es (0, 0, 0)." },
+        "vista_iso": { "type": "string", "enum": ["NE", "NO", "SE", "SO"], "description": "Desde dónde se mira el isométrico (sólo cambia el dibujo, no los datos)." }
+      }
+    },
+    "politicas": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Lo que el taller fabrica y los criterios de diseño. Salen de las tablas maestras; cambiar una política cambia lo que el trazo ofrece y lo que se valida.",
+      "required": ["angulos_codo_deg", "radio_codo_D", "angulos_injerto_deg", "permite_t_90", "permite_pantalon", "angulos_pantalon_deg", "entradas_permitidas", "rejilla",
+        "paso_largo_mm", "largo_min_tramo_mm", "recto_min_entre_accesorios_mm", "recto_antes_de_derivacion_D", "distancia_min_entre_derivaciones_D", "holgura_min_mm",
+        "altura_libre_min_mm", "velocidad_min_m_s", "velocidad_max_m_s", "semiangulo_reduccion_deg", "reduccion_horizontal", "relacion_reduccion_min", "manguera",
+        "rugosidad_mm", "diametros_comerciales_in"],
+      "properties": {
+        "angulos_codo_deg": { "type": "array", "minItems": 1, "items": { "type": "number", "minimum": 1, "maximum": 90 } },
+        "radio_codo_D": { "type": "number", "minimum": 0.5 },
+        "angulos_injerto_deg": { "type": "array", "minItems": 1, "items": { "type": "number", "minimum": 1, "maximum": 90 } },
+        "permite_t_90": { "type": "boolean" },
+        "permite_pantalon": { "type": "boolean" },
+        "angulos_pantalon_deg": { "type": "array", "items": { "type": "number", "minimum": 1, "maximum": 90 }, "description": "Ángulo de cada pierna contra el eje del pantalón." },
+        "entradas_permitidas": { "type": "array", "items": { "type": "string", "enum": ["SUPERIOR", "LATERAL", "INFERIOR"] } },
+        "rejilla": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["paso_azimut_deg", "elevaciones_deg"],
+          "properties": {
+            "paso_azimut_deg": { "type": "number", "enum": [15, 45, 90] },
+            "elevaciones_deg": { "type": "array", "items": { "type": "number", "enum": [-90, -60, -45, -30, 0, 30, 45, 60, 90] } }
+          }
+        },
+        "paso_largo_mm": { "type": "number", "minimum": 1 },
+        "largo_min_tramo_mm": { "type": "number", "minimum": 0 },
+        "recto_min_entre_accesorios_mm": { "type": "number", "minimum": 0 },
+        "recto_antes_de_derivacion_D": { "type": "number", "minimum": 0 },
+        "distancia_min_entre_derivaciones_D": { "type": "number", "minimum": 0 },
+        "holgura_min_mm": { "type": "number", "minimum": 0 },
+        "altura_libre_min_mm": { "type": "number", "minimum": 0 },
+        "velocidad_min_m_s": { "type": "number", "minimum": 0 },
+        "velocidad_max_m_s": { "type": "number", "minimum": 0 },
+        "semiangulo_reduccion_deg": { "type": "number", "minimum": 1, "maximum": 45 },
+        "reduccion_horizontal": { "type": "string", "enum": ["CONCENTRICA", "EXCENTRICA_PLANA_ABAJO"] },
+        "relacion_reduccion_min": { "type": "number", "minimum": 0, "maximum": 1 },
+        "manguera": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["radio_min_D", "largo_max_mm", "puno_mm", "rugosidad_mm"],
+          "properties": {
+            "radio_min_D": { "type": "number", "minimum": 0 },
+            "largo_max_mm": { "type": "number", "minimum": 0 },
+            "puno_mm": { "type": "number", "minimum": 0, "description": "Lo recto de cada punta que abraza la abrazadera." },
+            "rugosidad_mm": { "type": "number", "minimum": 0 }
+          }
+        },
+        "rugosidad_mm": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["GALVANIZADO", "ACERO_CARBON", "INOX_304", "INOX_316"],
+          "properties": {
+            "GALVANIZADO": { "type": "number", "minimum": 0 }, "ACERO_CARBON": { "type": "number", "minimum": 0 },
+            "INOX_304": { "type": "number", "minimum": 0 }, "INOX_316": { "type": "number", "minimum": 0 }
+          }
+        },
+        "diametros_comerciales_in": { "type": "array", "minItems": 1, "items": { "type": "number", "minimum": 1 } }
+      }
+    },
+    "equipo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tipo", "nombre", "posicion_mm", "rotacion_z_deg", "caja_mm", "perdida_Pa", "puertos"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id_equipo" },
+        "tipo": { "type": "string", "enum": ["COLECTOR", "MAQUINA", "CAMPANA", "VENTILADOR"] },
+        "nombre": { "type": "string" },
+        "posicion_mm": { "$ref": "#/$defs/vector_mm", "description": "El centro de la base del equipo." },
+        "rotacion_z_deg": { "type": "number", "minimum": 0, "maximum": 345, "multipleOf": 15 },
+        "caja_mm": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["largo", "ancho", "alto"],
+          "description": "La caja que ocupa el equipo, en sus ejes locales (largo en x, ancho en y, alto en z): para los choques.",
+          "properties": { "largo": { "type": "number", "minimum": 0 }, "ancho": { "type": "number", "minimum": 0 }, "alto": { "type": "number", "minimum": 0 } }
+        },
+        "perdida_Pa": { "$ref": "#/$defs/numero_o_null", "description": "Caída de presión propia (el filtro del colector); null en una máquina." },
+        "puertos": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/puerto" } }
+      }
+    },
+    "puerto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "rol", "nombre", "posicion_local_mm", "direccion_local", "posicion_mm", "direccion", "diametro_in", "caudal_m3_h", "coef_entrada_K", "nodo", "conexion"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id_puerto" },
+        "rol": { "type": "string", "enum": ["TOMA", "ENTRADA", "SALIDA"], "description": "TOMA: punto de captura de una máquina. ENTRADA: boca del colector. SALIDA: descarga (ventilador)." },
+        "nombre": { "type": "string" },
+        "posicion_local_mm": { "$ref": "#/$defs/vector_mm" },
+        "direccion_local": { "$ref": "#/$defs/direccion", "description": "Hacia dónde sale el ducto del puerto, hacia fuera del equipo." },
+        "posicion_mm": { "$ref": "#/$defs/vector_mm", "description": "posicion_mm del equipo + la local girada rotacion_z_deg." },
+        "direccion": { "$ref": "#/$defs/direccion" },
+        "diametro_in": { "type": "number", "minimum": 1 },
+        "caudal_m3_h": { "$ref": "#/$defs/numero_o_null", "description": "TOMA: el caudal de diseño. ENTRADA o SALIDA: null (se calcula)." },
+        "coef_entrada_K": { "$ref": "#/$defs/numero_o_null", "description": "Pérdida de entrada de la toma en presiones dinámicas; null si no aplica." },
+        "nodo": { "$ref": "#/$defs/id_nodo" },
+        "conexion": { "$ref": "#/$defs/conexion" }
+      }
+    },
+    "conexion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tipo", "nodo_transicion", "tramo_flexible", "adaptador", "barrenos"],
+      "properties": {
+        "tipo": { "type": "string", "enum": ["MANGUERA", "BRIDA"] },
+        "nodo_transicion": { "$ref": "#/$defs/nodo_o_null", "description": "MANGUERA: el punto de transición, donde empieza el ducto rígido." },
+        "tramo_flexible": { "$ref": "#/$defs/tramo_o_null", "description": "MANGUERA: el tramo FLEXIBLE." },
+        "adaptador": { "$ref": "#/$defs/accesorio_o_null", "description": "La reducción o ampliación en el puerto, si su Ø no es el del ducto." },
+        "barrenos": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["numero", "circulo_mm", "diametro_mm"],
+              "properties": { "numero": { "type": "integer", "minimum": 0 }, "circulo_mm": { "type": "number", "minimum": 0 }, "diametro_mm": { "type": "number", "minimum": 0 } }
+            }
+          ],
+          "description": "BRIDA: el patrón de la brida del equipo, si se conoce."
+        }
+      }
+    },
+    "nodo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tipo", "posicion_mm", "puerto", "accesorios", "tramos"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id_nodo" },
+        "tipo": { "type": "string", "enum": ["PUERTO", "TRANSICION", "VERTICE", "UNION", "DERIVACION", "EXTREMO"] },
+        "posicion_mm": { "$ref": "#/$defs/vector_mm", "description": "Absoluta, al eje: el punto de intersección de los ejes de los tramos que llegan." },
+        "puerto": { "$ref": "#/$defs/puerto_o_null" },
+        "accesorios": { "type": "array", "items": { "$ref": "#/$defs/id_accesorio" } },
+        "tramos": { "type": "array", "items": { "$ref": "#/$defs/id_tramo" } }
+      }
+    },
+    "tramo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tipo", "nodo_aguas_arriba", "nodo_aguas_abajo", "direccion", "longitud_ejes_mm", "descuentos", "longitud_neta_mm", "diametro_in", "diametro_interior_mm",
+        "diametro_bloqueado", "material", "calibre", "rugosidad_mm", "uniones", "flexible", "caudal_m3_h", "velocidad_m_s"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id_tramo" },
+        "tipo": { "type": "string", "enum": ["RIGIDO", "FLEXIBLE"] },
+        "nodo_aguas_arriba": { "$ref": "#/$defs/id_nodo", "description": "De donde viene el aire (lado de la toma)." },
+        "nodo_aguas_abajo": { "$ref": "#/$defs/id_nodo", "description": "Hacia donde va el aire (lado del colector)." },
+        "direccion": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/direccion" }], "description": "RIGIDO: la del aire. FLEXIBLE: null (es una curva)." },
+        "longitud_ejes_mm": { "type": "number", "minimum": 0, "description": "RIGIDO: de nodo a nodo. FLEXIBLE: el largo de la manguera sobre su eje." },
+        "descuentos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["accesorio", "mm"],
+            "properties": { "accesorio": { "$ref": "#/$defs/id_accesorio" }, "mm": { "type": "number", "minimum": 0 } }
+          }
+        },
+        "longitud_neta_mm": { "type": "number", "description": "longitud_ejes_mm − Σ descuentos: el tramo recto que se fabrica (y el que tiene fricción)." },
+        "diametro_in": { "type": "number", "minimum": 1 },
+        "diametro_interior_mm": { "type": "number", "minimum": 0 },
+        "diametro_bloqueado": { "type": "boolean", "description": "El ingeniero lo fijó: el dimensionamiento automático no lo cambia." },
+        "material": { "type": "string", "enum": ["GALVANIZADO", "ACERO_CARBON", "INOX_304", "INOX_316", "MANGUERA"] },
+        "calibre": { "type": ["integer", "null"] },
+        "rugosidad_mm": { "type": "number", "minimum": 0 },
+        "uniones": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["aguas_arriba", "aguas_abajo"],
+          "properties": { "aguas_arriba": { "$ref": "#/$defs/union" }, "aguas_abajo": { "$ref": "#/$defs/union" } }
+        },
+        "flexible": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/flexible" }] },
+        "caudal_m3_h": { "$ref": "#/$defs/numero_o_null", "description": "La suma de las tomas aguas arriba (se calcula al orientar el árbol)." },
+        "velocidad_m_s": { "$ref": "#/$defs/numero_o_null" }
+      }
+    },
+    "flexible": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["forma", "radio_mm", "angulo_curva_deg", "curvas", "desvio_mm", "altura_mm", "tramo_recto_mm", "puno_mm", "normal_plano"],
+      "description": "La manguera de la toma al punto de transición (§2.8).",
+      "properties": {
+        "forma": { "type": "string", "enum": ["RECTA", "S", "CODO", "LIBRE"] },
+        "radio_mm": { "$ref": "#/$defs/numero_o_null" },
+        "angulo_curva_deg": { "$ref": "#/$defs/numero_o_null" },
+        "curvas": { "type": "integer", "minimum": 0 },
+        "desvio_mm": { "type": "number", "minimum": 0, "description": "e: lo que se separan los ejes de la toma y del punto de transición." },
+        "altura_mm": { "type": "number", "description": "h: la distancia a lo largo de la dirección de la toma." },
+        "tramo_recto_mm": { "type": "number", "minimum": 0 },
+        "puno_mm": { "type": "number", "minimum": 0 },
+        "normal_plano": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/vector_unitario" }] }
+      }
+    },
+    "accesorio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tipo", "nodo", "conexiones", "geometria", "perdida", "familia_cotizap"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id_accesorio" },
+        "tipo": { "type": "string", "enum": ["CODO", "REDUCCION", "ADAPTADOR", "INJERTO", "REDUCCION_INJERTO", "PANTALON", "T_90", "COMPUERTA"] },
+        "nodo": { "$ref": "#/$defs/id_nodo" },
+        "conexiones": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["rol", "tramo", "diametro_in"],
+            "properties": {
+              "rol": { "type": "string", "enum": ["ENTRADA", "SALIDA", "RAMAL", "RAMAL_2"], "description": "En el sentido del aire: ENTRADA (aguas arriba del tronco), SALIDA (hacia el colector), RAMAL." },
+              "tramo": { "$ref": "#/$defs/id_tramo" },
+              "diametro_in": { "type": "number", "minimum": 1 }
+            }
+          }
+        },
+        "geometria": { "$ref": "#/$defs/geometria_accesorio" },
+        "perdida": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["modelo", "K_paso", "K_ramal", "referencia"],
+          "description": "Con qué se calcula su pérdida local; los K los llena la etapa de cálculo con la tabla de coeficientes.",
+          "properties": {
+            "modelo": { "type": "string", "enum": ["CODO_GAJOS", "EXPANSION", "CONTRACCION", "CONFLUENCIA_RAMAL", "CONFLUENCIA_PANTALON", "CONFLUENCIA_T", "COMPUERTA"] },
+            "K_paso": { "$ref": "#/$defs/numero_o_null" },
+            "K_ramal": { "$ref": "#/$defs/numero_o_null" },
+            "referencia": { "type": ["string", "null"] }
+          }
+        },
+        "familia_cotizap": { "type": ["string", "null"], "enum": ["CODO", "REDUCCION", "RAMAL", "REDUCCION_INJERTO", "PANTALON", "TRANSICION", null] }
+      }
+    },
+    "geometria_accesorio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["angulo_deg", "radio_eje_mm", "tangente_mm", "gajos", "normal_plano", "giro_entrada_deg", "entrada", "forma", "semiangulo_deg", "largo_mm", "largo_ramal_mm"],
+      "properties": {
+        "angulo_deg": { "$ref": "#/$defs/numero_o_null", "description": "CODO: θ. INJERTO, REDUCCION_INJERTO, T_90: β (ramal contra el tronco). PANTALON: cada pierna contra el eje." },
+        "radio_eje_mm": { "$ref": "#/$defs/numero_o_null" },
+        "tangente_mm": { "$ref": "#/$defs/numero_o_null", "description": "CODO: R·tan(θ/2), lo que ocupa de cada tramo." },
+        "gajos": { "type": ["integer", "null"] },
+        "normal_plano": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/vector_unitario" }], "description": "El plano del codo o de la derivación (para el plano de fabricación)." },
+        "giro_entrada_deg": { "$ref": "#/$defs/numero_o_null", "description": "Derivación en tronco horizontal: dónde entra el ramal, mirando aguas abajo; 0 arriba, 90 a la derecha, 270 a la izquierda." },
+        "entrada": { "type": ["string", "null"], "enum": ["SUPERIOR", "LATERAL", "INFERIOR", null] },
+        "forma": { "type": ["string", "null"], "enum": ["CONCENTRICA", "EXCENTRICA_PLANA_ABAJO", "EXCENTRICA_PLANA_ARRIBA", null] },
+        "semiangulo_deg": { "$ref": "#/$defs/numero_o_null" },
+        "largo_mm": { "$ref": "#/$defs/numero_o_null", "description": "Largo del cuerpo (reducción, cono de la reducción con injerto, cuerpo del injerto)." },
+        "largo_ramal_mm": { "$ref": "#/$defs/numero_o_null" }
+      }
+    },
+    "validacion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["codigo", "severidad", "elementos", "mensaje", "sugerencia"],
+      "properties": {
+        "codigo": { "type": "string", "pattern": "^[A-Z0-9_]+$" },
+        "severidad": { "type": "string", "enum": ["BLOQUEANTE", "ERROR", "AVISO", "INFO"] },
+        "elementos": { "type": "array", "items": { "$ref": "#/$defs/id_elemento" } },
+        "mensaje": { "type": "string" },
+        "sugerencia": { "type": ["string", "null"] }
+      }
+    },
+    "resultados": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metodo", "por_tramo", "por_toma", "balance"],
+      "description": "Lo que llena la etapa de cálculo; el trazo lo deja en null.",
+      "properties": {
+        "metodo": { "type": "string" },
+        "por_tramo": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tramo", "caudal_m3_h", "velocidad_m_s", "presion_dinamica_Pa", "reynolds", "factor_friccion", "perdida_friccion_Pa", "perdida_local_Pa"],
+            "properties": {
+              "tramo": { "$ref": "#/$defs/id_tramo" },
+              "caudal_m3_h": { "type": "number" },
+              "velocidad_m_s": { "type": "number" },
+              "presion_dinamica_Pa": { "type": "number" },
+              "reynolds": { "type": "number" },
+              "factor_friccion": { "type": "number" },
+              "perdida_friccion_Pa": { "type": "number" },
+              "perdida_local_Pa": { "$ref": "#/$defs/numero_o_null" }
+            }
+          }
+        },
+        "por_toma": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["puerto", "camino", "perdida_friccion_Pa", "perdida_total_Pa"],
+            "properties": {
+              "puerto": { "$ref": "#/$defs/id_puerto" },
+              "camino": { "type": "array", "items": { "$ref": "#/$defs/id_tramo" } },
+              "perdida_friccion_Pa": { "type": "number" },
+              "perdida_total_Pa": { "$ref": "#/$defs/numero_o_null" }
+            }
+          }
+        },
+        "balance": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["nodo", "sp_ramal_Pa", "sp_tronco_Pa", "relacion", "accion"],
+            "properties": {
+              "nodo": { "$ref": "#/$defs/id_nodo" },
+              "sp_ramal_Pa": { "type": "number" },
+              "sp_tronco_Pa": { "type": "number" },
+              "relacion": { "type": "number" },
+              "accion": { "type": "string", "enum": ["NINGUNA", "AJUSTAR_CAUDAL", "REDIMENSIONAR", "COMPUERTA"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}
