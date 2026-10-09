@@ -2,8 +2,9 @@
  * Contrato de la especificación del trazado isométrico (docs/trazado-isometrico.md): el ejemplo resuelto cumple el esquema
  * (docs/trazado-isometrico.schema.json), su red es un árbol orientado hacia el colector, cada posición sale de las
  * direcciones y los largos, cada accesorio cumple las políticas y cuadra con el motor de COTIZAP, los caudales, las
- * velocidades, la manguera y los choques son los que dicen las reglas, la fricción se puede calcular con lo que trae, y el
- * documento trae el esquema y el ejemplo tal como están en sus archivos.
+ * velocidades, la manguera y los choques son los que dicen las reglas, el cálculo de §3.4 (fricción, pérdidas locales,
+ * succiones, balanceo y ventilador) se rehace con lo que trae, y el documento trae el esquema y el ejemplo tal como están en
+ * sus archivos.
  */
 'use strict';
 
@@ -287,32 +288,87 @@ test('Choques y alturas: los ductos guardan su holgura entre sí y con los equip
   });
 });
 
-test('Con lo que trae se calcula la fricción: aire a la altitud del proyecto y Darcy-Weisbach por tramo y por camino', () => {
+test('Con lo que trae se calcula la red: aire, fricción por tramo, pérdidas locales, succiones, balanceo y ventilador (§3.4)', () => {
   const air = EJ.proyecto.aire;
   const TK = air.temperatura_C + 273.15;
   cerca(air.presion_Pa, 101325 * (1 - 2.25577e-5 * air.altitud_m) ** 5.25588, 1, 'presión a la altitud');
   cerca(air.densidad_kg_m3, air.presion_Pa / (287.05 * TK), 1e-4, 'ρ = p / (R·T)');
   cerca(air.viscosidad_Pa_s, (1.458e-6 * TK ** 1.5) / (TK + 110.4), 1e-8, 'μ (Sutherland)');
+  const rho = air.densidad_kg_m3;
   const R = EJ.resultados;
+  const fila = (id) => R.por_tramo.find((x) => x.tramo === id);
+  const pvDe = (Q, d) => (rho * (Q / 3600 / ((Math.PI * (d / 1000) ** 2) / 4)) ** 2) / 2;
+  // Fricción: Darcy-Weisbach con Swamee-Jain sobre la longitud neta, con el caudal que lleva cada tramo.
   EJ.tramos.forEach((t) => {
+    const r = fila(t.id);
     const D = t.diametro_interior_mm / 1000;
-    const v = t.caudal_m3_h / 3600 / ((Math.PI * D * D) / 4);
-    const Re = (air.densidad_kg_m3 * v * D) / air.viscosidad_Pa_s;
+    const v = r.caudal_m3_h / 3600 / ((Math.PI * D * D) / 4);
+    const Re = (rho * v * D) / air.viscosidad_Pa_s;
     const f = 0.25 / Math.log10(t.rugosidad_mm / 1000 / (3.7 * D) + 5.74 / Re ** 0.9) ** 2;
-    const pv = (air.densidad_kg_m3 * v * v) / 2;
-    const r = R.por_tramo.find((x) => x.tramo === t.id);
+    const pv = (rho * v * v) / 2;
+    cerca(r.velocidad_m_s, v, 0.001, `${t.id} v`);
     cerca(r.presion_dinamica_Pa, pv, 0.01, `${t.id} pv`);
     cerca(r.reynolds, Re, 2, `${t.id} Re`);
     cerca(r.factor_friccion, f, 1e-4, `${t.id} f`);
     cerca(r.perdida_friccion_Pa, (f * (t.longitud_neta_mm / 1000) / D) * pv, 0.01, `${t.id} Δp`);
   });
+  // Los K de la tabla (ACGIH): codo de 5 gajos a 90° con R/D 1.5 = 0.24; entrada de ramal a 45° = 0.28; curvas lisas de la manguera.
+  EJ.accesorios.forEach((a) => {
+    if (a.tipo === 'CODO') { assert.equal(a.geometria.gajos, 5); cerca(a.geometria.radio_eje_mm / (a.conexiones[0].diametro_in * IN), 1.5, 1e-9); assert.equal(a.perdida.K_paso, 0.24, a.id); }
+    if (a.tipo === 'REDUCCION_INJERTO') { assert.equal(a.geometria.angulo_deg, 45); assert.equal(a.perdida.K_ramal, 0.28); assert.equal(a.perdida.K_paso, 0); }
+    assert.match(a.perdida.referencia, /^ACGIH/);
+  });
+  const K = (id) => A.get(id).perdida;
+  const manguera = T.get('TR-004').flexible;
+  const kCurvas = 0.12 * (manguera.angulo_curva_deg / 90) * manguera.curvas; // R/D = 552.5/127 > 2.5: el liso de R/D 2.5
+  const locales = { 'TR-001': K('CO-001').K_paso, 'TR-002': 0, 'TR-003': 0, 'TR-004': kCurvas, 'TR-005': K('CO-002').K_paso, 'TR-006': K('RI-001').K_ramal };
+  Object.entries(locales).forEach(([id, k]) => cerca(fila(id).perdida_local_Pa, k * fila(id).presion_dinamica_Pa, 0.01, `${id} local`));
+  // Succión: la campana con (1 + K)·pv y, tramo a tramo, fricción más locales.
+  const sp = (id) => fila(id).presion_estatica_Pa;
+  const tramoDe = (pid) => EJ.tramos.find((t) => t.nodo_aguas_arriba === P.get(pid).nodo).id;
+  ['PU-02', 'PU-03'].forEach((pid) => {
+    const t0 = fila(tramoDe(pid));
+    const campana = (1 + P.get(pid).coef_entrada_K) * pvDe(P.get(pid).caudal_m3_h, P.get(pid).diametro_in * IN);
+    cerca(R.por_toma.find((x) => x.puerto === pid).presion_estatica_campana_Pa, campana, 0.01, `${pid} campana`);
+    cerca(t0.presion_estatica_Pa, campana + t0.perdida_friccion_Pa + t0.perdida_local_Pa, 0.02, `${pid} primer tramo`);
+  });
+  [['TR-002', 'TR-001'], ['TR-005', 'TR-004'], ['TR-006', 'TR-005']].forEach(([id, antes]) => cerca(sp(id), sp(antes) + fila(id).perdida_friccion_Pa + fila(id).perdida_local_Pa, 0.02, `${id} succión`));
+  // Balanceo en N-002: manda el ramal (más succión); el tronco se corrige con Q′ = Q·√relación (relación entre 1.05 y 1.20).
+  assert.equal(R.balance.length, 1);
+  const b = R.balance[0];
+  assert.deepEqual([b.nodo, b.tramo_ramal, b.tramo_tronco, b.corriente_menor, b.accion], ['N-002', 'TR-006', 'TR-002', 'TR-002', 'AJUSTAR_CAUDAL']);
+  cerca(b.sp_ramal_Pa, sp('TR-006'), 0.01);
+  cerca(b.sp_tronco_Pa, sp('TR-002'), 0.01);
+  cerca(b.relacion, sp('TR-006') / sp('TR-002'), 0.001);
+  assert.ok(b.relacion > 1.05 && b.relacion <= 1.2);
+  cerca(b.caudal_corregido_m3_h, 1300 * Math.sqrt(sp('TR-006') / sp('TR-002')), 0.1);
+  cerca(fila('TR-003').caudal_m3_h, 900 + b.caudal_corregido_m3_h, 0.11, 'el tronco al colector lleva la suma corregida');
+  // la mezcla va más lenta que lo que llega: no hay pérdida por aceleración, y la succión sigue a la mayor
+  assert.equal(fila('TR-003').perdida_local_Pa, 0);
+  cerca(sp('TR-003'), sp('TR-006') + fila('TR-003').perdida_friccion_Pa, 0.02);
+  // Por toma: su camino, su fricción y su pérdida total (entrada + fricción + locales).
   R.por_toma.forEach((c) => {
     let n = P.get(c.puerto).nodo;
     const camino = [];
     for (let t = EJ.tramos.find((x) => x.nodo_aguas_arriba === n); t; t = EJ.tramos.find((x) => x.nodo_aguas_arriba === n)) { camino.push(t.id); n = t.nodo_aguas_abajo; }
     assert.deepEqual(c.camino, camino, `${c.puerto}: de la toma al colector`);
-    cerca(c.perdida_friccion_Pa, camino.reduce((s, id) => s + R.por_tramo.find((x) => x.tramo === id).perdida_friccion_Pa, 0), 0.011);
+    cerca(c.perdida_friccion_Pa, camino.reduce((s, id) => s + fila(id).perdida_friccion_Pa, 0), 0.011);
+    const p = P.get(c.puerto);
+    cerca(c.perdida_total_Pa, p.coef_entrada_K * pvDe(p.caudal_m3_h, p.diametro_in * IN) + camino.reduce((s, id) => s + fila(id).perdida_friccion_Pa + fila(id).perdida_local_Pa, 0), 0.03);
   });
+  cerca(R.por_toma.find((x) => x.puerto === 'PU-02').caudal_corregido_m3_h, b.caudal_corregido_m3_h, 1e-9);
+  // Ventilador: la boca más el colector; en aire estándar para la curva; potencia con la eficiencia y el motor comercial.
+  assert.equal(R.ventiladores.length, 1);
+  const v = R.ventiladores[0];
+  assert.deepEqual([v.equipo, v.bocas], ['EQ-01', ['PU-01']]);
+  cerca(v.caudal_m3_h, fila('TR-003').caudal_m3_h, 1e-9);
+  cerca(v.presion_estatica_boca_Pa, sp('TR-003'), 1e-9);
+  cerca(v.presion_estatica_Pa, sp('TR-003') + EJ.equipos[0].perdida_Pa, 0.011);
+  cerca(v.presion_estatica_estandar_Pa, (v.presion_estatica_Pa * 1.2) / rho, 0.02);
+  cerca(v.potencia_aire_kW, (v.caudal_m3_h / 3600) * v.presion_estatica_Pa / 1000, 0.001);
+  cerca(v.potencia_freno_kW, v.potencia_aire_kW / v.eficiencia_ventilador, 0.002);
+  const hp = v.potencia_freno_kW / v.eficiencia_transmision / 0.7457;
+  assert.equal(v.motor_hp, [0.5, 0.75, 1, 1.5, 2, 3, 5, 7.5, 10].find((m) => m >= hp), `el motor comercial siguiente a ${hp.toFixed(2)} HP`);
   // y cada accesorio trae lo que pide su modelo de pérdida
   EJ.accesorios.forEach((a) => {
     if (a.perdida.modelo === 'CODO_GAJOS') assert.ok(a.geometria.angulo_deg && a.geometria.radio_eje_mm && a.geometria.gajos);

@@ -17,7 +17,10 @@ const EJ = require('../docs/ejemplos/trazado-isometrico-ejemplo.json');
 const M = crearMaestros();
 const V3 = (x, y, z) => ({ x, y, z });
 const cerca = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg || ''} ${a} ≠ ${b}`);
-const sinResultados = JSON.stringify({ ...EJ, resultados: null });
+const PD = require('../src/motor/perdidas');
+const completo = JSON.stringify(EJ);
+/** El sistema exportado por el modelo, con el cálculo de pérdidas (etapa 4). */
+const calculado = (s) => JSON.stringify(PD.calcular(s).sistema);
 const PROYECTO = { id: 'EJ-TRAZADO-01', nombre: 'Ejemplo: sierra y cepillo a un colector', servicio: 'POLVO', material_transportado: 'Aserrín y viruta de madera', aire: { temperatura_C: 20, altitud_m: 2240 }, origen: 'Centro de la base del colector, sobre el piso terminado' };
 const CAMARA = { k: 0.06, ox: 600, oy: 450 };
 const nuevoTablero = () => { const s = TB.crear(M, null, { ancho: 1200, alto: 700 }); s.cam = { ...CAMARA }; return s; };
@@ -124,7 +127,7 @@ function trazarEjemplo(s) {
 }
 
 test('El ejemplo de la paleta (§1.6 con las operaciones del modelo) es el JSON resuelto', () => {
-  assert.equal(JSON.stringify(TZ.aSistema(TB.ejemplo(M), M)), sinResultados);
+  assert.equal(calculado(TZ.aSistema(TB.ejemplo(M), M)), completo);
 });
 
 test('El recorrido de §1.6 jugado en el tablero (pantalla, teclas, tiradores e imán) da exactamente el ejemplo', () => {
@@ -132,10 +135,11 @@ test('El recorrido de §1.6 jugado en el tablero (pantalla, teclas, tiradores e 
   assert.ok(TB.hacer(s, (t) => TZ.aplicarDimensiones(t, M), ''));
   assert.match(s.msg, /TR-005: 6″ → 8″, 33\.5 → 18\.8 m\/s\. Reducción con injerto a 45° en N-007 \(RI-001\)/);
   assert.ok(TB.hacer(s, (t) => TZ.renumerar(t, M), ''));
-  assert.equal(JSON.stringify(TZ.aSistema(s.t, M)), sinResultados);
+  assert.equal(calculado(TZ.aSistema(s.t, M)), completo);
   assert.ok(TB.fases(s).every((f) => f.pendientes === 0), 'sin pendientes en ninguna fase');
   const ex = TB.exportar(s);
-  assert.equal(ex.texto, JSON.stringify(TZ.aSistema(s.t, M), null, 2));
+  assert.equal(ex.texto, JSON.stringify(EJ, null, 2), 'la salida trae el cálculo de pérdidas: es el ejemplo completo');
+  assert.deepEqual([ex.calculado, ex.aviso], [true, null]);
   // y se puede deshacer paso por paso hasta el principio, y rehacer
   const final = JSON.stringify(s.t);
   let n = 0;
@@ -478,8 +482,8 @@ test('Fases: lo pendiente de cada una; ▶ lleva a la siguiente con algo pendien
 
 test('Importar y exportar: el JSON del sistema ida y vuelta; lo roto se rechaza sin cambiar nada', () => {
   const s = nuevoTablero();
-  assert.ok(TB.importar(s, sinResultados));
-  assert.equal(JSON.stringify(TZ.aSistema(s.t, M)), sinResultados);
+  assert.ok(TB.importar(s, completo));
+  assert.equal(calculado(TZ.aSistema(s.t, M)), completo);
   assert.equal(s.hist.length, 1, 'se puede deshacer');
   const antes = JSON.stringify(s.t);
   assert.equal(TB.importar(s, '{nada'), false);
@@ -555,4 +559,34 @@ test('La manguera imposible dice hasta dónde subir el punto de transición', ()
   assert.equal(sem.color, 'ROJO');
   assert.match(sem.texto, /pide un radio de 156 mm; la manguera de 5″ necesita 190\.5 mm\. Con este desvío, suba el punto de transición a 600 mm o más\.$/);
   assert.equal(TZ.resolverManguera({ ...x, P_r: V3(0, 400, 600) }).posible, true, 'a 600 mm ya cabe');
+});
+
+test('Salida con el cálculo de pérdidas (etapa 4): ventilador, tomas, balance, renglón por tramo, caché y lo que falta', () => {
+  const s = nuevoTablero();
+  TB.reemplazar(s, TB.ejemplo(M), 'ejemplo');
+  const c = TB.calculo(s);
+  assert.equal(TB.calculo(s), c, 'se guarda mientras el trazo no cambie');
+  const inf = TB.informeCalculo(s);
+  assert.deepEqual(inf.ventiladores.map((v) => [v.nombre, v.caudal_m3_h, v.presion_estatica_Pa, v.motor_hp]), [['Colector de polvo', 2283.4, 1863.78, 3]]);
+  assert.deepEqual(inf.tomas.map((x) => [x.nombre, x.caudal_corregido_m3_h, x.critica]), [['Sierra de banco', 1383.4, false], ['Cepillo', 900, true]]);
+  assert.deepEqual(inf.balance.map((b) => [b.nodo, b.nombre_accion]), [['N-002', 'Ajustar caudal']]);
+  assert.deepEqual(inf.tramos.map((x) => [x.tramo, x.diametro_in]), [['TR-001', 6], ['TR-002', 6], ['TR-003', 8], ['TR-004', 5], ['TR-005', 5], ['TR-006', 5]]);
+  assert.deepEqual(TB.filaCalculo(s, 'TR-006').locales.map((l) => l.texto), ['entrada del ramal RI-001 (K 0.28)']);
+  assert.deepEqual(TB.filaCalculo(s, 'TR-004').locales.map((l) => l.texto), ['curvas de la manguera (K 0.1048)']);
+  assert.equal(TB.filaCalculo(s, 'TR-001').presion_estatica_Pa, 349.42);
+  assert.equal(TB.filaCalculo(s, 'TR-099'), null);
+  // un cambio en el trazo se vuelve a calcular: sin pérdida de entrada en la sierra, compuerta
+  assert.ok(TB.hacer(s, (t) => TZ.editarPuerto(t, M, 'PU-02', { coef_entrada_K: 0 }), ''));
+  assert.notEqual(TB.calculo(s), c);
+  assert.deepEqual(TB.informeCalculo(s).balance.map((b) => b.nombre_accion), ['Compuerta']);
+  TB.deshacer(s);
+  assert.equal(TB.exportar(s).texto, JSON.stringify(EJ, null, 2));
+  // sin caudal en una toma no se exporta ni se calcula, y se dice por qué
+  assert.ok(TB.hacer(s, (t) => TZ.editarPuerto(t, M, 'PU-03', { caudal_m3_h: null }), ''));
+  assert.match(TB.informeCalculo(s).error, /^Para calcular, primero corrija los problemas: hay 1 problema: La toma PU-03 \(Cepillo\) no tiene caudal/);
+  assert.equal(TB.filaCalculo(s, 'TR-001'), null);
+  assert.match(TB.exportar(s).error, /No se puede exportar/);
+  const b = TB.exportar(s, true);
+  assert.deepEqual([b.borrador, b.calculado], [true, false], 'el borrador sale sin cálculo');
+  assert.equal(JSON.parse(b.texto).resultados, null);
 });

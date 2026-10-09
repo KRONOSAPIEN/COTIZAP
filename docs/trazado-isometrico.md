@@ -1,7 +1,7 @@
 # Trazado unifilar isométrico de redes de extracción
 
 > **Especificación funcional y técnica · COTIZAP · 9-oct-2026.** Para desarrolladores full-stack, diseñadores de producto CAD y proyectistas de ingeniería industrial.
-> La acompañan el esquema de datos [`docs/trazado-isometrico.schema.json`](trazado-isometrico.schema.json), el ejemplo resuelto [`docs/ejemplos/trazado-isometrico-ejemplo.json`](ejemplos/trazado-isometrico-ejemplo.json), la prueba de contrato [`tests/trazado_isometrico_contrato.test.js`](../tests/trazado_isometrico_contrato.test.js) el modelo de la etapa 1, [`src/motor/trazado_iso.js`](../src/motor/trazado_iso.js), con sus pruebas (§5.1), el tablero jugable de la etapa 2, la pestaña «Trazado isométrico» de COTIZAP ([`src/web/trazado_tablero.js`](../src/web/trazado_tablero.js) y [`src/web/trazado_iso_ui.js`](../src/web/trazado_iso_ui.js), §5.2), y la validación con «Corregir» de la etapa 3 (§5.3). La prueba verifica que el ejemplo cumple el esquema y cada regla de §2 (posiciones, ángulos, manguera, accesorios contra el motor de COTIZAP, caudales, velocidades, choques y fricción), y que este documento trae el esquema y el ejemplo tal como están en sus archivos.
+> La acompañan el esquema de datos [`docs/trazado-isometrico.schema.json`](trazado-isometrico.schema.json), el ejemplo resuelto [`docs/ejemplos/trazado-isometrico-ejemplo.json`](ejemplos/trazado-isometrico-ejemplo.json), la prueba de contrato [`tests/trazado_isometrico_contrato.test.js`](../tests/trazado_isometrico_contrato.test.js) el modelo de la etapa 1, [`src/motor/trazado_iso.js`](../src/motor/trazado_iso.js), con sus pruebas (§5.1), el tablero jugable de la etapa 2, la pestaña «Trazado isométrico» de COTIZAP ([`src/web/trazado_tablero.js`](../src/web/trazado_tablero.js) y [`src/web/trazado_iso_ui.js`](../src/web/trazado_iso_ui.js), §5.2), la validación con «Corregir» de la etapa 3 (§5.3) y el cálculo de pérdidas de la etapa 4, [`src/motor/perdidas.js`](../src/motor/perdidas.js) (§5.4). La prueba verifica que el ejemplo cumple el esquema y cada regla de §2 (posiciones, ángulos, manguera, accesorios contra el motor de COTIZAP, caudales, velocidades, choques y fricción), y que este documento trae el esquema y el ejemplo tal como están en sus archivos.
 
 ## Índice
 
@@ -21,7 +21,7 @@
 
 El módulo con el que un proyectista arma en isométrico una red de extracción (colección de polvo, material abrasivo, humos o ventilación) desde cada máquina hasta el colector. Las piezas se colocan como bloques que se ajustan solos a lo que se puede fabricar, y el resultado es un grafo con todo lo que necesitan el cálculo de caída de presión y el balanceo.
 
-No calcula las pérdidas: deja el modelo listo para la etapa de cálculo (§3.4). Tampoco es un BIM: la estructura del edificio entra sólo como cajas de obstáculos.
+El trazo no calcula las pérdidas: deja el modelo listo, y la etapa de cálculo (§3.4 y §5.4, `src/motor/perdidas.js`) llena `resultados` con la fricción, las pérdidas locales, el balanceo y el punto del ventilador. Tampoco es un BIM: la estructura del edificio entra sólo como cajas de obstáculos.
 
 ### 0.2 Qué ya existe en COTIZAP y qué agrega esta especificación
 
@@ -232,7 +232,7 @@ Al seleccionar una toma, el inspector muestra **Acople** con dos opciones: [Mang
 
 - **El JSON del sistema** (§3): Copiar o Descargar. En COTIZAP se guarda con la cotización.
 - **Partidas de COTIZAP:** pasa por las reglas del unifilar como lectura de origen USUARIO, igual que Dibujar unifilar. Las mangueras salen como compradas y los adaptadores como reducciones.
-- **Etapa de cálculo:** recibe el JSON y llena `resultados` (§3.4).
+- **Etapa de cálculo:** recibe el JSON y llena `resultados` (§3.4): en el tablero, la fase de salida muestra el ventilador de cada colector, las tomas, el balanceo y la hoja por tramo, y el JSON sale con el cálculo (§5.4).
 
 ### 1.6 Recorrido del ejemplo, paso a paso
 
@@ -272,7 +272,7 @@ El ejemplo resuelto ([docs/ejemplos/trazado-isometrico-ejemplo.json](ejemplos/tr
 
 **Fase 5**
 
-14. El JSON es el del ejemplo. La fricción por camino es 232.04 Pa desde la sierra y 230.65 Pa desde el cepillo (§3.4).
+14. El JSON es el del ejemplo, con el cálculo de §3.4: el cepillo es el camino crítico, la sierra se balancea a 1 383 m³/h y el ventilador del colector queda en 2 283 m³/h a 1 864 Pa (motor de 3 HP).
 
 ---
 
@@ -659,24 +659,56 @@ Los verifica [`tests/trazado_isometrico_contrato.test.js`](../tests/trazado_isom
 
 | Relación SP mayor / SP menor | Acción |
 | --- | --- |
+| ≤ 1.05 | Nada: la diferencia está dentro de la precisión del cálculo (NINGUNA) |
 | ≤ 1.2 | Subir el caudal de la corriente de menor pérdida: Q′ = Q·√(SP_mayor / SP_menor) (AJUSTAR_CAUDAL) |
 | > 1.2 | Redimensionar esa corriente (REDIMENSIONAR) |
 | Alternativa | Compuerta de regulación (COMPUERTA); poco recomendable con polvo abrasivo |
 
 El ventilador se elige con el camino de mayor pérdida más el colector.
 
-**El ejemplo, sólo con fricción** (`resultados.por_tramo`, calculado con lo que trae el JSON; las pérdidas locales quedan para la tabla de coeficientes):
+**Cómo lo hace la etapa de cálculo** (`src/motor/perdidas.js`, §5.4). Es la hoja de cálculo del método de presión dinámica de la ACGIH, con un renglón por tramo, de las tomas al colector. Las presiones estáticas se dan como succión, en valor absoluto:
 
-| Tramo | Q (m³/h) | v (m/s) | pv (Pa) | Re | f | Neta (mm) | Δp fricción (Pa) |
+1. **El primer tramo de una toma** empieza con la succión de su campana, (1 + K)·pv, más el adaptador si la toma y el tramo no son del mismo Ø.
+2. **Cada tramo** suma su fricción y las pérdidas locales que le tocan: el codo al que entra (K·pv), su entrada de ramal (K_ramal·pv), las curvas de su manguera y el cambio de sección hacia el tramo siguiente. Una expansión recupera R·(pv₁ − pv₂) y pierde el resto; una contracción gasta (1 + L)·(pv₂ − pv₁).
+3. **En una confluencia** manda la corriente de más succión. Las otras se corrigen con Q′ = Q·√(SP mayor / SP menor) si pasan del 5 %, y el tronco que sigue lleva la suma corregida. Si la mezcla va más rápido que el promedio de lo que llega, la diferencia de presión dinámica es una pérdida más; la recuperación no se cuenta.
+4. **El balanceo** queda por confluencia:
+
+   | Relación | Acción |
+   | --- | --- |
+   | ≤ 1.05 | NINGUNA: no se corrige |
+   | ≤ 1.20 | AJUSTAR_CAUDAL: se acepta el caudal mayor de la corriente corregida |
+   | > 1.20 | REDIMENSIONAR, si un Ø comercial menor del tramo propio de esa corriente la equilibra sin pasar de la velocidad máxima. Si no, COMPUERTA, con su advertencia en polvo |
+
+5. **El ventilador** de cada colector: el caudal que llega, la succión de la boca más la pérdida del colector, la misma succión en aire estándar (× 1.2/ρ, para leer la curva del fabricante), la potencia del aire Q·SP, la potencia al freno con la eficiencia del ventilador (0.65) y el motor comercial siguiente con la de las bandas (0.95).
+
+**La tabla de coeficientes** son los valores de referencia del manual *Industrial Ventilation* de la ACGIH. Antes de usarlos en un proyecto, conviene cotejarlos con la edición que se tenga a la mano. Están juntos en `TABLA` y el cálculo acepta otra tabla:
+
+| Pieza | Coeficiente |
+| --- | --- |
+| Codo de 90° por R/D (0.5, 0.75, 1, 1.5, 2, 2.5) | Estampado o liso: 0.71, 0.33, 0.22, 0.15, 0.13, 0.12 · 5 gajos: —, 0.46, 0.33, 0.24, 0.19, 0.17 · 4 gajos: —, 0.50, 0.37, 0.27, 0.24, 0.23 · 3 gajos: 0.98, 0.54, 0.42, 0.34, 0.33, 0.33 · inglete (2 gajos): 1.2 |
+| Codo de otro ángulo | K de 90° con los gajos equivalentes (los mismos grados por junta: 45° de 3 gajos = 90° de 5), por θ/90 |
+| Curvas de la manguera | Las del codo liso por R/D, por α/90, por cada curva |
+| Entrada de ramal por β (10° a 90°) | 0.06, 0.09, 0.12, 0.15, 0.18 (30°), 0.21, 0.25, 0.28 (45°), 0.32, 0.44 (60°), 1.00 (90°), sobre la pv del ramal; el paso del tronco va en su fricción |
+| Expansión: recuperación R por semiángulo y D₂/D₁ (1.25, 1.5, 1.75, 2, 2.5) | 3.5°: 0.92, 0.88, 0.84, 0.81, 0.75 · 5°: 0.88, 0.84, 0.80, 0.76, 0.68 · 10°: 0.85, 0.76, 0.70, 0.63, 0.53 · 15°: 0.83, 0.70, 0.62, 0.55, 0.43 · 20°: 0.81, 0.67, 0.57, 0.48, 0.36 · 25°: 0.80, 0.65, 0.53, 0.44, 0.28 · 30°: 0.79, 0.63, 0.51, 0.41, 0.25 · brusca: 0.77, 0.62, 0.48, 0.37, 0.22 |
+| Contracción: L por semiángulo (5° a 90°) | 0.05, 0.06, 0.08 (15°), 0.10, 0.11, 0.13 (30°), 0.20 (45°), 0.30 (60°), 0.35 |
+
+La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) ≈ (1 − a)², con a = A₁/A₂, a menos de 0.03 hasta D₂/D₁ = 2. La prueba lo verifica.
+
+**El ejemplo** (`resultados`, calculado con lo que trae el JSON y verificado por la prueba de contrato):
+
+| Tramo | Q (m³/h) | v (m/s) | pv (Pa) | f | Fricción (Pa) | Locales (Pa) | Succión al final (Pa) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| TR-001 subida de la sierra (6″) | 1 300 | 19.796 | 179.66 | 152 577 | 0.0199 | 1 571.4 | 36.81 |
-| TR-002 tronco 6″ | 1 300 | 19.796 | 179.66 | 152 577 | 0.0199 | 6 165.69 | 144.42 |
-| TR-003 tronco 8″ al colector | 2 200 | 18.844 | 162.80 | 193 656 | 0.0187 | 3 394.29 | 50.81 |
-| TR-004 manguera 5″ | 900 | 19.735 | 178.56 | 126 757 | 0.0408 | 958.08 | 54.91 |
-| TR-005 bajante 5″ | 900 | 19.735 | 178.56 | 126 757 | 0.0208 | 909.5 | 26.54 |
-| TR-006 ramal 5″ a 45° | 900 | 19.735 | 178.56 | 126 757 | 0.0208 | 3 372.05 | 98.39 |
+| TR-001 subida de la sierra (6″) | 1 300 | 19.796 | 179.66 | 0.0199 | 36.81 | 43.12 (codo CO-001, K 0.24) | 349.42 |
+| TR-002 tronco 6″ | 1 300 | 19.796 | 179.66 | 0.0199 | 144.42 | 0 | 493.84 |
+| TR-004 manguera 5″ | 900 | 19.735 | 178.56 | 0.0408 | 54.91 | 18.72 (dos curvas de 39.3°) | 341.46 |
+| TR-005 bajante 5″ | 900 | 19.735 | 178.56 | 0.0208 | 26.54 | 42.85 (codo CO-002, K 0.24) | 410.85 |
+| TR-006 ramal 5″ a 45° | 900 | 19.735 | 178.56 | 0.0208 | 98.39 | 50.00 (entrada del ramal, K 0.28) | 559.24 |
+| TR-003 tronco 8″ al colector | 2 283.4 | 19.559 | 175.38 | 0.0186 | 54.54 | 0 | 613.78 |
 
-Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa** desde el cepillo (TR-004, TR-005, TR-006, TR-003). Con los K de los dos codos, la entrada de cada toma y la confluencia se completan las presiones de cada corriente en N-002 y se aplica el balanceo.
+- **Campanas:** 269.49 Pa la sierra y 267.84 Pa el cepillo, con K = 0.5.
+- **Balanceo en N-002:** el ramal llega con 559.24 Pa y el tronco con 493.84 Pa, una relación de 1.132. Se acepta el caudal mayor de la sierra: 1 300 · √1.132 = 1 383.4 m³/h. Al colector llegan 2 283.4 m³/h. La mezcla va más lenta que lo que llega (175.38 Pa contra 193.6 Pa), así que no hay pérdida por aceleración.
+- **Por camino:** desde la sierra, fricción de 235.77 Pa y pérdida total de 368.72 Pa. Desde el cepillo, 234.38 Pa y 435.22 Pa: es el crítico.
+- **Ventilador del colector:** 2 283.4 m³/h a 613.78 + 1 250 = 1 863.78 Pa, que en aire estándar son 2 439.23 Pa. Son 1.182 kW de aire y 1.819 kW al freno; con las bandas, 2.57 HP, y el motor comercial es de 3 HP.
 
 ### 3.5 Esquema completo
 
@@ -1044,16 +1076,17 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
     "resultados": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["metodo", "por_tramo", "por_toma", "balance"],
-      "description": "Lo que llena la etapa de cálculo; el trazo lo deja en null.",
+      "required": ["metodo", "por_tramo", "por_toma", "balance", "ventiladores"],
+      "description": "Lo que llena la etapa de cálculo (src/motor/perdidas.js); el trazo lo deja en null. Las presiones estáticas son succión, en valor absoluto.",
       "properties": {
         "metodo": { "type": "string" },
         "por_tramo": {
           "type": "array",
+          "description": "Un renglón por tramo, como la hoja de cálculo del método: el caudal es el que lleva el tramo con el balanceo de las confluencias de aguas arriba.",
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["tramo", "caudal_m3_h", "velocidad_m_s", "presion_dinamica_Pa", "reynolds", "factor_friccion", "perdida_friccion_Pa", "perdida_local_Pa"],
+            "required": ["tramo", "caudal_m3_h", "velocidad_m_s", "presion_dinamica_Pa", "reynolds", "factor_friccion", "perdida_friccion_Pa", "perdida_local_Pa", "presion_estatica_Pa"],
             "properties": {
               "tramo": { "$ref": "#/$defs/id_tramo" },
               "caudal_m3_h": { "type": "number" },
@@ -1062,7 +1095,8 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
               "reynolds": { "type": "number" },
               "factor_friccion": { "type": "number" },
               "perdida_friccion_Pa": { "type": "number" },
-              "perdida_local_Pa": { "$ref": "#/$defs/numero_o_null" }
+              "perdida_local_Pa": { "$ref": "#/$defs/numero_o_null", "description": "Codo al que entra, entrada de ramal, curvas de la manguera, cambio de sección y aceleración en la confluencia." },
+              "presion_estatica_Pa": { "type": "number", "description": "Succión al final del tramo, con sus pérdidas locales." }
             }
           }
         },
@@ -1071,12 +1105,15 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["puerto", "camino", "perdida_friccion_Pa", "perdida_total_Pa"],
+            "required": ["puerto", "camino", "perdida_friccion_Pa", "perdida_total_Pa", "presion_estatica_campana_Pa", "caudal_m3_h", "caudal_corregido_m3_h"],
             "properties": {
               "puerto": { "$ref": "#/$defs/id_puerto" },
               "camino": { "type": "array", "items": { "$ref": "#/$defs/id_tramo" } },
               "perdida_friccion_Pa": { "type": "number" },
-              "perdida_total_Pa": { "$ref": "#/$defs/numero_o_null" }
+              "perdida_total_Pa": { "$ref": "#/$defs/numero_o_null", "description": "Entrada de la toma, fricción y locales de su camino hasta la boca." },
+              "presion_estatica_campana_Pa": { "type": "number", "description": "(1 + K)·pv de la toma." },
+              "caudal_m3_h": { "type": "number" },
+              "caudal_corregido_m3_h": { "type": "number", "description": "El que va a jalar la toma con el balanceo." }
             }
           }
         },
@@ -1085,13 +1122,42 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["nodo", "sp_ramal_Pa", "sp_tronco_Pa", "relacion", "accion"],
+            "required": ["nodo", "tramo_ramal", "tramo_tronco", "sp_ramal_Pa", "sp_tronco_Pa", "relacion", "accion", "corriente_menor", "caudal_m3_h", "caudal_corregido_m3_h", "sugerencia"],
             "properties": {
               "nodo": { "$ref": "#/$defs/id_nodo" },
+              "tramo_ramal": { "$ref": "#/$defs/id_tramo" },
+              "tramo_tronco": { "$ref": "#/$defs/id_tramo" },
               "sp_ramal_Pa": { "type": "number" },
               "sp_tronco_Pa": { "type": "number" },
-              "relacion": { "type": "number" },
-              "accion": { "type": "string", "enum": ["NINGUNA", "AJUSTAR_CAUDAL", "REDIMENSIONAR", "COMPUERTA"] }
+              "relacion": { "type": "number", "description": "Succión mayor entre succión menor." },
+              "accion": { "type": "string", "enum": ["NINGUNA", "AJUSTAR_CAUDAL", "REDIMENSIONAR", "COMPUERTA"] },
+              "corriente_menor": { "$ref": "#/$defs/id_tramo" },
+              "caudal_m3_h": { "type": "number" },
+              "caudal_corregido_m3_h": { "type": "number" },
+              "sugerencia": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "ventiladores": {
+          "type": "array",
+          "description": "Uno por colector (o por ventilador al que llega la red): el punto de operación para elegirlo en la curva del fabricante.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["equipo", "bocas", "caudal_m3_h", "presion_estatica_boca_Pa", "perdida_equipo_Pa", "presion_estatica_Pa", "presion_estatica_estandar_Pa", "potencia_aire_kW", "potencia_freno_kW", "eficiencia_ventilador", "eficiencia_transmision", "motor_hp"],
+            "properties": {
+              "equipo": { "$ref": "#/$defs/id_equipo" },
+              "bocas": { "type": "array", "items": { "$ref": "#/$defs/id_puerto" } },
+              "caudal_m3_h": { "type": "number" },
+              "presion_estatica_boca_Pa": { "type": "number" },
+              "perdida_equipo_Pa": { "type": "number" },
+              "presion_estatica_Pa": { "type": "number", "description": "Succión de la boca más la pérdida del colector." },
+              "presion_estatica_estandar_Pa": { "type": "number", "description": "La misma en aire estándar (1.2 kg/m³), para leer la curva del fabricante." },
+              "potencia_aire_kW": { "type": "number" },
+              "potencia_freno_kW": { "type": "number" },
+              "eficiencia_ventilador": { "type": "number", "minimum": 0, "maximum": 1 },
+              "eficiencia_transmision": { "type": "number", "minimum": 0, "maximum": 1 },
+              "motor_hp": { "$ref": "#/$defs/numero_o_null" }
             }
           }
         }
@@ -1726,9 +1792,9 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
       },
       "perdida": {
         "modelo": "CODO_GAJOS",
-        "K_paso": null,
+        "K_paso": 0.24,
         "K_ramal": null,
-        "referencia": "Codo de gajos: K(θ, R/D, gajos)"
+        "referencia": "ACGIH: codo de 5 gajos a 90°, R/D 1.5"
       },
       "familia_cotizap": "CODO"
     },
@@ -1767,9 +1833,9 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
       },
       "perdida": {
         "modelo": "CODO_GAJOS",
-        "K_paso": null,
+        "K_paso": 0.24,
         "K_ramal": null,
-        "referencia": "Codo de gajos: K(θ, R/D, gajos)"
+        "referencia": "ACGIH: codo de 5 gajos a 90°, R/D 1.5"
       },
       "familia_cotizap": "CODO"
     },
@@ -1813,9 +1879,9 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
       },
       "perdida": {
         "modelo": "CONFLUENCIA_RAMAL",
-        "K_paso": null,
-        "K_ramal": null,
-        "referencia": "Confluencia a 45° con cono: K(β, Q_ramal/Q_salida, A_ramal/A_salida, A_entrada/A_salida)"
+        "K_paso": 0,
+        "K_ramal": 0.28,
+        "referencia": "ACGIH: entrada de ramal a 45°, sobre la pv del ramal; el paso del tronco va en su fricción"
       },
       "familia_cotizap": "REDUCCION_INJERTO"
     }
@@ -1833,7 +1899,7 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
     }
   ],
   "resultados": {
-    "metodo": "Fricción: Darcy-Weisbach con Swamee-Jain sobre la longitud neta. Pérdidas locales: pendientes de la tabla de coeficientes.",
+    "metodo": "ACGIH, Industrial Ventilation: método de presión dinámica con balanceo por diseño. Fricción de Darcy-Weisbach (Swamee-Jain) sobre la longitud neta; codos, entradas de ramal, curvas de manguera, expansiones y contracciones con la tabla de coeficientes; succión de la campana (1 + K)·pv. Presiones estáticas como succión, en valor absoluto.",
     "por_tramo": [
       {
         "tramo": "TR-001",
@@ -1843,7 +1909,8 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
         "reynolds": 152577,
         "factor_friccion": 0.0199,
         "perdida_friccion_Pa": 36.81,
-        "perdida_local_Pa": null
+        "perdida_local_Pa": 43.12,
+        "presion_estatica_Pa": 349.42
       },
       {
         "tramo": "TR-002",
@@ -1853,17 +1920,19 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
         "reynolds": 152577,
         "factor_friccion": 0.0199,
         "perdida_friccion_Pa": 144.42,
-        "perdida_local_Pa": null
+        "perdida_local_Pa": 0,
+        "presion_estatica_Pa": 493.84
       },
       {
         "tramo": "TR-003",
-        "caudal_m3_h": 2200,
-        "velocidad_m_s": 18.844,
-        "presion_dinamica_Pa": 162.8,
-        "reynolds": 193656,
-        "factor_friccion": 0.0187,
-        "perdida_friccion_Pa": 50.81,
-        "perdida_local_Pa": null
+        "caudal_m3_h": 2283.4,
+        "velocidad_m_s": 19.559,
+        "presion_dinamica_Pa": 175.38,
+        "reynolds": 200997,
+        "factor_friccion": 0.0186,
+        "perdida_friccion_Pa": 54.54,
+        "perdida_local_Pa": 0,
+        "presion_estatica_Pa": 613.78
       },
       {
         "tramo": "TR-004",
@@ -1873,7 +1942,8 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
         "reynolds": 126757,
         "factor_friccion": 0.0408,
         "perdida_friccion_Pa": 54.91,
-        "perdida_local_Pa": null
+        "perdida_local_Pa": 18.72,
+        "presion_estatica_Pa": 341.46
       },
       {
         "tramo": "TR-005",
@@ -1883,7 +1953,8 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
         "reynolds": 126757,
         "factor_friccion": 0.0208,
         "perdida_friccion_Pa": 26.54,
-        "perdida_local_Pa": null
+        "perdida_local_Pa": 42.85,
+        "presion_estatica_Pa": 410.85
       },
       {
         "tramo": "TR-006",
@@ -1893,7 +1964,8 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
         "reynolds": 126757,
         "factor_friccion": 0.0208,
         "perdida_friccion_Pa": 98.39,
-        "perdida_local_Pa": null
+        "perdida_local_Pa": 50,
+        "presion_estatica_Pa": 559.24
       }
     ],
     "por_toma": [
@@ -1904,8 +1976,11 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
           "TR-002",
           "TR-003"
         ],
-        "perdida_friccion_Pa": 232.04,
-        "perdida_total_Pa": null
+        "perdida_friccion_Pa": 235.77,
+        "perdida_total_Pa": 368.72,
+        "presion_estatica_campana_Pa": 269.49,
+        "caudal_m3_h": 1300,
+        "caudal_corregido_m3_h": 1383.4
       },
       {
         "puerto": "PU-03",
@@ -1915,11 +1990,46 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
           "TR-006",
           "TR-003"
         ],
-        "perdida_friccion_Pa": 230.65,
-        "perdida_total_Pa": null
+        "perdida_friccion_Pa": 234.38,
+        "perdida_total_Pa": 435.22,
+        "presion_estatica_campana_Pa": 267.84,
+        "caudal_m3_h": 900,
+        "caudal_corregido_m3_h": 900
       }
     ],
-    "balance": []
+    "balance": [
+      {
+        "nodo": "N-002",
+        "tramo_ramal": "TR-006",
+        "tramo_tronco": "TR-002",
+        "sp_ramal_Pa": 559.24,
+        "sp_tronco_Pa": 493.84,
+        "relacion": 1.132,
+        "accion": "AJUSTAR_CAUDAL",
+        "corriente_menor": "TR-002",
+        "caudal_m3_h": 1300,
+        "caudal_corregido_m3_h": 1383.4,
+        "sugerencia": "TR-002 pasa de 1300 a 1383 m³/h (+6.4 %) para igualar la succión de TR-006: se acepta así."
+      }
+    ],
+    "ventiladores": [
+      {
+        "equipo": "EQ-01",
+        "bocas": [
+          "PU-01"
+        ],
+        "caudal_m3_h": 2283.4,
+        "presion_estatica_boca_Pa": 613.78,
+        "perdida_equipo_Pa": 1250,
+        "presion_estatica_Pa": 1863.78,
+        "presion_estatica_estandar_Pa": 2439.23,
+        "potencia_aire_kW": 1.182,
+        "potencia_freno_kW": 1.819,
+        "eficiencia_ventilador": 0.65,
+        "eficiencia_transmision": 0.95,
+        "motor_hp": 3
+      }
+    ]
   }
 }
 ```
@@ -2074,7 +2184,7 @@ Por camino: **232.04 Pa** desde la sierra (TR-001, TR-002, TR-003) y **230.65 Pa
 | 1 · Modelo **(hecha, §5.1)** | El esquema de §3. Equipos y puertos con posición; puntos fijos y compensación; direcciones inclinadas; orientación del flujo desde cualquier arranque; el imán (§2.5.4) y la manguera (§2.8.2) como funciones puras con pruebas | `src/motor/trazado_iso.js` (nuevo) | `unifilar_cad.js`: árbol, giros, fusión, choques (`distanciaSegmentos`), `aLectura` |
 | 2 · Tablero **(hecha, §5.2)** | Fases, colocación de equipos y tomas, plano de trabajo y sus teclas, caja de valores, imán y tiradores de la manguera, cubo de vista | `src/web/trazado_tablero.js` (el juego, sin pantalla) y `src/web/trazado_iso_ui.js` (la pestaña «Trazado isométrico») | Las ideas del tablero de Dibujar unifilar: cámara, gestos, etiquetas sin encimar, deshacer |
 | 3 · Validar y dimensionar **(hecha, §5.3)** | Caudales, velocidades, dimensionamiento con candados, catálogo de §2.11, panel de problemas con «Corregir» | Motor (`correcciones`, `corregir`, `decidirCorto`, Ø en cadena) y tablero | `revisar` y las reglas del unifilar (pegar las piezas o fabricar el tramo corto) |
-| 4 · Cálculo | Pérdidas locales con su tabla de coeficientes, presión por toma, balanceo y selección del ventilador; llena `resultados` | `src/motor/perdidas.js` (nuevo) | El JSON de §3 |
+| 4 · Cálculo **(hecha, §5.4)** | Pérdidas locales con su tabla de coeficientes, presión por toma, balanceo y selección del ventilador; llena `resultados` | `src/motor/perdidas.js` (nuevo) y la salida del tablero | El JSON de §3 |
 
 ### 5.1 Etapa 1, hecha: el modelo
 
@@ -2190,7 +2300,59 @@ Los caudales (la suma de las tomas aguas arriba), las velocidades y el dimension
 1. **Sin arreglo automático** (se corrigen a mano): REDUCCION_BRUSCA, T_90_ALTA_PERDIDA, MANGUERA_LARGA, MANGUERA_TORCIDA, CHOQUE_MANGUERA, TRONCO_MENOR_QUE_RAMAL (cambiar cuál es el tronco es geometría) y TOMA_SIN_DATOS (el caudal es un dato del proyecto, no se inventa). Lo BLOQUEANTE nunca queda en el trazo: el fantasma no lo deja hacer y dice por qué.
 2. **Pegar** sigue la regla del unifilar (unión soldada, o engargolada si la costura del material es engargolada). En el trazo la geometría no cambia: el recto que queda se arma con las piezas.
 3. **Rapidez.** Los arreglos se buscan al pintar el panel, con unos 150 ms por pintada; los que no alcanzan muestran «Buscar arreglo». Se guardan mientras el trazo no cambie.
-4. **Pendiente:** el cálculo de pérdidas (etapa 4) y pasar el trazo a partidas.
+4. **Pendiente:** pasar el trazo a partidas. El cálculo de pérdidas llegó con la etapa 4 (§5.4).
+
+### 5.4 Etapa 4, hecha: el cálculo
+
+`src/motor/perdidas.js` lee el JSON del sistema y llena lo que el trazo deja en null: la K de cada accesorio y `resultados`. Usa el método de §3.4 con la tabla de coeficientes. Es puro y no depende del tablero: `calcular(sistema, opciones)` devuelve el sistema calculado y la hoja de cálculo para mostrarla. Si al sistema le falta algo, falla con el porqué: una toma sin caudal, una red que no llega a un colector o un nodo con dos salidas.
+
+**Lo que llena:**
+
+| `resultados` | Qué trae |
+| --- | --- |
+| `por_tramo` | Q (con el balanceo de aguas arriba), v, pv, Re, f, fricción, pérdidas locales y la succión al final del tramo |
+| `por_toma` | El camino a la boca, la fricción, la pérdida total (entrada, fricción y locales), la succión de la campana y el caudal que va a jalar con el balanceo |
+| `balance` | Por confluencia: los tramos del ramal y del tronco, sus succiones, la relación, la acción, la corriente corregida con su caudal antes y después, y la sugerencia. «Bajar TR-002 a 6″, TR-001 a 6″ deja la relación en 1.15 (19.8 m/s).» Si ningún Ø comercial lo logra: «Compuerta en TR-002, poco recomendable con polvo abrasivo…» |
+| `ventiladores` | Uno por colector (o ventilador al final de la red): caudal, succión de la boca, pérdida del equipo, presión estática real y en aire estándar, potencias, eficiencias y motor |
+
+El esquema (§3.5) creció con esos campos. Lo que el trazo exporta sigue llevando `resultados: null`, y calcular lo ya calculado da lo mismo.
+
+**En el tablero**, la fase **Salida**:
+
+- **Ventilador:** el de cada colector, con su punto de operación y el porqué de cada número.
+- **Tomas:** la tabla con el caudal que va a jalar cada una (y el de diseño si cambió), la succión de su campana, la pérdida de su camino y cuál es la crítica.
+- **Balanceo:** cada confluencia con su relación, su acción y su sugerencia.
+- **Hoja de cálculo:** un renglón por tramo. Clic en un tramo lo selecciona, y su inspector trae su renglón completo con cada pérdida local («entrada del ramal RI-001 (K 0.28): 50.0 Pa»).
+- **Cotas del lienzo:** dicen Ø, caudal y succión al final de cada tramo.
+- **JSON:** «Copiar» y «Descargar» lo dan con el cálculo. El borrador sale sin él.
+- **Si algo falta:** el panel dice qué corregir primero.
+- **Caché:** el cálculo se guarda mientras el trazo no cambie.
+
+**Cómo se verifica:**
+
+- `tests/trazado_isometrico_contrato.test.js`: el ejemplo se rehace con fórmulas propias de la prueba. Cubre fricción, K de la tabla, locales, succiones encadenadas, balanceo (relación, umbral y Q′), caminos, ventilador, aire estándar, potencia y motor.
+- `tests/perdidas.test.js`:
+  - la tabla y su interpolación, y la expansión brusca contra Borda-Carnot;
+  - el aire;
+  - el ejemplo exacto;
+  - los tres umbrales del balanceo, con K de la sierra en 0.75, 1.2 y 0, en polvo y en ventilación;
+  - el redimensionamiento que regresa la sierra de 8″ a 6″;
+  - el pantalón, el adaptador de expansión y el de contracción, la reducción, y la T a 90° con su aceleración;
+  - las eficiencias, una tabla reemplazada, los datos que faltan y la pureza;
+  - una caminata de cambios sobre el ejemplo.
+- `tests/trazado_iso.test.js`: el recorrido de §1.6 más el cálculo da exactamente el ejemplo, y la caminata al azar del modelo también calcula (o dice qué falta) en cada paso.
+- `tests/trazado_tablero.test.js`: el informe, el renglón por tramo, la caché, el recálculo y deshacer, y lo que falta.
+- `tests/e2e/ui.e2e.js`, sección 37: en el navegador, cubre el ventilador, las tomas, el balanceo, las cotas y la hoja. Con K = 0 en la sierra sale la compuerta, deshacer regresa al ejemplo, y una toma sin caudal muestra qué falta.
+
+**Precisiones:**
+
+1. **Presión del ventilador.** Es la succión de entrada: la de la boca más la del colector. Se toma así a propósito (es conservadora) porque no resta la pv de entrada y la descarga se supone libre. Si hay chimenea o ducto de descarga, súmelo.
+2. **El caudal corregido** es el que la red va a jalar si se construye así. Por eso el ventilador se elige con la suma corregida, aunque el balanceo diga NINGUNA en otras confluencias.
+3. **Pendiente:**
+   - editar la tabla de coeficientes y las eficiencias desde la aplicación (hoy se cambian con `opciones`);
+   - el ducto de descarga del ventilador;
+   - elegir el modelo del ventilador en un catálogo de fabricantes;
+   - pasar el trazo a partidas.
 
 ---
 
@@ -2201,7 +2363,7 @@ Los caudales (la suma de las tomas aguas arriba), las velocidades y el dimension
 | Cubre desde la posición de la máquina hasta la red principal | Fases 1 a 3 (§1.1 a §1.3) con el recorrido del ejemplo clic por clic (§1.6): del equipo en X, Y, Z y su toma, por la manguera o la brida, hasta el injerto en el tronco y la boca del colector |
 | Distingue la manguera (con altura) de la brida directa | §1.2 y §2.8: altura h y desvío e del punto de transición con la S resuelta (R, α y L con sus límites); brida alineada con el cuello, con adaptador y como punto fijo. En el esquema: `conexion.tipo`, el tramo FLEXIBLE y el nodo TRANSICION |
 | Lógica matemática del trazado isométrico | §0.4 (proyección, inversa al plano de trabajo, planos degenerados); §2.1 (rejilla de 170 direcciones, candidatas, elección con histéresis, largo); §2.3 (θ, R, T); §2.5 (β, giro de entrada, imán con sus ecuaciones) |
-| El JSON permite calcular pérdidas dinámicas | §3.4: cada término con sus datos y su fórmula; la fricción del ejemplo calculada con lo que trae el JSON (y verificada por la prueba); la estructura de `resultados` y el balanceo |
+| El JSON permite calcular pérdidas dinámicas | §3.4: cada término con sus datos y su fórmula, y el cálculo completo del ejemplo (fricción, locales, succiones, balanceo y ventilador) hecho con lo que trae el JSON y verificado por la prueba; la etapa 4 (§5.4) lo hace en `src/motor/perdidas.js` |
 | Rejilla isométrica rigurosa | Direcciones discretas con tolerancias, plano de trabajo explícito y ángulos validados contra las políticas (§2.1 y §2.3) |
 | Validación de diámetros y reducciones entre principal y derivados | §2.4, §2.5.2 y §2.6: el Ø no baja hacia el colector, el ramal no es mayor que el tronco, la reducción con injerto cuando cambia el Ø, la forma y el largo de cada reducción, el dimensionamiento por velocidad |
 | Interacción exacta, sin ambigüedades | Cada paso dice el gesto (presionar, arrastrar, soltar, clic), el ajuste (100 mm, 15°, radio de captura en px) y las teclas (§1.3, §4.3 y §4.4) |

@@ -2616,7 +2616,7 @@ const ok = (cond, msg) => {
   console.log('35) Trazado isométrico jugable: el recorrido de §1.6 con ratón y teclado da el JSON del ejemplo; fases, problemas, imán, tiradores y guardado');
   {
     const EJ = require('../../docs/ejemplos/trazado-isometrico-ejemplo.json');
-    const esperado = JSON.stringify({ ...EJ, resultados: null });
+    const esperado = JSON.stringify(EJ); // con el cálculo de pérdidas (etapa 4)
     const p = await nuevaPagina();
     const R = (fn, a) => p.evaluate(fn, a);
     await p.click('#tab-trazado');
@@ -2742,7 +2742,7 @@ const ok = (cond, msg) => {
     ok(/TR-005: 6″ → 8″, 33[.,]5 → 18[.,]8 m\/s\. Reducción con injerto a 45° en N-007 \(RI-001\)/.test(await msg()), 'dimensionar por caudal: el tronco a 8″ y la reducción con injerto');
     await p.click('#ti-fase-5');
     await p.click('#ti-renumerar');
-    const sis = () => R(() => JSON.stringify(window.COTIZAP.trazadoIso.aSistema(window.COTIZAP.web.trazadoUI.estado().t, window.COTIZAP.web.estadoApp.M)));
+    const sis = () => R(() => JSON.stringify(window.COTIZAP.perdidas.calcular(window.COTIZAP.trazadoIso.aSistema(window.COTIZAP.web.trazadoUI.estado().t, window.COTIZAP.web.estadoApp.M)).sistema));
     ok(await sis() === esperado, 'el JSON del sistema es exactamente el del ejemplo resuelto (§1.6)');
     ok(await p.locator('.ti-fase-n').count() === 0 && /Listo para exportar/.test(await p.locator('#ti-salida-estado').innerText()), 'ninguna fase con pendientes; listo para exportar');
     await p.click('#ti-copiar');
@@ -2802,11 +2802,11 @@ const ok = (cond, msg) => {
   console.log('36) Trazado isométrico, etapa 3: validar y dimensionar con «Corregir», caudal y velocidad en el lienzo, Ø en cadena y tramo corto');
   {
     const EJ = require('../../docs/ejemplos/trazado-isometrico-ejemplo.json');
-    const esperado = JSON.stringify({ ...EJ, resultados: null });
+    const esperado = JSON.stringify(EJ); // con el cálculo de pérdidas (etapa 4)
     const p = await nuevaPagina();
     const R = (fn, a) => p.evaluate(fn, a);
     const msg = () => p.locator('#ti-msg').innerText();
-    const sis = () => R(() => JSON.stringify(window.COTIZAP.trazadoIso.aSistema(window.COTIZAP.web.trazadoUI.estado().t, window.COTIZAP.web.estadoApp.M)));
+    const sis = () => R(() => JSON.stringify(window.COTIZAP.perdidas.calcular(window.COTIZAP.trazadoIso.aSistema(window.COTIZAP.web.trazadoUI.estado().t, window.COTIZAP.web.estadoApp.M)).sistema));
     const centroDe = (id) => R((tid) => {
       const s = window.COTIZAP.web.trazadoUI.estado();
       const t = s.g.tramos.get(tid);
@@ -2876,6 +2876,60 @@ const ok = (cond, msg) => {
     const uniones = await R(() => window.COTIZAP.trazadoIso.aSistema(window.COTIZAP.web.trazadoUI.estado().t, window.COTIZAP.web.estadoApp.M, { borrador: true }).tramos.find((t) => t.id === 'TR-002').uniones);
     ok(uniones.aguas_arriba === 'BRIDA' && uniones.aguas_abajo === 'BRIDA', 'con el tramo corto aceptado, sus uniones son de brida');
     await p.context().close();
+  }
+
+  console.log('37) Trazado isométrico, etapa 4: el cálculo de pérdidas en la salida (ventilador, tomas, balanceo y hoja), las cotas con succión');
+  {
+    const EJ = require('../../docs/ejemplos/trazado-isometrico-ejemplo.json');
+    const p = await nuevaPagina();
+    const R = (fn, a) => p.evaluate(fn, a);
+    // Esc suelta la selección (con el foco fuera de los campos) y el inspector vuelve a la salida
+    const soltar = async () => { await R(() => document.activeElement && document.activeElement.blur()); await p.keyboard.press('Escape'); };
+    await p.click('#tab-trazado');
+    await p.click('#ti-ejemplo');
+    await p.click('#ti-fase-5');
+    // el ventilador del colector: caudal, succión, aire estándar y motor
+    const vent = await p.locator('.ti-calc-vent[data-equipo="EQ-01"]').innerText();
+    ok(/Ventilador de Colector de polvo/.test(vent) && /2,283 m³\/h a 1,864 Pa/.test(vent) && /2,439 Pa/.test(vent) && /motor de 3 HP/.test(vent), `el punto del ventilador (${vent.replace(/\s+/g, ' ')})`);
+    // por toma: la sierra jala más con el balanceo y el cepillo es el camino crítico
+    const sierra = await p.locator('#ti-calc-tomas tr[data-puerto="PU-02"]').innerText();
+    const cepillo = p.locator('#ti-calc-tomas tr[data-puerto="PU-03"]');
+    ok(/1,383\s*de 1,300/.test(sierra) && /269 Pa/.test(sierra), `la sierra con su caudal corregido y la succión de su campana (${sierra.replace(/\s+/g, ' ')})`);
+    ok(await cepillo.getAttribute('class') === 'ti-critica' && /crítica/.test(await cepillo.innerText()), 'el cepillo es la toma crítica');
+    // el balanceo en la confluencia
+    const bal = p.locator('#ti-calc-balance li[data-nodo="N-002"]');
+    ok(await bal.getAttribute('data-accion') === 'AJUSTAR_CAUDAL' && /relación 1\.13: Ajustar caudal\. TR-002 pasa de 1300 a 1383 m³\/h/.test(await bal.innerText()), `el balanceo en N-002 (${(await bal.innerText()).slice(0, 90)})`);
+    // las cotas dicen Ø, caudal y succión al final
+    const cotas = await p.locator('#ti-lienzo [data-cota]').evaluateAll((els) => els.map((e) => e.textContent));
+    ok(cotas.includes('8″ · 2,283 m³/h · 614 Pa') && cotas.every((c) => / Pa$/.test(c)), `las cotas de la salida (${cotas.slice(0, 3).join(' | ')})`);
+    ok(/Listo para exportar, con el cálculo/.test(await p.locator('#ti-salida-estado').innerText()), 'el JSON sale con el cálculo');
+    // la hoja: clic en un tramo lo selecciona, y su inspector trae su renglón
+    await p.locator('#ti-calc-hoja').evaluate((d) => { d.open = true; });
+    await p.locator('#ti-calc-hoja tr[data-tramo="TR-006"] button').click();
+    const fila = await p.locator('#ti-calc-tramo').innerText();
+    ok(/entrada del ramal RI-001 \(K 0\.28\): 50[.,]0 Pa/.test(fila) && /559 Pa/.test(fila), `el renglón de TR-006 (${fila.replace(/\s+/g, ' ')})`);
+    // sin pérdida de entrada en la sierra, la diferencia pasa del 20 %: compuerta, poco recomendable con polvo
+    await soltar();
+    await p.locator('#ti-calc-tomas tr[data-puerto="PU-02"] button').click();
+    await p.fill('#ti-p-k', '0');
+    await p.press('#ti-p-k', 'Enter');
+    await soltar();
+    await p.waitForFunction(() => { const li = document.querySelector('#ti-calc-balance li'); return li && li.dataset.accion === 'COMPUERTA'; }, null, { timeout: 3000 }).catch(() => {});
+    ok(/Compuerta en TR-002, poco recomendable con polvo abrasivo/.test(await p.locator('#ti-calc-balance li').innerText()), 'con K = 0 en la sierra, compuerta (y el porqué)');
+    // deshacer regresa al ejemplo
+    await p.keyboard.press('Control+z');
+    await p.waitForFunction(() => { const li = document.querySelector('#ti-calc-balance li'); return li && li.dataset.accion === 'AJUSTAR_CAUDAL'; }, null, { timeout: 3000 }).catch(() => {});
+    const sis = await R(() => JSON.stringify(window.COTIZAP.perdidas.calcular(window.COTIZAP.trazadoIso.aSistema(window.COTIZAP.web.trazadoUI.estado().t, window.COTIZAP.web.estadoApp.M)).sistema));
+    ok(sis === JSON.stringify(EJ), 'con deshacer, el ejemplo calculado otra vez');
+    // una toma sin caudal: el cálculo dice qué falta
+    await p.locator('#ti-calc-tomas tr[data-puerto="PU-03"] button').click();
+    await p.fill('#ti-p-q', '');
+    await p.press('#ti-p-q', 'Enter');
+    await soltar();
+    await p.waitForSelector('#ti-calc-estado', { timeout: 3000 }).catch(() => {});
+    const estado = await p.locator('#ti-calc-estado').innerText().catch(() => '');
+    ok(/caudal/.test(estado), `sin caudal, el cálculo dice qué falta (${estado.slice(0, 100)})`);
+    await p.close();
   }
 
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);

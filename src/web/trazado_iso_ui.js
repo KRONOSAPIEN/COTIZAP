@@ -6,7 +6,8 @@
  * equipos sobre el piso, se ponen sus tomas en las caras de su caja, se acoplan con manguera (con sus tiradores) o con brida,
  * y se arma la red con trazos que se ajustan solos a lo que el taller fabrica: codos, injertos y reducciones salen solos, el
  * imán propone cómo llegar al tronco o al colector, y lo que no se puede se dice con su porqué. La barra de fases cuenta lo
- * pendiente; el panel de problemas, la revisión de §2.11; la salida es el JSON del sistema (§3).
+ * pendiente; el panel de problemas, la revisión de §2.11; la salida, el cálculo de pérdidas (balanceo y ventilador) y el JSON
+ * del sistema (§3).
  *
  * Todo lo que el tablero decide está en web/trazado_tablero.js (probado en Node); aquí sólo se dibuja en SVG y se traducen
  * los gestos y las teclas. El trazo se guarda con la cotización (estado.cot.trazado_iso). Depende de app.js (W.estadoApp,
@@ -298,10 +299,12 @@
       let ny = (b.x - a.x) / L;
       if (ny > 0 || (ny === 0 && nx > 0)) { nx = -nx; ny = -ny; }
       const validar = s.fase === 4;
+      const fc = s.fase === 5 ? TB().filaCalculo(s, t.id) : null;
       const Q = g.Q.get(t.id);
       const v = g.v.get(t.id);
       const sem = Q ? TB().velocidadSemaforo(s, v) : null;
-      const txt = validar ? `${pulg(t.diametro_in)} · ${Q === null ? 'sin caudal' : `${n0(Q)} m³/h · ${W.num(v, 1)} m/s`}` : `${pulg(t.diametro_in)} · ${metros(g.seg.get(t.id).L)}`;
+      const txt = fc ? `${pulg(t.diametro_in)} · ${n0(fc.caudal_m3_h)} m³/h · ${n0(fc.presion_estatica_Pa)} Pa`
+        : validar ? `${pulg(t.diametro_in)} · ${Q === null ? 'sin caudal' : `${n0(Q)} m³/h · ${W.num(v, 1)} m/s`}` : `${pulg(t.diametro_in)} · ${metros(g.seg.get(t.id).L)}`;
       const w = anchoTexto(txt, 12);
       const off = ancho / 2 + 10;
       const cand = [];
@@ -1035,14 +1038,27 @@
     } else pintarEstado();
   }
 
+  /** El renglón de la hoja de cálculo de un tramo (en la salida). */
+  function bloqueCalculo(id) {
+    const fc = TB().filaCalculo(ui.s, id);
+    if (!fc) return null;
+    return h('dl', { class: 'ti-datos ti-calc-tramo', id: 'ti-calc-tramo' },
+      h('dt', null, 'Cálculo'), h('dd', null, `${n0(fc.caudal_m3_h)} m³/h · ${W.num(fc.velocidad_m_s, 1)} m/s · pv ${n0(fc.presion_dinamica_Pa)} Pa`),
+      h('dt', null, 'Fricción'), h('dd', null, `${W.num(fc.perdida_friccion_Pa, 1)} Pa (f ${W.num(fc.factor_friccion, 4)}, Re ${n0(fc.reynolds)})`),
+      h('dt', null, 'Locales'), h('dd', null, fc.locales.length ? fc.locales.map((l) => `${l.texto}: ${W.num(l.Pa, 1)} Pa`).join('; ') : '—'),
+      h('dt', null, 'Succión al final'), h('dd', null, `${n0(fc.presion_estatica_Pa)} Pa`));
+  }
+
   function inspectorTramo(id) {
     const s = ui.s;
     const T = TZ();
     const info = TB().infoTramo(s, id);
     const t = s.g.tramos.get(id);
+    const calc = s.fase === 5 ? bloqueCalculo(id) : null;
     if (info.tipo === 'FLEXIBLE') {
       const pid = s.g.puertoDeNodo.get(t.a);
       return h('section', { class: 'ti-ins' }, titulo(`Manguera ${id}`, `de la toma ${pid}`), h('p', { class: `ti-semaforo ${{ VERDE: 'ti-sem-verde', AMBAR: 'ti-sem-ambar', ROJO: 'ti-sem-rojo' }[info.manguera.color]}` }, info.manguera.texto),
+        calc,
         h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-sec', onclick: () => { s.sel = { tipo: 'PUERTO', id: pid }; pintar(); } }, 'Mover sus tiradores')));
     }
     const candado = h('input', { type: 'checkbox', id: 'ti-t-candado', checked: info.bloqueado });
@@ -1076,6 +1092,7 @@
         h('dt', null, 'Velocidad'), h('dd', { class: info.caudal ? (info.semaforo === 'AMBAR' ? 'ti-sem-ambar' : info.semaforo === 'VERDE' ? 'ti-sem-verde' : '') : '' },
           info.velocidad === null ? '—' : !info.caudal ? '— (no le llega aire de ninguna toma)' : `${W.num(info.velocidad, 1)} m/s ${info.semaforo === 'VERDE' ? '✓' : `(de ${s.t.politicas.velocidad_min_m_s} a ${s.t.politicas.velocidad_max_m_s})`}`),
         h('dt', null, 'Material'), h('dd', null, `${info.material} cal. ${info.calibre}`)),
+      calc,
       h('div', { class: 'ti-acciones' },
         h('button', { type: 'button', class: 'btn btn-sec', onclick: () => { TB().elegir(s, 'MOVER'); TB().decir(s, `Arrastre ${id} de lado para moverlo.`, false); pintar(); } }, 'Mover segmento (M)'),
         h('button', { type: 'button', class: 'btn btn-peligro', id: 'ti-borrar-tramo', onclick: () => { if (TB().borrar(s, { tipo: 'TRAMO', id })) cambio(); else pintarEstado(); } }, 'Borrar (Supr)'),
@@ -1175,6 +1192,39 @@
       h('p', { class: 'ti-nota' }, 'Abajo, en «Problemas», la revisión completa: clic en uno lo selecciona y lo centra; «Corregir» aplica el arreglo (se puede deshacer).'));
   }
 
+  /** El cálculo de pérdidas (etapa 4): el ventilador de cada colector, las tomas, el balanceo y la hoja por tramo. */
+  function seccionCalculo() {
+    const s = ui.s;
+    const inf = TB().informeCalculo(s);
+    if (inf.error) return [h('h4', null, 'Cálculo de pérdidas'), h('p', { class: 'ti-semaforo ti-sem-ambar', id: 'ti-calc-estado' }, inf.error)];
+    const ir = (id) => () => irA(id);
+    const pct = (x) => `${Math.round(x * 100)} %`;
+    const tabla = (id, cabeza, filas) => h('div', { class: 'ti-tabla-env' }, h('table', { class: 'ti-calc-tabla', id },
+      h('thead', null, h('tr', null, cabeza.map((x) => h('th', { scope: 'col' }, x)))), h('tbody', null, filas)));
+    return [
+      h('h4', null, 'Cálculo de pérdidas'),
+      inf.ventiladores.map((v) => h('div', { class: 'ti-calc-vent', 'data-equipo': v.equipo },
+        h('p', { class: 'ti-calc-vent-tit' }, `Ventilador de ${v.nombre}`),
+        h('p', { class: 'ti-calc-vent-punto' }, `${n0(v.caudal_m3_h)} m³/h a ${n0(v.presion_estatica_Pa)} Pa`),
+        h('p', { class: 'ti-nota' }, `Succión en la boca ${n0(v.presion_estatica_boca_Pa)} Pa más ${n0(v.perdida_equipo_Pa)} Pa del equipo. En aire estándar (1.2 kg/m³), para la curva del fabricante: ${n0(v.presion_estatica_estandar_Pa)} Pa. ${W.num(v.potencia_freno_kW, 2)} kW al freno (ventilador al ${pct(v.eficiencia_ventilador)}, bandas al ${pct(v.eficiencia_transmision)}): motor de ${v.motor_hp === null ? 'más de 500' : String(v.motor_hp)} HP.`))),
+      h('p', { class: 'ti-nota' }, 'Por toma: el caudal que va a jalar con el balanceo, la succión de su campana y la pérdida de su camino hasta el colector.'),
+      tabla('ti-calc-tomas', ['Toma', 'm³/h', 'Campana', 'Camino'], inf.tomas.map((x) => h('tr', { 'data-puerto': x.puerto, class: x.critica ? 'ti-critica' : null },
+        h('td', null, h('button', { type: 'button', class: 'enlace', title: x.puerto, onclick: ir(x.puerto) }, x.nombre), x.critica ? h('span', { class: 'ti-chip', title: 'El camino de más pérdida' }, 'crítica') : null),
+        h('td', null, n0(x.caudal_corregido_m3_h), x.caudal_corregido_m3_h === x.caudal_m3_h ? null : h('span', { class: 'ti-sub' }, `de ${n0(x.caudal_m3_h)}`)),
+        h('td', null, `${n0(x.presion_estatica_campana_Pa)} Pa`), h('td', null, x.perdida_total_Pa === null ? '—' : `${n0(x.perdida_total_Pa)} Pa`)))),
+      inf.balance.length ? h('ul', { class: 'ti-lista ti-calc-balance', id: 'ti-calc-balance' }, inf.balance.map((b) => h('li', { 'data-nodo': b.nodo, 'data-accion': b.accion },
+        h('button', { type: 'button', class: 'enlace', onclick: ir(b.nodo) }, b.nodo), ` ${b.tramo_ramal} ${n0(b.sp_ramal_Pa)} Pa y ${b.tramo_tronco} ${n0(b.sp_tronco_Pa)} Pa, relación ${W.num(b.relacion, 2)}: `,
+        h('strong', null, b.nombre_accion), b.sugerencia ? `. ${b.sugerencia}` : '.')))
+        : h('p', { class: 'ti-nota', id: 'ti-calc-balance' }, 'Sin confluencias: no hay nada que balancear.'),
+      h('details', { class: 'ti-politicas', id: 'ti-calc-hoja' }, h('summary', null, `Hoja de cálculo (${inf.tramos.length} tramos)`),
+        tabla(null, ['Tramo', 'Ø', 'm³/h', 'm/s', 'Fricción', 'Locales', 'Succión'], inf.tramos.map((x) => h('tr', { 'data-tramo': x.tramo },
+          h('td', null, h('button', { type: 'button', class: 'enlace', onclick: ir(x.tramo) }, x.tramo)), h('td', null, pulg(x.diametro_in)), h('td', null, n0(x.caudal_m3_h)), h('td', null, W.num(x.velocidad_m_s, 1)),
+          h('td', null, W.num(x.perdida_friccion_Pa, 1)), h('td', { title: x.locales.join(', ') }, W.num(x.perdida_local_Pa, 1)), h('td', null, n0(x.presion_estatica_Pa))))),
+        h('p', { class: 'ti-nota' }, 'En pascales; la succión es al final de cada tramo. Clic en un tramo: su renglón completo (presión dinámica, Reynolds, f y cada pérdida local).')),
+      h('p', { class: 'ti-nota' }, `Método de la ACGIH (Industrial Ventilation) con balanceo por diseño; aire a ${W.num(inf.aire.densidad_kg_m3, 4)} kg/m³. Las presiones son succión (Pa). Los coeficientes son los de referencia del manual: cotéjelos con su edición. En esta fase las cotas dicen Ø, caudal y succión al final de cada tramo.`),
+    ];
+  }
+
   function inspectorSalida() {
     const s = ui.s;
     const ex = TB().exportar(s);
@@ -1190,8 +1240,11 @@
       setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
     };
     return h('section', { class: 'ti-ins' },
-      titulo('Salida', 'El JSON del sistema (§3 de la especificación), para el cálculo de pérdidas y el balanceo'),
-      ex.error ? h('p', { class: 'ti-semaforo ti-sem-ambar', id: 'ti-salida-estado' }, ex.error) : h('p', { class: 'ti-semaforo ti-sem-verde', id: 'ti-salida-estado' }, `Listo para exportar (${(ex.texto.length / 1024).toFixed(1)} KB).`),
+      titulo('Salida', 'El cálculo de pérdidas con el balanceo y el ventilador, y el JSON del sistema (§3 de la especificación)'),
+      seccionCalculo(),
+      h('h4', null, 'El JSON del sistema'),
+      ex.error ? h('p', { class: 'ti-semaforo ti-sem-ambar', id: 'ti-salida-estado' }, ex.error)
+        : h('p', { class: 'ti-semaforo ti-sem-verde', id: 'ti-salida-estado' }, `Listo para exportar${ex.calculado ? ', con el cálculo' : ', sin el cálculo'} (${(ex.texto.length / 1024).toFixed(1)} KB).`),
       h('div', { class: 'ti-acciones' },
         h('button', { type: 'button', class: 'btn btn-primario', id: 'ti-copiar', disabled: !!ex.error, onclick: () => copiar(false) }, 'Copiar el JSON'),
         artefacto ? null : h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-descargar', disabled: !!ex.error, onclick: descargar }, 'Descargar'),
@@ -1214,7 +1267,7 @@
           h('li', null, 'Acoples: con la toma seleccionada, F manguera o B brida. Arrastre el rombo (altura) y el círculo (desvío).'),
           h('li', null, 'Trazado: presione en una toma con brida, un punto de transición, la boca o un extremo y arrastre; el trazo sigue en cadena. ↑ fija Z, → X, ← Y, H horizontal, V vertical; teclee 3.25, <45, @135 o ^45 y Entrar; Tab cambia de opción; Mayús conserva la dirección; Esc termina.'),
           h('li', null, 'Cerca del tronco o de la boca, el imán propone la llegada: Tab alterna, clic acepta.'),
-          h('li', null, 'Validar: dimensionar por caudal y revisar los problemas. Salida: el JSON.'))),
+          h('li', null, 'Validar: dimensionar por caudal y revisar los problemas. Salida: el cálculo de pérdidas, el balanceo, el ventilador y el JSON.'))),
       h('p', { class: 'ti-nota' }, 'Vista: Q y E giran el isométrico; 1 iso, 2 planta, 3 y 4 elevaciones; F o 0 encuadra; rueda o + y − acercan; Espacio y arrastrar mueve. Ctrl+Z y Ctrl+Y deshacen y rehacen.'));
   }
 
@@ -1294,6 +1347,17 @@
     const rhc = $('#ti-rehacer');
     if (rhc) rhc.disabled = !s.fut.length;
   }
+  /** Selecciona un tramo, un nodo, un puerto o un equipo y lo lleva al centro del lienzo. */
+  function irA(id) {
+    const s = ui.s;
+    s.sel = s.g.tramos.has(id) ? { tipo: 'TRAMO', id } : s.g.puertos.has(id) ? { tipo: 'PUERTO', id } : s.t.equipos.some((q) => q.id === id) ? { tipo: 'EQUIPO', id } : { tipo: 'NODO', id };
+    const pos = s.g.tramos.has(id) ? (() => { const t = s.g.tramos.get(id); const a = s.g.pos.get(t.a); const b = s.g.pos.get(t.b); return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 }; })()
+      : s.g.puertos.has(id) ? s.g.puertos.get(id).posicion_mm : s.g.pos.has(id) ? s.g.pos.get(id) : s.t.equipos.find((q) => q.id === id).posicion_mm;
+    const q = P(pos);
+    TB().desplazar(s, s.ancho / 2 - q.x, s.alto / 2 - q.y);
+    pintar();
+  }
+
   function pintarProblemas() {
     const el = $('#ti-problemas');
     if (!el) return;
@@ -1303,13 +1367,7 @@
     const abierto = el.querySelector('details') ? el.querySelector('details').open : ps.some((p) => p.severidad !== 'AVISO');
     const ir = (p) => {
       const id = p.elementos.find((e) => s.g.tramos.has(e) || s.g.pos.has(e) || s.g.puertos.has(e) || s.t.equipos.some((q) => q.id === e));
-      if (!id) return;
-      s.sel = s.g.tramos.has(id) ? { tipo: 'TRAMO', id } : s.g.puertos.has(id) ? { tipo: 'PUERTO', id } : s.t.equipos.some((q) => q.id === id) ? { tipo: 'EQUIPO', id } : { tipo: 'NODO', id };
-      const pos = s.g.tramos.has(id) ? (() => { const t = s.g.tramos.get(id); const a = s.g.pos.get(t.a); const b = s.g.pos.get(t.b); return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 }; })()
-        : s.g.puertos.has(id) ? s.g.puertos.get(id).posicion_mm : s.g.pos.has(id) ? s.g.pos.get(id) : s.t.equipos.find((q) => q.id === id).posicion_mm;
-      const q = P(pos);
-      TB().desplazar(s, s.ancho / 2 - q.x, s.alto / 2 - q.y);
-      pintar();
+      if (id) irA(id);
     };
     // los arreglos se buscan en el modelo (se prueban antes de ofrecerlos); con poco tiempo por pintada, el resto con un botón
     const inicio = Date.now();
@@ -1355,6 +1413,8 @@
   function pintar() {
     if (!ui.montado || !ui.abierto) return;
     tablero();
+    const cuerpo = $('.ti-cuerpo');
+    if (cuerpo) cuerpo.classList.toggle('ti-cuerpo-calculo', ui.s.fase === 5); // la salida trae tablas: inspector más ancho
     medir();
     pintarFases();
     pintarPaleta();

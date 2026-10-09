@@ -615,9 +615,9 @@
       },
       "perdida": {
         "modelo": "CODO_GAJOS",
-        "K_paso": null,
+        "K_paso": 0.24,
         "K_ramal": null,
-        "referencia": "Codo de gajos: K(θ, R/D, gajos)"
+        "referencia": "ACGIH: codo de 5 gajos a 90°, R/D 1.5"
       },
       "familia_cotizap": "CODO"
     },
@@ -656,9 +656,9 @@
       },
       "perdida": {
         "modelo": "CODO_GAJOS",
-        "K_paso": null,
+        "K_paso": 0.24,
         "K_ramal": null,
-        "referencia": "Codo de gajos: K(θ, R/D, gajos)"
+        "referencia": "ACGIH: codo de 5 gajos a 90°, R/D 1.5"
       },
       "familia_cotizap": "CODO"
     },
@@ -702,9 +702,9 @@
       },
       "perdida": {
         "modelo": "CONFLUENCIA_RAMAL",
-        "K_paso": null,
-        "K_ramal": null,
-        "referencia": "Confluencia a 45° con cono: K(β, Q_ramal/Q_salida, A_ramal/A_salida, A_entrada/A_salida)"
+        "K_paso": 0,
+        "K_ramal": 0.28,
+        "referencia": "ACGIH: entrada de ramal a 45°, sobre la pv del ramal; el paso del tronco va en su fricción"
       },
       "familia_cotizap": "REDUCCION_INJERTO"
     }
@@ -722,7 +722,7 @@
     }
   ],
   "resultados": {
-    "metodo": "Fricción: Darcy-Weisbach con Swamee-Jain sobre la longitud neta. Pérdidas locales: pendientes de la tabla de coeficientes.",
+    "metodo": "ACGIH, Industrial Ventilation: método de presión dinámica con balanceo por diseño. Fricción de Darcy-Weisbach (Swamee-Jain) sobre la longitud neta; codos, entradas de ramal, curvas de manguera, expansiones y contracciones con la tabla de coeficientes; succión de la campana (1 + K)·pv. Presiones estáticas como succión, en valor absoluto.",
     "por_tramo": [
       {
         "tramo": "TR-001",
@@ -732,7 +732,8 @@
         "reynolds": 152577,
         "factor_friccion": 0.0199,
         "perdida_friccion_Pa": 36.81,
-        "perdida_local_Pa": null
+        "perdida_local_Pa": 43.12,
+        "presion_estatica_Pa": 349.42
       },
       {
         "tramo": "TR-002",
@@ -742,17 +743,19 @@
         "reynolds": 152577,
         "factor_friccion": 0.0199,
         "perdida_friccion_Pa": 144.42,
-        "perdida_local_Pa": null
+        "perdida_local_Pa": 0,
+        "presion_estatica_Pa": 493.84
       },
       {
         "tramo": "TR-003",
-        "caudal_m3_h": 2200,
-        "velocidad_m_s": 18.844,
-        "presion_dinamica_Pa": 162.8,
-        "reynolds": 193656,
-        "factor_friccion": 0.0187,
-        "perdida_friccion_Pa": 50.81,
-        "perdida_local_Pa": null
+        "caudal_m3_h": 2283.4,
+        "velocidad_m_s": 19.559,
+        "presion_dinamica_Pa": 175.38,
+        "reynolds": 200997,
+        "factor_friccion": 0.0186,
+        "perdida_friccion_Pa": 54.54,
+        "perdida_local_Pa": 0,
+        "presion_estatica_Pa": 613.78
       },
       {
         "tramo": "TR-004",
@@ -762,7 +765,8 @@
         "reynolds": 126757,
         "factor_friccion": 0.0408,
         "perdida_friccion_Pa": 54.91,
-        "perdida_local_Pa": null
+        "perdida_local_Pa": 18.72,
+        "presion_estatica_Pa": 341.46
       },
       {
         "tramo": "TR-005",
@@ -772,7 +776,8 @@
         "reynolds": 126757,
         "factor_friccion": 0.0208,
         "perdida_friccion_Pa": 26.54,
-        "perdida_local_Pa": null
+        "perdida_local_Pa": 42.85,
+        "presion_estatica_Pa": 410.85
       },
       {
         "tramo": "TR-006",
@@ -782,7 +787,8 @@
         "reynolds": 126757,
         "factor_friccion": 0.0208,
         "perdida_friccion_Pa": 98.39,
-        "perdida_local_Pa": null
+        "perdida_local_Pa": 50,
+        "presion_estatica_Pa": 559.24
       }
     ],
     "por_toma": [
@@ -793,8 +799,11 @@
           "TR-002",
           "TR-003"
         ],
-        "perdida_friccion_Pa": 232.04,
-        "perdida_total_Pa": null
+        "perdida_friccion_Pa": 235.77,
+        "perdida_total_Pa": 368.72,
+        "presion_estatica_campana_Pa": 269.49,
+        "caudal_m3_h": 1300,
+        "caudal_corregido_m3_h": 1383.4
       },
       {
         "puerto": "PU-03",
@@ -804,10 +813,45 @@
           "TR-006",
           "TR-003"
         ],
-        "perdida_friccion_Pa": 230.65,
-        "perdida_total_Pa": null
+        "perdida_friccion_Pa": 234.38,
+        "perdida_total_Pa": 435.22,
+        "presion_estatica_campana_Pa": 267.84,
+        "caudal_m3_h": 900,
+        "caudal_corregido_m3_h": 900
       }
     ],
-    "balance": []
+    "balance": [
+      {
+        "nodo": "N-002",
+        "tramo_ramal": "TR-006",
+        "tramo_tronco": "TR-002",
+        "sp_ramal_Pa": 559.24,
+        "sp_tronco_Pa": 493.84,
+        "relacion": 1.132,
+        "accion": "AJUSTAR_CAUDAL",
+        "corriente_menor": "TR-002",
+        "caudal_m3_h": 1300,
+        "caudal_corregido_m3_h": 1383.4,
+        "sugerencia": "TR-002 pasa de 1300 a 1383 m³/h (+6.4 %) para igualar la succión de TR-006: se acepta así."
+      }
+    ],
+    "ventiladores": [
+      {
+        "equipo": "EQ-01",
+        "bocas": [
+          "PU-01"
+        ],
+        "caudal_m3_h": 2283.4,
+        "presion_estatica_boca_Pa": 613.78,
+        "perdida_equipo_Pa": 1250,
+        "presion_estatica_Pa": 1863.78,
+        "presion_estatica_estandar_Pa": 2439.23,
+        "potencia_aire_kW": 1.182,
+        "potencia_freno_kW": 1.819,
+        "eficiencia_ventilador": 0.65,
+        "eficiencia_transmision": 0.95,
+        "motor_hp": 3
+      }
+    ]
   }
 }

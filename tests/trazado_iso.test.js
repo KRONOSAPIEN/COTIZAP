@@ -69,7 +69,9 @@ function ejemploDesdeElColector() {
   return t;
 }
 const terminado = (t) => T.renumerar(T.aplicarDimensiones(t, M), M);
-const sinResultados = { ...EJ, resultados: null };
+const P = require('../src/motor/perdidas');
+/** El sistema exportado con el cálculo de pérdidas (etapa 4): el JSON completo del ejemplo. */
+const calculado = (s) => P.calcular(s).sistema;
 
 /* ------------------------------------------------------------------ geometría */
 
@@ -205,7 +207,7 @@ test('Manguera en curva (ejes que se cruzan) y libre (Bézier): radios y largos'
 
 /* ------------------------------------------------------------------ el ejemplo, clic por clic */
 
-test('El recorrido de §1.6 da exactamente el JSON del ejemplo (sin los resultados del cálculo)', () => {
+test('El recorrido de §1.6 da exactamente el JSON del ejemplo (los resultados, con el cálculo de pérdidas)', () => {
   let t = equiposDelEjemplo();
   assert.equal(t.ultimo.info[0].mensaje, 'Manguera en S de dos curvas de 39.31°: radio 552.5 mm (mínimo 190.5 mm), 958 mm de largo.');
   t = T.trazar(t, M, puerto(t, 'EQ-02').nodo, { direccion: dir(0, 90), largo_mm: 1800 });
@@ -248,23 +250,25 @@ test('El recorrido de §1.6 da exactamente el JSON del ejemplo (sin los resultad
   t = T.renumerar(t, M);
   const s = T.aSistema(t, M);
   assert.deepEqual(validarEsquema(s, ESQUEMA), []);
-  assert.deepStrictEqual(s, sinResultados);
+  assert.equal(s.resultados, null, 'el trazo deja los resultados al cálculo');
+  assert.deepStrictEqual(calculado(s), EJ);
 });
 
 test('El sentido del aire no depende de por dónde se trazó: desde el colector sale el mismo sistema', () => {
   const s = T.aSistema(terminado(ejemploDesdeElColector()), M);
-  assert.deepStrictEqual(s, sinResultados);
+  assert.equal(s.resultados, null, 'el trazo deja los resultados al cálculo');
+  assert.deepStrictEqual(calculado(s), EJ);
 });
 
 test('El JSON del ejemplo se lee de regreso, se vuelve a escribir igual y renumerar no cambia nada', () => {
   const r = T.desdeSistema(EJ, M);
   assert.deepEqual(r.errores, []);
-  assert.deepStrictEqual(T.aSistema(r.modelo, M), sinResultados);
-  assert.deepStrictEqual(T.aSistema(T.renumerar(r.modelo, M), M), sinResultados);
+  assert.deepStrictEqual(calculado(T.aSistema(r.modelo, M)), EJ);
+  assert.deepStrictEqual(calculado(T.aSistema(T.renumerar(r.modelo, M), M)), EJ);
   // lo guardado (el modelo como JSON) también vuelve
   const v = T.validar(JSON.parse(JSON.stringify(r.modelo)), M);
   assert.deepEqual(v.errores, []);
-  assert.deepStrictEqual(T.aSistema(v.modelo, M), sinResultados);
+  assert.deepStrictEqual(calculado(T.aSistema(v.modelo, M)), EJ);
 });
 
 /* ------------------------------------------------------------------ trazar */
@@ -843,7 +847,7 @@ test('Corregir: cada arreglo se prueba en el modelo, quita su problema y no deja
   const ej = terminado(ejemploDesdeLasTomas());
   const colector = entre(ej, nodoEn(ej, 4250, 0, 3000), puerto(ej, 'EQ-01').nodo);
   const cs = aplica(T.cambiarDiametro(ej, M, colector, 6), 'VELOCIDAD_ALTA', new RegExp(`^Cambiar ${colector} a 8″ \\(18\\.8 m/s\\)\\.$`));
-  assert.equal(JSON.stringify(T.aSistema(T.renumerar(T.corregir(T.cambiarDiametro(ej, M, colector, 6), M, cs[0]), M), M)), JSON.stringify(sinResultados), 'corregido y renumerado, es el ejemplo');
+  assert.equal(JSON.stringify(calculado(T.aSistema(T.renumerar(T.corregir(T.cambiarDiametro(ej, M, colector, 6), M, cs[0]), M), M))), JSON.stringify(EJ), 'corregido y renumerado, es el ejemplo');
   assert.ok(cs.some((c) => c.op === 'aplicarDimensiones'));
   // tramo corto: pegar, alargar o aceptar; accesorios que no caben: alargar
   const corto = aplica(tramoCorto(), 'TRAMO_CORTO', /^Pegar CO-001 y CO-002 \(unión engargolada/);
@@ -883,12 +887,13 @@ test('Corregir: cada arreglo se prueba en el modelo, quita su problema y no deja
   falla(() => T.corregir(ej, M, { op: 'borrarTodo', args: [] }), 'DATO_INVALIDO');
 });
 
-test('Una caminata de operaciones al azar nunca deja el trazo inválido ni lanza otra cosa que TrazadoError', () => {
+test('Una caminata de operaciones al azar nunca deja el trazo inválido ni lanza otra cosa que TrazadoError (ni el cálculo, otra cosa que CalculoError)', () => {
   let semilla = 20261009;
   const azar = () => { semilla = (semilla * 1103515245 + 12345) % 2147483648; return semilla / 2147483648; };
   const uno = (xs) => xs[Math.floor(azar() * xs.length)];
   let t = terminado(ejemploDesdeLasTomas());
   let hechas = 0;
+  let calculados = 0;
   const ops = [
     () => T.ponerEquipo(t, M, { tipo: 'MAQUINA', posicion_mm: { x: Math.round(azar() * 20) * 500, y: Math.round(azar() * 16 - 8) * 500, z: 0 }, caja_mm: { largo: 600, ancho: 600, alto: 800 } }),
     () => { const e = uno(t.equipos.filter((x) => x.tipo === 'MAQUINA')); if (!e) return t; return T.agregarPuerto(t, M, e.id, { posicion_local_mm: { x: 0, y: 0, z: e.caja_mm.alto }, diametro_in: uno([4, 5, 6]), caudal_m3_h: uno([null, 500, 900]) }); },
@@ -917,6 +922,15 @@ test('Una caminata de operaciones al azar nunca deja el trazo inválido ni lanza
     assert.deepEqual(v.errores, [], `paso ${i}`);
     const s = T.aSistema(t, M, { borrador: true });
     assert.deepEqual(validarEsquema(s, ESQUEMA), [], `paso ${i}`);
+    // y el cálculo de pérdidas lo calcula, o dice qué le falta (una toma sin caudal, una red abierta…)
+    try {
+      const r = P.calcular(s);
+      assert.deepEqual(validarEsquema(r.sistema, ESQUEMA), [], `paso ${i}, calculado`);
+      calculados += 1;
+    } catch (e) {
+      if (!(e instanceof P.CalculoError)) throw e;
+    }
   }
   assert.ok(hechas > 40, `se hicieron ${hechas} operaciones`);
+  assert.ok(calculados > 0, 'alguno se pudo calcular');
 });

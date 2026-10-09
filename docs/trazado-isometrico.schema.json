@@ -359,16 +359,17 @@
     "resultados": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["metodo", "por_tramo", "por_toma", "balance"],
-      "description": "Lo que llena la etapa de cálculo; el trazo lo deja en null.",
+      "required": ["metodo", "por_tramo", "por_toma", "balance", "ventiladores"],
+      "description": "Lo que llena la etapa de cálculo (src/motor/perdidas.js); el trazo lo deja en null. Las presiones estáticas son succión, en valor absoluto.",
       "properties": {
         "metodo": { "type": "string" },
         "por_tramo": {
           "type": "array",
+          "description": "Un renglón por tramo, como la hoja de cálculo del método: el caudal es el que lleva el tramo con el balanceo de las confluencias de aguas arriba.",
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["tramo", "caudal_m3_h", "velocidad_m_s", "presion_dinamica_Pa", "reynolds", "factor_friccion", "perdida_friccion_Pa", "perdida_local_Pa"],
+            "required": ["tramo", "caudal_m3_h", "velocidad_m_s", "presion_dinamica_Pa", "reynolds", "factor_friccion", "perdida_friccion_Pa", "perdida_local_Pa", "presion_estatica_Pa"],
             "properties": {
               "tramo": { "$ref": "#/$defs/id_tramo" },
               "caudal_m3_h": { "type": "number" },
@@ -377,7 +378,8 @@
               "reynolds": { "type": "number" },
               "factor_friccion": { "type": "number" },
               "perdida_friccion_Pa": { "type": "number" },
-              "perdida_local_Pa": { "$ref": "#/$defs/numero_o_null" }
+              "perdida_local_Pa": { "$ref": "#/$defs/numero_o_null", "description": "Codo al que entra, entrada de ramal, curvas de la manguera, cambio de sección y aceleración en la confluencia." },
+              "presion_estatica_Pa": { "type": "number", "description": "Succión al final del tramo, con sus pérdidas locales." }
             }
           }
         },
@@ -386,12 +388,15 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["puerto", "camino", "perdida_friccion_Pa", "perdida_total_Pa"],
+            "required": ["puerto", "camino", "perdida_friccion_Pa", "perdida_total_Pa", "presion_estatica_campana_Pa", "caudal_m3_h", "caudal_corregido_m3_h"],
             "properties": {
               "puerto": { "$ref": "#/$defs/id_puerto" },
               "camino": { "type": "array", "items": { "$ref": "#/$defs/id_tramo" } },
               "perdida_friccion_Pa": { "type": "number" },
-              "perdida_total_Pa": { "$ref": "#/$defs/numero_o_null" }
+              "perdida_total_Pa": { "$ref": "#/$defs/numero_o_null", "description": "Entrada de la toma, fricción y locales de su camino hasta la boca." },
+              "presion_estatica_campana_Pa": { "type": "number", "description": "(1 + K)·pv de la toma." },
+              "caudal_m3_h": { "type": "number" },
+              "caudal_corregido_m3_h": { "type": "number", "description": "El que va a jalar la toma con el balanceo." }
             }
           }
         },
@@ -400,13 +405,42 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["nodo", "sp_ramal_Pa", "sp_tronco_Pa", "relacion", "accion"],
+            "required": ["nodo", "tramo_ramal", "tramo_tronco", "sp_ramal_Pa", "sp_tronco_Pa", "relacion", "accion", "corriente_menor", "caudal_m3_h", "caudal_corregido_m3_h", "sugerencia"],
             "properties": {
               "nodo": { "$ref": "#/$defs/id_nodo" },
+              "tramo_ramal": { "$ref": "#/$defs/id_tramo" },
+              "tramo_tronco": { "$ref": "#/$defs/id_tramo" },
               "sp_ramal_Pa": { "type": "number" },
               "sp_tronco_Pa": { "type": "number" },
-              "relacion": { "type": "number" },
-              "accion": { "type": "string", "enum": ["NINGUNA", "AJUSTAR_CAUDAL", "REDIMENSIONAR", "COMPUERTA"] }
+              "relacion": { "type": "number", "description": "Succión mayor entre succión menor." },
+              "accion": { "type": "string", "enum": ["NINGUNA", "AJUSTAR_CAUDAL", "REDIMENSIONAR", "COMPUERTA"] },
+              "corriente_menor": { "$ref": "#/$defs/id_tramo" },
+              "caudal_m3_h": { "type": "number" },
+              "caudal_corregido_m3_h": { "type": "number" },
+              "sugerencia": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "ventiladores": {
+          "type": "array",
+          "description": "Uno por colector (o por ventilador al que llega la red): el punto de operación para elegirlo en la curva del fabricante.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["equipo", "bocas", "caudal_m3_h", "presion_estatica_boca_Pa", "perdida_equipo_Pa", "presion_estatica_Pa", "presion_estatica_estandar_Pa", "potencia_aire_kW", "potencia_freno_kW", "eficiencia_ventilador", "eficiencia_transmision", "motor_hp"],
+            "properties": {
+              "equipo": { "$ref": "#/$defs/id_equipo" },
+              "bocas": { "type": "array", "items": { "$ref": "#/$defs/id_puerto" } },
+              "caudal_m3_h": { "type": "number" },
+              "presion_estatica_boca_Pa": { "type": "number" },
+              "perdida_equipo_Pa": { "type": "number" },
+              "presion_estatica_Pa": { "type": "number", "description": "Succión de la boca más la pérdida del colector." },
+              "presion_estatica_estandar_Pa": { "type": "number", "description": "La misma en aire estándar (1.2 kg/m³), para leer la curva del fabricante." },
+              "potencia_aire_kW": { "type": "number" },
+              "potencia_freno_kW": { "type": "number" },
+              "eficiencia_ventilador": { "type": "number", "minimum": 0, "maximum": 1 },
+              "eficiencia_transmision": { "type": "number", "minimum": 0, "maximum": 1 },
+              "motor_hp": { "$ref": "#/$defs/numero_o_null" }
             }
           }
         }

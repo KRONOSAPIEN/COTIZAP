@@ -1235,6 +1235,19 @@ dd.ti-sem-verde, dd.ti-sem-ambar { background: none; font-weight: 600; }
 .ti-politicas > *:not(summary) { margin-top: 8px; }
 .ti-pasos { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--fg-2); display: flex; flex-direction: column; gap: 4px; }
 #ti-json { width: 100%; font: 12px var(--font-mono); }
+.ti-calc-vent { padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2, var(--surface)); display: flex; flex-direction: column; gap: 3px; }
+.ti-calc-vent-tit { font-size: 12.5px; font-weight: 600; color: var(--fg-2); }
+.ti-calc-vent-punto { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ti-tabla-env { overflow-x: auto; max-width: 100%; }
+.ti-calc-tabla { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.ti-sub { display: block; font-size: 11px; color: var(--fg-3); }
+.ti-calc-tabla th, .ti-calc-tabla td { padding: 3px 6px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.ti-calc-tabla th:first-child, .ti-calc-tabla td:first-child { text-align: left; }
+.ti-calc-tabla th { color: var(--fg-2); font-weight: 600; }
+.ti-calc-tabla .enlace { font-size: 12.5px; padding: 1px 2px; }
+.ti-critica td { font-weight: 600; }
+.ti-chip { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 9px; font-size: 11px; font-weight: 600; color: var(--warn); background: var(--warn-soft); }
+.ti-calc-balance li { line-height: 1.45; }
 .ti-problemas { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
 .ti-problemas summary { cursor: pointer; font-weight: 700; font-size: 13px; }
 .ti-info-n { font-weight: 500; color: var(--fg-3); }
@@ -1343,6 +1356,9 @@ dd.ti-sem-verde, dd.ti-sem-ambar { background: none; font-weight: 600; }
 .ti-manguera-previa.ti-rojo { stroke: var(--crit); stroke-dasharray: 6 5; }
 .ti-medir { stroke: var(--fg); stroke-width: 1.5; stroke-dasharray: 5 4; pointer-events: none; }
 .ti-medir-punto { fill: var(--fg); pointer-events: none; }
+@media (min-width: 1280px) {
+  .ti-cuerpo.ti-cuerpo-calculo { grid-template-columns: 210px minmax(0, 1fr) 400px; }
+}
 @media (max-width: 1279px) {
   .ti-cuerpo { grid-template-columns: 180px minmax(0, 1fr); }
   .ti-inspector { grid-column: 1 / -1; max-height: none; }

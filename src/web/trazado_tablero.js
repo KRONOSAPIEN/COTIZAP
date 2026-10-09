@@ -6,19 +6,20 @@
  * o SE, en planta y en las dos elevaciones), qué hay bajo el puntero, el plano de trabajo y sus teclas (↑ → ← H V, Tab y
  * Mayús), la caja de valores (3.25, 3250mm, <45, @135, ^45), el fantasma del trazo con su color, el imán de derivación y de
  * llegada, el modo cadena, la colocación de equipos sobre el nivel, las tomas sobre las caras de su caja, los tiradores de
- * la manguera, mover segmento, medir, deshacer y rehacer (100 pasos) y el contador de pendientes de cada fase.
+ * la manguera, mover segmento, medir, deshacer y rehacer (100 pasos) y el contador de pendientes de cada fase. En la salida,
+ * el cálculo de pérdidas (motor/perdidas.js, etapa 4) sobre el JSON del sistema, guardado mientras el trazo no cambie.
  *
  * Cada cambio pasa por el modelo puro (motor/trazado_iso.js): si el taller no lo fabrica, el modelo lo rechaza con su código
  * y su porqué, y el tablero lo dice sin cambiar nada. Funciona en Node (sus pruebas recorren el ejemplo de §1.6 con
  * coordenadas de pantalla) y en el navegador, donde web/trazado_iso_ui.js lo dibuja y le pasa los gestos y las teclas.
  */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('../motor/trazado_iso'));
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('../motor/trazado_iso'), require('../motor/perdidas'));
   else {
     root.COTIZAP = root.COTIZAP || {};
-    root.COTIZAP.trazadoTablero = factory(root.COTIZAP.trazadoIso);
+    root.COTIZAP.trazadoTablero = factory(root.COTIZAP.trazadoIso, root.COTIZAP.perdidas);
   }
-}(typeof self !== 'undefined' ? self : this, function (TZ) {
+}(typeof self !== 'undefined' ? self : this, function (TZ, PD) {
   'use strict';
 
   const IN = 25.4;
@@ -1211,12 +1212,64 @@
     });
   }
 
-  /* ------------------------------------------------------------------ salida (Fase 5) */
+  /* ------------------------------------------------------------------ salida y cálculo (Fase 5) */
 
-  /** El JSON del sistema (§3); con errores sólo como borrador. { texto, borrador } o { error }. */
+  /**
+   * El cálculo de la red (src/motor/perdidas.js, etapa 4) sobre el JSON del sistema: { sistema, hoja } o { error } con el
+   * porqué. Se guarda mientras el trazo no cambie.
+   */
+  function calculo(s) {
+    if (s.calc && s.calc.t === s.t) return s.calc.r;
+    let r;
+    try {
+      r = PD.calcular(TZ.aSistema(s.t, s.M));
+    } catch (e) {
+      if (e instanceof TZ.TrazadoError) r = { error: `Para calcular, primero corrija los problemas: ${textoError(e).replace(/^No se puede exportar mientras haya /, 'hay ')}` };
+      else if (e instanceof PD.CalculoError) r = { error: e.message };
+      else throw e;
+    }
+    s.calc = { t: s.t, r };
+    return r;
+  }
+  const NOMBRE_ACCION = { NINGUNA: 'Balanceada', AJUSTAR_CAUDAL: 'Ajustar caudal', REDIMENSIONAR: 'Redimensionar', COMPUERTA: 'Compuerta' };
+  /**
+   * El cálculo para mostrarlo: ventiladores, tomas (con su equipo y la crítica), balance y la hoja por tramo con su Ø.
+   * { error } si no se puede calcular.
+   */
+  function informeCalculo(s) {
+    const c = calculo(s);
+    if (c.error) return { error: c.error };
+    const R = c.sistema.resultados;
+    const equipo = (id) => s.t.equipos.find((e) => e.id === id);
+    const dePuerto = (pid) => s.t.equipos.find((e) => e.puertos.some((p) => p.id === pid));
+    return {
+      ventiladores: R.ventiladores.map((v) => ({ ...v, nombre: equipo(v.equipo) ? equipo(v.equipo).nombre : v.equipo })),
+      tomas: R.por_toma.map((x) => ({ ...x, nombre: dePuerto(x.puerto) ? dePuerto(x.puerto).nombre : x.puerto, critica: x.puerto === c.hoja.critica })),
+      balance: R.balance.map((b) => ({ ...b, nombre_accion: NOMBRE_ACCION[b.accion] })),
+      tramos: R.por_tramo.map((x) => ({ ...x, diametro_in: c.sistema.tramos.find((t) => t.id === x.tramo).diametro_in, locales: c.hoja.filas.get(x.tramo).locales.map((l) => l.que) })),
+      aire: c.hoja.aire,
+    };
+  }
+  const NOMBRE_LOCAL = { CODO: 'codo', RAMAL: 'entrada del ramal', CURVAS: 'curvas de la manguera', EXPANSION: 'expansión', CONTRACCION: 'contracción', ACELERACION: 'aceleración en la confluencia', COMPUERTA: 'compuerta' };
+  /** El renglón del cálculo de un tramo (caudal, velocidad, succión al final…) con sus pérdidas locales en palabras, o null. */
+  function filaCalculo(s, id) {
+    const c = calculo(s);
+    const r = c.error ? null : c.sistema.resultados.por_tramo.find((x) => x.tramo === id);
+    if (!r) return null;
+    const locales = c.hoja.filas.get(id).locales.map((l) => ({ que: l.que, id: l.id, K: l.K, Pa: l.Pa, texto: `${NOMBRE_LOCAL[l.que] || l.que}${l.id ? ` ${l.id}` : ''}${l.K === null ? '' : ` (K ${Number(l.K.toFixed(4))})`}` }));
+    return { ...r, locales };
+  }
+
+  /**
+   * El JSON del sistema (§3), con el cálculo de pérdidas si se puede; con errores, sólo como borrador (sin cálculo).
+   * { texto, borrador, calculado, aviso } o { error }.
+   */
   function exportar(s, borrador) {
     try {
-      return { texto: JSON.stringify(TZ.aSistema(s.t, s.M, { borrador: !!borrador }), null, 2), borrador: !!borrador };
+      const sis = TZ.aSistema(s.t, s.M, { borrador: !!borrador });
+      if (borrador) return { texto: JSON.stringify(sis, null, 2), borrador: true, calculado: false, aviso: null };
+      const c = calculo(s);
+      return { texto: JSON.stringify(c.sistema || sis, null, 2), borrador: false, calculado: !c.error, aviso: c.error || null };
     } catch (e) {
       if (e instanceof TZ.TrazadoError) return { error: textoError(e) };
       throw e;
@@ -1267,6 +1320,6 @@
     arranqueDe, empezar, teclasSostenidas, planoDeTrabajo, leerCaja, teclear, fantasma, alinear, confirmar, cancelar, fijar, siguienteOpcion, cambiarDiametroActivo, cambiarNivel,
     reducirEn, desplazamientoSegmento, moverSegmento, borrar, medir,
     correccionesDe, correccionesListas, corregir, cambiarDiametroTramo, cambiarDiametroEnCadena, decidirCorto,
-    infoTramo, piezasDe, velocidadSemaforo, exportar, importar, ejemplo,
+    infoTramo, piezasDe, velocidadSemaforo, calculo, informeCalculo, filaCalculo, NOMBRE_ACCION, exportar, importar, ejemplo,
   };
 }));
