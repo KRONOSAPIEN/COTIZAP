@@ -7,19 +7,20 @@
  * Mayús), la caja de valores (3.25, 3250mm, <45, @135, ^45), el fantasma del trazo con su color, el imán de derivación y de
  * llegada, el modo cadena, la colocación de equipos sobre el nivel, las tomas sobre las caras de su caja, los tiradores de
  * la manguera, mover segmento, medir, deshacer y rehacer (100 pasos) y el contador de pendientes de cada fase. En la salida,
- * el cálculo de pérdidas (motor/perdidas.js, etapa 4) sobre el JSON del sistema, guardado mientras el trazo no cambie.
+ * el cálculo de pérdidas (motor/perdidas.js, etapa 4) sobre el JSON del sistema, y el despiece del trazo con las reglas del
+ * unifilar (motor/trazado_lectura.js), guardados mientras el trazo no cambie.
  *
  * Cada cambio pasa por el modelo puro (motor/trazado_iso.js): si el taller no lo fabrica, el modelo lo rechaza con su código
  * y su porqué, y el tablero lo dice sin cambiar nada. Funciona en Node (sus pruebas recorren el ejemplo de §1.6 con
  * coordenadas de pantalla) y en el navegador, donde web/trazado_iso_ui.js lo dibuja y le pasa los gestos y las teclas.
  */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('../motor/trazado_iso'), require('../motor/perdidas'));
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('../motor/trazado_iso'), require('../motor/perdidas'), require('../motor/trazado_lectura'));
   else {
     root.COTIZAP = root.COTIZAP || {};
-    root.COTIZAP.trazadoTablero = factory(root.COTIZAP.trazadoIso, root.COTIZAP.perdidas);
+    root.COTIZAP.trazadoTablero = factory(root.COTIZAP.trazadoIso, root.COTIZAP.perdidas, root.COTIZAP.trazadoLectura);
   }
-}(typeof self !== 'undefined' ? self : this, function (TZ, PD) {
+}(typeof self !== 'undefined' ? self : this, function (TZ, PD, TL) {
   'use strict';
 
   const IN = 25.4;
@@ -1271,6 +1272,17 @@
     s.calc = { t: s.t, r };
     return r;
   }
+  /**
+   * El trazo a partidas (motor/trazado_lectura.js, §5.6): la lectura para las reglas del unifilar, su despiece y los avisos,
+   * guardado mientras el trazo, las tablas y la yarda no cambien. { error } si todavía no se puede pasar.
+   */
+  function despiece(s, yarda_mm) {
+    const y = yarda_mm === 1220 ? 1220 : 914.4;
+    if (s.desp && s.desp.t === s.t && s.desp.M === s.M && s.desp.y === y) return s.desp.r;
+    const r = TL.despiece(s.t, s.M, { yarda_mm: y });
+    s.desp = { t: s.t, M: s.M, y, r };
+    return r;
+  }
   const NOMBRE_ACCION = { NINGUNA: 'Balanceada', AJUSTAR_CAUDAL: 'Ajustar caudal', REDIMENSIONAR: 'Redimensionar', COMPUERTA: 'Compuerta' };
   /**
    * El cálculo para mostrarlo: ventiladores, tomas (con su equipo y la crítica), balance y la hoja por tramo con su Ø.
@@ -1364,6 +1376,6 @@
     arranqueDe, empezar, teclasSostenidas, planoDeTrabajo, leerCaja, teclear, fantasma, alinear, confirmar, cancelar, fijar, siguienteOpcion, cambiarDiametroActivo, cambiarNivel,
     reducirEn, compuertaEn, compuertaSugerida, quitarCompuerta, desplazamientoSegmento, moverSegmento, borrar, medir,
     correccionesDe, correccionesListas, corregir, cambiarDiametroTramo, cambiarDiametroEnCadena, decidirCorto,
-    infoTramo, piezasDe, velocidadSemaforo, calculo, informeCalculo, filaCalculo, NOMBRE_ACCION, exportar, importar, ejemplo,
+    infoTramo, piezasDe, velocidadSemaforo, calculo, informeCalculo, filaCalculo, NOMBRE_ACCION, despiece, exportar, importar, ejemplo,
   };
 }));

@@ -618,3 +618,23 @@ test('Compuerta en el tablero: la herramienta (G) en un tramo, la que pide el ba
   assert.equal(TB.compuertaSugerida(s, 'TR-004'), false, 'en una manguera no');
   assert.match(s.msg, /No cabe una compuerta en el tramo propio de TR-004/);
 });
+
+test('Salida: el trazo a partidas con las reglas del unifilar, guardado mientras el trazo y la yarda no cambien', () => {
+  const s = nuevoTablero();
+  assert.match(TB.despiece(s).error, /todavía no llega a la boca de un colector/);
+  TB.reemplazar(s, TB.ejemplo(M), 'ejemplo');
+  const r = TB.despiece(s);
+  assert.equal(TB.despiece(s), r, 'se guarda mientras el trazo no cambie');
+  assert.deepEqual([r.bom.resumen.estado, r.diferencias, r.avisos, r.lectura.metadatos.yarda_mm], ['DEFINITIVA', [], [], 914.4]);
+  const r4 = TB.despiece(s, 1220);
+  assert.notEqual(r4, r);
+  assert.equal(r4.lectura.metadatos.yarda_mm, 1220, 'la yarda de la cotización');
+  // un cambio en el trazo se vuelve a despiezar: la compuerta sale como compra
+  assert.ok(TB.hacer(s, (t) => TZ.ponerCompuerta(t, M, { tramo: 'TR-002', s_mm: 3000 }), ''));
+  assert.ok(TB.despiece(s).bom.accesorios.some((a) => a.tipo === 'COMPUERTA'));
+  // sin caudal en una toma sí se pasa (no cambia el despiece), con su aviso; un problema de geometría lo detiene
+  assert.ok(TB.hacer(s, (t) => TZ.editarPuerto(t, M, 'PU-03', { caudal_m3_h: null }), ''));
+  assert.deepEqual([TB.despiece(s).bom.resumen.estado, TB.despiece(s).avisos], ['DEFINITIVA', ['La toma PU-03 (Cepillo) no tiene caudal de diseño. No cambia el despiece; el cálculo de pérdidas sí lo necesita.']]);
+  assert.ok(TB.hacer(s, (t) => TZ.cambiarLargo(t, M, 'TR-005', 150), ''));
+  assert.equal(TB.despiece(s).error, 'Para pasarlo a partidas, primero corrija el problema del trazo: Los accesorios del tramo TR-005 ocupan 40 mm más que su largo.');
+});

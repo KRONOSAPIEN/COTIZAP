@@ -2583,7 +2583,7 @@ const ok = (cond, msg) => {
     const antes = await R(() => window.COTIZAP.web.estadoApp.cot.partidas.filter((x) => x.unifilar_id).length);
     await p.click('#cad-listo');
     await p.waitForSelector('#uf-agregar');
-    ok(/^Reemplazar con \d+ partidas$/.test(await p.locator('#uf-agregar').innerText()) && new RegExp(`Ya hay ${antes} partidas del unifilar`).test(await p.locator('#uf-cuerpo').innerText()), 'con partidas ya importadas, «Listo» propone reemplazarlas');
+    ok(/^Reemplazar con \d+ partidas$/.test(await p.locator('#uf-agregar').innerText()) && new RegExp(`Ya hay ${antes} partidas del dibujo unifilar`).test(await p.locator('#uf-cuerpo').innerText()), 'con partidas ya importadas, «Listo» propone reemplazarlas');
     await p.click('#uf-agregar');
     const despues = await R(() => window.COTIZAP.web.estadoApp.cot.partidas.filter((x) => x.unifilar_id).map((x) => x.familia));
     ok(despues.length < antes && !despues.includes('RAMAL') && !despues.includes('COMPRADO'), 'se reemplazaron: sin el injerto ni la manguera');
@@ -2597,7 +2597,7 @@ const ok = (cond, msg) => {
     await p.click('#cad-ejemplo');
     ok(await p.locator('#cad-tablero .cad-equipo').count() === 4 && /croquis de ejemplo/.test(await estado()), '«Probar con el ejemplo» dibuja el croquis de ejemplo');
     await p.click('#cad-listo');
-    ok(await p.locator('#uf-agregar').innerText() === 'Reemplazar con 22 partidas' && /Despiece definitiva/.test(await p.locator('.uf-estado').innerText()), 'el ejemplo dibujado: las 22 partidas del croquis, sin preguntas');
+    ok(await p.locator('#uf-agregar').innerText() === 'Reemplazar con 22 partidas' && /Despiece definitivo/.test(await p.locator('.uf-estado').innerText()), 'el ejemplo dibujado: las 22 partidas del croquis, sin preguntas');
     await p.click('#uf-agregar');
     // un dibujo guardado que no sirve se descarta (no rompe la página)
     await R(() => { const c = JSON.parse(localStorage.getItem('cotizap.cotizacion.v1')); c.dibujo_unifilar = { version: 1, tramos: [{ id: 'A-001', de: 'N-001', a: 'N-001' }], equipos: [] }; localStorage.setItem('cotizap.cotizacion.v1', JSON.stringify(c)); });
@@ -2959,6 +2959,56 @@ const ok = (cond, msg) => {
     await p.waitForSelector('#ti-calc-estado', { timeout: 3000 }).catch(() => {});
     const estado = await p.locator('#ti-calc-estado').innerText().catch(() => '');
     ok(/caudal/.test(estado), `sin caudal, el cálculo dice qué falta (${estado.slice(0, 100)})`);
+    await p.close();
+  }
+
+  console.log('38) Trazado isométrico a la cotización: el despiece con las reglas del unifilar, «Pasar a la cotización», ver las partidas y reemplazarlas tras un cambio');
+  {
+    const p = await nuevaPagina();
+    const R = (fn, a) => p.evaluate(fn, a);
+    const soltar = async () => { await R(() => document.activeElement && document.activeElement.blur()); await p.keyboard.press('Escape'); };
+    const importadas = () => R(() => window.COTIZAP.web.estadoApp.cot.partidas.filter((x) => x.unifilar_id).map((x) => x.unifilar_id));
+    await p.click('#tab-trazado');
+    await p.click('#ti-ejemplo');
+    await p.click('#ti-fase-5');
+    // en la salida, antes del cálculo: el despiece del trazo
+    const est = await p.locator('#ti-part-estado').innerText();
+    ok(/^Despiece definitivo: 14 partidas \(5 tramos rectos, 3 accesorios, 12 ménsulas y las compras\)\.$/.test(est), `el despiece del ejemplo (${est})`);
+    ok(await p.locator('#ti-part-estado').getAttribute('class') === 'ti-semaforo ti-sem-verde', 'en verde');
+    ok(!(await p.locator('#ti-part-avisos').count()) && !(await p.locator('#ti-part-ya').count()), 'sin avisos y sin partidas importadas todavía');
+    // «Pasar a la cotización»: el diálogo del despiece, y las partidas ya en la cotización
+    await p.click('#ti-pasar');
+    await p.waitForSelector('#dlg-unifilar[open]', { timeout: 3000 });
+    ok(await p.locator('#uf-titulo').innerText() === 'Despiece del trazado', 'el diálogo dice que es el despiece del trazado');
+    const cuerpo = await p.locator('#uf-cuerpo').innerText();
+    ok(/Despiece definitivo/.test(cuerpo) && /No hay preguntas pendientes/.test(cuerpo) && /Se agregaron 14 partidas a la cotización\./.test(cuerpo), `el despiece y lo agregado (${cuerpo.slice(0, 160).replace(/\s+/g, ' ')})`);
+    const ids = await importadas();
+    ok(ids.length === 14 && ids.includes('RINJ-001') && ids.includes('COMPRA-MANGUERA_5') && ids.includes('SOP-001'), `14 partidas con su pieza (${ids.join(', ')})`);
+    ok(await R(() => window.COTIZAP.trazadoLectura.esDeTrazado(window.COTIZAP.web.estadoApp.cot.unifilar.lectura) && window.COTIZAP.web.estadoApp.cot.unifilar.importado), 'la lectura del trazo queda en la cotización');
+    ok(/Copiar la lectura del trazado/.test(cuerpo), 'se puede copiar la lectura del trazado');
+    // «Ver en la cotización»: cierra y lleva a la primera partida; el aviso dice de dónde salieron y todas se cotizan
+    await p.click('#uf-ver-cotizacion');
+    ok(!(await R(() => document.querySelector('#dlg-unifilar').open)) && !(await p.locator('#panel-cotizacion').isHidden()), 'cierra el diálogo y muestra la cotización');
+    const aviso = await p.locator('#aviso-unifilar').innerText();
+    ok(/14 partidas del trazado isométrico · definitiva\./.test(aviso) && /Todas las preguntas están respondidas/.test(aviso), `el aviso de la cotización (${aviso.replace(/\s+/g, ' ')})`);
+    ok(await R(() => window.COTIZAP.web.estadoApp.res.totales.n_partidas_error === 0 && window.COTIZAP.web.estadoApp.res.totales.total > 0), 'las partidas se cotizan sin errores');
+    // de regreso al trazo, la salida sabe que ya hay partidas; la boca de la sierra a 5″ agrega su adaptador
+    await p.click('#tab-trazado');
+    ok(/La cotización ya tiene 14 partidas importadas/.test(await p.locator('#ti-part-ya').innerText()), 'la salida avisa que ya hay partidas importadas');
+    await p.locator('#ti-calc-tomas tr[data-puerto="PU-02"] button').click();
+    await p.selectOption('#ti-p-d', '5');
+    await soltar();
+    await p.waitForFunction(() => /15 partidas/.test((document.querySelector('#ti-part-estado') || {}).textContent || ''), null, { timeout: 3000 }).catch(() => {});
+    ok(/^Despiece definitivo: 15 partidas \(5 tramos rectos, 4 accesorios/.test(await p.locator('#ti-part-estado').innerText()), 'con la boca de 5″, una reducción más');
+    await p.click('#ti-pasar');
+    await p.waitForSelector('#dlg-unifilar[open]', { timeout: 3000 });
+    const nuevo = await p.locator('#uf-cuerpo').innerText();
+    ok(/Es una lectura nueva: al aplicarla reemplaza las 14 partidas del trazado isométrico/.test(nuevo), 'el despiece nuevo se revisa antes de reemplazar');
+    ok(/^Reemplazar con 15 partidas$/.test(await p.locator('#uf-agregar').innerText()) && (await importadas()).length === 14, 'las partidas no cambian hasta reemplazarlas');
+    await p.click('#uf-agregar');
+    const ids2 = await importadas();
+    ok(ids2.length === 15 && ids2.includes('RED-001'), `reemplazadas: con la reducción de la boca (${ids2.join(', ')})`);
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.partidas.find((x) => x.unifilar_id === 'RED-001').D2_mm === 127), 'la reducción de 6″ a 5″');
     await p.close();
   }
 

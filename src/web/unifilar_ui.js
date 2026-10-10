@@ -9,7 +9,8 @@
  * las partidas ya están en la cotización, las reemplaza.
  *
  * La lectura también puede salir del DIBUJO (web/unifilar_cad_ui.js): la ductería armada con trazos en el tablero, que al dar
- * «Listo» pasa por las mismas reglas y preguntas.
+ * «Listo» pasa por las mismas reglas y preguntas; o del TRAZADO ISOMÉTRICO (motor/trazado_lectura.js), con «Pasar a la
+ * cotización» en su salida.
  *
  * Lo importado vive en la cotización: estado.cot.unifilar = { lectura, respuestas, importado }; el dibujo, en
  * estado.cot.dibujo_unifilar. La foto no se guarda: sólo dura mientras la página está abierta.
@@ -28,6 +29,10 @@
   const V = () => C.unifilarVision;
   const IMG = () => C.imagen;
   const CAD = () => C.unifilarCad;
+  const TL = () => C.trazadoLectura;
+  const deTrazado = (lect) => !!(TL() && TL().esDeTrazado(lect));
+  /** De dónde salió la lectura, para decirlo: del trazado, del dibujo o de un croquis. */
+  const origen = (lect) => (deTrazado(lect) ? 'del trazado isométrico' : CAD().esDeDibujo(lect) ? 'del dibujo unifilar' : 'de un croquis unifilar');
   const MAX_TRABAJO = 3000; // lado mayor con que se prepara la foto (los recortes que se mandan no piden más)
   const MAX_TEXTO = 5e6; // caracteres: una lectura real pesa decenas de kB
   const NS = 'http://www.w3.org/2000/svg';
@@ -127,7 +132,7 @@
     $('.aviso-icono', el).textContent = pend || !u.importado ? '?' : 'i';
     const n = importadas().length;
     $('.aviso-txt', el).replaceChildren(...(u.importado
-      ? [h('strong', null, `${n} ${n === 1 ? 'partida' : 'partidas'} de un croquis unifilar · ${ESTADO[estado][0].toLowerCase()}.`), ' ',
+      ? [h('strong', null, `${n} ${n === 1 ? 'partida' : 'partidas'} ${origen(u.lectura)} · ${ESTADO[estado][0].toLowerCase()}.`), ' ',
         pend ? `${pend} ${pend === 1 ? 'pregunta' : 'preguntas'} por responder.` : 'Todas las preguntas están respondidas.']
       : [h('strong', null, 'Hay una lectura de unifilar sin agregar a la cotización.'), ' ', pend ? `${pend} ${pend === 1 ? 'pregunta' : 'preguntas'} por responder.` : '']));
   }
@@ -138,6 +143,7 @@
     borrador = null;
     errores = [];
     nota = '';
+    if (guardada() && deTrazado(guardada().lectura)) notaLectura = ''; // los avisos del paso del trazo los dice su salida
     vista = guardada() ? 'revision' : 'carga';
     if (modo === 'dibujo') abrirDibujo();
     else pintar();
@@ -178,7 +184,8 @@
     $('#dlg-unifilar').classList.toggle('uf-dlg-cad', enDibujo);
     cuerpo.classList.toggle('uf-cuerpo-cad', enDibujo);
     const f = fuente();
-    $('#uf-titulo').textContent = enDibujo ? 'Dibujar el unifilar' : vista === 'revision' && f && CAD().esDeDibujo(f.lectura) ? 'Despiece del dibujo' : 'Importar unifilar';
+    $('#uf-titulo').textContent = enDibujo ? 'Dibujar el unifilar' : vista === 'revision' && f && CAD().esDeDibujo(f.lectura) ? 'Despiece del dibujo'
+      : vista === 'revision' && f && deTrazado(f.lectura) ? 'Despiece del trazado' : 'Importar unifilar';
     if (enDibujo) { W.unifilarCadUI.pintar(cuerpo, pie); return; }
     if (vista === 'carga') pintarCarga(cuerpo, pie);
     else if (vista === 'foto' && prep) pintarFoto(cuerpo, pie);
@@ -284,7 +291,7 @@
     nota = '';
     if (g && g.importado) {
       borrador = nueva; // no toca las partidas importadas hasta que se reemplacen
-      if (agregarYa) nota = `Ya hay ${importadas().length} partidas del unifilar en la cotización: revise el despiece nuevo y use «Reemplazar» para cambiarlas.`;
+      if (agregarYa) nota = `Ya hay ${importadas().length} partidas ${origen(g.lectura)} en la cotización: revise el despiece nuevo y use «Reemplazar» para cambiarlas.`;
     } else {
       borrador = null;
       E().cot.unifilar = nueva;
@@ -296,7 +303,7 @@
         if (primera) E().sel = primera.id;
         const pend = UF().pendientes(bom).length;
         nota = `Se agregaron ${n} partidas a la cotización.${pend ? ` Responda ${pend === 1 ? 'la pregunta' : `las ${pend} preguntas`} para afinarlas: al contestar, las partidas se actualizan solas.` : ''}`;
-        W.toast(`${n} ${n === 1 ? 'partida agregada' : 'partidas agregadas'} desde el dibujo`);
+        W.toast(`${n} ${n === 1 ? 'partida agregada' : 'partidas agregadas'} desde ${deTrazado(lect) ? 'el trazado' : 'el dibujo'}`);
       } else if (agregarYa) nota = 'Responda lo que bloquea para poder agregar las partidas.';
       W.recalcular();
     }
@@ -640,7 +647,7 @@
       const p = N.get(a.nodo_a).pos_px;
       const q = N.get(a.nodo_b).pos_px;
       const d = a.diametro.valor ? `${a.diametro.valor}″` : 'Ø?';
-      const l = a.longitud_cota.valor ? `${a.longitud_cota.valor} m` : '¿m?';
+      const l = a.longitud_cota.valor ? `${Number(a.longitud_cota.valor.toFixed(3))} m` : '¿m?';
       lienzo.append(svg('text', { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 - k * 0.5, 'font-size': k.toFixed(1), 'text-anchor': 'middle', class: `uf-d-txt${duda.has(a.id) ? ' uf-d-txt-duda' : ''}` }, `${a.id} · ${d} · ${l}`));
     });
     red.nodos.forEach((n) => {
@@ -663,7 +670,8 @@
       : null;
     return h('details', { class: 'uf-grupo uf-g-dibujo', open: conFoto },
       h('summary', null, conFoto ? 'La lectura sobre la foto' : 'Dibujo de la lectura'),
-      h('p', { class: 'uf-ayuda' }, conFoto ? 'Revise que cada línea, diámetro y cota coincidan con el croquis; en color de aviso, lo que se pregunta.' : 'La red tal como se leyó (sin la foto); en color de aviso, lo que se pregunta.'),
+      h('p', { class: 'uf-ayuda' }, conFoto ? 'Revise que cada línea, diámetro y cota coincidan con el croquis; en color de aviso, lo que se pregunta.'
+        : deTrazado(bom) ? 'La red del trazo en isométrico (cotas a ejes); en color de aviso, lo que se pregunta.' : 'La red tal como se leyó (sin la foto); en color de aviso, lo que se pregunta.'),
       revisar,
       marco);
   }
@@ -691,7 +699,7 @@
       lect.red.aristas.forEach((a) => {
         const p = N.get(a.nodo_a);
         const q = N.get(a.nodo_b);
-        const t = `${a.id} · ${a.diametro.valor ? `${a.diametro.valor}″` : 'Ø?'} · ${a.longitud_cota.valor ? `${a.longitud_cota.valor} m` : '¿m?'}`;
+        const t = `${a.id} · ${a.diametro.valor ? `${a.diametro.valor}″` : 'Ø?'} · ${a.longitud_cota.valor ? `${Number(a.longitud_cota.valor.toFixed(3))} m` : '¿m?'}`;
         g.lineWidth = 4; g.strokeStyle = '#ffffff'; g.strokeText(t, (p.x + q.x) / 2, (p.y + q.y) / 2 - k * 0.5);
         g.fillStyle = '#1b4596'; g.fillText(t, (p.x + q.x) / 2, (p.y + q.y) / 2 - k * 0.5);
       });
@@ -718,6 +726,35 @@
     }
     verif = { activa: false };
     pintar();
+  }
+
+  /**
+   * El trazo del trazado isométrico, ya leído (motor/trazado_lectura.js): abre el diálogo en su despiece y lo agrega a la
+   * cotización si se puede (si ya hay partidas importadas, se revisa para reemplazarlas). Lo que se contestó aquí a un trazo
+   * anterior y el trazo no dice (el ángulo de un injerto, un tramo corto sin decidir) se conserva en los elementos que siguen;
+   * lo que dice el trazo manda. avisos: lo que hay que saber del paso (se muestra arriba del despiece).
+   */
+  function desdeTrazado(lect, respuestas, avisos) {
+    const g = guardada();
+    const previas = g && deTrazado(g.lectura) ? g.respuestas : {};
+    const ids = new Set([...lect.red.nodos.map((n) => n.id), ...lect.red.aristas.map((a) => a.id)]);
+    const conservadas = {};
+    Object.keys(previas).filter((id) => ids.has(id)).forEach((id) => {
+      const r = {};
+      ['angulo_deg', 'encimado', 'aceptado'].forEach((k) => { if (previas[id][k] !== undefined) r[k] = previas[id][k]; });
+      if (Object.keys(r).length) conservadas[id] = r;
+    });
+    const todas = { ...conservadas };
+    Object.keys(respuestas || {}).forEach((id) => { todas[id] = { ...(todas[id] || {}), ...respuestas[id] }; });
+    errores = [];
+    vista = 'revision';
+    notaLectura = avisos && avisos.length ? `Del trazo: ${avisos.join(' ')}` : '';
+    const d = $('#dlg-unifilar');
+    if (!d.open) { if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', ''); }
+    aceptarLectura(lect, todas, true);
+    W.recalcular();
+    const foco = $('.uf-preguntas [data-clave]') || $('#uf-agregar, #uf-ver-cotizacion, #uf-listo');
+    if (foco) foco.focus();
   }
 
   /** Guarda una respuesta (o la quita con valor undefined), vuelve a correr las reglas y, si ya están en la cotización, actualiza las partidas. */
@@ -861,18 +898,19 @@
     const u = { diam: E().cot.unidad_diam, long: E().cot.unidad_long };
     const reemplaza = !!borrador || (f.importado && importadas().length);
     const ed = editadas();
-    const [estadoTxt, estadoNota] = ESTADO[R.estado];
+    const estadoNota = ESTADO[R.estado][1];
     const deDibujo = CAD().esDeDibujo(f.lectura);
+    const delTrazado = deTrazado(f.lectura);
     W.reemplazar(cuerpo,
       h('div', { class: `uf-estado uf-estado-${R.estado.toLowerCase()}` },
-        h('strong', null, `Despiece ${estadoTxt.toLowerCase()}`), h('span', null, estadoNota)),
+        h('strong', null, `Despiece ${{ DEFINITIVA: 'definitivo', PRELIMINAR: 'preliminar', NO_COTIZABLE: 'no cotizable' }[R.estado]}`), h('span', null, estadoNota)),
       h('div', { class: 'tiles uf-tiles' },
         W.tile('Tramos rectos', String(R.conteo.ductos_rectos), `${W.num(R.longitud_total_neta_m, 2)} m netos`),
         W.tile('Accesorios', String(R.conteo.accesorios), 'codos, injertos y reducciones'),
         W.tile('Aros', String(R.conteo.aros), `${R.conteo.aros_sueltos} sueltos · ${R.conteo.tornillos_juegos} tornillos`),
         W.tile('Ménsulas', String(R.conteo.menulas), 'regla del taller'),
         W.tile('Al punto más lejano', `${W.num(R.longitud_al_punto_mas_alejado_m, 1)} m`, `Ø mayor ${W.num(R.diametro_max_in, 0)}″`)),
-      borrador ? h('p', { class: 'uf-nota' }, `Es una lectura nueva: al aplicarla reemplaza las ${importadas().length} partidas del unifilar que ya están en la cotización.`) : null,
+      borrador ? h('p', { class: 'uf-nota' }, `Es una lectura nueva: al aplicarla reemplaza las ${importadas().length} partidas ${origen(guardada().lectura)} que ya están en la cotización.`) : null,
       notaLectura ? h('p', { class: 'uf-nota uf-nota-lectura' }, notaLectura) : null,
       nota ? h('p', { class: 'uf-nota', role: 'status' }, nota) : null,
       preguntas.length
@@ -892,7 +930,7 @@
       h('p', { class: 'uf-pie-txt' },
         h('button', { type: 'button', class: 'btn-texto', id: 'uf-copiar', onclick: () => W.copiarTexto(JSON.stringify(bom, null, 2), 'Despiece copiado en JSON') }, 'Copiar el despiece en JSON'),
         ' · ',
-        h('button', { type: 'button', class: 'btn-texto', id: 'uf-copiar-lectura', onclick: () => W.copiarTexto(JSON.stringify(f.lectura, null, 2), 'Lectura copiada en JSON') }, deDibujo ? 'Copiar la lectura del dibujo' : 'Copiar la lectura de Claude'),
+        h('button', { type: 'button', class: 'btn-texto', id: 'uf-copiar-lectura', onclick: () => W.copiarTexto(JSON.stringify(f.lectura, null, 2), 'Lectura copiada en JSON') }, deDibujo ? 'Copiar la lectura del dibujo' : delTrazado ? 'Copiar la lectura del trazado' : 'Copiar la lectura de Claude'),
         ' · el esquema está en docs/unifilar-bom.schema.json; para medir la lectura, docs/evaluacion'));
     const bloqueado = R.estado === 'NO_COTIZABLE';
     const pendienteAplicar = reemplaza && (borrador || ed.length);
@@ -902,8 +940,10 @@
       : pendienteAplicar
         ? h('button', { type: 'button', class: 'btn btn-primario', id: 'uf-agregar', disabled: bloqueado, onclick: agregar }, 'Actualizar partidas')
         : h('button', { type: 'button', class: 'btn btn-primario', id: 'uf-listo', onclick: cerrar }, 'Listo');
+    const primeraImportada = f.importado && !borrador ? importadas()[0] : null;
     W.reemplazar(pie,
       deDibujo && W.unifilarCadUI.hayDibujo() ? h('button', { type: 'button', class: 'btn btn-sec', id: 'uf-editar-dibujo', onclick: abrirDibujo }, 'Editar el dibujo') : null,
+      delTrazado && primeraImportada ? h('button', { type: 'button', class: 'btn btn-sec', id: 'uf-ver-cotizacion', onclick: () => { cerrar(); W.verPartida(primeraImportada.id); } }, 'Ver en la cotización') : null,
       h('button', { type: 'button', class: 'btn btn-sec', id: 'uf-otra', onclick: () => { vista = 'carga'; errores = []; pintar(); $('#uf-texto').focus(); } }, 'Otra lectura'),
       guardada() && !borrador ? h('button', { type: 'button', class: 'btn btn-sec', id: 'uf-descartar', onclick: descartar }, guardada().importado ? 'Quitar de la cotización' : 'Descartar la lectura') : null,
       h('span', { class: 'uf-pie-esp' }),
@@ -933,7 +973,7 @@
     }
   }
 
-  W.unifilarUI = { render, abrir, despiece: () => despiece() };
+  W.unifilarUI = { render, abrir, desdeTrazado, despiece: () => despiece() };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);
   else iniciar();
 }(typeof self !== 'undefined' ? self : this));

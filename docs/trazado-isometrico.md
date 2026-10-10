@@ -231,7 +231,7 @@ Al seleccionar una toma, el inspector muestra **Acople** con dos opciones: [Mang
 ### 1.5 Fase 5 · Salida
 
 - **El JSON del sistema** (§3): Copiar o Descargar. En COTIZAP se guarda con la cotización.
-- **Partidas de COTIZAP:** pasa por las reglas del unifilar como lectura de origen USUARIO, igual que Dibujar unifilar. Las mangueras salen como compradas y los adaptadores como reducciones.
+- **Partidas de COTIZAP:** «Pasar a la cotización» lleva el trazo por las reglas del unifilar como lectura de origen USUARIO, igual que Dibujar unifilar (§5.6). Las mangueras salen como compradas, los adaptadores como reducciones y la compuerta como compra.
 - **Etapa de cálculo:** recibe el JSON y llena `resultados` (§3.4): en el tablero, la fase de salida muestra el ventilador de cada colector, las tomas, el balanceo y la hoja por tramo, y el JSON sale con el cálculo (§5.4).
 
 ### 1.6 Recorrido del ejemplo, paso a paso
@@ -2187,6 +2187,7 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
 | 2 · Tablero **(hecha, §5.2)** | Fases, colocación de equipos y tomas, plano de trabajo y sus teclas, caja de valores, imán y tiradores de la manguera, cubo de vista | `src/web/trazado_tablero.js` (el juego, sin pantalla) y `src/web/trazado_iso_ui.js` (la pestaña «Trazado isométrico») | Las ideas del tablero de Dibujar unifilar: cámara, gestos, etiquetas sin encimar, deshacer |
 | 3 · Validar y dimensionar **(hecha, §5.3)** | Caudales, velocidades, dimensionamiento con candados, catálogo de §2.11, panel de problemas con «Corregir» | Motor (`correcciones`, `corregir`, `decidirCorto`, Ø en cadena) y tablero | `revisar` y las reglas del unifilar (pegar las piezas o fabricar el tramo corto) |
 | 4 · Cálculo **(hecha, §5.4)** | Pérdidas locales con su tabla de coeficientes, presión por toma, balanceo y selección del ventilador; llena `resultados` | `src/motor/perdidas.js` (nuevo) y la salida del tablero | El JSON de §3 |
+| 5 · Partidas **(hecha, §5.6)** | El trazo a una lectura del unifilar, su despiece verificado contra el trazo y «Pasar a la cotización» | `src/motor/trazado_lectura.js` (nuevo), la salida del tablero y el diálogo del despiece | Las reglas del unifilar (`unifilar.js`) y su diálogo (`unifilar_ui.js`) |
 
 ### 5.1 Etapa 1, hecha: el modelo
 
@@ -2226,7 +2227,7 @@ El trazo se guarda tal cual (posiciones de los nodos, tramos con su Ø y su mate
 8. **Renumerar.** `renumerar` da identificadores limpios en el orden de la red: los nodos desde la boca, con el tronco antes que el ramal; los tramos desde cada toma hacia el colector; las piezas en el orden de sus nodos. Así sale la numeración del ejemplo. Las partidas y respuestas que usaban los identificadores anteriores dejan de servir.
 9. **Para las etapas siguientes:**
    - el tablero (etapa 2, hecho: §5.2);
-   - pasar el trazo a partidas: las reglas del unifilar todavía leen sólo tramos horizontales y verticales, y falta extenderlas a los inclinados;
+   - pasar el trazo a partidas (hecho: §5.6);
    - el pantalón: el taller lo retiró, y el modelo lo rechaza aunque la política lo permita;
    - la descarga del ventilador (SALIDA);
    - el cálculo de pérdidas (etapa 4).
@@ -2265,7 +2266,7 @@ Es la pestaña **Trazado isométrico** de COTIZAP: otro apartado, al lado de la 
 6. **El rombo y el círculo** de la manguera coinciden mientras no hay desvío: decide el primer arrastre (a lo largo del eje de la toma, el rombo; de lado, el círculo).
 7. **El color del fantasma:** verde si se puede; ámbar si se puede pero deja un aviso o un error del catálogo (por ejemplo, un choque); rojo con el motivo si el modelo lo rechaza. Una red que todavía no llega al colector y el extremo de la cadena no lo pintan de ámbar: son normales mientras se traza.
 8. **Rapidez:** cada fantasma nuevo se prueba en el modelo (`trazar` y `revisar`) y se guarda en una caché mientras dura el trazo. Con trazos de decenas de tramos tarda unos milisegundos; con 481 tramos, de 20 a 60 ms. La rejilla gruesa de choques de §2.10 lo bajaría en trazos grandes.
-9. **Pendiente:** el menú radial de 400 ms en el teléfono (§4.5), la regla de niveles con nombre, la tapa (su bloque sale con candado y el porqué), la rejilla gruesa de choques y pasar el trazo a partidas. «Corregir» llegó con la etapa 3 (§5.3) y la compuerta después de la etapa 4 (§5.5).
+9. **Pendiente:** el menú radial de 400 ms en el teléfono (§4.5), la regla de niveles con nombre, la tapa (su bloque sale con candado y el porqué) y la rejilla gruesa de choques. «Corregir» llegó con la etapa 3 (§5.3), la compuerta después de la etapa 4 (§5.5) y el paso a partidas con la etapa 5 (§5.6).
 
 ### 5.3 Etapa 3, hecha: validar y dimensionar
 
@@ -2302,7 +2303,7 @@ Los caudales (la suma de las tomas aguas arriba), las velocidades y el dimension
 1. **Sin arreglo automático** (se corrigen a mano): REDUCCION_BRUSCA, T_90_ALTA_PERDIDA, MANGUERA_LARGA, MANGUERA_TORCIDA, CHOQUE_MANGUERA, TRONCO_MENOR_QUE_RAMAL (cambiar cuál es el tronco es geometría) y TOMA_SIN_DATOS (el caudal es un dato del proyecto, no se inventa). Lo BLOQUEANTE nunca queda en el trazo: el fantasma no lo deja hacer y dice por qué.
 2. **Pegar** sigue la regla del unifilar (unión soldada, o engargolada si la costura del material es engargolada). En el trazo la geometría no cambia: el recto que queda se arma con las piezas.
 3. **Rapidez.** Los arreglos se buscan al pintar el panel, con unos 150 ms por pintada; los que no alcanzan muestran «Buscar arreglo». Se guardan mientras el trazo no cambie.
-4. **Pendiente:** pasar el trazo a partidas. El cálculo de pérdidas llegó con la etapa 4 (§5.4).
+4. El cálculo de pérdidas llegó con la etapa 4 (§5.4) y el paso a partidas con la etapa 5 (§5.6).
 
 ### 5.4 Etapa 4, hecha: el cálculo
 
@@ -2353,8 +2354,9 @@ El esquema (§3.5) creció con esos campos. Lo que el trazo exporta sigue llevan
 3. **Pendiente:**
    - editar la tabla de coeficientes y las eficiencias desde la aplicación (hoy se cambian con `opciones`);
    - el ducto de descarga del ventilador;
-   - elegir el modelo del ventilador en un catálogo de fabricantes;
-   - pasar el trazo a partidas.
+   - elegir el modelo del ventilador en un catálogo de fabricantes.
+
+   Pasar el trazo a partidas llegó con la etapa 5 (§5.6).
 
 ### 5.5 Después de la etapa 4: la compuerta y el pulido del tablero
 
@@ -2381,6 +2383,86 @@ El esquema (§3.5) creció con esos campos. Lo que el trazo exporta sigue llevan
 - **Tableta y teléfono.** En la columna angosta los nombres de la paleta se parten en dos renglones en lugar de cortarse. En el teléfono, la barra de estado deja las coordenadas (no hay puntero) y cabe en un renglón.
 
 Lo verifican `tests/trazado_iso.test.js` (poner, ocupar, no fundirse, ida y vuelta, quitar, rechazos y la caminata al azar con compuertas), `tests/perdidas.test.js` (el cierre que balancea), `tests/trazado_tablero.test.js` (la herramienta, el botón del balanceo y Borrar) y la sección 37 de `tests/e2e/ui.e2e.js` (el botón, la herramienta G y quitarla desde el inspector).
+
+### 5.6 Etapa 5, hecha: del trazo a la cotización
+
+En la salida, **Pasar a la cotización** lleva el trazo por las mismas reglas del taller que la foto y el dibujo unifilar. Así el despiece, las uniones, las ménsulas y las compras salen con la misma lógica que el resto de COTIZAP. El botón abre el diálogo del despiece («Despiece del trazado») con las partidas ya agregadas, si se puede. Si la cotización ya tiene partidas importadas, el despiece nuevo se revisa y «Reemplazar» las cambia.
+
+**La lectura** (`src/motor/trazado_lectura.js`, `aLectura`) se arma del JSON del sistema, con origen USUARIO y confianza 1:
+
+| Del trazo | En la lectura |
+| --- | --- |
+| Cada tramo rígido | Una arista con su Ø y su largo a ejes, con el nodo aguas abajo primero y su eje del isométrico (X, Y, Z o ninguno). La manguera no es arista: se compra |
+| Codos y derivaciones | El ángulo de cada uno anotado en su nodo (el del trazo, no el de la hoja); la T a 90° como 90° |
+| Compuerta | La nota «COMPUERTA» en su nodo: las reglas la compran (COMPRADO, del catálogo si existe `COMPUERTA_<Ø>`; si no, con su precio por capturar y el aviso COMPUERTA_SIN_CATALOGO) y le dan 150 mm del tramo |
+| Reducción o adaptador excéntrico | La nota «EXC» en su nodo: reducción excéntrica de cara plana |
+| Colector y tomas | Un equipo por puerto con ducto (`EQ-01-PU-01`), con la boca del Ø del puerto respondida. La toma con manguera va en su punto de transición, con un tramo del catálogo respondido |
+| Tramo corto decidido | PEGAR responde «pegar los accesorios»; ACEPTAR, «fabricar el tramo corto» |
+| Material y calibre | Los de la mayoría de los tramos (las reglas usan uno para todo el sistema; si hay más de uno, se avisa) |
+
+**La proyección de la hoja.** Las reglas buscan el tronco de una derivación por cómo se ve: el tramo que sigue derecho. Por eso la lectura se dibuja en la vista en que ninguna pareja de tramos de un nodo se ve alineada sin estarlo, ni un tramo se ve de punta. Empieza por el isométrico NE; si la peor pareja queda a menos de 20° de verse alineada, prueba azimuts cada 15° y elevaciones de 20° a 55° y se queda con la mejor. Un codo entre una subida y una horizontal a 45° se ve alineado en el NE; con él, la lectura sale en azimut 90° y elevación 55°.
+
+**Lo que no se puede pasar**, con su motivo:
+
+- un trazo sin boca de colector;
+- un problema que cambia el despiece: piezas que no caben, un choque, un Ø que crece hacia el colector, y los demás de §2.11;
+- más de una boca (las reglas esperan un colector con una).
+
+Una toma sin caudal o sin ducto no lo detiene: no cambia el despiece. Sale como aviso.
+
+**Lo que se avisa** antes de pasar (en la salida y arriba del despiece):
+
+- La T a 90° no la fabrica el taller. Las reglas proponen un injerto a 45° y lo preguntan; para que cuadre, trace ese ramal con un injerto.
+- Un tramo corto que el trazo no ha decidido lo pregunta el despiece, que propone pegar.
+- Una toma sin caudal o sin ducto.
+- Dos o más materiales o calibres.
+
+**La verificación.** `verificar` compara el despiece con el trazo. Revisa:
+
+- el largo neto de cada tramo, con una tolerancia de 1 mm;
+- su Ø;
+- la pieza de cada nodo, con el ángulo del codo, el del injerto y si la reducción es excéntrica;
+- las piezas de más.
+
+Lo que no cuadra sale como aviso. Hay dos casos que no se cuentan como diferencia:
+
+- un tramo corto sin decidir, porque el despiece lo pregunta;
+- los largos alrededor de una T a 90°, porque cambia la pieza.
+
+**Lo que se agregó a las reglas del unifilar** (sirve también para la foto y el dibujo):
+
+- La nota «COMPUERTA» en el nodo de un tramo recto del mismo Ø: una compuerta comprada. En otro lugar, COMPUERTA_NO_VA (por confirmar).
+- La nota «EXC», «EXCÉNTRICA» o «CARA PLANA» en el nodo de una reducción: excéntrica de cara plana.
+- **La manguera de otro Ø que el ducto** (la boca de la máquina, respondida o anotada en un equipo con manguera) lleva su adaptador en la punta:
+  - es una reducción que ocupa su largo del tramo;
+  - su lado de la manguera va liso (`extremos_sin_brida`);
+  - el ducto se une a él con brida, y la manguera es la de su Ø.
+- **Las juntas de una reducción pegada** a un equipo o a un codo, cada una del Ø de su lado. Antes:
+  - la boca menor que el ducto salía con las juntas cruzadas;
+  - un codo con cambio de Ø se unía también al tramo de después de la reducción, con una junta de más.
+- **El esquema del despiece** admite los identificadores del trazo (`TR-…` y `EQ-…-PU-…`).
+
+**En la cotización.**
+
+- La lectura del trazo vive en `cot.unifilar` como cualquier otra.
+- El aviso de la cotización dice «N partidas del trazado isométrico».
+- «Ver en la cotización» lleva a la primera partida.
+- Al volver a pasar el trazo, lo que se contestó en el despiece y el trazo no dice se conserva en los elementos que siguen: el ángulo de un injerto en lugar de la T, o un tramo corto sin decidir. Lo que dice el trazo manda.
+- Las partidas salen con la yarda de la cotización.
+
+Lo verifican:
+
+- `tests/trazado_lectura.test.js`:
+  - el ejemplo: lectura, respuestas, despiece definitivo que cuadra, esquema y partidas que se cotizan;
+  - lo que no se puede pasar y lo que pasa con aviso;
+  - la compuerta, la reducción excéntrica y los adaptadores de brida y de manguera;
+  - el tramo corto sin decidir, pegado y aceptado;
+  - la T a 90° y la proyección;
+  - `verificar` con un despiece alterado;
+  - una caminata al azar de 140 trazos: el despiece cuadra, cada junta es del Ø de sus piezas y todo se cotiza.
+- `tests/unifilar.test.js`: las juntas de las reducciones pegadas y el adaptador de la manguera.
+- `tests/trazado_tablero.test.js`: el despiece guardado mientras el trazo y la yarda no cambien.
+- La sección 38 de `tests/e2e/ui.e2e.js`: el botón, el diálogo, «Ver en la cotización» y reemplazar tras un cambio.
 
 ---
 

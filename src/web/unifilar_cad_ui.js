@@ -1043,11 +1043,11 @@
     const uniones = bom.elementos_union.filter((j) => j.tipo === 'UNION_ENGARGOLADA').length;
     const mangueras = bom.partidas_compradas.filter((c) => /^MANGUERA/.test(c.articulo_id)).reduce((s, c) => s + c.cantidad, 0);
     const abraz = bom.soportes.filter((s) => s.tipo === 'ABRAZADERA').reduce((s, x) => s + x.cantidad, 0);
-    const [estado] = { DEFINITIVA: ['Definitiva'], PRELIMINAR: ['Preliminar'], NO_COTIZABLE: ['No cotizable'] }[R.estado];
+    const estado = { DEFINITIVA: 'definitivo', PRELIMINAR: 'preliminar', NO_COTIZABLE: 'no cotizable' }[R.estado];
     const pend = UF().pendientes(bom).length;
     return h('section', { class: 'cad-resumen', 'aria-labelledby': 'cad-res-tit' },
       h('h3', { id: 'cad-res-tit' }, 'Lo que sale del dibujo'),
-      h('div', { class: `cad-estado-chip uf-estado uf-estado-${R.estado.toLowerCase()}` }, h('strong', null, `Despiece ${estado.toLowerCase()}`),
+      h('div', { class: `cad-estado-chip uf-estado uf-estado-${R.estado.toLowerCase()}` }, h('strong', null, `Despiece ${estado}`),
         h('span', null, pend ? `${pend} ${pend === 1 ? 'pregunta' : 'preguntas'} al revisar` : 'sin preguntas pendientes')),
       h('dl', { class: 'cad-cuenta', id: 'cad-cuenta' },
         ...[

@@ -202,7 +202,7 @@ Al volver a **«Editar el dibujo»**, `aplicarRespuestas` pasa esas respuestas a
 
 ## 10. Límites
 
-- Sólo **tramos horizontales y verticales**: no hay tramos inclinados (una subida a 45°); se dibujan como horizontal más vertical.
+- Sólo **tramos horizontales y verticales**: no hay tramos inclinados (una subida a 45°); se dibujan como horizontal más vertical. El **trazado isométrico** sí los tiene, con la compuerta, y pasa a partidas con estas mismas reglas ([`trazado-isometrico.md`](trazado-isometrico.md) §5.6).
 - Sólo ducto **redondo**: no hay transiciones a rectangular ni ductos rectangulares.
 - El colector tiene **una boca**; no hay compuertas ni ventiladores como equipos del dibujo.
 - No hay pantalones ni derivaciones múltiples en un punto: el taller hace injertos separados.

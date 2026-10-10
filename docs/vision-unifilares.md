@@ -92,7 +92,8 @@ flowchart LR
 | `45°`, `45º`, `45o` | Ángulo | 45° | Cerca de un vértice o de una derivación |
 | `cal 22`, `C-22`, `#22` | Calibre | 22 | Global si está en el cuadro de datos o el título |
 | `GALV`, `NEGRO`, `INOX` | Material | `GALVANIZADO`, `ACERO_CARBON`, `INOX_304` | |
-| `EXC`, `CARA PLANA` | Reducción excéntrica | `excentrica: CARA_PLANA` | |
+| `EXC`, `EXCÉNTRICA`, `CARA PLANA` | Reducción excéntrica | `excentrica: CARA_PLANA` | La nota va en el nodo de la reducción |
+| `COMPUERTA` | Compuerta de regulación en un tramo recto | Accesorio COMPUERTA (comprado): ocupa 150 mm, media junta de cada lado | La nota va en el nodo, entre dos tramos rectos del mismo Ø |
 | `MANG 6"` | Manguera | Artículo `MANGUERA_6` del catálogo | |
 | `SUBE`, `BAJA`, `↑`, `↓` | Posición vertical | `posicion: VERTICAL` | Decide el espaciamiento de las ménsulas |
 
@@ -241,7 +242,7 @@ En cada nodo se genera la unión según lo que se encuentra; dentro de cada tram
 | --- | --- | --- | --- | --- | --- | --- |
 | `JUNTA_BRIDADA` | Pieza del taller contra pieza del taller | 2 (uno en cada pieza) | n | π · D_perf × 40 mL/m | — | Completo (cada brida lleva media junta) |
 | `JUNTA_EQUIPO` | Pieza del taller contra un equipo con brida propia | 1 | n | π · D_perf × 40 mL/m | Confirmar el patrón de barrenos del equipo | Media junta: la otra mitad la pone el equipo |
-| `JUNTA_MANGUERA` | Extremo hacia una máquina por manguera | 0 (extremo liso) | 0 | 0 | 1 tramo de manguera del catálogo y 2 abrazaderas | No: van como partidas compradas |
+| `JUNTA_MANGUERA` | Extremo hacia una máquina por manguera (si la manguera es de otro Ø que el ducto, `boca_diametro` de la máquina, va con su adaptador: una reducción en la punta con el lado de la manguera liso, unida al ducto con brida) | 0 (extremo liso) | 0 | 0 | 1 tramo de manguera del catálogo, del Ø de la manguera, y 2 abrazaderas | No: van como partidas compradas |
 | `UNION_ENGARGOLADA` | Dos accesorios pegados sin tramo entre ellos | 0 | 0 | — | Engargolado al perímetro | Familia `UNION` |
 | Junta interna | Entre las piezas de un tramo largo (armado por yardas) | 2 | n | Igual | — | Completo |
 | Brida suelta | En el extremo final de cada tramo con ajuste | (uno de los 2 aros de esa junta es suelto) | — | — | Se suelda en obra después de cortar el ajuste | Completo |
@@ -298,12 +299,14 @@ Con la regla del taller (`proceso.soportes.espaciado`, documento de arquitectura
 | `ANGULO_DERIVACION_NO_PERMITIDO` | Injerto fuera de 30/45 (T a 90°) | 45° a favor del flujo | CONFIRMAR |
 | `DERIVACION_CONTRA_FLUJO` | El ramal entra contra el flujo | Se voltea | CONFIRMAR |
 | `ORIENTACION_AMBIGUA` | Vertical en la hoja que puede ser diagonal de 45° | La cota manda; si no, bajada | CONFIRMAR |
-| `TRANSICION_INSERTADA` | Cambio de Ø sin accesorio dibujado | Reducción concéntrica | INFO |
+| `TRANSICION_INSERTADA` | Cambio de Ø sin accesorio dibujado, o una manguera de otro Ø que el ducto | Reducción concéntrica (el adaptador de la manguera, en su punta) | INFO (ADVERTENCIA si el Ø de la manguera viene anotado en la foto) |
 | `ACCESORIOS_ENCIMADOS` | Longitud neta < 150 mm (o el motor no puede fabricar la pieza) | Entre dos accesorios, se pegan con una unión; junto a un equipo, tramo corto | CONFIRMAR (BLOQUEANTE si la neta es ≤ 0) |
 | `CONEXION_EQUIPO` | Boca de equipo sin medida ni barrenos (o con la medida anotada en `boca_diametro`: falta su patrón de barrenos) | Brida compatible del Ø del ducto (o el anotado, con reducción si no es el del ducto) | CONFIRMAR (ADVERTENCIA si la medida está anotada) |
 | `LECTURA_DUDOSA` | Un Ø, una cota o un ángulo leídos con confianza de 0.5 a 0.9 | Se usa el valor leído | CONFIRMAR por debajo de 0.7; ADVERTENCIA de 0.7 a 0.9 |
 | `COTAS_NO_CUADRAN` | Las parciales de una cota total no suman la total | Se cotizan las parciales | ADVERTENCIA |
 | `REDUCCION_GRANDE` | Una reducción de más de la mitad | Se cotiza como está | ADVERTENCIA |
+| `COMPUERTA_NO_VA` | Una nota «COMPUERTA» en un codo, una derivación o un cambio de Ø | No se cotiza | CONFIRMAR |
+| `COMPUERTA_SIN_CATALOGO` | No hay `COMPUERTA_<Ø>` en el catálogo de compras | Se cotiza en $0 con su precio por capturar | ADVERTENCIA |
 | `VERIFICACION_VISUAL` | La revisión visual de Claude encontró una diferencia entre la foto y la lectura | La lectura no se cambia | ADVERTENCIA |
 | `MANGUERA_SIN_LARGO` | Manguera sin largo | Un tramo del catálogo | ADVERTENCIA |
 | `CALIBRE_BAJO_TABLA` | Calibre más delgado que la tabla de servicio | El anotado (se confirma o se cambia) | ADVERTENCIA |
@@ -401,8 +404,8 @@ Es el archivo [`docs/unifilar-bom.schema.json`](unifilar-bom.schema.json) (JSON 
   },
   "$defs": {
     "confianza": { "type": "number", "minimum": 0, "maximum": 1, "description": "0 = no se sabe, 1 = certeza. Umbrales en §6 del documento." },
-    "id_red": { "type": "string", "pattern": "^(N|A|T)-[0-9]{3,4}$" },
-    "id_pieza": { "type": "string", "pattern": "^(DUCT|CODO|RED|RINJ|INJ|PANT|TRAN|EQ|JNT|SOP)-[0-9]{2,3}$" },
+    "id_red": { "type": "string", "pattern": "^(N|A|T|TR)-[0-9]{3,4}$" },
+    "id_pieza": { "type": "string", "pattern": "^((DUCT|CODO|RED|RINJ|INJ|PANT|TRAN|COMP|EQ|JNT|SOP)-[0-9]{2,3}|EQ-[0-9]{2,3}-PU-[0-9]{2,3})$" },
     "medida": {
       "type": "object",
       "description": "Un dato leído o inferido, con su procedencia. valor null = faltante (y entonces hay una alerta).",
@@ -525,7 +528,7 @@ Es el archivo [`docs/unifilar-bom.schema.json`](unifilar-bom.schema.json) (JSON 
       "additionalProperties": false,
       "required": ["id", "tipo", "nombre", "nodo_id", "conexion", "texto_id", "confianza", "boca_diametro"],
       "properties": {
-        "id": { "type": "string", "pattern": "^EQ-[0-9]{2,3}$" },
+        "id": { "type": "string", "pattern": "^EQ-[0-9]{2,3}(-PU-[0-9]{2,3})?$" },
         "tipo": { "type": "string", "enum": ["COLECTOR", "MAQUINA", "CAMPANA", "COMPUERTA", "VENTILADOR", "OTRO"] },
         "nombre": { "type": "string" },
         "nodo_id": { "$ref": "#/$defs/id_red" },
@@ -591,8 +594,8 @@ Es el archivo [`docs/unifilar-bom.schema.json`](unifilar-bom.schema.json) (JSON 
       "additionalProperties": false,
       "required": ["id", "tipo", "nodo_id", "aristas", "diametro_entrada_in", "diametro_salida_in", "d_ramal_in", "angulo", "k_R", "gajos", "excentrica", "partida_cotizap"],
       "properties": {
-        "id": { "type": "string", "pattern": "^(CODO|RED|RINJ|INJ|PANT|TRAN)-[0-9]{3}$" },
-        "tipo": { "type": "string", "enum": ["CODO", "REDUCCION", "REDUCCION_INJERTO", "INJERTO", "PANTALON", "TRANSICION"] },
+        "id": { "type": "string", "pattern": "^(CODO|RED|RINJ|INJ|PANT|TRAN|COMP)-[0-9]{3}$" },
+        "tipo": { "type": "string", "enum": ["CODO", "REDUCCION", "REDUCCION_INJERTO", "INJERTO", "PANTALON", "TRANSICION", "COMPUERTA"] },
         "nodo_id": { "$ref": "#/$defs/id_red" },
         "aristas": { "type": "array", "description": "Lado del colector primero; en una derivación, el ramal al último.", "items": { "$ref": "#/$defs/id_red" } },
         "diametro_entrada_in": { "type": "number", "minimum": 1, "description": "Del lado del colector (el mayor)." },
@@ -667,7 +670,8 @@ Es el archivo [`docs/unifilar-bom.schema.json`](unifilar-bom.schema.json) (JSON 
             "COTA_ILEGIBLE", "COTA_FALTANTE", "DIAMETRO_FALTANTE", "DIAMETRO_INFERIDO", "DIAMETRO_INCONSISTENTE", "ANGULO_INFERIDO", "ANGULO_NO_PERMITIDO",
             "ANGULO_DERIVACION_NO_PERMITIDO", "DERIVACION_CONTRA_FLUJO", "ORIENTACION_AMBIGUA", "TRANSICION_INSERTADA", "ACCESORIOS_ENCIMADOS", "CONEXION_EQUIPO",
             "MANGUERA_SIN_LARGO", "CALIBRE_BAJO_TABLA", "CALIBRE_FALTANTE", "MATERIAL_FALTANTE", "TEXTO_SIN_ASOCIAR", "ASOCIACION_AMBIGUA", "TRAZO_SIN_CONECTAR",
-            "CRUCE_SIN_NODO", "CICLO_EN_RED", "PANTALON_RETIRADO", "SIN_COLECTOR", "LECTURA_DUDOSA", "COTAS_NO_CUADRAN", "REDUCCION_GRANDE", "VERIFICACION_VISUAL"
+            "CRUCE_SIN_NODO", "CICLO_EN_RED", "PANTALON_RETIRADO", "SIN_COLECTOR", "LECTURA_DUDOSA", "COTAS_NO_CUADRAN", "REDUCCION_GRANDE", "VERIFICACION_VISUAL",
+            "COMPUERTA_NO_VA", "COMPUERTA_SIN_CATALOGO"
           ]
         },
         "referencias": { "type": "array", "items": { "type": "string" } },

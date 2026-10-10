@@ -18,6 +18,7 @@ const lecturaEjemplo = () => UF.leer(EJEMPLO).lectura;
 const despiezar = (lectura, respuestas) => UF.despiezar(lectura, M, respuestas || {});
 const codigos = (bom, sev) => bom.alertas_ambiguedad.filter((a) => !a.resuelta && (!sev || a.severidad === sev)).map((a) => a.codigo);
 const ducto = (bom, arista) => bom.ductos_rectos.find((d) => d.arista_id === arista);
+const r1 = (x) => Math.round(x * 10) / 10;
 
 /** Un croquis en planta mínimo: nodos [id, x, y], aristas [id, a, b, Ø″, m] y equipos [id, tipo, nodo, conexión]. */
 function planta(nodos, aristas, equipos, extra) {
@@ -298,6 +299,79 @@ test('Lecturas dudosas, boca anotada, reducción de más de la mitad y la nota �
   assert.equal(ducto(baja, 'A-008').posicion, 'VERTICAL');
   const o = baja.alertas_ambiguedad.find((a) => a.codigo === 'ORIENTACION_AMBIGUA');
   assert.deepEqual([o.severidad, o.respuesta.propuesta], ['CONFIRMAR', 'VERTICAL']);
+});
+
+test('Notas en un nodo: «COMPUERTA» en un tramo recto (comprada, ocupa 150 mm, media junta de cada lado) y «EXC» en una reducción', () => {
+  const nota = (id, nodo, txt) => ({ id, contenido_crudo: txt, contenido_normalizado: txt, tipo: 'NOTA', bbox_px: { x: 0, y: 0, w: 40, h: 20 }, confianza_ocr: 0.95, asociado_a: nodo });
+  // colector — 2 m — N-2 (compuerta) — 2 m — máquina
+  const red = (textos, D2) => planta([['N-1', 0, 0], ['N-2', 400, 0], ['N-3', 800, 0]], [['A-1', 'N-1', 'N-2', 6, 2], ['A-2', 'N-2', 'N-3', D2 || 6, 2]],
+    [['COL', 'COLECTOR', 'N-1', 'BRIDA_EQUIPO', 6], ['M1', 'MAQUINA', 'N-3', 'BRIDA_TALLER']], { textos });
+  const sin = despiezar(UF.leer(red([])).lectura);
+  const con = despiezar(UF.leer(red([nota('T-1', 'N-2', 'COMPUERTA')])).lectura);
+  const cp = con.accesorios.find((a) => a.tipo === 'COMPUERTA');
+  assert.ok(cp, 'la compuerta es un accesorio');
+  assert.deepEqual([cp.id, cp.nodo_id, cp.aristas, cp.diametro_entrada_in], ['COMP-001', 'N-2', ['A-1', 'A-2'], 6]);
+  assert.deepEqual([cp.partida_cotizap.familia, cp.partida_cotizap.precio_compra_unitario], ['COMPRADO', 0], 'sin catálogo, con su precio por capturar');
+  assert.match(cp.partida_cotizap.descripcion, /Compuerta de regulación de 6″ \(capture su precio\)/);
+  assert.ok(con.alertas_ambiguedad.some((a) => a.codigo === 'COMPUERTA_SIN_CATALOGO' && a.severidad === 'ADVERTENCIA'));
+  ['A-1', 'A-2'].forEach((aid) => assert.equal(ducto(con, aid).longitud_neta_mm, ducto(sin, aid).longitud_neta_mm - UF.LARGO_COMPUERTA_MM / 2, `${aid}: la mitad de la compuerta`));
+  const juntas = con.elementos_union.filter((j) => j.piezas.includes('COMP-001'));
+  assert.deepEqual(juntas.map((j) => [j.tipo, j.aros]), [['JUNTA_EQUIPO', 1], ['JUNTA_EQUIPO', 1]], 'la compuerta trae sus bridas: del ducto, media junta');
+  // con el artículo en el catálogo, se compra a su precio
+  const M2 = clonar(M);
+  M2.compras.articulos.COMPUERTA_6 = { descripcion: 'Compuerta de guillotina de 6″', unidad: 'pza', precio: 950, iva_incluido: false, categoria: 'PROVEEDOR' };
+  const cat = UF.despiezar(UF.leer(red([nota('T-1', 'N-2', 'COMPUERTA')])).lectura, M2, {});
+  assert.deepEqual(cat.accesorios.find((a) => a.tipo === 'COMPUERTA').partida_cotizap, { familia: 'COMPRADO', descripcion: 'Compuerta de guillotina de 6″', articulo_id: 'COMPUERTA_6', cantidad: 1 });
+  assert.ok(!cat.alertas_ambiguedad.some((a) => a.codigo === 'COMPUERTA_SIN_CATALOGO'));
+  // y se cotiza: la partida comprada sale entre las demás
+  const r = C.cotizar({ yarda_mm: 914.4, partidas: UF.aPartidas(cat) }, M2);
+  assert.ok(r.partidas.every((f) => f.ok), r.partidas.filter((f) => !f.ok).map((f) => f.errores).join(' '));
+  assert.ok(r.partidas.some((f) => f.familia === 'COMPRADO' && f.entrada.articulo_id === 'COMPUERTA_6'));
+  // en un cambio de Ø no va: se pregunta y no se cotiza
+  const mal = despiezar(UF.leer(red([nota('T-1', 'N-2', 'COMPUERTA')], 5)).lectura);
+  assert.ok(!mal.accesorios.some((a) => a.tipo === 'COMPUERTA'));
+  assert.ok(mal.alertas_ambiguedad.some((a) => a.codigo === 'COMPUERTA_NO_VA' && a.severidad === 'CONFIRMAR'));
+  // «EXC» en el nodo de la reducción: excéntrica de cara plana
+  const conc = despiezar(UF.leer(red([], 5)).lectura).accesorios.find((a) => a.tipo === 'REDUCCION');
+  const exc = despiezar(UF.leer(red([nota('T-1', 'N-2', 'EXC')], 5)).lectura).accesorios.find((a) => a.tipo === 'REDUCCION');
+  assert.deepEqual([conc.excentrica, conc.partida_cotizap.excentrica], [false, 'NO']);
+  assert.deepEqual([exc.excentrica, exc.partida_cotizap.excentrica], [true, 'CARA_PLANA']);
+  assert.ok(C.cotizarPartida(exc.partida_cotizap, M).ok !== false);
+});
+
+test('Reducciones pegadas: cada junta es del Ø de su lado (boca menor que el ducto, codo con reducción) y la manguera de otro Ø lleva su adaptador', () => {
+  const juntas = (bom, nodo) => bom.elementos_union.filter((j) => j.nodo_id === nodo).map((j) => `${j.tipo} ${j.piezas.join('+')} ${j.diametro_in}`).sort();
+  const cotiza = (bom) => {
+    const r = C.cotizar({ yarda_mm: 914.4, partidas: UF.aPartidas(bom) }, M);
+    assert.ok(r.partidas.every((f) => f.ok), r.partidas.filter((f) => !f.ok).map((f) => f.errores).join(' '));
+  };
+  // la boca de la máquina (5″) es menor que el ducto (6″): el ducto se une a la reducción con 6″ y la reducción a la boca con 5″
+  const boca = despiezar(UF.leer(planta([['N-1', 0, 0], ['N-2', 400, 0]], [['A-1', 'N-1', 'N-2', 6, 2]], [['COL', 'COLECTOR', 'N-1', 'BRIDA_EQUIPO', 6], ['M1', 'MAQUINA', 'N-2', 'BRIDA_EQUIPO', 5]])).lectura);
+  assert.deepEqual(juntas(boca, 'N-2'), ['JUNTA_BRIDADA DUCT-001+RED-001 6', 'JUNTA_EQUIPO RED-001+M1 5']);
+  cotiza(boca);
+  // un codo con cambio de Ø (8″ → 6″): la reducción va después del codo; el tramo de 6″ toca la reducción, no el codo
+  const codo = despiezar(UF.leer(planta([['N-1', 0, 0], ['N-2', 400, 0], ['N-3', 400, 400]], [['A-1', 'N-1', 'N-2', 8, 2], ['A-2', 'N-2', 'N-3', 6, 2]],
+    [['COL', 'COLECTOR', 'N-1', 'BRIDA_EQUIPO', 8], ['M1', 'MAQUINA', 'N-3', 'BRIDA_TALLER']])).lectura);
+  assert.deepEqual(codo.accesorios.map((a) => `${a.id} ${a.nodo_id}`), ['CODO-001 N-2', 'RED-001 N-2']);
+  assert.deepEqual(juntas(codo, 'N-2'), ['JUNTA_BRIDADA CODO-001+RED-001 8', 'JUNTA_BRIDADA DUCT-001+CODO-001 8', 'JUNTA_BRIDADA DUCT-002+RED-001 6']);
+  cotiza(codo);
+  // la manguera de la máquina es de 6″ y el ducto de 5″: adaptador de 6″ a 5″ en la punta, con su lado de 6″ liso, y manguera de 6″
+  const red = (boca6, respuestas) => despiezar(UF.leer(planta([['N-1', 0, 0], ['N-2', 400, 0]], [['A-1', 'N-1', 'N-2', 5, 2]],
+    [['COL', 'COLECTOR', 'N-1', 'BRIDA_EQUIPO', 5], ['M1', 'MAQUINA', 'N-2', 'MANGUERA', boca6]])).lectura, respuestas);
+  const sin = red(null);
+  const con = red(6);
+  const ad = con.accesorios.find((a) => a.nodo_id === 'N-2');
+  assert.deepEqual([ad.tipo, ad.diametro_entrada_in, ad.diametro_salida_in, ad.partida_cotizap.extremos_sin_brida], ['REDUCCION', 6, 5, ['D1']]);
+  assert.equal(ducto(con, 'A-1').longitud_neta_mm, r1(ducto(sin, 'A-1').longitud_neta_mm - C.cotizarPartida(ad.partida_cotizap, M).geometria.detalle.L_mm), 'el adaptador ocupa su largo del tramo');
+  assert.deepEqual([ducto(sin, 'A-1').extremo_fin, ducto(con, 'A-1').extremo_fin], ['LISO_MANGUERA', 'BRIDA'], 'el ducto ya no recibe la manguera: se une al adaptador');
+  assert.deepEqual(juntas(con, 'N-2'), ['JUNTA_BRIDADA DUCT-001+RED-001 5', 'JUNTA_MANGUERA RED-001+M1 6']);
+  assert.deepEqual(con.partidas_compradas.map((p) => [p.articulo_id, p.cantidad]), [['MANGUERA_6', 1], ['ABRAZADERA_MANGUERA', 2]]);
+  const t = con.alertas_ambiguedad.find((a) => a.codigo === 'TRANSICION_INSERTADA');
+  assert.deepEqual([t.severidad, t.respuesta.campo, t.respuesta.propuesta], ['ADVERTENCIA', 'boca_in', 6], 'anotada en el croquis: se pregunta');
+  cotiza(con);
+  // respondida del Ø del ducto, no hay adaptador; respondida de 6″, se usa sin preguntar
+  assert.ok(!red(6, { M1: { boca_in: 5 } }).accesorios.some((a) => a.nodo_id === 'N-2'));
+  assert.equal(red(null, { M1: { boca_in: 6 } }).alertas_ambiguedad.find((a) => a.codigo === 'TRANSICION_INSERTADA').severidad, 'INFO');
 });
 
 test('aPartidas: tramos, accesorios, soportes y compras, cada una con su pieza; todas se cotizan', () => {

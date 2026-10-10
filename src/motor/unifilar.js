@@ -46,6 +46,11 @@
   const CAMPOS = ['longitud_m', 'diametro_in', 'angulo_deg', 'posicion', 'boca_in', 'manguera_tramos', 'calibre', 'material', 'aceptado', 'encimado'];
   // Una nota junto a un tramo que dice que es vertical
   const NOTA_VERTICAL = /\b(SUBE|BAJA|BAJADA|SUBIDA)\b/i;
+  // Una nota en un nodo: compuerta de regulación en un tramo recto; reducción excéntrica (cara plana)
+  const NOTA_COMPUERTA = /\bCOMPUERTA\b/i;
+  const NOTA_EXCENTRICA = /\b(EXC[EÉ]NTRIC[AO]|EXC|CARA\s+PLANA)\b/i;
+  /** Lo que ocupa una compuerta de guillotina con sus dos cuellos (la mitad de cada lado). */
+  const LARGO_COMPUERTA_MM = 150;
 
   const r1 = (x) => Math.round(x * 10) / 10;
   const r2 = (x) => Math.round(x * 100) / 100;
@@ -276,6 +281,8 @@
       return t ? { valor: parseFloat(t.contenido_normalizado), texto: t } : null;
     };
     const notaVertical = (aid) => textos.find((t) => t.asociado_a === aid && t.confianza_ocr >= CONF_MIN && NOTA_VERTICAL.test(`${t.contenido_normalizado || ''} ${t.contenido_crudo || ''}`));
+    /** Una nota de un nodo que dice algo (compuerta, excéntrica). */
+    const notaEn = (nid, re) => textos.find((t) => t.asociado_a === nid && t.confianza_ocr >= CONF_MIN && t.tipo !== 'ANGULO' && re.test(`${t.contenido_normalizado || ''} ${t.contenido_crudo || ''}`));
     // la confianza de un ángulo anotado, como medida (para avisar si es dudoso)
     const comoMedida = (t) => ({ valor: parseFloat(t.contenido_normalizado), origen: t.origen === 'USUARIO' ? 'USUARIO' : 'OCR', confianza: t.confianza_ocr, texto_id: t.id });
 
@@ -468,13 +475,15 @@
 
     function agregarReduccion(nid, aMayor, aMenor, D1, D2, todoEnMenor) {
       const id = nuevoId('RED');
+      // «EXC» o «CARA PLANA» en el nodo: excéntrica de cara plana (la de los tramos horizontales en polvo)
+      const excentrica = notaEn(nid, NOTA_EXCENTRICA) ? 'CARA_PLANA' : 'NO';
       try {
-        const f = cotizarAcc({ familia: 'REDUCCION', D1_mm: r1(D1 * IN), D2_mm: r1(D2 * IN), excentrica: 'NO' });
+        const f = cotizarAcc({ familia: 'REDUCCION', D1_mm: r1(D1 * IN), D2_mm: r1(D2 * IN), excentrica });
         const Lr = f.geometria.detalle.L_mm;
         if (todoEnMenor) ocupar(aMenor, id, Lr); else { if (aMayor) ocupar(aMayor, id, Lr / 2); ocupar(aMenor, id, Lr / 2); }
         piezas.acc.push({
-          id, tipo: 'REDUCCION', nodo_id: nid, aristas: [aMayor, aMenor].filter(Boolean), diametro_entrada_in: D1, diametro_salida_in: D2, d_ramal_in: null, angulo: null, k_R: null, gajos: null, excentrica: false,
-          partida_cotizap: { ...base, familia: 'REDUCCION', D1_mm: r1(D1 * IN), D2_mm: r1(D2 * IN), excentrica: 'NO' },
+          id, tipo: 'REDUCCION', nodo_id: nid, aristas: [aMayor, aMenor].filter(Boolean), diametro_entrada_in: D1, diametro_salida_in: D2, d_ramal_in: null, angulo: null, k_R: null, gajos: null, excentrica: excentrica === 'CARA_PLANA',
+          partida_cotizap: { ...base, familia: 'REDUCCION', D1_mm: r1(D1 * IN), D2_mm: r1(D2 * IN), excentrica },
         });
         if (D2 / D1 < 0.5 && A.get(aMenor).diametro.origen !== 'USUARIO') {
           alerta('ADVERTENCIA', 'REDUCCION_GRANDE', [nid, id, aMenor], `La reducción de ${pulgadas(D1)} a ${pulgadas(D2)} en ${nid} es de más de la mitad.`, 'Suele ser una derivación o un diámetro mal leído; se cotiza como está.',
@@ -482,6 +491,26 @@
         }
         return { id, L: Lr };
       } catch (err) { errorMotor([nid], err); return null; }
+    }
+
+    /**
+     * Una compuerta de regulación (nota «COMPUERTA» en un nodo de un tramo recto del mismo Ø): se compra; ocupa
+     * LARGO_COMPUERTA_MM del tramo, la mitad de cada lado. Si el catálogo no la tiene, va con su precio por capturar.
+     */
+    function agregarCompuerta(nid, ap, ah, Dc) {
+      const id = nuevoId('COMP');
+      const art = `COMPUERTA_${Math.round(Dc)}`;
+      const enCatalogo = M.compras && M.compras.articulos && M.compras.articulos[art];
+      const partida = enCatalogo ? { familia: 'COMPRADO', descripcion: M.compras.articulos[art].descripcion, articulo_id: art, cantidad: 1 }
+        : { familia: 'COMPRADO', descripcion: `Compuerta de regulación de ${pulgadas(Dc)} (capture su precio)`, precio_compra_unitario: 0, cantidad: 1 };
+      if (!enCatalogo) {
+        alerta('ADVERTENCIA', 'COMPUERTA_SIN_CATALOGO', [nid, id], `No hay compuerta de ${pulgadas(Dc)} en el catálogo de compras (${art}).`,
+          'Se cotiza en $0: capture su precio en la partida o agréguela al catálogo de compras.', null);
+      }
+      ocupar(ap, id, LARGO_COMPUERTA_MM / 2);
+      ocupar(ah, id, LARGO_COMPUERTA_MM / 2);
+      piezas.acc.push({ id, tipo: 'COMPUERTA', nodo_id: nid, aristas: [ap, ah], diametro_entrada_in: Dc, diametro_salida_in: Dc, d_ramal_in: null, angulo: null, k_R: null, gajos: null, excentrica: null, partida_cotizap: partida });
+      return id;
     }
 
     function agregarCodo(nid, ap, ah, theta, angulo) {
@@ -527,6 +556,15 @@
         const rAng = Number(resp(nid, 'angulo_deg'));
         const Dp = D.get(p);
         const Dh = D.get(h[0]);
+        const notaCp = notaEn(nid, NOTA_COMPUERTA);
+        if (notaCp && colineal && Dp === Dh && !ann && !finito(rAng)) {
+          n.tipo = 'UNION_COLINEAL';
+          n.accesorio_id = agregarCompuerta(nid, p, h[0], Dp);
+          return;
+        }
+        if (notaCp) {
+          alerta('CONFIRMAR', 'COMPUERTA_NO_VA', [nid, notaCp.id], `La compuerta anotada en ${nid} no está en un tramo recto del mismo diámetro.`, 'No se cotiza: una compuerta va entre dos tramos rectos del mismo Ø.', `¿Dónde va la compuerta de ${nid}?`);
+        }
         if (colineal && !ann && !finito(rAng)) {
           if (Dp === Dh) { n.tipo = 'UNION_COLINEAL'; return; }
           n.tipo = 'CAMBIO_DIAMETRO';
@@ -694,11 +732,28 @@
       const aid = n.aristas[0];
       if (!aid || !D.has(aid)) return;
       const Dd = D.get(aid);
+      // la boca del equipo: la respondida o la anotada (en una toma con manguera, el Ø de la manguera)
+      const bocaR = Number(resp(e.id, 'boca_in'));
+      const bm = e.boca_diametro;
+      const bocaLeida = bm && finito(bm.valor) && bm.valor > 0 && bm.confianza >= CONF_MIN ? comercial(bm.unidad === 'mm' ? bm.valor / IN : bm.valor) : null;
       if (e.conexion === 'MANGUERA') {
-        extremoDe.set(n.id, 'LISO_MANGUERA');
-        const art = `MANGUERA_${Math.round(Dd)}`;
+        // una manguera de otro Ø que el ducto: un adaptador del taller en la punta (su lado liso, a la manguera)
+        const Dm = finito(bocaR) && bocaR > 0 ? bocaR : bocaLeida;
+        let adaptador = null;
+        if (Dm && Math.abs(Dm - Dd) > 1e-9) {
+          adaptador = agregarReduccion(n.id, null, aid, Math.max(Dm, Dd), Math.min(Dm, Dd), true);
+          if (adaptador) {
+            piezas.acc.find((x) => x.id === adaptador.id).partida_cotizap.extremos_sin_brida = [Dm > Dd ? 'D1' : 'D2'];
+            const anotada = !(finito(bocaR) && bocaR > 0) && bm.origen !== 'USUARIO';
+            alerta(anotada ? 'ADVERTENCIA' : 'INFO', 'TRANSICION_INSERTADA', [e.id, adaptador.id], `La manguera de «${e.nombre}» (${pulgadas(Dm)}${anotada ? ', anotada' : ''}) no es del diámetro del ducto (${pulgadas(Dd)}).`,
+              `Se agregó un adaptador de ${r1(adaptador.L)} mm en la punta: la manguera abraza su lado liso.`, anotada ? `¿La manguera de «${e.nombre}» es de ${pulgadas(Dm)}?` : null, anotada ? pregunta('NUMERO', e.id, 'boca_in', 'in', [], Dm) : null);
+          }
+        }
+        const Dh = adaptador ? Dm : Dd;
+        extremoDe.set(n.id, adaptador ? 'BRIDA' : 'LISO_MANGUERA');
+        const art = `MANGUERA_${Math.round(Dh)}`;
         if (!M.compras.articulos[art]) {
-          alerta('ADVERTENCIA', 'MANGUERA_SIN_LARGO', [e.id], `No hay manguera de ${pulgadas(Dd)} en el catálogo de compras para «${e.nombre}».`, 'No se cotiza la manguera: agréguela al catálogo o como partida comprada.', null);
+          alerta('ADVERTENCIA', 'MANGUERA_SIN_LARGO', [e.id], `No hay manguera de ${pulgadas(Dh)} en el catálogo de compras para «${e.nombre}».`, 'No se cotiza la manguera: agréguela al catálogo o como partida comprada.', null);
           return;
         }
         const tr = Number(resp(e.id, 'manguera_tramos'));
@@ -708,14 +763,11 @@
           alerta('ADVERTENCIA', 'MANGUERA_SIN_LARGO', [e.id], `La manguera a «${e.nombre}» no trae largo.`, `Se cuenta un tramo del catálogo («${M.compras.articulos[art].descripcion}») y una abrazadera en cada punta.`, `¿Cuántos tramos de manguera lleva «${e.nombre}»?`,
             pregunta('NUMERO', e.id, 'manguera_tramos', 'tramos', [], 1));
         }
-        compras.push({ equipo: e, nodo: n.id, arista: aid, D: Dd, articulo: art, tramos });
+        compras.push({ equipo: e, nodo: n.id, arista: aid, D: Dh, articulo: art, tramos, adaptador: adaptador ? adaptador.id : null });
       } else if (e.conexion === 'LISO') extremoDe.set(n.id, 'ABIERTO');
       else {
         extremoDe.set(n.id, 'BRIDA_EQUIPO');
         if (e.conexion === 'BRIDA_EQUIPO') {
-          const bocaR = Number(resp(e.id, 'boca_in'));
-          const bm = e.boca_diametro;
-          const bocaLeida = bm && finito(bm.valor) && bm.valor > 0 && bm.confianza >= CONF_MIN ? comercial(bm.unidad === 'mm' ? bm.valor / IN : bm.valor) : null;
           const boca = finito(bocaR) && bocaR > 0 ? bocaR : bocaLeida;
           if (finito(bocaR) && bocaR > 0) resuelta('CONEXION_EQUIPO', [e.id], `«${e.nombre}»: boca de ${pulgadas(bocaR)}.`, pregunta('NUMERO', e.id, 'boca_in', 'in', [], bocaR));
           else if (bocaLeida) {
@@ -833,20 +885,25 @@
       };
       const ductoDe = (aid) => ductos.find((d) => d.arista_id === aid);
       const sueltoEn = (d, nodoId) => (d && d.nodo_fin === nodoId && d.armado.ajuste_mm > 0 && d.extremo_fin !== 'LISO_MANGUERA' && d.extremo_fin !== 'ABIERTO' ? 1 : 0);
-      // en los nodos: pieza contra pieza (una reducción pegada a un codo o a un equipo se une a la pieza vecina)
+      // en los nodos: cada pieza con el tramo que toca (si una reducción pegada a la pieza va en medio, el tramo toca la reducción)
+      const enMedio = (x, aid) => !(x.tipo === 'REDUCCION' && x.aristas.length === 1)
+        && acc.some((y) => y.tipo === 'REDUCCION' && y.aristas.length === 1 && y.nodo_id === x.nodo_id && y.aristas[0] === aid);
       acc.forEach((x) => x.aristas.forEach((aid) => {
         const d = ductoDe(aid);
-        if (!d) return;
-        const Din = x.tipo === 'REDUCCION' && x.aristas.length === 1 ? x.diametro_salida_in : d.diametro_in;
-        junta('JUNTA_BRIDADA', x.nodo_id, [d.id, x.id], Din, 2, sueltoEn(d, x.nodo_id), 'NODO');
+        if (!d || enMedio(x, aid)) return;
+        // la compuerta se compra con sus bridas: del lado del ducto va la media junta del taller
+        if (x.tipo === 'COMPUERTA') junta('JUNTA_EQUIPO', x.nodo_id, [d.id, x.id], d.diametro_in, 1, sueltoEn(d, x.nodo_id), 'NODO');
+        else junta('JUNTA_BRIDADA', x.nodo_id, [d.id, x.id], d.diametro_in, 2, sueltoEn(d, x.nodo_id), 'NODO');
       }));
-      // reducciones pegadas a un codo o a un equipo: su lado mayor se une al codo o a la boca
+      // reducciones pegadas a un codo o a un equipo: su otro lado (el que no da al tramo) se une al codo o a la boca; el
+      // adaptador de una manguera, a la manguera (sin aros)
       acc.filter((x) => x.tipo === 'REDUCCION' && x.aristas.length === 1).forEach((x) => {
+        const otro = Math.abs(ctx.D.get(x.aristas[0]) - x.diametro_entrada_in) < 1e-9 ? x.diametro_salida_in : x.diametro_entrada_in;
         const vecino = acc.find((y) => y.nodo_id === x.nodo_id && y.id !== x.id);
-        if (vecino) junta('JUNTA_BRIDADA', x.nodo_id, [vecino.id, x.id], x.diametro_entrada_in, 2, 0, 'NODO');
+        if (vecino) junta('JUNTA_BRIDADA', x.nodo_id, [vecino.id, x.id], otro, 2, 0, 'NODO');
         else {
           const eq = L.equipos.find((e) => e.nodo_id === x.nodo_id);
-          if (eq) junta('JUNTA_EQUIPO', x.nodo_id, [x.id, eq.id], x.diametro_entrada_in, 1, 0, 'NODO');
+          if (eq && eq.conexion !== 'MANGUERA') junta('JUNTA_EQUIPO', x.nodo_id, [x.id, eq.id], otro, 1, 0, 'NODO');
         }
       });
       // a los equipos con brida (si no hay una reducción en medio)
@@ -868,7 +925,7 @@
       (ctx.compras || []).forEach((c) => {
         const d = ductoDe(c.arista);
         elementos.push({
-          id: id3('JNT', elementos.length + 1), tipo: 'JUNTA_MANGUERA', nodo_id: c.nodo, piezas: [d ? d.id : c.arista, c.equipo.id], diametro_in: c.D, aros: 0, aros_sueltos: 0, perfil: null,
+          id: id3('JNT', elementos.length + 1), tipo: 'JUNTA_MANGUERA', nodo_id: c.nodo, piezas: [c.adaptador || (d ? d.id : c.arista), c.equipo.id], diametro_in: c.D, aros: 0, aros_sueltos: 0, perfil: null,
           solera_por_aro_mm: null, barrenos_por_aro: null, tornillos_juegos: 0, tornillo: null, sellador_ml: 0, abrazaderas_manguera: 2, incluido_en_partidas: 'NO', origen: 'NODO', articulo_manguera: c.articulo,
           partida_cotizap: null,
         });
@@ -1014,5 +1071,5 @@
     return out;
   }
 
-  return { leer, despiezar, aPartidas, pendientes, respuestasValidas, CAMPOS, COMERCIALES_IN, SEVERIDADES };
+  return { leer, despiezar, aPartidas, pendientes, respuestasValidas, CAMPOS, COMERCIALES_IN, SEVERIDADES, LARGO_COMPUERTA_MM };
 }));

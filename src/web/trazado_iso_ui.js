@@ -22,6 +22,7 @@
   const $ = (s, r) => (r || document).querySelector(s);
   const TZ = () => C.trazadoIso;
   const TB = () => C.trazadoTablero;
+  const UF = () => C.unifilar;
   const E = () => W.estadoApp;
   const M = () => E().M;
   const NS = 'http://www.w3.org/2000/svg';
@@ -1251,6 +1252,41 @@
     ];
   }
 
+  /** La yarda de la cotización (como en el dibujo unifilar): la del encabezado o la de las tablas. */
+  function yarda() {
+    const y = C.cotizador.yardaDeCotizacion(E().cot, M()).yarda_mm;
+    return Math.round(y === undefined ? M().proceso.armado_yardas.yarda_defecto_mm : y) === 1220 ? 1220 : 914.4;
+  }
+
+  /**
+   * El trazo a partidas (§5.6): el despiece con las mismas reglas del taller que la foto y el dibujo unifilar, lo que hay que
+   * saber, y el botón que lo lleva al diálogo del despiece y a la cotización.
+   */
+  function seccionPartidas() {
+    const s = ui.s;
+    const r = TB().despiece(s, yarda());
+    const tit = h('h4', null, 'Pasar a la cotización');
+    if (r.error) return [tit, h('p', { class: 'ti-semaforo ti-sem-ambar', id: 'ti-part-estado' }, r.error)];
+    const R = r.bom.resumen;
+    const pend = UF().pendientes(r.bom).length;
+    const n = R.estado === 'NO_COTIZABLE' ? 0 : UF().aPartidas(r.bom).length;
+    const preguntas = `${pend} ${pend === 1 ? 'pregunta' : 'preguntas'}`;
+    const estado = {
+      DEFINITIVA: ['verde', `Despiece definitivo: ${n} partidas (${R.conteo.ductos_rectos} tramos rectos, ${R.conteo.accesorios} accesorios, ${R.conteo.menulas} ménsulas y las compras).`],
+      PRELIMINAR: ['ambar', `Despiece preliminar: ${n} partidas con lo que proponen las reglas; ${preguntas} por responder en el despiece.`],
+      NO_COTIZABLE: ['rojo', `El despiece todavía no se puede cotizar: ${preguntas} por responder, alguna bloquea.`],
+    }[R.estado];
+    const ya = E().cot.partidas.filter((p) => p.unifilar_id).length;
+    return [
+      tit,
+      h('p', { class: `ti-semaforo ti-sem-${estado[0]}`, id: 'ti-part-estado' }, estado[1]),
+      r.avisos.length ? h('ul', { class: 'ti-lista ti-avisos', id: 'ti-part-avisos' }, r.avisos.map((a) => h('li', null, a))) : null,
+      ya ? h('p', { class: 'ti-nota', id: 'ti-part-ya' }, `La cotización ya tiene ${ya} ${ya === 1 ? 'partida importada' : 'partidas importadas'}: al pasar el trazo se muestra el despiece nuevo para reemplazarlas.`) : null,
+      h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-primario', id: 'ti-pasar', onclick: () => W.unifilarUI.desdeTrazado(r.lectura, r.respuestas, r.avisos) }, 'Pasar a la cotización')),
+      h('p', { class: 'ti-nota' }, `Con las reglas del taller (las de la foto y del dibujo unifilar): los tramos por yardas de ${r.lectura.metadatos.yarda_mm === 1220 ? '4 ft' : '3 ft'}, los codos, los injertos, las reducciones, las bridas, las ménsulas y las compras. En el despiece se contestan las preguntas que queden.`),
+    ];
+  }
+
   function inspectorSalida() {
     const s = ui.s;
     const ex = TB().exportar(s);
@@ -1266,7 +1302,8 @@
       setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
     };
     return h('section', { class: 'ti-ins' },
-      titulo('Salida', 'El cálculo de pérdidas con el balanceo y el ventilador, y el JSON del sistema (§3 de la especificación)'),
+      titulo('Salida', 'Las partidas de la cotización, el cálculo de pérdidas con el balanceo y el ventilador, y el JSON del sistema (§3 de la especificación)'),
+      seccionPartidas(),
       seccionCalculo(),
       h('h4', null, 'El JSON del sistema'),
       ex.error ? h('p', { class: 'ti-semaforo ti-sem-ambar', id: 'ti-salida-estado' }, ex.error)
@@ -1278,8 +1315,7 @@
         h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-renumerar', onclick: () => aplicar((t) => TZ().renumerar(t, M()), 'Identificadores renumerados en el orden de la red.') }, 'Renumerar')),
       h('h4', null, 'Abrir un sistema'),
       area,
-      h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-abrir-json', onclick: () => { if (TB().importar(s, area.value)) cambio(); else pintarEstado(); } }, 'Abrir este JSON')),
-      h('p', { class: 'ti-nota' }, 'Pasar el trazo a partidas de la cotización llega en la siguiente etapa: las reglas del unifilar todavía leen sólo tramos horizontales y verticales.'));
+      h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-abrir-json', onclick: () => { if (TB().importar(s, area.value)) cambio(); else pintarEstado(); } }, 'Abrir este JSON')));
   }
 
   function inspectorAyuda() {
@@ -1293,7 +1329,7 @@
           h('li', null, 'Acoples: con la toma seleccionada, F manguera o B brida. Arrastre el rombo (altura) y el círculo (desvío).'),
           h('li', null, 'Trazado: presione en una toma con brida, un punto de transición, la boca o un extremo y arrastre; el trazo sigue en cadena. ↑ fija Z, → X, ← Y, H horizontal, V vertical; teclee 3.25, <45, @135 o ^45 y Entrar; Tab cambia de opción; Mayús conserva la dirección; Esc termina.'),
           h('li', null, 'Cerca del tronco o de la boca, el imán propone la llegada: Tab alterna, clic acepta.'),
-          h('li', null, 'Validar: dimensionar por caudal y revisar los problemas. Salida: el cálculo de pérdidas, el balanceo, el ventilador y el JSON.'))),
+          h('li', null, 'Validar: dimensionar por caudal y revisar los problemas. Salida: pasar el trazo a la cotización, el cálculo de pérdidas, el balanceo, el ventilador y el JSON.'))),
       h('p', { class: 'ti-nota' }, 'Vista: Q y E giran el isométrico; 1 iso, 2 planta, 3 y 4 elevaciones; F o 0 encuadra; rueda o + y − acercan; Espacio y arrastrar mueve. Ctrl+Z y Ctrl+Y deshacen y rehacen.'));
   }
 
