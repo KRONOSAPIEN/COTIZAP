@@ -275,6 +275,37 @@
     R.puertos.forEach((p) => { if (p.rol === 'TOMA') factor.set(p.id, 1); });
     const tomasDe = new Map();
 
+    /**
+     * La compuerta del tramo propio de una corriente (de la confluencia hacia arriba, hasta la toma o la confluencia anterior):
+     * { pieza, tramos } con los tramos desde el que entra a la compuerta hasta el que llega a la confluencia, o null.
+     */
+    const compuertaDe = (t) => {
+      const camino = [t];
+      for (let cur = t; ;) {
+        const n = cur.nodo_aguas_arriba;
+        const inc = R.entran.get(n) || [];
+        const pz = (R.piezasEn.get(n) || []).find((a) => a.tipo === 'COMPUERTA');
+        if (pz && inc.length === 1) return { pieza: pz, tramos: [inc[0], ...camino] };
+        if (inc.length !== 1) return null;
+        cur = inc[0];
+        camino.unshift(cur);
+      }
+    };
+    /** Cierra la compuerta lo que falta (dP, en Pa): sube la pérdida del tramo que entra a ella y la succión de ahí a la confluencia. */
+    const cerrar = (c, cp, dP) => {
+      cp.tramos.forEach((t, i) => {
+        const f = fila.get(t.id);
+        if (i === 0) {
+          const l = f.locales.find((x) => x.que === 'COMPUERTA' && x.id === cp.pieza.id);
+          l.Pa += dP;
+          l.K = l.Pa / f.pv;
+          f.local += dP;
+        } else f.sp_inicio += dP;
+        f.sp_final += dP;
+      });
+      c.cierre = { pieza: cp.pieza.id, tramo: cp.tramos[0].id, Pa: dP, K: dP / fila.get(cp.tramos[0].id).pv };
+    };
+
     R.orden.forEach((t) => {
       const up = t.nodo_aguas_arriba;
       const dn = t.nodo_aguas_abajo;
@@ -311,11 +342,19 @@
         let Qout = 0;
         let pvw = 0;
         cor.forEach((c) => {
-          const rel = gob.f.sp_final / c.f.sp_final;
-          c.k = c === gob || rel <= UMBRAL_NINGUNA ? 1 : Math.sqrt(rel);
+          c.sp0 = c.f.sp_final;
+          c.rel = gob.f.sp_final / c.f.sp_final;
+          c.k = 1;
+          if (c === gob || c.rel <= UMBRAL_NINGUNA) return;
+          // con una compuerta en su tramo propio, se cierra lo que falta y la corriente se queda con su caudal
+          const cp = compuertaDe(c.t);
+          if (cp) { cerrar(c, cp, gob.f.sp_final - c.f.sp_final); return; }
+          c.k = Math.sqrt(c.rel);
+          tomasDe.get(c.t.id).forEach((pid) => factor.set(pid, factor.get(pid) * c.k));
+        });
+        cor.forEach((c) => {
           Qout += c.f.Q * c.k;
           pvw += c.f.Q * c.k * c.f.pv * c.k * c.k;
-          if (c.k !== 1) tomasDe.get(c.t.id).forEach((pid) => factor.set(pid, factor.get(pid) * c.k));
         });
         pvw /= Qout;
         f.Q = Qout;
@@ -401,7 +440,9 @@
         if (l) a.perdida = { modelo: l.que, K_paso: redondo(l.K, 4), K_ramal: null, referencia: `ACGIH: ${l.que === 'EXPANSION' ? 'expansión' : 'contracción'} de ${l.d1}″ a ${l.d2}″ con semiángulo de ${redondo(l.alfa, 2)}°, sobre la pv de la sección menor` };
         else a.perdida = { modelo: P.modelo || 'EXPANSION', K_paso: 0, K_ramal: null, referencia: 'Sin cambio de sección: sin pérdida' };
       } else if (a.tipo === 'COMPUERTA') {
-        a.perdida = { modelo: 'COMPUERTA', K_paso: op.tabla.compuerta.K, K_ramal: null, referencia: op.tabla.compuerta.referencia };
+        const cierre = h.conf.flatMap((c) => c.corrientes).map((c) => c.cierre).find((x) => x && x.pieza === a.id);
+        a.perdida = cierre ? { modelo: 'COMPUERTA', K_paso: redondo(cierre.K, 4), K_ramal: null, referencia: `Cerrada hasta K ${num(cierre.K, 2)} (${num(cierre.Pa, 0)} Pa) para balancear; abierta, sin pérdida` }
+          : { modelo: 'COMPUERTA', K_paso: op.tabla.compuerta.K, K_ramal: null, referencia: op.tabla.compuerta.referencia };
       }
     });
 
@@ -413,12 +454,13 @@
         const par = [c.gob, menor];
         const tronco = par.find((x) => x.rol === 'ENTRADA') || par.find((x) => x.rol === 'RAMAL' && par.some((y) => y.rol === 'RAMAL_2')) || c.gob;
         const ramal = par.find((x) => x !== tronco);
-        const rel = c.gob.f.sp_final / menor.f.sp_final;
-        let accion = rel <= UMBRAL_NINGUNA ? 'NINGUNA' : rel <= UMBRAL_AJUSTE ? 'AJUSTAR_CAUDAL' : 'REDIMENSIONAR';
+        const rel = menor.rel;
+        let accion = rel <= UMBRAL_NINGUNA ? 'NINGUNA' : menor.cierre ? 'COMPUERTA' : rel <= UMBRAL_AJUSTE ? 'AJUSTAR_CAUDAL' : 'REDIMENSIONAR';
         let sugerencia = null;
         const qa = menor.f.Q;
         const qb = menor.f.Q * menor.k;
-        if (accion !== 'NINGUNA') sugerencia = `${menor.t.id} pasa de ${num(qa, 0)} a ${num(qb, 0)} m³/h (+${num((menor.k - 1) * 100, 1)} %) para igualar la succión de ${c.gob.t.id}`;
+        if (menor.cierre) sugerencia = `Cierre la compuerta ${menor.cierre.pieza} de ${menor.cierre.tramo} hasta K ${num(menor.cierre.K, 2)} (${num(menor.cierre.Pa, 0)} Pa) para igualar la succión de ${c.gob.t.id}: ${menor.t.id} se queda con sus ${num(qa, 0)} m³/h.`;
+        else if (accion !== 'NINGUNA') sugerencia = `${menor.t.id} pasa de ${num(qa, 0)} a ${num(qb, 0)} m³/h (+${num((menor.k - 1) * 100, 1)} %) para igualar la succión de ${c.gob.t.id}`;
         if (accion === 'AJUSTAR_CAUDAL') sugerencia += ': se acepta así.';
         if (accion === 'REDIMENSIONAR') {
           const r = redimensionar(s, R, air, op, c, menor, comerciales);
@@ -426,7 +468,7 @@
           sugerencia += `. ${r.texto}`;
         }
         balance.push({
-          nodo: c.nodo, tramo_ramal: ramal.t.id, tramo_tronco: tronco.t.id, sp_ramal_Pa: redondo(ramal.f.sp_final, 2), sp_tronco_Pa: redondo(tronco.f.sp_final, 2),
+          nodo: c.nodo, tramo_ramal: ramal.t.id, tramo_tronco: tronco.t.id, sp_ramal_Pa: redondo(ramal.sp0, 2), sp_tronco_Pa: redondo(tronco.sp0, 2),
           relacion: redondo(rel, 3), accion, corriente_menor: menor.t.id, caudal_m3_h: redondo(qa, 1), caudal_corregido_m3_h: redondo(qb, 1), sugerencia,
         });
       });
@@ -503,8 +545,8 @@
       if (!ok) break;
       const h2 = hojaDe(s, R, air, op, diam);
       const c2 = h2.conf.find((x) => x.nodo === c.nodo);
-      const a = c2.corrientes.find((x) => x.t.id === menor.t.id).f.sp_final;
-      const b = c2.corrientes.filter((x) => x.t.id !== menor.t.id).reduce((m, x) => Math.max(m, x.f.sp_final), 0);
+      const a = c2.corrientes.find((x) => x.t.id === menor.t.id).sp0;
+      const b = c2.corrientes.filter((x) => x.t.id !== menor.t.id).reduce((m, x) => Math.max(m, x.sp0), 0);
       const rel = Math.max(a, b) / Math.min(a, b);
       const v = Math.max(...propios.map((t) => h2.fila.get(t.id).v));
       const cand = { diam, rel, v };

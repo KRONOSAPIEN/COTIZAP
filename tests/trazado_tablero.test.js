@@ -590,3 +590,31 @@ test('Salida con el cálculo de pérdidas (etapa 4): ventilador, tomas, balance,
   assert.deepEqual([b.borrador, b.calculado], [true, false], 'el borrador sale sin cálculo');
   assert.equal(JSON.parse(b.texto).resultados, null);
 });
+
+test('Compuerta en el tablero: la herramienta (G) en un tramo, la que pide el balanceo, su nombre y quitarla con Borrar', () => {
+  const s = nuevoTablero();
+  TB.reemplazar(s, TB.ejemplo(M), 'ejemplo');
+  TB.elegir(s, 'COMPUERTA');
+  assert.match(s.msg, /Toque un tramo recto donde va la compuerta/);
+  assert.equal(TB.compuertaEn(s, null), false);
+  assert.ok(TB.compuertaEn(s, { tipo: 'TRAMO', id: 'TR-002', s_mm: 3020 }));
+  assert.match(s.msg, /^Compuerta CP-001 en N-008: abierta\. En la salida, el balanceo dice cuánto cerrarla\.$/);
+  assert.deepEqual(TB.piezasDe(s, 'N-008').map((p) => [p.corto, p.nombre]), [['Compuerta', 'Compuerta de regulación de 6″ (150 mm con sus cuellos)']]);
+  assert.deepEqual(s.g.pos.get('N-008'), { x: 7750, y: 0, z: 3000 }, 'a 3 m del codo, en la rejilla de 50 mm');
+  // Borrar en su nodo la quita
+  assert.ok(TB.borrar(s, { tipo: 'NODO', id: 'N-008' }));
+  assert.equal(s.msg, 'Se quitó la compuerta de N-008.');
+  assert.equal(s.t.tramos.length, 6);
+  // el balanceo pide compuerta: el botón la pone a la mitad del tramo propio, y el cálculo la cierra
+  assert.ok(TB.hacer(s, (t) => TZ.editarPuerto(t, M, 'PU-02', { coef_entrada_K: 0 }), ''));
+  const b0 = TB.informeCalculo(s).balance[0];
+  assert.deepEqual([b0.accion, b0.cierre], ['COMPUERTA', null]);
+  assert.ok(TB.compuertaSugerida(s, b0.corriente_menor));
+  assert.match(s.msg, /^Compuerta CP-\d{3} a la mitad de TR-002: el balanceo dice cuánto cerrarla\.$/);
+  const b1 = TB.informeCalculo(s).balance[0];
+  assert.equal(b1.accion, 'COMPUERTA');
+  assert.ok(b1.cierre && b1.cierre.K > 0.5 && b1.cierre.K < 1.2, JSON.stringify(b1.cierre));
+  // si no cabe en ningún tramo propio, lo dice
+  assert.equal(TB.compuertaSugerida(s, 'TR-004'), false, 'en una manguera no');
+  assert.match(s.msg, /No cabe una compuerta en el tramo propio de TR-004/);
+});

@@ -2916,11 +2916,41 @@ const ok = (cond, msg) => {
     await soltar();
     await p.waitForFunction(() => { const li = document.querySelector('#ti-calc-balance li'); return li && li.dataset.accion === 'COMPUERTA'; }, null, { timeout: 3000 }).catch(() => {});
     ok(/Compuerta en TR-002, poco recomendable con polvo abrasivo/.test(await p.locator('#ti-calc-balance li').innerText()), 'con K = 0 en la sierra, compuerta (y el porqué)');
+    // «Poner compuerta»: va a la mitad del tramo y el balanceo dice cuánto cerrarla; la sierra se queda con su caudal
+    await p.locator('.ti-calc-compuerta[data-tramo="TR-002"]').click();
+    await p.waitForFunction(() => /Cierre la compuerta/.test((document.querySelector('#ti-calc-balance li') || {}).textContent || ''), null, { timeout: 3000 }).catch(() => {});
+    const cierre = await p.locator('#ti-calc-balance li').innerText();
+    ok(/Cierre la compuerta CP-001 de TR-002 hasta K 0[.,]88 \(159 Pa\)/.test(cierre) && /se queda con sus 1300 m³\/h/.test(cierre), `la compuerta se cierra lo que falta (${cierre.slice(0, 120)})`);
+    ok((await p.locator('#ti-lienzo .ti-pieza-txt').allTextContents()).includes('Compuerta') && await p.locator('#ti-b-compuerta .ti-n').innerText() === '1', 'la compuerta se ve en el lienzo y en la paleta');
+    ok(/2,200 m³\/h/.test(await p.locator('.ti-calc-vent').innerText()), 'al ventilador llega el caudal de diseño');
     // deshacer regresa al ejemplo
+    await p.keyboard.press('Control+z');
     await p.keyboard.press('Control+z');
     await p.waitForFunction(() => { const li = document.querySelector('#ti-calc-balance li'); return li && li.dataset.accion === 'AJUSTAR_CAUDAL'; }, null, { timeout: 3000 }).catch(() => {});
     const sis = await R(() => JSON.stringify(window.COTIZAP.perdidas.calcular(window.COTIZAP.trazadoIso.aSistema(window.COTIZAP.web.trazadoUI.estado().t, window.COTIZAP.web.estadoApp.M)).sistema));
     ok(sis === JSON.stringify(EJ), 'con deshacer, el ejemplo calculado otra vez');
+    // la herramienta Compuerta (G) en el ramal, y quitarla desde el inspector de su nodo
+    await soltar();
+    await p.keyboard.press('g');
+    const q6 = await R(() => {
+      const s = window.COTIZAP.web.trazadoUI.estado();
+      const t = s.g.tramos.get('TR-006');
+      const a = s.g.pos.get(t.a);
+      const b = s.g.pos.get(t.b);
+      const q = window.COTIZAP.trazadoTablero.pantalla(s, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 });
+      const r = document.querySelector('#ti-lienzo').getBoundingClientRect();
+      return { x: r.left + (q.x * r.width) / s.ancho, y: r.top + (q.y * r.height) / s.alto };
+    });
+    await p.mouse.click(q6.x, q6.y);
+    const msgG = await p.locator('#ti-msg').innerText();
+    ok(/^Compuerta CP-\d{3} en N-\d{3}: abierta/.test(msgG), `con G y un clic en el ramal, la compuerta (${msgG})`);
+    const nodoG = msgG.match(/en (N-\d{3})/)[1];
+    await p.keyboard.press('s');
+    await R((nid) => { const s = window.COTIZAP.web.trazadoUI.estado(); s.sel = { tipo: 'NODO', id: nid }; window.COTIZAP.web.trazadoUI.render(); }, nodoG);
+    ok(/Abierta: el balanceo de la salida dice si hay que cerrarla/.test(await p.locator('#ti-inspector').innerText()), 'en el ramal que manda, la compuerta queda abierta');
+    await p.locator('#ti-n-quitar-compuerta').click();
+    const sinG = await R(() => JSON.stringify(window.COTIZAP.perdidas.calcular(window.COTIZAP.trazadoIso.aSistema(window.COTIZAP.web.trazadoUI.estado().t, window.COTIZAP.web.estadoApp.M)).sistema));
+    ok(new RegExp(`^Se quitó la compuerta de ${nodoG}\\.$`).test(await p.locator('#ti-msg').innerText()) && sinG === JSON.stringify(EJ), 'quitarla regresa exactamente al ejemplo');
     // una toma sin caudal: el cálculo dice qué falta
     await p.locator('#ti-calc-tomas tr[data-puerto="PU-03"] button').click();
     await p.fill('#ti-p-q', '');

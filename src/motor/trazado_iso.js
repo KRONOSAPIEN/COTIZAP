@@ -63,7 +63,9 @@
   const PREFIJO = { CODO: 'CO', REDUCCION: 'RE', ADAPTADOR: 'AD', INJERTO: 'IN', REDUCCION_INJERTO: 'RI', PANTALON: 'PA', T_90: 'TE', COMPUERTA: 'CP' };
   const ORDEN_PIEZA = ['CODO', 'REDUCCION', 'ADAPTADOR', 'INJERTO', 'REDUCCION_INJERTO', 'T_90', 'PANTALON', 'COMPUERTA'];
   const SEVERIDADES = ['BLOQUEANTE', 'ERROR', 'AVISO', 'INFO'];
-  const PASO_EQUIPO_MM = 100; // los equipos se separan en la rejilla del piso
+  const PASO_EQUIPO_MM = 100;
+  /** La compuerta de guillotina con sus dos cuellos: lo que ocupa del tramo (la mitad de cada lado). */
+  const LARGO_COMPUERTA_MM = 150; // los equipos se separan en la rejilla del piso
 
   class TrazadoError extends Error {
     constructor(codigo, mensaje, elementos, sugerencia) {
@@ -705,6 +707,9 @@
       const ad = g.ady.get(nid);
       const rig = ad.filter((x) => rigido(x.tramo)).map((x) => x.tramo);
       const pid = g.puertoDeNodo.get(nid);
+      const sinCompuerta = (porque) => { if (nd.compuerta) prob('COMPUERTA_NO_VA', `La compuerta de ${nid} va en un tramo recto del mismo Ø: ${porque}.`, [nid], 'Quítela de ahí y póngala en un tramo recto.'); };
+      if (pid || g.pt.has(nid)) sinCompuerta(pid ? 'ahí está la brida del equipo' : 'ahí empieza la manguera');
+      else if (rig.length !== 2 || rig.length !== ad.length) sinCompuerta(rig.length > 2 ? 'ahí hay una derivación' : 'ahí termina el ducto');
       if (pid || g.pt.has(nid)) {
         g.tipo.set(nid, pid ? 'PUERTO' : 'TRANSICION');
         if (!pid) {
@@ -745,6 +750,16 @@
         if (conocido && Dout < Din) prob('DIAMETRO_DECRECE', `Hacia el colector el diámetro no baja: en ${nid} el tramo anterior (${ti.id}) es de ${pulgadas(Din)} y el siguiente (${to.id}) de ${pulgadas(Dout)}.`, [nid, ti.id, to.id], `Suba ${to.id} a ${pulgadas(Din)} o más.`);
         if (th < TOL_ANG) {
           g.tipo.set(nid, 'UNION');
+          if (nd.compuerta && Din !== Dout) sinCompuerta(`ahí cambia de ${pulgadas(Din)} a ${pulgadas(Dout)}`);
+          else if (nd.compuerta) {
+            const pz = pieza('COMPUERTA', nid, {
+              conexiones: [{ rol: 'ENTRADA', tramo: ti.id, diametro_in: Din }, { rol: 'SALIDA', tramo: to.id, diametro_in: Dout }],
+              geometria: { ...geomVacia(), largo_mm: LARGO_COMPUERTA_MM },
+              perdida: { modelo: 'COMPUERTA', K_paso: null, K_ramal: null, referencia: 'Compuerta de regulación: abierta no pierde; el balanceo dice cuánto cerrarla' }, familia_cotizap: null,
+            });
+            ocupar(pz, ti, LARGO_COMPUERTA_MM / 2, nid);
+            ocupar(pz, to, LARGO_COMPUERTA_MM / 2, nid);
+          }
           if (Din !== Dout) {
             const mayor = Din > Dout ? ti : to;
             const menor = mayor === ti ? to : ti;
@@ -754,6 +769,7 @@
           return;
         }
         g.tipo.set(nid, 'VERTICE');
+        sinCompuerta('ahí el ducto da vuelta');
         const c = cerca(th, angCodo);
         if (c === undefined) {
           prob('GIRO_NO_FABRICABLE', th > 179.9 ? `En ${nid} el ducto regresa sobre sí mismo.` : `En ${nid} el ducto da vuelta ${n(th, 1)}°: el taller hace codos a ${lista(angCodo.map((a) => `${a}°`))}.`, [nid, ti.id, to.id],
@@ -918,7 +934,7 @@
       if (sueltos.length) { const s = new Set(sueltos.map((x) => x.id)); m.nodos = m.nodos.filter((x) => !s.has(x.id)); }
       for (const x of m.nodos) {
         const ts = grado.get(x.id);
-        if (x.puerto || x.ancla || pts.has(x.id) || ts.length !== 2 || !ts.every(rigido)) continue;
+        if (x.puerto || x.ancla || x.compuerta || pts.has(x.id) || ts.length !== 2 || !ts.every(rigido)) continue;
         const [t1, t2] = ts[0].id < ts[1].id ? ts : [ts[1], ts[0]];
         if (t1.diametro_in !== t2.diametro_in || t1.material !== t2.material || t1.calibre !== t2.calibre || t1.diametro_bloqueado !== t2.diametro_bloqueado) continue;
         const o1 = t1.a === x.id ? t1.b : t1.a;
@@ -950,7 +966,7 @@
       const previo = m.piezas[pz.nodo] && m.piezas[pz.nodo][pz.tipo];
       pz.id = previo || nuevoId(m, PREFIJO[pz.tipo]);
       (nuevo[pz.nodo] = nuevo[pz.nodo] || {})[pz.tipo] = pz.id;
-      if (!previo) {
+      if (!previo && pz.tipo !== 'COMPUERTA') { // la compuerta la pone quien traza: no es una pieza que salió sola
         const que = { CODO: `Codo de ${pz.geometria.angulo_deg}°`, REDUCCION: `Reducción de ${pulgadas(pz.D1)} a ${pulgadas(pz.D2)}`, ADAPTADOR: `Adaptador de ${pulgadas(pz.D_puerto)} a ${pulgadas(pz.conexiones[0].diametro_in)}`,
           INJERTO: `Injerto a ${pz.geometria.angulo_deg}°`, REDUCCION_INJERTO: `Reducción con injerto a ${pz.geometria.angulo_deg}°`, T_90: 'T a 90°' }[pz.tipo] || pz.tipo;
         const codigo = { CODO: 'CODO_INSERTADO', REDUCCION: 'REDUCCION_INSERTADA', ADAPTADOR: 'ADAPTADOR_INSERTADO' }[pz.tipo] || 'DERIVACION_INSERTADA';
@@ -1971,6 +1987,39 @@
     return terminar(m, M);
   }
 
+  /**
+   * Pone una compuerta de regulación (§4.3, bloque Compuerta) en un punto de un tramo recto ({ tramo, s_mm }: lo parte ahí) o
+   * en un nodo que ya une dos tramos rectos del mismo Ø. Ocupa LARGO_COMPUERTA_MM del tramo, la mitad de cada lado, y el
+   * cálculo de pérdidas dice cuánto cerrarla para balancear.
+   */
+  function ponerCompuerta(t0, M, desde) {
+    const m = inicio(t0);
+    let nodo;
+    if (esObjeto(desde) && desde.tramo !== undefined) {
+      const t = tramoDe(m, desde.tramo);
+      dato(rigido(t), 'La compuerta va en el ducto rígido, no en la manguera.', [t.id]);
+      dato(finito(desde.s_mm), 'Falta en qué punto del tramo va la compuerta.');
+      nodo = partir(m, calcular(m, M), t.id, desde.s_mm);
+    } else {
+      dato(typeof desde === 'string', 'La compuerta va en un punto de un tramo o en un nodo.');
+      nodo = desde;
+    }
+    const nd = nodoDe(m, nodo);
+    dato(!nd.compuerta, `En ${nodo} ya hay una compuerta.`, [nodo]);
+    nd.compuerta = true;
+    marcar(m, 'ponerCompuerta', { nodo });
+    return terminar(m, M);
+  }
+  /** Quita la compuerta de un nodo; si los dos tramos siguen en línea, se funden otra vez en uno. */
+  function quitarCompuerta(t0, M, nodoId) {
+    const m = inicio(t0);
+    const nd = nodoDe(m, nodoId);
+    dato(nd.compuerta, `En ${nodoId} no hay compuerta.`, [nodoId]);
+    delete nd.compuerta;
+    marcar(m, 'quitarCompuerta', { nodo: nodoId });
+    return terminar(m, M);
+  }
+
   /** Ancla un nodo (punto fijo; no se funde) o lo suelta. */
   function anclar(t0, M, nodoId, si) {
     const m = inicio(t0);
@@ -2580,9 +2629,10 @@
       const reId = { EQ: /^EQ-\d{2,3}$/, PU: /^PU-\d{2,3}$/, N: /^N-\d{3,4}$/, TR: /^TR-\d{3,4}$/, AC: /^(CO|RE|AD|IN|RI|PA|TE|CP)-\d{3,4}$/ };
       const vistos = new Set();
       const unico = (id, re, que) => { dato(typeof id === 'string' && re.test(id) && !vistos.has(id), `${que} sin identificador válido (${String(id)}).`); vistos.add(id); return id; };
+      const conCompuerta = new Set(s.accesorios.filter((a) => esObjeto(a) && a.tipo === 'COMPUERTA').map((a) => a.nodo));
       s.nodos.forEach((x) => {
         unico(x.id, reId.N, 'Un nodo');
-        m.nodos.push({ id: x.id, posicion_mm: coordenada(x.posicion_mm, `El nodo ${x.id}`), puerto: null, ancla: x.tipo === 'UNION' && Array.isArray(x.accesorios) && !x.accesorios.length });
+        m.nodos.push({ id: x.id, posicion_mm: coordenada(x.posicion_mm, `El nodo ${x.id}`), puerto: null, ancla: x.tipo === 'UNION' && Array.isArray(x.accesorios) && !x.accesorios.length, ...(conCompuerta.has(x.id) ? { compuerta: true } : {}) });
       });
       const nodos = new Set(m.nodos.map((x) => x.id));
       const materiales = new Map();
@@ -2686,7 +2736,7 @@
       x.nodos.forEach((nd) => {
         dato(esObjeto(nd), 'Un nodo no es válido.');
         unico(nd.id, /^N-\d{3,4}$/, 'Un nodo');
-        m.nodos.push({ id: nd.id, posicion_mm: coordenada(nd.posicion_mm, `El nodo ${nd.id}`), puerto: typeof nd.puerto === 'string' ? nd.puerto : null, ancla: nd.ancla === true });
+        m.nodos.push({ id: nd.id, posicion_mm: coordenada(nd.posicion_mm, `El nodo ${nd.id}`), puerto: typeof nd.puerto === 'string' ? nd.puerto : null, ancla: nd.ancla === true, ...(nd.compuerta === true ? { compuerta: true } : {}) });
       });
       const nodos = new Set(m.nodos.map((y) => y.id));
       x.tramos.forEach((tr) => {
@@ -2832,7 +2882,7 @@
   }
 
   return {
-    VERSION, IN, REJILLAS, SERVICIOS, TIPOS_EQUIPO, TrazadoError,
+    VERSION, IN, LARGO_COMPUERTA_MM, REJILLAS, SERVICIOS, TIPOS_EQUIPO, TrazadoError,
     // geometría
     vectorDe, direccionDeVector, rejilla, textoDireccion, proyectar, rayoDeVista, alPlano, planoHorizontal, planoVertical, aire, politicasDe, validarPoliticas,
     resolverManguera, puntosManguera,
@@ -2842,7 +2892,7 @@
     ponerEquipo, editarEquipo, moverEquipo, quitarEquipo, agregarPuerto, editarPuerto, quitarPuerto,
     acoplarBrida, acoplarManguera, moverTransicion, desacoplar,
     candidatas, textoCandidatas, elegirDireccion, ajustarLargo, trazar, conectar, rutas,
-    cambiarLargo, moverSegmento, cambiarAngulo, cambiarDiametro, reducir, decidirCorto, anclar, borrarTramo, dimensionar, aplicarDimensiones,
+    cambiarLargo, moverSegmento, cambiarAngulo, cambiarDiametro, reducir, decidirCorto, ponerCompuerta, quitarCompuerta, anclar, borrarTramo, dimensionar, aplicarDimensiones,
     CORREGIBLES, correcciones, corregir,
   };
 }));

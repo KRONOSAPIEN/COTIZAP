@@ -1205,6 +1205,7 @@ kbd { font: 500 11.5px var(--font-mono); padding: 1px 6px; border: 1px solid var
 .ti-ins-sub { font-size: 12.5px; color: var(--fg-2); margin-top: 2px; }
 .ti-rejilla-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; align-items: end; }
 .ti-campo input, .ti-campo select { min-height: 34px; padding: 5px 8px; }
+.ti-campo-ancho { grid-column: 1 / -1; }
 .ti-nota { font-size: 12.5px; color: var(--fg-2); }
 .ti-semaforo { font-size: 13px; font-weight: 600; padding: 6px 9px; border-radius: 8px; }
 .ti-sem-verde { color: var(--good); background: var(--good-soft); }
@@ -1362,6 +1363,7 @@ dd.ti-sem-verde, dd.ti-sem-ambar { background: none; font-weight: 600; }
 @media (max-width: 1279px) {
   .ti-cuerpo { grid-template-columns: 180px minmax(0, 1fr); }
   .ti-inspector { grid-column: 1 / -1; max-height: none; }
+  .ti-bloque-txt { white-space: normal; line-height: 1.15; } /* «Tramo recto», «Red. c/ injerto» completos en la columna angosta */
 }
 @media (max-width: 859px) {
   .ti-cuerpo { grid-template-columns: minmax(0, 1fr); min-height: 0; }
@@ -1369,6 +1371,9 @@ dd.ti-sem-verde, dd.ti-sem-ambar { background: none; font-weight: 600; }
   .ti-grupo { flex-direction: row; flex: none; align-items: center; }
   .ti-grupo-tit { display: none; }
   .ti-bloque { grid-template-columns: 22px auto; flex: none; }
+  .ti-bloque-txt { white-space: nowrap; }
+  .ti-coords { display: none; } /* sin puntero que pase por encima, las coordenadas sólo estorban */
+  .ti-caja { min-width: 0; }
   .ti-bloque .ti-tecla, .ti-bloque .ti-n, .ti-bloque .ti-candado { display: none; }
   .ti-lienzo-marco { min-height: 0; height: max(320px, 58dvh); flex: none; }
   .ti-vistas { max-width: calc(100% - 112px); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }

@@ -85,9 +85,9 @@
     { grupo: 'Utilidades', bloques: [
       { id: 'SELECCIONAR', nombre: 'Seleccionar', herr: 'SELECCIONAR', tecla: 'S' }, { id: 'MOVER', nombre: 'Mover segmento', herr: 'MOVER', tecla: 'M' },
       { id: 'MEDIR', nombre: 'Medir', herr: 'MEDIR', tecla: 'D' }, { id: 'BORRAR', nombre: 'Borrar', herr: 'BORRAR', tecla: 'Supr' },
-      { id: 'COMPUERTA', nombre: 'Compuerta', apagado: 'compuerta' }, { id: 'TAPA', nombre: 'Extremo o tapa', apagado: 'tapa' }] },
+      { id: 'COMPUERTA', nombre: 'Compuerta', herr: 'COMPUERTA', tecla: 'G' }, { id: 'TAPA', nombre: 'Extremo o tapa', apagado: 'tapa' }] },
   ];
-  const TECLA_HERR = { s: 'SELECCIONAR', t: 'TRAMO', c: 'TRAMO', v: 'VERTICAL', r: 'REDUCCION', i: 'INJERTO', j: 'RINJ', m: 'MOVER', d: 'MEDIR', p: 'TOMA' };
+  const TECLA_HERR = { s: 'SELECCIONAR', t: 'TRAMO', c: 'TRAMO', v: 'VERTICAL', r: 'REDUCCION', i: 'INJERTO', j: 'RINJ', m: 'MOVER', d: 'MEDIR', p: 'TOMA', g: 'COMPUERTA' };
   const VISTAS_BTN = [['NE', 'Iso', '1'], ['PLANTA', 'Planta', '2'], ['ELEV_XZ', 'Elev. X-Z', '3'], ['ELEV_YZ', 'Elev. Y-Z', '4']];
 
   const ui = { s: null, montado: false, puntero: null, gesto: null, punteros: new Map(), hover: null, cuadro: 0, espacio: false, abierto: false, dim: null, paleta: null };
@@ -133,21 +133,31 @@
     return { err, aviso };
   };
   /** Acomoda las etiquetas sin encimarlas ni sacarlas del lienzo: cada una toma el primer lugar libre de sus candidatos. */
+  /**
+   * Dónde va cada etiqueta: el primer lugar libre de sus candidatos. Si ninguno está libre, la obligada va donde menos tape
+   * (encimarse en un ducto pesa poco; en otra etiqueta, más; en la barra de vistas, el cubo o los ejes, mucho), y la que no
+   * es obligada sólo si tapa poco. Peso por caja: 0.3 ducto, 1 etiqueta o marca, 8 controles del lienzo.
+   */
   function colocador() {
     const cajas = [];
     const { ancho, alto } = ui.s;
     const fuera = (r) => r.x < 2 || r.y < 2 || r.x + r.w > ancho - 2 || r.y + r.h > alto - 2;
-    const choca = (r) => fuera(r) || cajas.some((c) => r.x < c.x + c.w && r.x + r.w > c.x && r.y < c.y + c.h && r.y + r.h > c.y);
+    const cruce = (r, c) => Math.max(0, Math.min(r.x + r.w, c.x + c.w) - Math.max(r.x, c.x)) * Math.max(0, Math.min(r.y + r.h, c.y + c.h) - Math.max(r.y, c.y));
+    const tapa = (r) => cajas.reduce((a, c) => a + cruce(r, c) * c.peso, 0);
+    const dentro = (r) => ({ ...r, x: Math.max(2, Math.min(r.x, ancho - r.w - 2)), y: Math.max(2, Math.min(r.y, alto - r.h - 2)) });
     return {
-      ocupar: (r) => cajas.push(r),
+      ocupar: (r, peso) => cajas.push({ ...r, peso: peso === undefined ? 1 : peso }),
       elegir: (cands, obligado) => {
-        const r = cands.find((c) => !choca(c));
-        if (r) { cajas.push(r); return r; }
-        if (!obligado) return null;
-        const c0 = cands[0];
-        const q = { ...c0, x: Math.max(2, Math.min(c0.x, ancho - c0.w - 2)), y: Math.max(2, Math.min(c0.y, alto - c0.h - 2)) };
-        cajas.push(q);
-        return q;
+        const libre = cands.find((c) => !fuera(c) && tapa(c) === 0);
+        let r = libre;
+        if (!r) {
+          const opciones = cands.map(dentro).map((c) => ({ c, t: tapa(c) }));
+          const mejor = opciones.reduce((m, o) => (o.t < m.t ? o : m), opciones[0]);
+          if (!obligado && mejor.t > mejor.c.w * mejor.c.h * 0.15) return null;
+          r = mejor.c;
+        }
+        cajas.push({ ...r, peso: 1 });
+        return r;
       },
     };
   }
@@ -223,9 +233,10 @@
     const sel = s.sel;
     const lugar = colocador();
     const barra = $('.ti-vistas');
-    lugar.ocupar({ x: 0, y: 0, w: barra ? barra.offsetWidth + 12 : 520, h: barra ? barra.offsetHeight + 12 : 48 });
-    lugar.ocupar({ x: s.ancho - 104, y: 0, w: 104, h: 104 });
-    lugar.ocupar({ x: 0, y: s.alto - 88, w: 88, h: 88 });
+    lugar.ocupar({ x: 0, y: 0, w: barra ? barra.offsetWidth + 12 : 520, h: barra ? barra.offsetHeight + 12 : 48 }, 8);
+    lugar.ocupar({ x: s.ancho - 104, y: 0, w: 104, h: 104 }, 8);
+    lugar.ocupar({ x: 0, y: s.alto - 88, w: 88, h: 88 }, 8);
+    lugar.ocupar({ x: s.ancho - 300, y: s.alto - 26, w: 300, h: 26 }, 8); // la escala de la rejilla
     const items = [];
     const prof = (p) => TB().profundidad(s, p);
     const clase = (id, base) => [base, err.has(id) ? 'ti-err' : aviso.has(id) ? 'ti-aviso' : '', sel && sel.id === id ? 'ti-sel' : '', ui.hover === id ? 'ti-hover' : ''].filter(Boolean).join(' ');
@@ -293,7 +304,7 @@
           }
         },
       });
-      if (L >= 2) for (let f = 0, pasoF = Math.max(10, ancho) / L; f <= 1; f += pasoF) lugar.ocupar({ x: a.x + (b.x - a.x) * f - ancho / 2, y: a.y + (b.y - a.y) * f - ancho / 2, w: ancho, h: ancho });
+      if (L >= 2) for (let f = 0, pasoF = Math.max(10, ancho) / L; f <= 1; f += pasoF) lugar.ocupar({ x: a.x + (b.x - a.x) * f - ancho / 2, y: a.y + (b.y - a.y) * f - ancho / 2, w: ancho, h: ancho }, 0.3);
       if (L < 40) return;
       let nx = -(b.y - a.y) / L;
       let ny = (b.x - a.x) / L;
@@ -399,7 +410,7 @@
     const x1 = Math.max(...pts.map((p) => p.x));
     const y0 = Math.min(...pts.map((p) => p.y));
     const y1 = Math.max(...pts.map((p) => p.y));
-    const k = 50 / Math.max(x1 - x0, y1 - y0, 0.5);
+    const k = 70 / Math.max(x1 - x0, y1 - y0, 0.5); // caras grandes: «Oeste» y «Norte» caben en la suya
     const cx = 41 - ((x0 + x1) / 2) * k;
     const cy = 41 - ((y0 + y1) / 2) * k;
     const hijos = caras.map((c) => {
@@ -728,6 +739,7 @@
         else ok = T.decir(s, 'Toque una toma.', true);
         break;
       case 'REDUCCION': ok = T.reducirEn(s, hit); break;
+      case 'COMPUERTA': ok = T.compuertaEn(s, hit); break;
       case 'MEDIR': T.medir(s, hit, p.x, p.y); pintarEstado(); programarCapa(); return;
       case 'BORRAR': ok = T.borrar(s, hit && { tipo: hit.tipo, id: hit.id }, ui.mayus); break;
       default: seleccionar(hit); return;
@@ -810,8 +822,7 @@
   const MOTIVO_APAGADO = {
     t90: (s) => (s.t.politicas.permite_t_90 ? 'La T a 90° sale sola al trazar un ramal a 90° (esta política la permite); COTIZAP todavía no la cotiza.' : 'El taller no hace T a 90° en este servicio: use un injerto a 30° o 45°.'),
     pantalon: () => 'El taller retiró el pantalón: use un injerto.',
-    compuerta: () => 'La compuerta llega con la etapa de cálculo (el balanceo).',
-    tapa: () => 'Un extremo queda abierto (aviso EXTREMO_ABIERTO) hasta llevarlo a un equipo; la tapa llega con la etapa de cálculo.',
+    tapa: () => 'Un extremo libre queda abierto (aviso EXTREMO_ABIERTO) hasta llevarlo a un equipo o a la boca. La tapa, para dejar una preparación cerrada, llega después.',
   };
   function contar(id) {
     const s = ui.s;
@@ -823,6 +834,7 @@
       TRAMO: s.t.tramos.filter((t) => t.tipo === 'RIGIDO').length, VERTICAL: s.t.tramos.filter((t) => t.tipo === 'RIGIDO' && s.g.seg.get(t.id).dir && Math.abs(s.g.seg.get(t.id).dir.elevacion_deg) === 90).length,
       REDUCCION: pz.filter((p) => p.tipo === 'REDUCCION' || p.tipo === 'ADAPTADOR').length, INJERTO: pz.filter((p) => p.tipo === 'INJERTO').length, RINJ: pz.filter((p) => p.tipo === 'REDUCCION_INJERTO').length,
       T90: pz.filter((p) => p.tipo === 'T_90').length,
+      COMPUERTA: pz.filter((p) => p.tipo === 'COMPUERTA').length,
     }[id] || 0;
   }
   function pintarPaleta() {
@@ -895,6 +907,14 @@
   /* ------------------------------------------------------------------ inspector */
 
   const campo = (etq, control, nota) => h('div', { class: 'campo ti-campo' }, h('label', { for: control.id }, etq), control, nota ? h('span', { class: 'nota' }, nota) : null);
+  /** Un campo que ocupa todo el renglón (textos largos y selectores con nombres largos). */
+  const campoAncho = (etq, control, nota) => { const c = campo(etq, control, nota); c.classList.add('ti-campo-ancho'); return c; };
+  /** 0.00001813 → 1.813×10⁻⁵ */
+  const cientifico = (x) => {
+    const e = Math.floor(Math.log10(Math.abs(x)));
+    const sup = String(e).replace(/-/g, '⁻').replace(/\d/g, (d) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[d]);
+    return `${W.num(x / 10 ** e, 3)}×10${sup}`;
+  };
   function entrada(id, valor, alCambiar, attrs) {
     const el = h('input', { id, type: 'text', inputmode: 'decimal', autocomplete: 'off', value: valor === null || valor === undefined ? '' : String(valor), ...attrs });
     // se aplica una vez: al volver a pintar el inspector, el campo se va y su «change» al perder el foco ya no cuenta
@@ -1105,6 +1125,9 @@
     const nd = s.t.nodos.find((x) => x.id === nid);
     const pz = TB().piezasDe(s, nid);
     const codo = pz.find((p) => p.tipo === 'CODO');
+    const compuerta = pz.find((p) => p.tipo === 'COMPUERTA');
+    const inf = compuerta ? TB().informeCalculo(s) : null;
+    const cierre = inf && !inf.error ? (inf.balance.map((b) => b.cierre).find((c) => c && c.pieza === compuerta.id) || null) : null;
     const ancla = h('input', { type: 'checkbox', id: 'ti-n-ancla', checked: nd.ancla });
     ancla.addEventListener('change', () => aplicar((m) => T.anclar(m, M(), nid, ancla.checked), ancla.checked ? `${nid} anclado: es un punto fijo.` : `${nid} suelto.`));
     const libre = (s.g.ady.get(nid) || []).length === 1;
@@ -1127,6 +1150,8 @@
       titulo(`Nodo ${nid}`, `X ${n0(nd.posicion_mm.x)}, Y ${n0(nd.posicion_mm.y)}, Z ${n0(nd.posicion_mm.z)}`),
       pz.length ? h('ul', { class: 'ti-lista' }, pz.map((p) => h('li', null, `${p.id} · ${p.nombre}`))) : h('p', { class: 'ti-nota' }, libre ? 'Extremo libre: siga el trazo desde aquí o llévelo a un equipo.' : 'Sin pieza: los tramos siguen rectos.'),
       codo ? campo('Ángulo del codo', selector('ti-n-angulo', s.t.politicas.angulos_codo_deg.map((a) => [a, `${a}°`]), codo.angulo, (v) => aplicar((m) => T.cambiarAngulo(m, M(), nid, Number(v)), `Codo de ${nid} a ${v}°.`), 'Ángulo del codo')) : null,
+      compuerta ? h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-peligro', id: 'ti-n-quitar-compuerta', onclick: () => { if (TB().quitarCompuerta(s, nid)) cambio(); else pintarEstado(); } }, 'Quitar la compuerta')) : null,
+      compuerta ? h('p', { class: 'ti-nota' }, cierre ? `En el balanceo se cierra hasta K ${W.num(cierre.K, 2)}: pierde ${n0(cierre.Pa)} Pa para que su ramal no jale de más.` : 'Abierta: el balanceo de la salida dice si hay que cerrarla y cuánto.') : null,
       h('label', { class: 'ti-check', for: 'ti-n-ancla' }, ancla, 'Anclar (punto fijo: no se mueve al editar)'),
       agregar);
   }
@@ -1147,15 +1172,15 @@
       h('div', { class: 'ti-rejilla-campos' },
         campo('Nombre', entrada('ti-pr-nombre', pr.nombre, (v) => aplicar((t) => T.cambiarProyecto(t, M(), { nombre: v }), 'Nombre del proyecto.'), { inputmode: 'text' })),
         campo('Clave', entrada('ti-pr-id', pr.id, (v) => aplicar((t) => T.cambiarProyecto(t, M(), { id: v }), 'Clave del proyecto.'), { inputmode: 'text' })),
-        campo('Servicio', selector('ti-pr-servicio', [['POLVO', 'Polvo'], ['ABRASIVO', 'Material abrasivo'], ['VENTILACION', 'Ventilación'], ['HUMOS', 'Humos']], pr.servicio, (v) => aplicar((t) => T.cambiarProyecto(t, M(), { servicio: v }), (m) => `Servicio: velocidades de ${m.politicas.velocidad_min_m_s} a ${m.politicas.velocidad_max_m_s} m/s.`), 'Servicio')),
-        campo('Material transportado', entrada('ti-pr-mat', pr.material_transportado || '', (v) => aplicar((t) => T.cambiarProyecto(t, M(), { material_transportado: v || null }), 'Material transportado.'), { inputmode: 'text' })),
+        campoAncho('Servicio', selector('ti-pr-servicio', [['POLVO', 'Polvo'], ['ABRASIVO', 'Material abrasivo'], ['VENTILACION', 'Ventilación'], ['HUMOS', 'Humos']], pr.servicio, (v) => aplicar((t) => T.cambiarProyecto(t, M(), { servicio: v }), (m) => `Servicio: velocidades de ${m.politicas.velocidad_min_m_s} a ${m.politicas.velocidad_max_m_s} m/s.`), 'Servicio')),
+        campoAncho('Material transportado', entrada('ti-pr-mat', pr.material_transportado || '', (v) => aplicar((t) => T.cambiarProyecto(t, M(), { material_transportado: v || null }), 'Material transportado.'), { inputmode: 'text' })),
         campo('Temperatura (°C)', entrada('ti-pr-temp', pr.aire.temperatura_C, (v) => aplicar((t) => T.cambiarProyecto(t, M(), { aire: { temperatura_C: num(v) } }), 'Temperatura del aire.'))),
         campo('Altitud (m)', entrada('ti-pr-alt', pr.aire.altitud_m, (v) => aplicar((t) => T.cambiarProyecto(t, M(), { aire: { altitud_m: num(v) } }), 'Altitud.'))),
-        campo('Origen', entrada('ti-pr-origen', pr.origen, (v) => aplicar((t) => T.cambiarProyecto(t, M(), { origen: v }), 'Origen.'), { inputmode: 'text' }))),
-      h('p', { class: 'ti-nota', id: 'ti-pr-aire' }, `Aire: ${W.num(a.presion_Pa / 1000, 2)} kPa, ρ = ${W.num(a.densidad_kg_m3, 4)} kg/m³, μ = ${a.viscosidad_Pa_s} Pa·s.`),
+        campoAncho('Origen', entrada('ti-pr-origen', pr.origen, (v) => aplicar((t) => T.cambiarProyecto(t, M(), { origen: v }), 'Origen.'), { inputmode: 'text' }))),
+      h('p', { class: 'ti-nota', id: 'ti-pr-aire' }, `Aire: ${W.num(a.presion_Pa / 1000, 2)} kPa, ρ = ${W.num(a.densidad_kg_m3, 4)} kg/m³, μ = ${cientifico(a.viscosidad_Pa_s)} Pa·s.`),
       h('h4', null, 'Ducto nuevo'),
       h('div', { class: 'ti-rejilla-campos' },
-        campo('Material', selector('ti-pr-material', Object.keys(M().materiales).filter((k) => ['GALVANIZADO', 'ACERO_CARBON', 'INOX_304', 'INOX_316'].includes(k)).map((k) => [k, M().materiales[k].nombre || k]), s.t.material.material, (v) => {
+        campoAncho('Material', selector('ti-pr-material', Object.keys(M().materiales).filter((k) => ['GALVANIZADO', 'ACERO_CARBON', 'INOX_304', 'INOX_316'].includes(k)).map((k) => [k, M().materiales[k].nombre || k]), s.t.material.material, (v) => {
           const c2 = Object.keys(M().calibres[M().materiales[v].tabla_calibre] || {}).map(Number);
           aplicar((t) => T.cambiarMaterial(t, M(), v, c2.includes(s.t.material.calibre) ? s.t.material.calibre : c2[0]), 'Material del ducto nuevo.');
         }, 'Material')),
@@ -1214,7 +1239,8 @@
         h('td', null, `${n0(x.presion_estatica_campana_Pa)} Pa`), h('td', null, x.perdida_total_Pa === null ? '—' : `${n0(x.perdida_total_Pa)} Pa`)))),
       inf.balance.length ? h('ul', { class: 'ti-lista ti-calc-balance', id: 'ti-calc-balance' }, inf.balance.map((b) => h('li', { 'data-nodo': b.nodo, 'data-accion': b.accion },
         h('button', { type: 'button', class: 'enlace', onclick: ir(b.nodo) }, b.nodo), ` ${b.tramo_ramal} ${n0(b.sp_ramal_Pa)} Pa y ${b.tramo_tronco} ${n0(b.sp_tronco_Pa)} Pa, relación ${W.num(b.relacion, 2)}: `,
-        h('strong', null, b.nombre_accion), b.sugerencia ? `. ${b.sugerencia}` : '.')))
+        h('strong', null, b.nombre_accion), b.sugerencia ? `. ${b.sugerencia}` : '.',
+        b.accion === 'COMPUERTA' && !b.cierre ? h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-sec ti-calc-compuerta', 'data-tramo': b.corriente_menor, onclick: () => { if (TB().compuertaSugerida(s, b.corriente_menor)) cambio(); else pintarEstado(); } }, `Poner compuerta en ${b.corriente_menor}`)) : null)))
         : h('p', { class: 'ti-nota', id: 'ti-calc-balance' }, 'Sin confluencias: no hay nada que balancear.'),
       h('details', { class: 'ti-politicas', id: 'ti-calc-hoja' }, h('summary', null, `Hoja de cálculo (${inf.tramos.length} tramos)`),
         tabla(null, ['Tramo', 'Ø', 'm³/h', 'm/s', 'Fricción', 'Locales', 'Succión'], inf.tramos.map((x) => h('tr', { 'data-tramo': x.tramo },
@@ -1414,8 +1440,11 @@
     if (!ui.montado || !ui.abierto) return;
     tablero();
     const cuerpo = $('.ti-cuerpo');
-    if (cuerpo) cuerpo.classList.toggle('ti-cuerpo-calculo', ui.s.fase === 5); // la salida trae tablas: inspector más ancho
-    medir();
+    const antes = ui.s.ancho;
+    // la salida trae tablas: inspector más ancho; el lienzo se angosta y la vista se aleja lo mismo, para que no se salga nada
+    const cambia = cuerpo && cuerpo.classList.contains('ti-cuerpo-calculo') !== (ui.s.fase === 5);
+    if (cuerpo) cuerpo.classList.toggle('ti-cuerpo-calculo', ui.s.fase === 5);
+    if (medir() && cambia && ui.medido && antes > 0 && ui.s.ancho !== antes) TB().zoom(ui.s, ui.s.ancho / antes);
     pintarFases();
     pintarPaleta();
     pintarBarraD();

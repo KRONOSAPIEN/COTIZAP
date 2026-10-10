@@ -139,6 +139,39 @@ test('Balanceo por diseño: hasta 5 % no se toca; hasta 20 % se acepta el caudal
   assert.match(b3.sugerencia, /Bajar TR-002 a 6″, TR-001 a 6″ deja la relación en 1\.1\d \(19\.8 m\/s\)\.$/);
 });
 
+test('Compuerta: con una en el tramo propio de la corriente de menos succión, se cierra lo que falta y nadie jala de más', () => {
+  let t = TZ.editarPuerto(TB.ejemplo(M), M, 'PU-02', { coef_entrada_K: 0 });
+  const sin = P.calcular(TZ.aSistema(t, M)).sistema.resultados;
+  assert.equal(sin.balance[0].accion, 'COMPUERTA', 'sin compuerta, la sugiere');
+  t = TZ.ponerCompuerta(t, M, { tramo: 'TR-002', s_mm: 3000 });
+  const r = P.calcular(TZ.aSistema(t, M));
+  const R = r.sistema.resultados;
+  const b = R.balance[0];
+  assert.equal(b.accion, 'COMPUERTA');
+  assert.equal(b.caudal_corregido_m3_h, b.caudal_m3_h, 'la sierra se queda con su caudal de diseño');
+  assert.ok(b.relacion > 1.2, 'la relación es la de antes de cerrar');
+  const dP = b.sp_ramal_Pa - b.sp_tronco_Pa;
+  const tramoCp = r.sistema.accesorios.find((a) => a.tipo === 'COMPUERTA').conexiones[0].tramo;
+  const fila = r.hoja.filas.get(tramoCp);
+  const l = fila.locales.find((x) => x.que === 'COMPUERTA');
+  cerca(l.Pa, dP, 0.02, 'la compuerta pierde la diferencia');
+  cerca(l.K, l.Pa / fila.pv, 1e-9);
+  assert.match(b.sugerencia, new RegExp(`^Cierre la compuerta CP-001 de ${tramoCp} hasta K ${String(Math.round(l.K * 100) / 100).replace('.', '\\.')} \\(${Math.round(dP)} Pa\\) para igualar la succión de TR-006: TR-\\d{3} se queda con sus 1300 m³/h\\.$`));
+  const cp = r.sistema.accesorios.find((a) => a.tipo === 'COMPUERTA');
+  cerca(cp.perdida.K_paso, l.K, 1e-4);
+  assert.match(cp.perdida.referencia, /^Cerrada hasta K 0\.\d\d \(\d+ Pa\) para balancear/);
+  // al colector llega la suma de diseño, y las dos tomas llegan con la misma succión
+  assert.equal(R.ventiladores[0].caudal_m3_h, 2200);
+  assert.deepEqual(R.por_toma.map((x) => x.caudal_corregido_m3_h), [1300, 900]);
+  const tot = R.por_toma.map((x) => x.perdida_total_Pa + (x.puerto === 'PU-02' ? fila.pv : 0));
+  cerca(R.por_toma[0].perdida_total_Pa, R.por_toma[1].perdida_total_Pa, 2, `caminos balanceados (${tot.join(' / ')})`);
+  assert.deepEqual(validarEsquema(r.sistema, ESQUEMA), []);
+  // abierta (sin nada que balancear) no pierde
+  const abierta = P.calcular(TZ.aSistema(TZ.ponerCompuerta(TB.ejemplo(M), M, { tramo: 'TR-006', s_mm: 1500 }), M)).sistema;
+  const cpa = abierta.accesorios.find((a) => a.tipo === 'COMPUERTA');
+  assert.equal(cpa.perdida.K_paso, 0, 'en la corriente que manda, la compuerta queda abierta');
+});
+
 test('Pantalón: las dos corrientes entran como ramales; el balance las compara igual', () => {
   const r = conCambio((s) => {
     const a = s.accesorios.find((x) => x.id === 'RI-001');

@@ -69,6 +69,7 @@ function ejemploDesdeElColector() {
   return t;
 }
 const terminado = (t) => T.renumerar(T.aplicarDimensiones(t, M), M);
+const g0neta = (t, id) => T.calcular(t, M).neta.get(id);
 const P = require('../src/motor/perdidas');
 /** El sistema exportado con el cálculo de pérdidas (etapa 4): el JSON completo del ejemplo. */
 const calculado = (s) => P.calcular(s).sistema;
@@ -887,6 +888,50 @@ test('Corregir: cada arreglo se prueba en el modelo, quita su problema y no deja
   falla(() => T.corregir(ej, M, { op: 'borrarTodo', args: [] }), 'DATO_INVALIDO');
 });
 
+test('Compuerta: se pone en un tramo recto (lo parte), ocupa su largo, no se funde, va y vuelve por el JSON y se quita', () => {
+  const ej = terminado(ejemploDesdeLasTomas());
+  const t = T.ponerCompuerta(ej, M, { tramo: 'TR-002', s_mm: 3000 });
+  const nodo = t.ultimo.nodo;
+  assert.equal(t.ultimo.operacion, 'ponerCompuerta');
+  assert.equal(t.nodos.find((n) => n.id === nodo).compuerta, true);
+  assert.deepEqual(t.ultimo.info, [], 'la compuerta la pone quien traza: no es una pieza insertada sola');
+  const g = T.calcular(t, M);
+  const cp = g.piezas.find((p) => p.tipo === 'COMPUERTA');
+  assert.equal(cp.nodo, nodo);
+  assert.equal(cp.id, 'CP-001');
+  assert.equal(cp.geometria.largo_mm, T.LARGO_COMPUERTA_MM);
+  assert.deepEqual(cp.conexiones.map((c) => c.rol), ['ENTRADA', 'SALIDA']);
+  assert.deepEqual(cp.ocupa.map((o) => o.mm), [T.LARGO_COMPUERTA_MM / 2, T.LARGO_COMPUERTA_MM / 2], 'la mitad de cada lado');
+  const lados = cp.conexiones.map((c) => c.tramo);
+  cerca(lados.reduce((x, id) => x + g.neta.get(id), 0), g0neta(ej, 'TR-002') - T.LARGO_COMPUERTA_MM, 1e-6, 'lo neto baja lo que mide la compuerta');
+  assert.equal(T.revisar(t, M).filter((v) => ['ERROR', 'BLOQUEANTE'].includes(v.severidad)).length, 0);
+  // en el JSON: un nodo UNION con su accesorio COMPUERTA, y de regreso igual
+  const s = T.aSistema(t, M);
+  assert.deepEqual(validarEsquema(s, ESQUEMA), []);
+  assert.deepEqual(s.nodos.find((n) => n.id === nodo).accesorios, ['CP-001']);
+  assert.equal(s.nodos.find((n) => n.id === nodo).tipo, 'UNION');
+  const r = T.desdeSistema(s, M);
+  assert.deepEqual(r.errores, []);
+  assert.deepStrictEqual(T.aSistema(r.modelo, M), s);
+  // sigue ahí aunque se mueva otra cosa (no se funde como una unión sin pieza)
+  const t2 = T.anclar(t, M, nodoEn(t, 10750, 0, 3000), true);
+  assert.ok(T.calcular(t2, M).piezas.some((p) => p.tipo === 'COMPUERTA' && p.nodo === nodo));
+  // quitarla funde los tramos otra vez: renumerado, el ejemplo
+  const q = T.quitarCompuerta(t, M, nodo);
+  assert.equal(q.tramos.length, ej.tramos.length);
+  assert.deepStrictEqual(calculado(T.aSistema(T.renumerar(q, M), M)), EJ);
+  // lo que no se puede
+  falla(() => T.ponerCompuerta(ej, M, nodoEn(ej, 10750, 0, 3000)), 'COMPUERTA_NO_VA', /ahí el ducto da vuelta/);
+  falla(() => T.ponerCompuerta(ej, M, { tramo: entre(ej, puerto(ej, 'EQ-03').nodo, puerto(ej, 'EQ-03').acople.nodo_transicion), s_mm: 300 }), 'DATO_INVALIDO', /manguera/);
+  falla(() => T.ponerCompuerta(ej, M, { tramo: 'TR-002', s_mm: 20 }), 'DATO_INVALIDO', /a menos de/);
+  falla(() => T.ponerCompuerta(ej, M, puerto(ej, 'EQ-02').nodo), 'COMPUERTA_NO_VA', /brida del equipo/);
+  falla(() => T.ponerCompuerta(t, M, nodo), 'DATO_INVALIDO', /ya hay una compuerta/);
+  falla(() => T.quitarCompuerta(ej, M, 'N-003'), 'DATO_INVALIDO', /no hay compuerta/);
+  // un cambio que dejaría la compuerta entre dos diámetros se rechaza con el porqué
+  const abajo = cp.conexiones[1].tramo;
+  falla(() => T.cambiarDiametro(t, M, abajo, 8), 'COMPUERTA_NO_VA', /cambia de 6″ a 8″/);
+});
+
 test('Una caminata de operaciones al azar nunca deja el trazo inválido ni lanza otra cosa que TrazadoError (ni el cálculo, otra cosa que CalculoError)', () => {
   let semilla = 20261009;
   const azar = () => { semilla = (semilla * 1103515245 + 12345) % 2147483648; return semilla / 2147483648; };
@@ -909,6 +954,8 @@ test('Una caminata de operaciones al azar nunca deja el trazo inválido ni lanza
     () => { const n = uno(t.nodos); if (!n) return t; const c = T.calcular(t, M).piezasDe.get(n.id); return c && c[0].tipo === 'CODO' ? T.cambiarAngulo(t, M, n.id, uno([30, 45, 60, 90])) : t; },
     () => { const tr = uno(t.tramos.filter((x) => x.tipo === 'RIGIDO')); return tr ? T.reducir(t, M, azar() < 0.5 ? tr.a : { tramo: tr.id, s_mm: uno([50, 300, 1000]) }, uno([3, 4, 5])) : t; },
     () => { const tr = uno(t.tramos.filter((x) => x.tipo === 'RIGIDO')); return tr ? T.decidirCorto(t, M, tr.id, uno(['PEGAR', 'ACEPTAR', null])) : t; },
+    () => { const tr = uno(t.tramos.filter((x) => x.tipo === 'RIGIDO')); return tr ? T.ponerCompuerta(t, M, { tramo: tr.id, s_mm: uno([150, 500, 1200]) }) : t; },
+    () => { const n = uno(t.nodos.filter((x) => x.compuerta)); return n ? T.quitarCompuerta(t, M, n.id) : t; },
     () => { const p = uno(T.revisar(t, M).filter((v) => T.CORREGIBLES.includes(v.codigo))); if (!p) return t; const c = uno(T.correcciones(t, M, p, { max: 2 })); return c ? T.corregir(t, M, c) : t; },
   ];
   for (let i = 0; i < 160; i += 1) {

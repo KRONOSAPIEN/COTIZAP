@@ -238,10 +238,12 @@
     const v1 = Math.max(...qs.map((q) => q.v));
     const w = Math.max(u1 - u0, 8000);
     const hh = Math.max(v1 - v0, 5000);
-    const k = clamp(Math.min(Math.max(80, s.ancho - 140) / w, Math.max(80, s.alto - 120) / hh), 0.003, 2);
+    // márgenes: arriba la barra de vistas, abajo la escala; a los lados, el cubo y los ejes
+    const m = { arriba: 64, abajo: 40, lados: 70 };
+    const k = clamp(Math.min(Math.max(80, s.ancho - 2 * m.lados) / w, Math.max(80, s.alto - m.arriba - m.abajo) / hh), 0.003, 2);
     s.cam.k = k;
     s.cam.ox = s.ancho / 2 - ((u0 + u1) / 2) * k;
-    s.cam.oy = s.alto / 2 + ((v0 + v1) / 2) * k;
+    s.cam.oy = (m.arriba + s.alto - m.abajo) / 2 + ((v0 + v1) / 2) * k;
   }
   function zoom(s, f, x, y) {
     const k = clamp(s.cam.k * f, 0.003, 2);
@@ -444,7 +446,8 @@
     RINJ: 'Arrastre desde un tramo: sale un injerto del Ø activo y el tronco de aguas arriba queda del Ø de «tronco después».',
     MOVER: 'Arrastre un tramo de lado: sus vecinos se alargan o se acortan (M).',
     MEDIR: 'Toque dos puntos: la distancia real y por eje (D).',
-    BORRAR: 'Toque un tramo, un equipo, una toma o una manguera para quitarlo (Mayús: el ramal completo hasta sus tomas).',
+    BORRAR: 'Toque un tramo, un equipo, una toma o una manguera para quitarlo (Mayús: el ramal completo hasta sus tomas); en una compuerta, la quita.',
+    COMPUERTA: 'Toque un tramo recto donde va la compuerta de regulación (se ajusta a 50 mm). En la salida, el balanceo dice cuánto cerrarla (G).',
   };
   /** La fase a la que pertenece cada herramienta (la barra de fases la sigue al elegirla). */
   const FASE_DE_HERR = { EQUIPO: 1, TOMA: 1, MANGUERA: 2, BRIDA: 2, TRAMO: 3, VERTICAL: 3, REDUCCION: 3, INJERTO: 3, RINJ: 3, MOVER: 3 };
@@ -1021,6 +1024,38 @@
     const desde = hit.tipo === 'TRAMO' ? { tramo: hit.id, s_mm: ajustar(hit.s_mm || 0, 50) } : hit.id;
     return !!hacer(s, (t) => TZ.reducir(t, s.M, desde, s.D), (m) => `Desde ${m.ultimo.nodo} hacia las tomas el ducto queda de ${pulg(s.D)}: ${m.ultimo.tramos.join(', ')}.`);
   }
+  /** Compuerta (G): en el punto tocado de un tramo recto (a 50 mm) o en un nodo que une dos tramos rectos del mismo Ø. */
+  function compuertaEn(s, hit) {
+    if (!hit || (hit.tipo !== 'TRAMO' && hit.tipo !== 'NODO')) return decir(s, 'Toque un tramo recto donde va la compuerta.', true);
+    const desde = hit.tipo === 'TRAMO' ? { tramo: hit.id, s_mm: ajustar(hit.s_mm || 0, 50) } : hit.id;
+    return !!hacer(s, (t) => TZ.ponerCompuerta(t, s.M, desde), (m) => `Compuerta ${(m.piezas[m.ultimo.nodo] || {}).COMPUERTA} en ${m.ultimo.nodo}: abierta. En la salida, el balanceo dice cuánto cerrarla.`);
+  }
+  /**
+   * La compuerta que pide el balanceo para la corriente que llega por un tramo: a la mitad del primer tramo recto de su tramo
+   * propio (del que llega a la confluencia hacia las tomas) en que cabe.
+   */
+  function compuertaSugerida(s, tramoId) {
+    const cand = [];
+    for (let t = s.g.tramos.get(tramoId); t && t.tipo === 'RIGIDO' && !cand.includes(t); ) {
+      cand.push(t);
+      const arriba = s.g.arriba.get(t.id);
+      const entran = arriba ? s.g.entran(arriba) : [];
+      t = entran.length === 1 ? entran[0] : null;
+    }
+    for (const t of cand) {
+      const L = s.g.seg.get(t.id).L;
+      const desde = { tramo: t.id, s_mm: ajustar(L / 2, 50) };
+      try { TZ.ponerCompuerta(s.t, s.M, desde); } catch (e) { if (e instanceof TZ.TrazadoError) continue; throw e; }
+      return !!hacer(s, (m) => TZ.ponerCompuerta(m, s.M, desde), (m) => `Compuerta ${(m.piezas[m.ultimo.nodo] || {}).COMPUERTA} a la mitad de ${t.id}: el balanceo dice cuánto cerrarla.`);
+    }
+    return decir(s, `No cabe una compuerta en el tramo propio de ${tramoId}: alárguelo o póngala a mano.`, true);
+  }
+  /** Quita la compuerta de un nodo (los dos tramos se vuelven a fundir si siguen en línea). */
+  function quitarCompuerta(s, nodo) {
+    const r = hacer(s, (m) => TZ.quitarCompuerta(m, s.M, nodo), `Se quitó la compuerta de ${nodo}.`);
+    if (r && s.sel && s.sel.id === nodo) s.sel = null;
+    return !!r;
+  }
   /** Mover segmento (M): el desplazamiento w (perpendicular al tramo, paralelo a sus vecinos) por el arrastre. */
   function desplazamientoSegmento(s, tid, x0, y0, x, y) {
     const t = s.g.tramos.get(tid);
@@ -1079,6 +1114,7 @@
       return !!r;
     }
     if (x.tipo === 'NODO') {
+      if ((s.g.piezasDe.get(x.id) || []).some((p) => p.tipo === 'COMPUERTA')) return quitarCompuerta(s, x.id);
       const ad = s.g.ady.get(x.id) || [];
       if (ad.length === 1) return borrar(s, { tipo: 'TRAMO', id: ad[0].tramo.id }, ramal);
       return decir(s, 'Seleccione un tramo para borrarlo.', true);
@@ -1204,6 +1240,10 @@
           nombre = `T a 90° con ramal de ${pulg(c[2].diametro_in)} (COTIZAP todavía no la cotiza)`;
           corto = 'T 90°';
           break;
+        case 'COMPUERTA':
+          nombre = `Compuerta de regulación de ${pulg(c[0].diametro_in)} (${n(ga.largo_mm)} mm con sus cuellos)`;
+          corto = 'Compuerta';
+          break;
         default:
           nombre = p.tipo;
           corto = p.tipo;
@@ -1245,7 +1285,11 @@
     return {
       ventiladores: R.ventiladores.map((v) => ({ ...v, nombre: equipo(v.equipo) ? equipo(v.equipo).nombre : v.equipo })),
       tomas: R.por_toma.map((x) => ({ ...x, nombre: dePuerto(x.puerto) ? dePuerto(x.puerto).nombre : x.puerto, critica: x.puerto === c.hoja.critica })),
-      balance: R.balance.map((b) => ({ ...b, nombre_accion: NOMBRE_ACCION[b.accion] })),
+      balance: R.balance.map((b) => {
+        const cf = c.hoja.confluencias.find((x) => x.nodo === b.nodo);
+        const co = cf && cf.corrientes.find((x) => x.t.id === b.corriente_menor);
+        return { ...b, nombre_accion: NOMBRE_ACCION[b.accion], cierre: co && co.cierre ? { ...co.cierre } : null };
+      }),
       tramos: R.por_tramo.map((x) => ({ ...x, diametro_in: c.sistema.tramos.find((t) => t.id === x.tramo).diametro_in, locales: c.hoja.filas.get(x.tramo).locales.map((l) => l.que) })),
       aire: c.hoja.aire,
     };
@@ -1318,7 +1362,7 @@
     colocarEquipo, moverEquipo, ponerToma, puntoDelPiso,
     mangueraDe, acoplar, semaforoManguera, alturaPorArrastre, desvioPorArrastre, previaManguera, moverManguera,
     arranqueDe, empezar, teclasSostenidas, planoDeTrabajo, leerCaja, teclear, fantasma, alinear, confirmar, cancelar, fijar, siguienteOpcion, cambiarDiametroActivo, cambiarNivel,
-    reducirEn, desplazamientoSegmento, moverSegmento, borrar, medir,
+    reducirEn, compuertaEn, compuertaSugerida, quitarCompuerta, desplazamientoSegmento, moverSegmento, borrar, medir,
     correccionesDe, correccionesListas, corregir, cambiarDiametroTramo, cambiarDiametroEnCadena, decidirCorto,
     infoTramo, piezasDe, velocidadSemaforo, calculo, informeCalculo, filaCalculo, NOMBRE_ACCION, exportar, importar, ejemplo,
   };

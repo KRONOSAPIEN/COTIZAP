@@ -538,6 +538,7 @@ En el ejemplo, desde lo alto de la subida del cepillo:
 | PT_DESALINEADO | BLOQUEANTE | El rígido no sale del PT en la dirección de la manguera | «El ducto sale del punto de transición N-006 en la dirección de la manguera (+Z).» | — |
 | PIEZA_NO_FABRICABLE | BLOQUEANTE | El motor de COTIZAP no puede fabricar la pieza de un nodo | «El motor no puede fabricar el codo de N-005: …» | — |
 | FLUJO_DESCONOCIDO | BLOQUEANTE (operación) | Una derivación sobre un tramo sin sentido conocido (§2.5.7) | «Conecte primero el tramo TR-001 al colector para saber hacia dónde va el aire.» | — |
+| COMPUERTA_NO_VA | BLOQUEANTE (operación) | Una compuerta fuera de un tramo recto del mismo Ø: en un codo, una derivación, un puerto, un extremo o un cambio de Ø (§5.5) | «La compuerta de N-008 va en un tramo recto del mismo Ø: ahí el ducto da vuelta.» | Quitarla y ponerla en un tramo recto |
 | DIAMETRO_BLOQUEADO | BLOQUEANTE (operación) | Un cambio de Ø en cadena (§2.6) llega a un tramo con candado | «TR-005 tiene candado en 6″: quítelo para cambiar la cadena a 8″.» | Quitar el candado |
 | MOVER_NO_POSIBLE | BLOQUEANTE (operación) | Mover segmento con un vecino que no es paralelo o que quedaría corto | «El tramo TR-002 no es paralelo al movimiento: no puede alargarse ni acortarse para seguir a TR-003.» | Cambiar el largo |
 | ACCESORIOS_NO_CABEN | ERROR | Neta < 0 | «Los accesorios del tramo TR-006 ocupan más que su largo.» | Alargar o pegar |
@@ -662,7 +663,7 @@ Los verifica [`tests/trazado_isometrico_contrato.test.js`](../tests/trazado_isom
 | ≤ 1.05 | Nada: la diferencia está dentro de la precisión del cálculo (NINGUNA) |
 | ≤ 1.2 | Subir el caudal de la corriente de menor pérdida: Q′ = Q·√(SP_mayor / SP_menor) (AJUSTAR_CAUDAL) |
 | > 1.2 | Redimensionar esa corriente (REDIMENSIONAR) |
-| Alternativa | Compuerta de regulación (COMPUERTA); poco recomendable con polvo abrasivo |
+| Alternativa | Compuerta de regulación (COMPUERTA) en el tramo propio de la corriente de menor pérdida: se cierra hasta perder la diferencia y la corriente se queda con su caudal de diseño; poco recomendable con polvo abrasivo |
 
 El ventilador se elige con el camino de mayor pérdida más el colector.
 
@@ -678,6 +679,7 @@ El ventilador se elige con el camino de mayor pérdida más el colector.
    | ≤ 1.05 | NINGUNA: no se corrige |
    | ≤ 1.20 | AJUSTAR_CAUDAL: se acepta el caudal mayor de la corriente corregida |
    | > 1.20 | REDIMENSIONAR, si un Ø comercial menor del tramo propio de esa corriente la equilibra sin pasar de la velocidad máxima. Si no, COMPUERTA, con su advertencia en polvo |
+   | Con una compuerta en el tramo propio de esa corriente (> 1.05) | COMPUERTA: se cierra hasta perder la diferencia, K = ΔP/pv del tramo que entra a ella, y la corriente no se corrige (§5.5) |
 
 5. **El ventilador** de cada colector: el caudal que llega, la succión de la boca más la pérdida del colector, la misma succión en aire estándar (× 1.2/ρ, para leer la curva del fabricante), la potencia del aire Q·SP, la potencia al freno con la eficiencia del ventilador (0.65) y el motor comercial siguiente con la de las bandas (0.95).
 
@@ -2263,7 +2265,7 @@ Es la pestaña **Trazado isométrico** de COTIZAP: otro apartado, al lado de la 
 6. **El rombo y el círculo** de la manguera coinciden mientras no hay desvío: decide el primer arrastre (a lo largo del eje de la toma, el rombo; de lado, el círculo).
 7. **El color del fantasma:** verde si se puede; ámbar si se puede pero deja un aviso o un error del catálogo (por ejemplo, un choque); rojo con el motivo si el modelo lo rechaza. Una red que todavía no llega al colector y el extremo de la cadena no lo pintan de ámbar: son normales mientras se traza.
 8. **Rapidez:** cada fantasma nuevo se prueba en el modelo (`trazar` y `revisar`) y se guarda en una caché mientras dura el trazo. Con trazos de decenas de tramos tarda unos milisegundos; con 481 tramos, de 20 a 60 ms. La rejilla gruesa de choques de §2.10 lo bajaría en trazos grandes.
-9. **Pendiente:** el menú radial de 400 ms en el teléfono (§4.5), la regla de niveles con nombre, la compuerta y la tapa (sus bloques salen con candado y el porqué), la rejilla gruesa de choques y pasar el trazo a partidas. «Corregir» llegó con la etapa 3 (§5.3).
+9. **Pendiente:** el menú radial de 400 ms en el teléfono (§4.5), la regla de niveles con nombre, la tapa (su bloque sale con candado y el porqué), la rejilla gruesa de choques y pasar el trazo a partidas. «Corregir» llegó con la etapa 3 (§5.3) y la compuerta después de la etapa 4 (§5.5).
 
 ### 5.3 Etapa 3, hecha: validar y dimensionar
 
@@ -2353,6 +2355,32 @@ El esquema (§3.5) creció con esos campos. Lo que el trazo exporta sigue llevan
    - el ducto de descarga del ventilador;
    - elegir el modelo del ventilador en un catálogo de fabricantes;
    - pasar el trazo a partidas.
+
+### 5.5 Después de la etapa 4: la compuerta y el pulido del tablero
+
+**La compuerta de regulación** (bloque Compuerta, tecla G) es la que pide el balanceo cuando ningún Ø comercial equilibra una confluencia.
+
+- **Dónde va.** En un punto de un tramo recto, a 50 mm, o en un nodo que une dos tramos rectos del mismo Ø.
+  - `ponerCompuerta(t, M, { tramo, s_mm })` parte el tramo ahí y marca el nodo. Con la marca no se funde con el tramo de al lado. El nodo sale UNION con su accesorio COMPUERTA (CP-…).
+  - La compuerta ocupa 150 mm del tramo, la mitad de cada lado (`LARGO_COMPUERTA_MM`, el cuerpo de guillotina con sus dos cuellos). Las reglas de tramo corto la cuentan como cualquier pieza.
+  - Un cambio que la dejaría en un codo, una derivación o entre dos Ø se rechaza con COMPUERTA_NO_VA.
+  - `quitarCompuerta` la quita, y si los tramos siguen en línea se funden otra vez. Va y vuelve por el JSON.
+- **En el cálculo.** Si la corriente de menos succión de una confluencia tiene una compuerta en su tramo propio (de la confluencia hacia las tomas), la compuerta se cierra hasta perder la diferencia. Su K es ΔP/pv del tramo que entra a ella, y la corriente se queda con su caudal de diseño.
+  - Ejemplo: con K = 0 en la sierra, la compuerta de TR-002 se cierra hasta K 0.88 (159 Pa) y al colector llegan los 2 200 m³/h de diseño.
+  - El balance guarda las succiones de antes de cerrar, para que se vea por qué. La compuerta de la corriente que manda queda abierta (K 0).
+- **En el tablero.**
+  - El balanceo que pide compuerta trae el botón «Poner compuerta en TR-…», que la pone a la mitad del primer tramo propio en que cabe.
+  - El inspector del nodo dice si está abierta o cuánto se cierra, y la quita. Borrar sobre su nodo también la quita.
+
+**El pulido del tablero:**
+
+- **Etiquetas.** Si ningún lugar está libre, una etiqueta obligada va donde menos tape, y una cota sólo si tapa poco. Tapar un ducto pesa poco, otra etiqueta más, y la barra de vistas, el cubo, los ejes y la escala mucho. Las cotas ya no se enciman en el cubo ni en los controles.
+- **Cubo de vista.** Caras más grandes: «Oeste», «Norte» y «Arriba» caben en la suya.
+- **Encuadre.** El dibujo se centra debajo de la barra de vistas. Al entrar a la salida, cuyo inspector es más ancho, la vista se aleja lo que se angosta el lienzo, para que no se salga nada.
+- **Inspector del proyecto.** Servicio, material transportado, origen y material del ducto van a lo ancho, y la viscosidad sale como 1.813×10⁻⁵ Pa·s.
+- **Tableta y teléfono.** En la columna angosta los nombres de la paleta se parten en dos renglones en lugar de cortarse. En el teléfono, la barra de estado deja las coordenadas (no hay puntero) y cabe en un renglón.
+
+Lo verifican `tests/trazado_iso.test.js` (poner, ocupar, no fundirse, ida y vuelta, quitar, rechazos y la caminata al azar con compuertas), `tests/perdidas.test.js` (el cierre que balancea), `tests/trazado_tablero.test.js` (la herramienta, el botón del balanceo y Borrar) y la sección 37 de `tests/e2e/ui.e2e.js` (el botón, la herramienta G y quitarla desde el inspector).
 
 ---
 
