@@ -295,3 +295,139 @@ test('Los sistemas que exporta el modelo al trazar se calculan, o dicen qué les
   }
   assert.ok(calculados > 20, `se calcularon ${calculados}`);
 });
+
+/* ------------------------------------------------------------------ invariantes en redes al azar */
+
+/**
+ * Lo que todo cálculo debe cumplir, venga de donde venga la red: el aire que entra por las tomas (con el balanceo) es el que
+ * llega a cada tramo y al ventilador; cada balance cuadra con sus umbrales y su Q′ = Q·√relación; la compuerta cerrada
+ * iguala las succiones; la succión se encadena; la pérdida de cada toma es la suma de su camino; el ventilador es la boca
+ * más el equipo; los K de los accesorios son los de la hoja; calcular lo calculado da lo mismo.
+ */
+function invariantes(r, msg) {
+  const S = r.sistema;
+  const R = S.resultados;
+  const fila = new Map(R.por_tramo.map((x) => [x.tramo, x]));
+  const hoja = r.hoja.filas;
+  const T = new Map(S.tramos.map((t) => [t.id, t]));
+  const entran = (n) => S.tramos.filter((t) => t.nodo_aguas_abajo === n);
+  const puertos = new Map(S.equipos.flatMap((e) => e.puertos.map((p) => [p.id, { ...p, equipo: e }])));
+  assert.deepEqual(validarEsquema(S, ESQUEMA), [], msg);
+  R.por_tramo.forEach((x) => Object.entries(x).forEach(([k, v]) => assert.ok(k === 'tramo' || (Number.isFinite(v) && v >= 0), `${msg}: ${x.tramo} ${k} = ${v}`)));
+  // 1) caudal: cada tramo lleva la suma de lo que le llega (con la corrección de cada confluencia)
+  const kDe = new Map(); // nodo|tramo → factor de la corriente que llega por ese tramo
+  r.hoja.confluencias.forEach((c) => c.corrientes.forEach((x) => kDe.set(`${c.nodo}|${x.t.id}`, x.k)));
+  S.tramos.forEach((t) => {
+    const inc = entran(t.nodo_aguas_arriba);
+    const q = !inc.length ? puertos.get(S.equipos.flatMap((e) => e.puertos).find((p) => p.nodo === t.nodo_aguas_arriba).id).caudal_m3_h
+      : inc.reduce((a, x) => a + hoja.get(x.id).Q * (inc.length > 1 ? kDe.get(`${t.nodo_aguas_arriba}|${x.id}`) : 1), 0);
+    cerca(hoja.get(t.id).Q, q, 1e-6, `${msg}: Q de ${t.id}`);
+  });
+  // y al ventilador llega lo que jalan las tomas
+  const sumaTomas = R.por_toma.reduce((a, x) => a + x.caudal_corregido_m3_h, 0);
+  cerca(R.ventiladores.reduce((a, v) => a + v.caudal_m3_h, 0), sumaTomas, 0.1 * R.por_toma.length + 0.2, `${msg}: Σ tomas = ventilador`);
+  // 2) balance: relación, umbral, Q′ y compuerta
+  R.balance.forEach((b) => {
+    const c = r.hoja.confluencias.find((x) => x.nodo === b.nodo);
+    const menor = c.corrientes.find((x) => x.t.id === b.corriente_menor);
+    cerca(b.relacion, c.gob.sp0 / menor.sp0, 0.001, `${msg}: relación en ${b.nodo}`);
+    assert.ok(b.relacion >= 1 - 1e-9);
+    if (b.relacion <= P.UMBRAL_NINGUNA) assert.equal(b.accion, 'NINGUNA', `${msg}: ${b.nodo}`);
+    else if (menor.cierre) assert.equal(b.accion, 'COMPUERTA');
+    else if (b.relacion <= P.UMBRAL_AJUSTE) assert.equal(b.accion, 'AJUSTAR_CAUDAL');
+    else assert.ok(['REDIMENSIONAR', 'COMPUERTA'].includes(b.accion));
+    const k = b.accion === 'NINGUNA' || menor.cierre ? 1 : Math.sqrt(b.relacion);
+    cerca(b.caudal_corregido_m3_h, b.caudal_m3_h * k, 0.06 + b.caudal_m3_h * 0.002, `${msg}: Q′ en ${b.nodo}`);
+    if (menor.cierre) {
+      cerca(menor.f.sp_final, c.gob.f.sp_final, 1e-6, `${msg}: la compuerta iguala las succiones en ${b.nodo}`);
+      cerca(menor.cierre.Pa, c.gob.sp0 - menor.sp0, 1e-6);
+    }
+  });
+  // 3) succión encadenada: lo que sale de un tramo es lo que entra al siguiente (o la mayor, en una confluencia)
+  S.tramos.forEach((t) => {
+    const inc = entran(t.nodo_aguas_arriba);
+    const f = hoja.get(t.id);
+    if (inc.length === 1) cerca(f.sp_inicio, hoja.get(inc[0].id).sp_final, 1e-6, `${msg}: succión de ${t.id}`);
+    if (inc.length > 1) cerca(f.sp_inicio, Math.max(...inc.map((x) => hoja.get(x.id).sp_final)), 1e-6, `${msg}: confluencia antes de ${t.id}`);
+    cerca(fila.get(t.id).presion_estatica_Pa, f.sp_final, 0.006);
+  });
+  // 4) por toma: la entrada más la fricción y los locales de su camino
+  R.por_toma.forEach((x) => {
+    const p = puertos.get(x.puerto);
+    const pv = hoja.get(x.camino[0]).toma.pv;
+    cerca(x.perdida_total_Pa, p.coef_entrada_K * pv + x.camino.reduce((a, id) => a + hoja.get(id).friccion + hoja.get(id).local, 0), 0.006, `${msg}: pérdida de ${x.puerto}`);
+    cerca(x.presion_estatica_campana_Pa, (1 + p.coef_entrada_K) * pv, 0.006);
+    assert.equal(T.get(x.camino[x.camino.length - 1]).nodo_aguas_abajo, S.equipos.flatMap((e) => e.puertos).find((q) => q.rol === 'ENTRADA' && q.nodo === T.get(x.camino[x.camino.length - 1]).nodo_aguas_abajo).nodo);
+  });
+  // 5) ventilador: la boca más el equipo, en aire estándar, y su potencia
+  R.ventiladores.forEach((v) => {
+    const e = S.equipos.find((q) => q.id === v.equipo);
+    const bocas = e.puertos.filter((p) => p.rol === 'ENTRADA').map((p) => p.nodo);
+    const sb = Math.max(...S.tramos.filter((t) => bocas.includes(t.nodo_aguas_abajo)).map((t) => hoja.get(t.id).sp_final));
+    cerca(v.presion_estatica_boca_Pa, sb, 0.006, `${msg}: boca`);
+    cerca(v.presion_estatica_Pa, sb + (e.perdida_Pa || 0), 0.011);
+    cerca(v.potencia_aire_kW, (v.caudal_m3_h / 3600) * v.presion_estatica_Pa / 1000, 0.001);
+    assert.ok(v.motor_hp * 0.7457 >= v.potencia_freno_kW / v.eficiencia_transmision - 1e-6, `${msg}: el motor alcanza`);
+  });
+  // 6) los K de los accesorios son los de la hoja
+  S.accesorios.forEach((a) => {
+    // la K de un cambio de sección va sobre la pv de su sección menor (la de la toma, en un adaptador de expansión en la toma)
+    const pvDe = (Q, dmm) => (r.hoja.aire.densidad_kg_m3 * (Q / 3600 / ((Math.PI * (dmm / 1000) ** 2) / 4)) ** 2) / 2;
+    const locales = [...hoja.values()].flatMap((f) => f.locales.filter((l) => l.id === a.id && l.que !== 'ACELERACION')
+      .map((l) => ({ ...l, pv: l.d1 ? pvDe(f.Q, Math.min(l.d1, l.d2) * 25.4) : f.pv })));
+    if (a.tipo === 'CODO' || a.tipo === 'COMPUERTA') locales.forEach((l) => cerca(a.perdida.K_paso, l.K, 1e-4, `${msg}: K de ${a.id}`));
+    if (['INJERTO', 'REDUCCION_INJERTO', 'T_90'].includes(a.tipo)) locales.forEach((l) => cerca(a.perdida.K_ramal, l.K, 1e-4, `${msg}: K de ${a.id}`));
+    locales.forEach((l) => cerca(l.Pa, l.K * l.pv, 1e-6, `${msg}: ${a.id} = K·pv`));
+  });
+  // 7) calcular lo calculado da lo mismo
+  assert.deepEqual(P.calcular(S).sistema, S, `${msg}: idempotente`);
+}
+
+test('Invariantes del cálculo en redes al azar: caudal, balance, compuerta, succión, caminos, ventilador y K', () => {
+  const ESTABLES = ['POLVO', 'VENTILACION'];
+  let total = 0;
+  const conCompuerta = { cerrada: 0, abierta: 0 };
+  const acciones = new Set();
+  [11, 2026, 77, 31337, 909].forEach((semilla0) => {
+    let semilla = semilla0;
+    const azar = () => { semilla = (semilla * 1103515245 + 12345) % 2147483648; return semilla / 2147483648; };
+    const uno = (xs) => xs[Math.floor(azar() * xs.length)];
+    let t = TB.ejemplo(M);
+    if (azar() < 0.4) t = TZ.cambiarProyecto(t, M, { servicio: uno(ESTABLES) });
+    const ops = [
+      () => { // otra máquina, con su toma y su brida, y su ramal hasta un tramo que ya llega al colector
+        let m = TZ.ponerEquipo(t, M, { tipo: 'MAQUINA', nombre: 'Máquina', posicion_mm: { x: 1000 * Math.round(2 + azar() * 10), y: 1000 * Math.round(-6 + azar() * 12), z: 0 }, caja_mm: { largo: 600, ancho: 600, alto: 900 } });
+        const eq = m.equipos[m.equipos.length - 1].id;
+        m = TZ.agregarPuerto(m, M, eq, { posicion_local_mm: { x: 0, y: 0, z: 900 }, diametro_in: uno([4, 5, 6]), caudal_m3_h: uno([500, 700, 900, 1200]), coef_entrada_K: uno([0.25, 0.5, 1]) });
+        const pu = m.equipos[m.equipos.length - 1].puertos[0].id;
+        m = TZ.acoplarBrida(m, M, pu);
+        const nodo = m.equipos[m.equipos.length - 1].puertos[0].nodo;
+        m = TZ.trazar(m, M, nodo, { direccion: { azimut_deg: 0, elevacion_deg: 90 }, largo_mm: uno([1500, 2100, 2600]) });
+        const cola = m.ultimo.nodo;
+        const g = TZ.calcular(m, M);
+        const destino = uno(m.tramos.filter((x) => x.tipo === 'RIGIDO' && g.conocido(x.id)));
+        const rs = TZ.rutas(m, M, cola, { tramo: destino.id });
+        return rs.length ? TZ.aplicarDimensiones(TZ.conectar(m, M, cola, uno(rs)), M) : t;
+      },
+      () => { const tr = uno(t.tramos.filter((x) => x.tipo === 'RIGIDO')); return TZ.ponerCompuerta(t, M, { tramo: tr.id, s_mm: 1000 * Math.round(TZ.calcular(t, M).seg.get(tr.id).L / 2000) || 500 }); },
+      () => { const n = uno(t.nodos.filter((x) => x.compuerta)); return n ? TZ.quitarCompuerta(t, M, n.id) : t; },
+      () => { const p = uno(t.equipos.flatMap((e) => e.puertos).filter((x) => x.rol === 'TOMA')); return TZ.editarPuerto(t, M, p.id, uno([{ coef_entrada_K: uno([0, 0.25, 0.5, 1, 2]) }, { caudal_m3_h: uno([400, 800, 1300, 2000]) }])); },
+      () => TZ.aplicarDimensiones(t, M),
+      () => { const tr = uno(t.tramos.filter((x) => x.tipo === 'RIGIDO')); return TZ.cambiarDiametro(t, M, tr.id, uno([5, 6, 7, 8, 9]), { cadena: true }); },
+    ];
+    for (let i = 0; i < 45; i += 1) {
+      try { t = uno(ops)(); } catch (e) { if (!(e instanceof TZ.TrazadoError)) throw e; }
+      let s;
+      try { s = TZ.aSistema(t, M); } catch (e) { if (e instanceof TZ.TrazadoError) continue; throw e; }
+      let r;
+      try { r = P.calcular(s); } catch (e) { if (e instanceof P.CalculoError) continue; throw e; }
+      invariantes(r, `semilla ${semilla0}, paso ${i}`);
+      total += 1;
+      r.sistema.resultados.balance.forEach((b) => acciones.add(b.accion));
+      r.sistema.accesorios.filter((a) => a.tipo === 'COMPUERTA').forEach((a) => { conCompuerta[a.perdida.K_paso > 0 ? 'cerrada' : 'abierta'] += 1; });
+    }
+  });
+  assert.ok(total > 60, `se revisaron ${total} cálculos`);
+  ['NINGUNA', 'AJUSTAR_CAUDAL', 'COMPUERTA'].forEach((a) => assert.ok(acciones.has(a), `salió ${a} (${[...acciones].join(', ')})`));
+  assert.ok(conCompuerta.cerrada > 0 && conCompuerta.abierta > 0, JSON.stringify(conCompuerta));
+});
