@@ -25,7 +25,7 @@
 
   const base = {
     meta: {
-      version: '1.7.0',
+      version: '1.8.0',
       moneda: 'MXN',
       aviso: 'Mano de obra, lámina y perfiles del proveedor y catálogo de compras son reales; el resto son valores ilustrativos. Revisar antes de cotizar.',
     },
@@ -564,14 +564,57 @@
       // (el caso real: 3 tramos de 6″ y 18 abrazaderas = $6,275.92 sin IVA)
       mangueras: { articulo: 'MANGUERA_6', abrazadera: 'ABRAZADERA_MANGUERA', abrazaderas_por_tramo: 6 },
     },
+
+    /* ------------------------------------------------------------------ */
+    /* CÁLCULO DE LA RED (el trazado isométrico; ver motor/perdidas.js)   */
+    /* Las eficiencias con que se elige el motor del ventilador y la      */
+    /* tabla de coeficientes de pérdidas: los valores de referencia del   */
+    /* manual Industrial Ventilation de la ACGIH. Los ejes de cada tabla  */
+    /* (R/D, ángulos, D₂/D₁) son los del manual y no se editan; sólo sus  */
+    /* valores. No mueven el precio de la cotización.                     */
+    /* ------------------------------------------------------------------ */
+    calculo: {
+      eficiencia_ventilador: 0.65, // potencia del aire ÷ potencia al freno; la del ventilador que se elija
+      eficiencia_transmision: 0.95, // de las bandas (1 = acople directo)
+      coeficientes: {
+        // K del codo de 90° por R/D (0.5, 0.75, 1, 1.5, 2, 2.5); los de 4 y 5 gajos no se hacen a R/D 0.5 (empiezan en 0.75)
+        codo: {
+          liso: [0.71, 0.33, 0.22, 0.15, 0.13, 0.12],
+          gajos_5: [0.46, 0.33, 0.24, 0.19, 0.17],
+          gajos_4: [0.5, 0.37, 0.27, 0.24, 0.23],
+          gajos_3: [0.98, 0.54, 0.42, 0.34, 0.33, 0.33],
+          inglete_90: 1.2, // 2 gajos (una sola junta)
+        },
+        // K de la entrada de ramal por su ángulo: 10, 15, 20, 25, 30, 35, 40, 45, 50, 60 y 90°, sobre la pv del ramal
+        entrada_ramal: [0.06, 0.09, 0.12, 0.15, 0.18, 0.21, 0.25, 0.28, 0.32, 0.44, 1.0],
+        // Recuperación R de la expansión: un renglón por semiángulo (3.5, 5, 10, 15, 20, 25, 30° y brusca),
+        // una columna por D₂/D₁ (1.25, 1.5, 1.75, 2, 2.5)
+        expansion: [
+          [0.92, 0.88, 0.84, 0.81, 0.75],
+          [0.88, 0.84, 0.8, 0.76, 0.68],
+          [0.85, 0.76, 0.7, 0.63, 0.53],
+          [0.83, 0.7, 0.62, 0.55, 0.43],
+          [0.81, 0.67, 0.57, 0.48, 0.36],
+          [0.8, 0.65, 0.53, 0.44, 0.28],
+          [0.79, 0.63, 0.51, 0.41, 0.25],
+          [0.77, 0.62, 0.48, 0.37, 0.22],
+        ],
+        // Factor L de la contracción por semiángulo: 5, 10, 15, 20, 25, 30, 45, 60 y 90°
+        contraccion: [0.05, 0.06, 0.08, 0.1, 0.11, 0.13, 0.2, 0.3, 0.35],
+      },
+    },
   };
+
+  /** Las rutas cuyas listas no pueden cambiar de largo (sus renglones son los ejes fijos de una tabla). */
+  const LARGO_FIJO = /^calculo\.coeficientes\./;
 
   /**
    * Un parche de maestros viene de fuera (navegador, almacén compartido, archivo importado): sólo se conserva lo que
    * tiene la forma de las tablas de arranque. Un número debe ser un número finito, un texto un texto, una lista una
    * lista no vacía de elementos de la misma forma, una tabla una tabla. Lo que no cumple se descarta (queda el valor de
    * arranque) y se anota su ruta. Los renglones que no existen en el arranque (otra hoja del proveedor, otro material)
-   * se respetan si son datos simples. No muta lo recibido.
+   * se respetan si son datos simples. Las listas de las tablas de coeficientes (calculo.coeficientes) conservan su largo:
+   * sus renglones son los ejes del manual. No muta lo recibido.
    * Devuelve { parche, descartados: ['proceso.hoja.ancho_mm', …] }.
    */
   function sanearParche(parche) {
@@ -593,6 +636,8 @@
       if (esObj(ref)) return esObj(v) && Object.keys(ref).every((k) => hay(v, k) && forma(v[k], ref[k]));
       return true;
     };
+    // Las tablas de coeficientes tienen los ejes del manual: cada lista conserva su largo (y cada renglón el suyo)
+    const mismoLargo = (v, ref) => (!Array.isArray(ref) ? true : Array.isArray(v) && v.length === ref.length && v.every((x, i) => mismoLargo(x, ref[i])));
     const limpiar = (p, ref, ruta) => {
       const salida = {};
       Object.keys(p).forEach((k) => {
@@ -607,7 +652,7 @@
             const sub = limpiar(v, r, [...ruta, k]);
             if (Object.keys(sub).length) salida[k] = sub;
           } else descartados.push(aqui);
-        } else if (forma(v, r)) salida[k] = v;
+        } else if (forma(v, r) && (!LARGO_FIJO.test(aqui) || mismoLargo(v, r))) salida[k] = v;
         else descartados.push(aqui);
       });
       return salida;

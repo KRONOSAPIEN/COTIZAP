@@ -685,7 +685,7 @@ El ventilador se elige con el camino de mayor pérdida más el colector.
 
 5. **El ventilador** de cada colector: el caudal que llega, la succión de la boca más la pérdida del colector, la misma succión en aire estándar (× 1.2/ρ, para leer la curva del fabricante), la potencia del aire Q·SP, la potencia al freno con la eficiencia del ventilador (0.65) y el motor comercial siguiente con la de las bandas (0.95).
 
-**La tabla de coeficientes** son los valores de referencia del manual *Industrial Ventilation* de la ACGIH. Antes de usarlos en un proyecto, conviene cotejarlos con la edición que se tenga a la mano. Están juntos en `TABLA` y el cálculo acepta otra tabla:
+**La tabla de coeficientes** son los valores de referencia del manual *Industrial Ventilation* de la ACGIH. Antes de usarlos en un proyecto, conviene cotejarlos con la edición que se tenga a la mano. Están juntos en `TABLA` y el cálculo acepta otra tabla; la aplicación toma la de las tablas maestras, donde se editan con las eficiencias (§5.8):
 
 | Pieza | Coeficiente |
 | --- | --- |
@@ -2354,11 +2354,10 @@ El esquema (§3.5) creció con esos campos. Lo que el trazo exporta sigue llevan
 1. **Presión del ventilador.** Es la succión de entrada: la de la boca más la del colector. Se toma así a propósito (es conservadora) porque no resta la pv de entrada y la descarga se supone libre. Si hay chimenea o ducto de descarga, súmelo.
 2. **El caudal corregido** es el que la red va a jalar si se construye así. Por eso el ventilador se elige con la suma corregida, aunque el balanceo diga NINGUNA en otras confluencias.
 3. **Pendiente:**
-   - editar la tabla de coeficientes y las eficiencias desde la aplicación (hoy se cambian con `opciones`);
    - el ducto de descarga del ventilador;
    - elegir el modelo del ventilador en un catálogo de fabricantes.
 
-   Pasar el trazo a partidas llegó con la etapa 5 (§5.6).
+   Pasar el trazo a partidas llegó con la etapa 5 (§5.6), y editar la tabla de coeficientes y las eficiencias desde la aplicación, después (§5.8).
 
 ### 5.5 Después de la etapa 4: la compuerta y el pulido del tablero
 
@@ -2495,6 +2494,41 @@ Lo verifican:
 - `tests/trazado_tablero.test.js`: la herramienta, quitarla y Borrar.
 - `tests/trazado_lectura.test.js`: la caminata al azar con tapas.
 - La sección 39 de `tests/e2e/ui.e2e.js`: la herramienta A, el cálculo, las partidas, quitarla desde el inspector y la familia en la cotización detallada.
+
+### 5.8 Los coeficientes y las eficiencias, en las tablas maestras
+
+Las eficiencias del ventilador y de las bandas y la tabla de coeficientes (§5.4) están en *Tablas maestras › Cálculo de la red* (grupo `calculo`). Arrancan con los valores de referencia del manual; el taller los cambia si su edición del manual, el fabricante o una medición dicen otra cosa. No mueven el precio de la cotización: mueven la succión, el balanceo y el ventilador del trazado.
+
+- **Qué se edita.**
+  - `eficiencia_ventilador` (0.65) y `eficiencia_transmision` (0.95, de las bandas; 1 = acople directo): de más de 0 a 1.
+  - `coeficientes.codo`: el K del codo de 90° por R/D, en cuatro columnas (liso o estampado, 5, 4 y 3 gajos; los de 4 y 5 gajos empiezan en R/D 0.75), y el del inglete. Un K va de 0 a 5.
+  - `coeficientes.entrada_ramal`: el K por ángulo, de 10° a 90°, de 0 a 5.
+  - `coeficientes.expansion`: la recuperación R por semiángulo (3.5° a 30° y brusca) y D₂/D₁ (1.25 a 2.5), de 0 a 1.
+  - `coeficientes.contraccion`: el factor L por semiángulo (5° a 90°), de 0 a 1.
+
+  Los ejes (R/D, ángulos y D₂/D₁) son los del manual y no se editan: sólo los valores, y cada lista conserva su largo. Un parche que llega con una lista de otro largo (de otra versión o de un archivo) se descarta y rige la de arranque.
+- **En el motor** (`src/motor/perdidas.js`).
+  - `coeficientes(tabla)` saca los valores editables de una tabla; `tablaDe(c)` arma la tabla con ellos.
+  - `revisarCoeficientes(c)` dice qué está mal, con el nombre del renglón: «Expansión a 15° con D₂/D₁ 1.5: la recuperación R va de 0… a 1…». `fueraDeLimite(ruta, v)` hace lo mismo para un solo dato.
+  - `opcionesDe(M)` arma las opciones del cálculo desde las tablas maestras, o falla (TABLA) con el porqué.
+  - Cada sección que se aparta de la referencia queda marcada. La referencia de sus piezas empieza con «Tablas del taller» en vez de «ACGIH». El método del JSON dice «con la tabla de coeficientes del taller (cambiada en codos)».
+  - Con las tablas de arranque, el cálculo da exactamente el ejemplo.
+- **En el editor de tablas.**
+  - Las cuatro tablas se dibujan con sus ejes de encabezado. Cada celda se titula con su renglón y su columna («Codo de 5 gajos a R/D 1.5»).
+  - Un valor fuera de su intervalo no entra. La celda vuelve a su valor y el aviso dice por qué.
+  - Un cuadro arriba dice cómo queda el ventilador del trazado de la cotización con esas tablas, y si la tabla es la de referencia o la del taller.
+  - «Último cambio» dice lo que el cambio movió en el ventilador en vez del precio: «Ventilador de Colector de polvo: 2283 m³/h a 1864 Pa, 1.82 → 2.15 kW al freno, motor de 3 → 5 HP». La ayuda (ⓘ) prueba valores contra el trazado y ajusta una tabla completa en un porcentaje.
+  - Se guardan, se deshacen y se restablecen como los demás datos.
+- **En el tablero.**
+  - `usarMaestros` toma las tablas cuando cambian (un dato, restablecidas o llegadas del almacén compartido) y olvida el cálculo y el despiece guardados.
+  - La nota del método en la salida dice qué secciones se cambiaron. «Coeficientes y eficiencias» lleva al grupo.
+  - Con una tabla imposible, el cálculo dice qué dato está mal y ofrece el mismo botón.
+
+Lo verifican:
+
+- `tests/coeficientes.test.js`: que las tablas de arranque son la referencia y dan el ejemplo exacto, un codo cambiado (K, referencias y método), las eficiencias, los rechazos con su porqué, la pureza, el parche (ida y vuelta y listas de otro largo) y el tablero (`usarMaestros`, el informe, una tabla imposible y el efecto en el ventilador).
+- `tests/ayuda_maestros.test.js`: la ayuda de cada dato y de cada tabla, con las columnas que el editor dibuja.
+- La sección 40 de `tests/e2e/ui.e2e.js`: el botón de la salida, el cuadro, las tablas con sus ejes, la eficiencia y una celda con su efecto, el rechazo de una R de 1.4, la ayuda que prueba contra el trazado, el parche guardado, la salida y el JSON con la tabla del taller, deshacer de vuelta al ejemplo, una tabla imposible y el celular.
 
 ---
 

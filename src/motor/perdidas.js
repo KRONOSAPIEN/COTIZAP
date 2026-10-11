@@ -16,7 +16,8 @@
  *                 en aire estándar (1.2 kg/m³, para leer la curva del fabricante), la potencia y el motor comercial
  *
  * Las presiones estáticas se dan como succión (valor absoluto, en Pa). Los coeficientes están juntos en TABLA, con su
- * referencia; el cálculo acepta otra tabla con `opciones.tabla`. Puro: no muta lo que recibe.
+ * referencia; el cálculo acepta otra tabla con `opciones.tabla`. Las tablas maestras traen los del taller y las dos
+ * eficiencias (grupo calculo): `opcionesDe(M)` los revisa y arma las opciones. Puro: no muta lo que recibe.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -96,6 +97,127 @@
   const redondo = (x, d) => { const k = 10 ** d; const r = Math.round(x * k) / k; return Object.is(r, -0) ? 0 : r; };
   /** Como en los mensajes del trazo: sin separador de miles y sin ceros de más. */
   const num = (x, d) => String(redondo(x, d));
+
+  /* ------------------------------------------------------------------ la tabla del taller */
+
+  /**
+   * Los coeficientes se editan en las tablas maestras (grupo «Cálculo de la red», calculo.coeficientes). Los ejes de cada
+   * tabla son los del manual y no se editan: sólo sus valores. Los codos de 4 y 5 gajos no se hacen a R/D 0.5 (sus valores
+   * empiezan en 0.75).
+   */
+  const desde = (ys) => ys.findIndex((y) => y !== null);
+  const EJES = {
+    codo_r_d: { liso: TABLA.codo.r_d, gajos_5: TABLA.codo.r_d.slice(desde(TABLA.codo.gajos[5])), gajos_4: TABLA.codo.r_d.slice(desde(TABLA.codo.gajos[4])), gajos_3: TABLA.codo.r_d },
+    entrada_ramal_deg: TABLA.entrada_ramal.angulo_deg,
+    expansion_semiangulo_deg: TABLA.expansion.semiangulo_deg,
+    expansion_relacion_D: TABLA.expansion.relacion_D,
+    contraccion_semiangulo_deg: TABLA.contraccion.semiangulo_deg,
+  };
+  const COLUMNAS_CODO = ['liso', 'gajos_5', 'gajos_4', 'gajos_3'];
+  /** Las secciones de la tabla y cómo se nombran en los mensajes. */
+  const SECCIONES = { codo: 'codos', entrada_ramal: 'entradas de ramal', expansion: 'expansiones', contraccion: 'contracciones' };
+
+  /** Los valores editables de una tabla de coeficientes (la de referencia si no se da otra): la forma de calculo.coeficientes. */
+  function coeficientes(tabla) {
+    const t = tabla || TABLA;
+    const sinNulos = (ys) => ys.slice(desde(ys));
+    return {
+      codo: { liso: [...t.codo.liso], gajos_5: sinNulos(t.codo.gajos[5]), gajos_4: sinNulos(t.codo.gajos[4]), gajos_3: [...t.codo.gajos[3]], inglete_90: t.codo.inglete_90 },
+      entrada_ramal: [...t.entrada_ramal.K],
+      expansion: t.expansion.R.map((f) => [...f]),
+      contraccion: [...t.contraccion.L],
+    };
+  }
+
+  /**
+   * El intervalo de un dato del grupo calculo de las tablas maestras (la ruta desde la raíz de los maestros):
+   * { min, max, abierto_min, texto } o null si la ruta no es de ese grupo.
+   */
+  function limiteDe(ruta) {
+    if (!Array.isArray(ruta) || ruta[0] !== 'calculo') return null;
+    if (ruta[1] === 'eficiencia_ventilador' || ruta[1] === 'eficiencia_transmision') return { min: 0, max: 1, abierto_min: true, texto: 'Una eficiencia va de más de 0 a 1 (0.65 = 65 %).' };
+    if (ruta[1] !== 'coeficientes') return null;
+    if (ruta[2] === 'expansion') return { min: 0, max: 1, abierto_min: false, texto: 'La recuperación R va de 0 (se pierde toda la presión dinámica que sobra) a 1 (se recupera toda).' };
+    if (ruta[2] === 'contraccion') return { min: 0, max: 1, abierto_min: false, texto: 'El factor L de la contracción va de 0 a 1.' };
+    if (ruta[2] === 'codo' || ruta[2] === 'entrada_ramal') return { min: 0, max: 5, abierto_min: false, texto: 'Un coeficiente K va de 0 a 5.' };
+    return null;
+  }
+  /** El motivo por el que un valor no sirve para ese dato del grupo calculo, o null si sirve (o la ruta no es de ese grupo). */
+  function fueraDeLimite(ruta, v) {
+    const l = limiteDe(ruta);
+    if (!l) return null;
+    if (!finito(v) || (l.abierto_min ? v <= l.min : v < l.min) || v > l.max) return l.texto;
+    return null;
+  }
+
+  /** Lo que está mal en unos coeficientes (la forma de calculo.coeficientes), en frases; vacío si sirven. */
+  function revisarCoeficientes(c) {
+    const mal = [];
+    const ruta = (...k) => ['calculo', 'coeficientes', ...k];
+    const minuscula = (x) => x.charAt(0).toLowerCase() + x.slice(1);
+    // v: los valores; eje: su eje; que: qué son; cual: cómo se nombra cada valor por su eje; r: su ruta
+    const lista = (v, eje, que, cual, r) => {
+      if (!Array.isArray(v) || v.length !== eje.length) { mal.push(`${que}: deben ser ${eje.length} valores.`); return; }
+      v.forEach((x, i) => { const m = fueraDeLimite([...r, i], x); if (m) mal.push(`${que} ${cual(eje[i])}: ${minuscula(m)}`); });
+    };
+    const grados = (a) => `a ${a}°`;
+    if (!esObjeto(c)) return ['Faltan los coeficientes.'];
+    if (!esObjeto(c.codo)) mal.push('Faltan los coeficientes de los codos.');
+    else {
+      COLUMNAS_CODO.forEach((k) => lista(c.codo[k], EJES.codo_r_d[k], k === 'liso' ? 'Codo liso o estampado' : `Codo de ${k.slice(6)} gajos`, (x) => `a R/D ${x}`, ruta('codo', k)));
+      const m = fueraDeLimite(ruta('codo', 'inglete_90'), c.codo.inglete_90);
+      if (m) mal.push(`Codo de inglete: ${minuscula(m)}`);
+    }
+    lista(c.entrada_ramal, EJES.entrada_ramal_deg, 'Entrada de ramal', grados, ruta('entrada_ramal'));
+    const semi = EJES.expansion_semiangulo_deg;
+    if (!Array.isArray(c.expansion) || c.expansion.length !== semi.length) mal.push(`Expansiones: deben ser ${semi.length} renglones.`);
+    else c.expansion.forEach((f, i) => lista(f, EJES.expansion_relacion_D, `Expansión ${i === semi.length - 1 ? 'brusca' : grados(semi[i])}`, (x) => `con D₂/D₁ ${x}`, ruta('expansion', i)));
+    lista(c.contraccion, EJES.contraccion_semiangulo_deg, 'Contracción', grados, ruta('contraccion'));
+    return mal;
+  }
+
+  /**
+   * La tabla de coeficientes con los valores del taller (calculo.coeficientes). Cada sección que se aparta de la de
+   * referencia queda marcada (taller: true) y lo dice en su referencia. Falla con CalculoError (TABLA) si no sirven.
+   */
+  function tablaDe(c) {
+    const mal = revisarCoeficientes(c);
+    if (mal.length) falla('TABLA', `La tabla de coeficientes de las tablas maestras (Cálculo de la red) no sirve: ${mal[0]}${mal.length > 1 ? ` Y ${mal.length - 1} ${mal.length === 2 ? 'dato más' : 'datos más'}.` : ''}`);
+    const t = clonar(TABLA);
+    const n = TABLA.codo.r_d.length;
+    const relleno = (ys) => [...Array(n - ys.length).fill(null), ...ys];
+    t.codo.liso = [...c.codo.liso];
+    t.codo.gajos = { 3: [...c.codo.gajos_3], 4: relleno(c.codo.gajos_4), 5: relleno(c.codo.gajos_5) };
+    t.codo.inglete_90 = c.codo.inglete_90;
+    t.entrada_ramal.K = [...c.entrada_ramal];
+    t.expansion.R = c.expansion.map((f) => [...f]);
+    t.contraccion.L = [...c.contraccion];
+    const ref = coeficientes(TABLA);
+    Object.keys(SECCIONES).forEach((k) => {
+      if (JSON.stringify(c[k]) === JSON.stringify(ref[k])) return;
+      t[k].taller = true;
+      t[k].referencia = `Tablas del taller, cambiada de la referencia (${t[k].referencia})`;
+    });
+    return t;
+  }
+
+  /** Las secciones de una tabla que el taller cambió (las claves de SECCIONES). */
+  const cambiadas = (tabla) => Object.keys(SECCIONES).filter((k) => tabla && tabla[k] && tabla[k].taller);
+
+  /**
+   * Las opciones del cálculo desde las tablas maestras (grupo calculo): las dos eficiencias y la tabla de coeficientes.
+   * Sin ese grupo, las de referencia. Falla con CalculoError si algún valor no sirve, con el porqué.
+   */
+  function opcionesDe(M) {
+    const c = M && esObjeto(M.calculo) ? M.calculo : null;
+    if (!c) return { ...DEFECTOS, tabla: TABLA };
+    const ef = (k, que) => {
+      if (c[k] === undefined) return DEFECTOS[k];
+      if (fueraDeLimite(['calculo', k], c[k])) falla('TABLA', `${que} de las tablas maestras (Cálculo de la red) va de más de 0 a 1: hoy dice ${c[k]}.`);
+      return c[k];
+    };
+    return { eficiencia_ventilador: ef('eficiencia_ventilador', 'La eficiencia del ventilador'), eficiencia_transmision: ef('eficiencia_transmision', 'La eficiencia de las bandas'), tabla: c.coeficientes === undefined ? TABLA : tablaDe(c.coeficientes) };
+  }
 
   /* ------------------------------------------------------------------ interpolación */
 
@@ -449,6 +571,8 @@
    */
   function calcular(sistema, opciones) {
     const op = { ...DEFECTOS, tabla: TABLA, ...(opciones || {}) };
+    /** De dónde sale el coeficiente de esa sección: del manual, o de las tablas del taller si las cambió. */
+    const fuente = (k) => (op.tabla[k] && op.tabla[k].taller ? 'Tablas del taller' : 'ACGIH');
     dato(op.eficiencia_ventilador > 0 && op.eficiencia_ventilador <= 1 && op.eficiencia_transmision > 0 && op.eficiencia_transmision <= 1, 'Las eficiencias van de 0 a 1.');
     const s = clonar(sistema);
     const R = red(s);
@@ -465,13 +589,13 @@
         const d = a.conexiones[0] ? a.conexiones[0].diametro_in * IN : null;
         const rD = d ? g.radio_eje_mm / d : null;
         const K = d ? kCodo(g.angulo_deg, rD, g.gajos, op.tabla) : null;
-        a.perdida = { modelo: 'CODO_GAJOS', K_paso: K === null ? null : redondo(K, 4), K_ramal: null, referencia: `ACGIH: codo de ${g.gajos} gajos a ${g.angulo_deg}°, R/D ${redondo(rD, 2)}${g.angulo_deg === 90 ? '' : ' (K de 90° por θ/90)'}` };
+        a.perdida = { modelo: 'CODO_GAJOS', K_paso: K === null ? null : redondo(K, 4), K_ramal: null, referencia: `${fuente('codo')}: codo de ${g.gajos} gajos a ${g.angulo_deg}°, R/D ${redondo(rD, 2)}${g.angulo_deg === 90 ? '' : ' (K de 90° por θ/90)'}` };
       } else if (esConfluencia(a)) {
         const K = a.tipo === 'T_90' ? kRamal(90, op.tabla) : kRamal(g.angulo_deg, op.tabla);
-        a.perdida = { modelo: P.modelo || 'CONFLUENCIA_RAMAL', K_paso: a.tipo === 'PANTALON' ? null : 0, K_ramal: redondo(K, 4), referencia: `ACGIH: entrada de ramal a ${a.tipo === 'T_90' ? 90 : g.angulo_deg}°, sobre la pv del ramal; el paso del tronco va en su fricción` };
+        a.perdida = { modelo: P.modelo || 'CONFLUENCIA_RAMAL', K_paso: a.tipo === 'PANTALON' ? null : 0, K_ramal: redondo(K, 4), referencia: `${fuente('entrada_ramal')}: entrada de ramal a ${a.tipo === 'T_90' ? 90 : g.angulo_deg}°, sobre la pv del ramal; el paso del tronco va en su fricción` };
       } else if (esTransicion(a)) {
         const l = [...h.fila.values()].flatMap((f) => f.locales).find((x) => x.id === a.id);
-        if (l) a.perdida = { modelo: l.que, K_paso: redondo(l.K, 4), K_ramal: null, referencia: `ACGIH: ${l.que === 'EXPANSION' ? 'expansión' : 'contracción'} de ${l.d1}″ a ${l.d2}″ con semiángulo de ${redondo(l.alfa, 2)}°, sobre la pv de la sección menor` };
+        if (l) a.perdida = { modelo: l.que, K_paso: redondo(l.K, 4), K_ramal: null, referencia: `${fuente(l.que === 'EXPANSION' ? 'expansion' : 'contraccion')}: ${l.que === 'EXPANSION' ? 'expansión' : 'contracción'} de ${l.d1}″ a ${l.d2}″ con semiángulo de ${redondo(l.alfa, 2)}°, sobre la pv de la sección menor` };
         else a.perdida = { modelo: P.modelo || 'EXPANSION', K_paso: 0, K_ramal: null, referencia: 'Sin cambio de sección: sin pérdida' };
       } else if (a.tipo === 'TAPA') {
         a.perdida = { modelo: 'TAPA', K_paso: null, K_ramal: null, referencia: 'Tapa: cierra un ramal ciego, que no lleva aire' };
@@ -545,7 +669,7 @@
     });
 
     s.resultados = {
-      metodo: 'ACGIH, Industrial Ventilation: método de presión dinámica con balanceo por diseño. Fricción de Darcy-Weisbach (Swamee-Jain) sobre la longitud neta; codos, entradas de ramal, curvas de manguera, expansiones y contracciones con la tabla de coeficientes; succión de la campana (1 + K)·pv. Presiones estáticas como succión, en valor absoluto.',
+      metodo: `ACGIH, Industrial Ventilation: método de presión dinámica con balanceo por diseño. Fricción de Darcy-Weisbach (Swamee-Jain) sobre la longitud neta; codos, entradas de ramal, curvas de manguera, expansiones y contracciones con la tabla de coeficientes${cambiadas(op.tabla).length ? ` del taller (cambiada en ${cambiadas(op.tabla).map((k) => SECCIONES[k]).join(', ')})` : ''}; succión de la campana (1 + K)·pv. Presiones estáticas como succión, en valor absoluto.`,
       por_tramo: [...h.fila.values()].sort((a, b) => (a.tramo < b.tramo ? -1 : 1)).map((f) => ({
         tramo: f.tramo, caudal_m3_h: redondo(f.Q, 1), velocidad_m_s: redondo(f.v, 3), presion_dinamica_Pa: redondo(f.pv, 2), reynolds: Math.round(f.Re), factor_friccion: redondo(f.f, 4),
         perdida_friccion_Pa: redondo(f.friccion, 2), perdida_local_Pa: redondo(f.local, 2), presion_estatica_Pa: redondo(f.sp_final, 2),
@@ -602,5 +726,5 @@
     try { red(sistema); aireDe(sistema.proyecto.aire); return null; } catch (e) { if (e instanceof CalculoError) return e.message; throw e; }
   }
 
-  return { IN, RHO_ESTANDAR, MOTORES_HP, UMBRAL_NINGUNA, UMBRAL_AJUSTE, ACCIONES, DEFECTOS, TABLA, CalculoError, lineal, kCodo, kRamal, recuperacion, factorContraccion, transicion, aireDe, friccion, calcular, faltante };
+  return { IN, RHO_ESTANDAR, MOTORES_HP, UMBRAL_NINGUNA, UMBRAL_AJUSTE, ACCIONES, DEFECTOS, TABLA, EJES, SECCIONES, CalculoError, coeficientes, limiteDe, fueraDeLimite, revisarCoeficientes, tablaDe, cambiadas, opcionesDe, lineal, kCodo, kRamal, recuperacion, factorContraccion, transicion, aireDe, friccion, calcular, faltante };
 }));

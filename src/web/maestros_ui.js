@@ -32,6 +32,7 @@
     ['materiales', 'Materiales', 'Densidad, tabla de calibre, variables de precio y consumibles por material.'],
     ['calibres', 'Espesor por calibre', 'En pulgadas. Cada familia de calibre (MSG, GSG, USSG) tiene su propia tabla.'],
     ['servicios', 'Calibre mínimo por servicio', 'No normativo: poblar con la norma interna. Mayor número de calibre = lámina más delgada.'],
+    ['calculo', 'Cálculo de la red (trazado)', 'Las eficiencias del ventilador y de las bandas y los coeficientes de pérdida (ACGIH) con que se calcula el trazado isométrico. No mueven el precio.'],
   ];
 
   const { esPct, etiqueta, unidadDe } = A;
@@ -292,6 +293,65 @@
     }));
   }
 
+  /* ---- Cálculo de la red: las eficiencias y las tablas de coeficientes con sus ejes fijos (los del manual) ---- */
+  function celdaCoef(ruta, v, nombre) {
+    const el = h('input', { type: 'number', step: 'any', value: String(v), 'aria-label': nombre, title: nombre, dataset: { ruta: llave(ruta), tipo: 'num', titulo: nombre } });
+    controles.set(llave(ruta), el);
+    return h('td', null, el);
+  }
+  /** Una tabla de coeficientes: filas = [[encabezado del renglón, [celdas]]], con las columnas de la ayuda. */
+  function tablaCoef(clave, filas, pie) {
+    const ruta = ['calculo', 'coeficientes', clave];
+    const buscar = `${ruta.join(' ')} ${tituloTabla(ruta)} coeficiente pérdida acgih`.toLowerCase();
+    return h('div', { class: 'm-tabla m-coef', dataset: { buscar, tabla: llave(ruta) } },
+      encabezadoTabla(ruta),
+      h('div', { class: 'tabla-env' }, h('table', { class: 'tabla', id: `m-coef-${clave}` },
+        h('thead', null, h('tr', null, A.COLUMNAS_CALCULO[clave].map((c) => h('th', { scope: 'col' }, c)))),
+        h('tbody', null, filas.map(([cab, celdas]) => h('tr', null, h('th', { scope: 'row' }, cab), celdas))))),
+      pie ? h('p', { class: 'nota' }, pie) : null);
+  }
+  function nodoCalculo(M) {
+    const c = M.calculo.coeficientes;
+    const EJ = C.perdidas.EJES;
+    const r = (...k) => ['calculo', 'coeficientes', ...k];
+    const NOMBRE_CODO = { liso: 'Codo liso o estampado', gajos_5: 'Codo de 5 gajos', gajos_4: 'Codo de 4 gajos', gajos_3: 'Codo de 3 gajos' };
+    const codo = tablaCoef('codo', EJ.codo_r_d.liso.map((rd) => [String(rd), Object.keys(NOMBRE_CODO).map((k) => {
+      const i = EJ.codo_r_d[k].indexOf(rd);
+      return i < 0 ? h('td', { class: 'm-coef-no', title: 'No se hace a este R/D' }, '—') : celdaCoef(r('codo', k, i), c.codo[k][i], `${NOMBRE_CODO[k]} a R/D ${rd}`);
+    })]), 'K del codo de 90°; otro ángulo, K × θ/90 con los gajos equivalentes. Las curvas de la manguera usan la columna del liso.');
+    const ramal = tablaCoef('entrada_ramal', EJ.entrada_ramal_deg.map((a, i) => [`${a}°`, [celdaCoef(r('entrada_ramal', i), c.entrada_ramal[i], `Entrada de ramal a ${a}°`)]]),
+      'Sobre la presión dinámica del ramal; el paso del tronco va en su fricción.');
+    const semi = EJ.expansion_semiangulo_deg;
+    const expansion = tablaCoef('expansion', semi.map((a, i) => {
+      const fila = i === semi.length - 1 ? 'Brusca' : `${a}°`;
+      return [fila, EJ.expansion_relacion_D.map((d, j) => celdaCoef(r('expansion', i, j), c.expansion[i][j], `Expansión ${i === semi.length - 1 ? 'brusca' : `a ${a}°`} con D₂/D₁ ${d}`))];
+    }), 'Pérdida = (1 − R)·(pv₁ − pv₂). Valores de 0 a 1.');
+    const contraccion = tablaCoef('contraccion', EJ.contraccion_semiangulo_deg.map((a, i) => [a === 90 ? '90° (brusca)' : `${a}°`, [celdaCoef(r('contraccion', i), c.contraccion[i], `Contracción a ${a}°`)]]),
+      'Pérdida = L·(pv₂ − pv₁). Valores de 0 a 1.');
+    return h('div', { class: 'm-obj' },
+      h('div', { class: 'm-calc-trazo', id: 'm-calc-trazo', 'aria-live': 'polite' }),
+      h('div', { class: 'm-filas m-filas-ancho' }, fila(['calculo', 'eficiencia_ventilador'], M.calculo.eficiencia_ventilador), fila(['calculo', 'eficiencia_transmision'], M.calculo.eficiencia_transmision)),
+      codo,
+      h('div', { class: 'm-filas m-filas-ancho' }, fila(r('codo', 'inglete_90'), c.codo.inglete_90)),
+      ramal, expansion, contraccion,
+      h('p', { class: 'nota' }, 'Los ejes (R/D, ángulos y D₂/D₁) son los del manual Industrial Ventilation de la ACGIH y no se editan; entre renglones se interpola. Los valores de arranque son los de referencia: cotéjelos con su edición.'));
+  }
+  /** El cuadro del cálculo: cómo queda el ventilador del trazado de esta cotización con estas tablas. */
+  function refrescarCalculo() {
+    const el = $('#m-calc-trazo');
+    if (!el) return;
+    const t = W.estadoApp.cot && W.estadoApp.cot.trazado_iso;
+    const ir = h('button', { type: 'button', class: 'btn btn-sec btn-chico', id: 'm-calc-ir', onclick: () => { $('#tab-trazado').click(); } }, 'Ir al trazado');
+    if (!t || !(t.equipos || []).length) { el.replaceChildren(h('p', { class: 'nota' }, 'Esta cotización no tiene trazado isométrico. Estos datos sólo mueven su cálculo de pérdidas, no el precio.')); return; }
+    const c = C.trazadoTablero.calcularTrazo(t, W.estadoApp.M);
+    if (c.error) { el.replaceChildren(h('p', { class: 'nota m-calc-error' }, `El trazado todavía no se calcula: ${c.error}`), ir); return; }
+    const nombre = (id) => { const e = t.equipos.find((x) => x.id === id); return e ? e.nombre : id; };
+    el.replaceChildren(h('p', { class: 'm-calc-tit' }, 'Con estas tablas, el trazado de esta cotización:'),
+      h('ul', { class: 'm-calc-vent' }, c.sistema.resultados.ventiladores.map((v) => h('li', null,
+        `Ventilador de ${nombre(v.equipo)}: ${W.num(v.caudal_m3_h, 0)} m³/h a ${W.num(v.presion_estatica_Pa, 0)} Pa, ${W.num(v.potencia_freno_kW, 2)} kW al freno, motor de ${v.motor_hp === null ? 'más de 500' : v.motor_hp} HP.`))),
+      h('p', { class: 'nota' }, c.cambiadas.length ? `Tabla del taller: cambiada en ${c.cambiadas.join(', ')}.` : 'Tabla de referencia (ACGIH), sin cambios.'), ir);
+  }
+
   /* ---- Línea de estado del guardado automático ---- */
   const hora = (t) => new Date(t).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   const MENSAJES = {
@@ -381,6 +441,8 @@
     if (!Number.isFinite(v) || v < 0) return 'Valor no válido: use un número, 0 o mayor';
     if (ruta[0] === 'merma' && v >= 1) return 'Valor no válido: la merma debe ser menor que 100 %';
     if (C.validacion.exigePositivo(ruta) && v <= 0) return 'Valor no válido: este dato debe ser mayor que 0';
+    const calc = C.perdidas.fueraDeLimite(ruta, v);
+    if (calc) return `Valor no válido: ${calc.charAt(0).toLowerCase()}${calc.slice(1)}`;
     return null;
   }
 
@@ -414,6 +476,9 @@
       if (mal) { W.toast(mal); return false; }
     }
     const antes = resumenTotal();
+    // Lo del cálculo de la red no mueve el precio: su efecto es el del ventilador del trazado
+    const soloCalculo = cambios.every(([ruta]) => ruta[0] === 'calculo');
+    const Mantes = soloCalculo ? U.clonar(estado.M) : null;
     cambios.forEach(([ruta, valor]) => {
       const previo = leer(estado.M, ruta);
       if (U.igual(previo, valor)) return;
@@ -426,7 +491,8 @@
     refrescarProveedor();
     marcarCambios();
     W.recalcular(); // guarda y recalcula la cotización
-    const efecto = W.ayudaUI.describir(antes, resumenTotal());
+    const efecto = soloCalculo ? C.trazadoTablero.efectoEnTrazo(estado.cot && estado.cot.trazado_iso, Mantes, estado.M) : W.ayudaUI.describir(antes, resumenTotal());
+    refrescarCalculo();
     if (opciones && opciones.deshaciendo) historial.pop();
     else {
       const unico = hechos.length === 1 ? hechos[0] : null;
@@ -504,9 +570,10 @@
           h('span', { class: 'm-grupo-mod', hidden: true }),
           W.ayudaUI.boton([clave], 'grupo'),
           h('span', { class: 'm-grupo-nota' }, nota)),
-        h('div', { class: 'm-grupo-cuerpo' }, clave === 'proveedor' ? nodoProveedor(M) : nodo(M[clave], [clave])));
+        h('div', { class: 'm-grupo-cuerpo' }, clave === 'proveedor' ? nodoProveedor(M) : clave === 'calculo' ? nodoCalculo(M) : nodo(M[clave], [clave])));
     }));
     marcarCambios();
+    refrescarCalculo();
     filtrar();
     aplicarBloqueo();
   }
@@ -558,8 +625,16 @@
         return;
       }
       valor = tipo === 'pct' ? n / 100 : n;
+      const calc = C.perdidas.fueraDeLimite(ruta, valor);
+      if (calc) {
+        el.value = String(leer(estado.M, ruta));
+        W.toast(`Valor no válido: ${calc.charAt(0).toLowerCase()}${calc.slice(1)}`);
+        return;
+      }
     }
-    aplicarLote([[ruta, valor]]);
+    // Una celda de una tabla de ejes fijos trae su nombre («Codo de 5 gajos a R/D 1.5»): con él se titula el cambio
+    const titulo = el.dataset.titulo ? `${el.dataset.titulo}: ${textoValor(ruta, leer(estado.M, ruta))} → ${textoValor(ruta, valor)}` : undefined;
+    aplicarLote([[ruta, valor]], titulo);
   }
 
   let enlazado = false;

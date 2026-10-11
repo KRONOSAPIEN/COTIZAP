@@ -108,7 +108,7 @@
       ui.s.cot = cot;
       if (s0) ui.s.fase = s0.fase;
       TB().decir(ui.s, m.equipos.length ? 'Siga el trazado: arrastre desde una toma, un extremo o un tramo.' : 'Empiece por el colector: elíjalo en la paleta y toque el piso.', false);
-    }
+    } else TB().usarMaestros(ui.s, M()); // las tablas pudieron cambiar (un dato, restablecidas o del almacén compartido)
     return ui.s;
   }
   /** Guarda el trazo con la cotización (cada cambio es una operación del usuario, no un movimiento del puntero). */
@@ -1228,7 +1228,8 @@
   function seccionCalculo() {
     const s = ui.s;
     const inf = TB().informeCalculo(s);
-    if (inf.error) return [h('h4', null, 'Cálculo de pérdidas'), h('p', { class: 'ti-semaforo ti-sem-ambar', id: 'ti-calc-estado' }, inf.error)];
+    const aTablas = () => h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-calc-tablas', onclick: () => W.maestrosUI.irA(['calculo']) }, 'Coeficientes y eficiencias'));
+    if (inf.error) return [h('h4', null, 'Cálculo de pérdidas'), h('p', { class: 'ti-semaforo ti-sem-ambar', id: 'ti-calc-estado' }, inf.error), /tablas maestras/.test(inf.error) ? aTablas() : null];
     const ir = (id) => () => irA(id);
     const pct = (x) => `${Math.round(x * 100)} %`;
     const tabla = (id, cabeza, filas) => h('div', { class: 'ti-tabla-env' }, h('table', { class: 'ti-calc-tabla', id },
@@ -1254,7 +1255,8 @@
           h('td', null, h('button', { type: 'button', class: 'enlace', onclick: ir(x.tramo) }, x.tramo)), h('td', null, pulg(x.diametro_in)), h('td', null, n0(x.caudal_m3_h)), h('td', null, W.num(x.velocidad_m_s, 1)),
           h('td', null, W.num(x.perdida_friccion_Pa, 1)), h('td', { title: x.locales.join(', ') }, W.num(x.perdida_local_Pa, 1)), h('td', null, n0(x.presion_estatica_Pa))))),
         h('p', { class: 'ti-nota' }, 'En pascales; la succión es al final de cada tramo. Clic en un tramo: su renglón completo (presión dinámica, Reynolds, f y cada pérdida local).')),
-      h('p', { class: 'ti-nota' }, `Método de la ACGIH (Industrial Ventilation) con balanceo por diseño; aire a ${W.num(inf.aire.densidad_kg_m3, 4)} kg/m³. Las presiones son succión (Pa). Los coeficientes son los de referencia del manual: cotéjelos con su edición. En esta fase las cotas dicen Ø, caudal y succión al final de cada tramo.`),
+      h('p', { class: 'ti-nota', id: 'ti-calc-metodo' }, `Método de la ACGIH (Industrial Ventilation) con balanceo por diseño; aire a ${W.num(inf.aire.densidad_kg_m3, 4)} kg/m³. Las presiones son succión (Pa). ${inf.cambiadas.length ? `Coeficientes de las tablas del taller, cambiados en ${inf.cambiadas.join(', ')}; los demás, los de referencia del manual.` : 'Los coeficientes son los de referencia del manual: cotéjelos con su edición.'} Se editan, con las eficiencias, en Tablas maestras › Cálculo de la red. En esta fase las cotas dicen Ø, caudal y succión al final de cada tramo.`),
+      aTablas(),
     ];
   }
 

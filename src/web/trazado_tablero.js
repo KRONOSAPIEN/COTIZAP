@@ -93,12 +93,26 @@
       M, t: modelo || TZ.nuevo(M), hist: [], fut: [], g: null, problemas: [],
       vista: 'NE', cam: { k: 0.05, ox: 0, oy: 0 }, ancho: o.ancho || 960, alto: o.alto || 600,
       herr: 'SELECCIONAR', tipoEquipo: 'MAQUINA', D: 6, D2: 5, nivel: 0, fase: 0,
-      fijar: null, caja: '', mayus: false, alt: false, traza: null, sel: null, medir: null, msg: '', error: false,
+      fijar: null, caja: '', mayus: false, alt: false, traza: null, sel: null, medir: null, msg: '', error: false, huellaM: JSON.stringify(M),
     };
     s.vista = s.t.proyecto.vista_iso || 'NE';
     recalcular(s);
     encuadrar(s);
     return s;
+  }
+  /**
+   * Las tablas maestras cambiaron (un dato editado, restablecidas o llegadas del almacén compartido): el tablero las toma,
+   * vuelve a revisar el trazo y olvida el cálculo y el despiece guardados. Devuelve si había algo distinto.
+   */
+  function usarMaestros(s, M) {
+    const huella = JSON.stringify(M);
+    if (s.M === M && s.huellaM === huella) return false;
+    s.M = M;
+    s.huellaM = huella;
+    s.calc = null;
+    s.desp = null;
+    recalcular(s);
+    return true;
   }
   function recalcular(s) {
     s.g = TZ.calcular(s.t, s.M);
@@ -1281,21 +1295,53 @@
   /* ------------------------------------------------------------------ salida y cálculo (Fase 5) */
 
   /**
-   * El cálculo de la red (src/motor/perdidas.js, etapa 4) sobre el JSON del sistema: { sistema, hoja } o { error } con el
-   * porqué. Se guarda mientras el trazo no cambie.
+   * El cálculo de un trazo (src/motor/perdidas.js, etapa 4) sobre su JSON del sistema, con las eficiencias y los
+   * coeficientes de las tablas maestras (grupo calculo): { sistema, hoja, cambiadas } (cambiadas: las secciones de la
+   * tabla que el taller cambió, por nombre) o { error } con el porqué.
    */
+  function calcularTrazo(t, M) {
+    try {
+      const op = PD.opcionesDe(M);
+      const r = PD.calcular(TZ.aSistema(t, M), op);
+      return { ...r, cambiadas: PD.cambiadas(op.tabla).map((k) => PD.SECCIONES[k]) };
+    } catch (e) {
+      if (e instanceof TZ.TrazadoError) return { error: `Para calcular, primero corrija los problemas: ${textoError(e).replace(/^No se puede exportar mientras haya /, 'hay ')}` };
+      if (e instanceof PD.CalculoError) return { error: e.message };
+      throw e;
+    }
+  }
+  /** El cálculo de la red del tablero (calcularTrazo); se guarda mientras el trazo y las tablas no cambien (usarMaestros). */
   function calculo(s) {
     if (s.calc && s.calc.t === s.t) return s.calc.r;
-    let r;
-    try {
-      r = PD.calcular(TZ.aSistema(s.t, s.M));
-    } catch (e) {
-      if (e instanceof TZ.TrazadoError) r = { error: `Para calcular, primero corrija los problemas: ${textoError(e).replace(/^No se puede exportar mientras haya /, 'hay ')}` };
-      else if (e instanceof PD.CalculoError) r = { error: e.message };
-      else throw e;
-    }
+    const r = calcularTrazo(s.t, s.M);
     s.calc = { t: s.t, r };
     return r;
+  }
+  const kw = (x) => String(Math.round(x * 100) / 100);
+  /**
+   * Lo que un cambio de las tablas maestras (de Ma a Mb) mueve en el ventilador del trazo `t`, para decirlo al editar el
+   * grupo calculo: { txt, clase } con clase sube | baja | igual | mal | neutro (como el efecto en el precio).
+   */
+  function efectoEnTrazo(t, Ma, Mb) {
+    if (!t || !(t.equipos || []).length) return { txt: 'Esta cotización no tiene trazado isométrico: estos datos mueven su cálculo de pérdidas, no el precio.', clase: 'neutro' };
+    const a = calcularTrazo(t, Ma);
+    if (a.error) return { txt: `El trazado de esta cotización todavía no se puede calcular: ${a.error}`, clase: 'neutro' };
+    const b = calcularTrazo(t, Mb);
+    if (b.error) return { txt: `Con ese valor el trazado no se puede calcular: ${b.error}`, clase: 'mal' };
+    const va = a.sistema.resultados.ventiladores;
+    const vb = b.sistema.resultados.ventiladores;
+    const nombre = (id) => { const e = t.equipos.find((x) => x.id === id); return e ? e.nombre : id; };
+    const partes = vb.map((y) => {
+      const x = va.find((v) => v.equipo === y.equipo);
+      if (!x || (x.presion_estatica_Pa === y.presion_estatica_Pa && x.potencia_freno_kW === y.potencia_freno_kW && x.motor_hp === y.motor_hp && x.caudal_m3_h === y.caudal_m3_h)) return null;
+      const hp = (v) => (v === null ? 'más de 500' : String(v));
+      const de = (p, q, fmt, un) => (fmt(p) === fmt(q) ? `${fmt(q)} ${un}` : `${fmt(p)} → ${fmt(q)} ${un}`);
+      return { d: y.potencia_freno_kW - x.potencia_freno_kW,
+        txt: `Ventilador de ${nombre(y.equipo)}: ${de(x.caudal_m3_h, y.caudal_m3_h, n, 'm³/h')} a ${de(x.presion_estatica_Pa, y.presion_estatica_Pa, n, 'Pa')}, ${de(x.potencia_freno_kW, y.potencia_freno_kW, kw, 'kW al freno')}, motor de ${de(x.motor_hp, y.motor_hp, hp, 'HP')}` };
+    }).filter(Boolean);
+    if (!partes.length) return { txt: 'Sin cambio en el ventilador del trazado: ninguna de sus piezas usa este dato (o su efecto es mínimo).', clase: 'igual' };
+    const d = partes.reduce((x, p) => x + p.d, 0);
+    return { txt: `${partes.map((p) => p.txt).join('; ')}.`, clase: d > 0 ? 'sube' : d < 0 ? 'baja' : 'igual' };
   }
   /**
    * El trazo a partidas (motor/trazado_lectura.js, §5.6): la lectura para las reglas del unifilar, su despiece y los avisos,
@@ -1310,8 +1356,8 @@
   }
   const NOMBRE_ACCION = { NINGUNA: 'Balanceada', AJUSTAR_CAUDAL: 'Ajustar caudal', REDIMENSIONAR: 'Redimensionar', COMPUERTA: 'Compuerta' };
   /**
-   * El cálculo para mostrarlo: ventiladores, tomas (con su equipo y la crítica), balance y la hoja por tramo con su Ø.
-   * { error } si no se puede calcular.
+   * El cálculo para mostrarlo: ventiladores, tomas (con su equipo y la crítica), balance, la hoja por tramo con su Ø y las
+   * secciones de la tabla de coeficientes que el taller cambió. { error } si no se puede calcular.
    */
   function informeCalculo(s) {
     const c = calculo(s);
@@ -1329,6 +1375,7 @@
       }),
       tramos: R.por_tramo.map((x) => ({ ...x, diametro_in: c.sistema.tramos.find((t) => t.id === x.tramo).diametro_in, locales: c.hoja.filas.get(x.tramo).locales.map((l) => l.que) })),
       aire: c.hoja.aire,
+      cambiadas: c.cambiadas,
     };
   }
   const NOMBRE_LOCAL = { CODO: 'codo', RAMAL: 'entrada del ramal', CURVAS: 'curvas de la manguera', EXPANSION: 'expansión', CONTRACCION: 'contracción', ACELERACION: 'aceleración en la confluencia', COMPUERTA: 'compuerta' };
@@ -1393,7 +1440,7 @@
 
   return {
     CAJAS, FASES, VISTAS, NOMBRE_VISTA, AYUDA, CAPTURA_PX, IMAN_PX, ALINEAR_PX,
-    crear, recalcular, hacer, reemplazar, deshacer, rehacer, decir,
+    crear, usarMaestros, recalcular, hacer, reemplazar, deshacer, rehacer, decir,
     adelante, profundidad, pantalla, enPlano, enNivel, esquinas, carasVisibles, encuadrar, zoom, desplazar, medidas, ponerVista, girarVista,
     tocar, caraBajo, fases, irFase, elegir,
     colocarEquipo, moverEquipo, ponerToma, puntoDelPiso,
@@ -1401,6 +1448,6 @@
     arranqueDe, empezar, teclasSostenidas, planoDeTrabajo, leerCaja, teclear, fantasma, alinear, confirmar, cancelar, fijar, siguienteOpcion, cambiarDiametroActivo, cambiarNivel,
     reducirEn, compuertaEn, compuertaSugerida, quitarCompuerta, tapaEn, quitarTapa, desplazamientoSegmento, moverSegmento, borrar, medir,
     correccionesDe, correccionesListas, corregir, cambiarDiametroTramo, cambiarDiametroEnCadena, decidirCorto,
-    infoTramo, piezasDe, velocidadSemaforo, calculo, informeCalculo, filaCalculo, NOMBRE_ACCION, despiece, exportar, importar, ejemplo,
+    infoTramo, piezasDe, velocidadSemaforo, calcularTrazo, calculo, efectoEnTrazo, informeCalculo, filaCalculo, NOMBRE_ACCION, despiece, exportar, importar, ejemplo,
   };
 }));

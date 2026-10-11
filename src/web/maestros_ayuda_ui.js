@@ -51,6 +51,16 @@
     const pct = a.sub ? d / a.sub : 0;
     return { txt: `${W.mxn(a.sub)} → ${W.mxn(b.sub)}  (${signo(d)}${W.mxn(Math.abs(d))} · ${signo(d)}${W.pct(Math.abs(pct), 2)})`, clase: d > 0 ? 'sube' : 'baja', d, pct };
   }
+  /*
+   * El cálculo de la red (grupo calculo) no mueve el precio: mueve el ventilador del trazado de la cotización. Probar un
+   * valor calcula el trazo con una COPIA de las tablas y dice qué cambia (trazado_tablero.efectoEnTrazo).
+   */
+  const esCalculo = (ruta) => ruta[0] === 'calculo';
+  function efectoTrazo(cambiar) {
+    const Mb = U.clonar(W.estadoApp.M);
+    cambiar(Mb);
+    return C.trazadoTablero.efectoEnTrazo(W.estadoApp.cot && W.estadoApp.cot.trazado_iso, W.estadoApp.M, Mb);
+  }
   const lineaEfecto = (e) => h('div', { class: `m-efecto m-efecto-${e.clase}` }, e.clase === 'sube' ? '▲ ' : e.clase === 'baja' ? '▼ ' : e.clase === 'mal' ? '⚠ ' : '', e.txt);
 
   /* ---------------- Ventana emergente ---------------- */
@@ -113,21 +123,22 @@
     const efecto = h('div', { class: 'm-sim-res', 'aria-live': 'polite' });
     const btnAplicar = h('button', { type: 'button', class: 'btn btn-primario btn-chico' }, 'Aplicar este valor');
     let temporizador = null;
+    const calc = esCalculo(ruta);
     const valido = () => {
       const n = Number(entrada.value);
       if (entrada.value === '' || !Number.isFinite(n) || n < 0) return 'Use un número, 0 o mayor.';
       if (ruta[0] === 'merma' && n >= 100) return 'La merma debe ser menor que 100 %.';
       if (C.validacion.exigePositivo(ruta) && n <= 0) return 'Este dato debe ser mayor que 0.';
-      return null;
+      return calc ? C.perdidas.fueraDeLimite(ruta, aAlm(n)) : null;
     };
     const actualizar = () => {
       const mal = valido();
       const igualAlActual = Number(entrada.value) === A.mostrado(ruta, leer(W.estadoApp.M, ruta));
       btnAplicar.disabled = !!mal || igualAlActual;
       if (mal) { efecto.replaceChildren(h('div', { class: 'm-efecto m-efecto-mal' }, `⚠ ${mal}`)); return; }
-      if (igualAlActual) { efecto.replaceChildren(h('div', { class: 'm-ayuda-suave' }, 'Escriba otro valor, o use −10 % / +10 %, para ver cuánto cambiaría su cotización.')); return; }
+      if (igualAlActual) { efecto.replaceChildren(h('div', { class: 'm-ayuda-suave' }, `Escriba otro valor, o use −10 % / +10 %, para ver cuánto cambiaría ${calc ? 'el ventilador del trazado' : 'su cotización'}.`)); return; }
       const v = aAlm(Number(entrada.value));
-      efecto.replaceChildren(lineaEfecto(describir(ahora(), conCambio((Mc) => escribir(Mc, ruta, v)))));
+      efecto.replaceChildren(lineaEfecto(calc ? efectoTrazo((Mc) => escribir(Mc, ruta, v)) : describir(ahora(), conCambio((Mc) => escribir(Mc, ruta, v)))));
     };
     entrada.addEventListener('input', () => { clearTimeout(temporizador); temporizador = setTimeout(actualizar, 60); });
     const factor = (f) => () => { entrada.value = String(reducida(A.mostrado(ruta, actual) * f)); actualizar(); };
@@ -138,8 +149,8 @@
       refrescar();
     });
     setTimeout(actualizar, 0);
-    return seccion('Con su cotización',
-      sensibilidad(ruta, actual),
+    return seccion(calc ? 'Con el trazado de esta cotización' : 'Con su cotización',
+      calc ? null : sensibilidad(ruta, actual),
       h('div', { class: 'm-sim' },
         h('div', { class: 'm-sim-fila' },
           h('label', null, 'Probar otro valor ', entrada, un ? h('span', { class: 'm-sim-un' }, un) : null),
@@ -193,6 +204,10 @@
     if (k === 'precios') return { rutas: Object.keys(M.precios).map((c) => ['precios', c]), que: 'precios', todos: 'todos los precios de esta lista', ejemplo: 'Todo subió 5 % → escriba 5.' };
     if (k === 'mano_obra') return { rutas: Object.keys(M.mano_obra.operaciones).map((o) => ['mano_obra', 'operaciones', o, 'salario_diario']), que: 'salarios por día', todos: 'todos los salarios por día', ejemplo: 'Aumento de salario de 4 % → escriba 4.' };
     if (k === 'compras.articulos') return { rutas: Object.keys(M.compras.articulos).map((a) => ['compras', 'articulos', a, 'precio']), que: 'precios del catálogo', todos: 'todos los precios del catálogo de compras', ejemplo: 'La tienda subió 5 % → escriba 5.' };
+    if (/^calculo\.coeficientes\./.test(k)) {
+      const celdas = (v, r) => (Array.isArray(v) ? v.flatMap((x, i) => celdas(x, [...r, i])) : v !== null && typeof v === 'object' ? Object.keys(v).flatMap((c) => celdas(v[c], [...r, c])) : [r]);
+      return { rutas: celdas(leer(M, ruta), ruta), que: 'coeficientes', todos: 'todos los coeficientes de esta tabla', ejemplo: 'Su edición del manual da 10 % más → escriba 10.', calculo: true };
+    }
     const t = leer(M, ruta);
     if (Array.isArray(t) && t.length && t.every((p) => Array.isArray(p) && p.length === 2) && /v_m_min/.test(k)) {
       return { rutas: t.map((_, i) => [...ruta, i, 1]), que: 'velocidades', todos: 'todas las velocidades de esta tabla', ejemplo: 'La máquina rinde 10 % más → escriba 10.' };
@@ -216,8 +231,14 @@
       const c = cambios();
       btn.disabled = !c || !c.length;
       if (!c) { efecto.replaceChildren(h('div', { class: 'm-efecto m-efecto-mal' }, '⚠ Escriba un porcentaje (por ejemplo 5 o −3).')); return; }
-      efecto.replaceChildren(h('div', { class: 'm-ayuda-suave' }, `${c.length} ${m.que} cambiarían.`),
-        lineaEfecto(describir(ahora(), conCambio((Mc) => c.forEach(([r, v]) => escribir(Mc, r, v))))));
+      const fuera = m.calculo ? c.find(([r, v]) => C.perdidas.fueraDeLimite(r, v)) : null;
+      if (fuera) {
+        btn.disabled = true;
+        efecto.replaceChildren(h('div', { class: 'm-efecto m-efecto-mal' }, `⚠ Con ese ajuste algún valor se sale de su intervalo: ${C.perdidas.fueraDeLimite(fuera[0], fuera[1])}`));
+        return;
+      }
+      const cambiar = (Mc) => c.forEach(([r, v]) => escribir(Mc, r, v));
+      efecto.replaceChildren(h('div', { class: 'm-ayuda-suave' }, `${c.length} ${m.que} cambiarían.`), lineaEfecto(m.calculo ? efectoTrazo(cambiar) : describir(ahora(), conCambio(cambiar))));
     };
     let t = null;
     entrada.addEventListener('input', () => { clearTimeout(t); t = setTimeout(actualizar, 60); });
@@ -372,7 +393,7 @@
     } else {
       const masivo = ajusteMasivo(ruta);
       if (masivo) cuerpo.push(masivo);
-      if (tipo === 'grupo' || tipo === 'sub') cuerpo.push(masMueve(ruta));
+      if ((tipo === 'grupo' || tipo === 'sub') && !esCalculo(ruta)) cuerpo.push(masMueve(ruta));
       else if (tipo === 'tabla' && masivo === null) { /* tablas de texto: sin simulación */ }
     }
     // Volver al valor de arranque

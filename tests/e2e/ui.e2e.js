@@ -3084,6 +3084,84 @@ const ok = (cond, msg) => {
     await p.close();
   }
 
+  console.log('40) El cálculo de la red en las tablas maestras: eficiencias y coeficientes editables, con su efecto en el ventilador del trazado');
+  {
+    const EJ = require('../../docs/ejemplos/trazado-isometrico-ejemplo.json');
+    const p = await nuevaPagina();
+    const R = (fn, a) => p.evaluate(fn, a);
+    const calculado = () => R(() => { const C = window.COTIZAP; return JSON.stringify(C.perdidas.calcular(C.trazadoIso.aSistema(C.web.trazadoUI.estado().t, C.web.estadoApp.M), C.perdidas.opcionesDe(C.web.estadoApp.M)).sistema); });
+    const cambiar = async (sel, v) => { await p.fill(sel, v); await p.locator(sel).dispatchEvent('change'); };
+    await p.click('#tab-trazado');
+    await p.click('#ti-ejemplo');
+    await p.click('#ti-fase-5');
+    ok(/Los coeficientes son los de referencia del manual/.test(await p.locator('#ti-calc-metodo').innerText()), 'de arranque, la tabla de referencia');
+    // «Coeficientes y eficiencias» lleva a su grupo de las tablas maestras, que dice cómo queda el ventilador del trazado
+    await p.click('#ti-calc-tablas');
+    await p.waitForFunction(() => window.COTIZAP.web.estadoApp.tab === 'maestros' && document.querySelector('.m-grupo[data-grupo="calculo"]').open, null, { timeout: 3000 }).catch(() => {});
+    ok(await p.locator('.m-grupo[data-grupo="calculo"]').evaluate((g) => g.open) && await p.locator('.m-grupo[data-grupo="calculo"] .m-chip-norma').count() === 1, 'el botón abre Tablas maestras › Cálculo de la red (valores de referencia)');
+    const caja = (await p.locator('#m-calc-trazo').innerText()).replace(/\s+/g, ' ');
+    ok(/Ventilador de Colector de polvo: 2,283 m³\/h a 1,864 Pa, 1\.82 kW al freno, motor de 3 HP\./.test(caja) && /Tabla de referencia \(ACGIH\), sin cambios\./.test(caja), `el cuadro: el ventilador del trazado con estas tablas (${caja})`);
+    // las tablas con sus ejes fijos
+    ok(JSON.stringify(await p.locator('#m-coef-expansion thead th').allTextContents()) === JSON.stringify(['Semiángulo', 'D₂/D₁ 1.25', 'D₂/D₁ 1.5', 'D₂/D₁ 1.75', 'D₂/D₁ 2', 'D₂/D₁ 2.5'])
+      && await p.locator('#m-coef-expansion tbody tr').count() === 8 && /^Brusca/.test(await p.locator('#m-coef-expansion tbody tr').last().innerText()), 'la expansión: un renglón por semiángulo (el último, brusca) y una columna por D₂/D₁');
+    ok(await p.locator('#m-coef-codo tbody tr').count() === 6 && await p.locator('#m-coef-codo tbody tr').first().locator('.m-coef-no').count() === 2, 'los codos por R/D; los de 4 y 5 gajos no se hacen a R/D 0.5');
+    // la eficiencia del ventilador: el último cambio dice lo que mueve el ventilador, no el precio
+    await cambiar('#m_calculo__eficiencia_ventilador', '0.55');
+    const ult = (await p.locator('#maestros-ultimo').innerText()).replace(/\s+/g, ' ');
+    ok(/Eficiencia del ventilador: 0\.65 → 0\.55/.test(ult) && /Ventilador de Colector de polvo: 2283 m³\/h a 1864 Pa, 1\.82 → 2\.15 kW al freno, motor de 3 → 5 HP/.test(ult), `el último cambio: el motor sube a 5 HP (${ult})`);
+    // una celda: su nombre titula el cambio y la tabla queda «del taller»
+    const codo5 = p.locator('#m-coef-codo input[aria-label="Codo de 5 gajos a R/D 1.5"]');
+    ok(await codo5.inputValue() === '0.24', 'la celda del codo de 5 gajos a R/D 1.5');
+    await codo5.fill('0.48');
+    await codo5.dispatchEvent('change');
+    const ult2 = (await p.locator('#maestros-ultimo').innerText()).replace(/\s+/g, ' ');
+    ok(/Codo de 5 gajos a R\/D 1\.5: 0\.24 → 0\.48/.test(ult2) && /1864 → 1906 Pa/.test(ult2), `los codos pesan más: sube la succión (${ult2})`);
+    ok(/Tabla del taller: cambiada en codos\./.test(await p.locator('#m-calc-trazo').innerText()) && await p.locator('.m-tabla[data-tabla=\'["calculo","coeficientes","codo"]\']').getAttribute('data-mod') === '1', 'el cuadro dice que la tabla es la del taller y la tabla se marca modificada');
+    ok(/«?2 modificados/.test(await p.locator('.m-grupo[data-grupo="calculo"] .m-grupo-mod').innerText()), 'el grupo cuenta sus dos cambios');
+    // lo que se sale de su intervalo no entra
+    const exp = p.locator('#m-coef-expansion input[aria-label="Expansión a 15° con D₂/D₁ 1.5"]');
+    await exp.fill('1.4');
+    await exp.dispatchEvent('change');
+    ok(await exp.inputValue() === '0.7' && await R(() => window.COTIZAP.web.estadoApp.M.calculo.coeficientes.expansion[3][1]) === 0.7, 'una recuperación de 1.4 se rechaza y la celda vuelve a 0.7');
+    // la ayuda del dato prueba valores contra el trazado
+    await p.locator('.m-fila:has(#m_calculo__eficiencia_transmision) .m-ayuda').click();
+    await p.locator('#m-pop .m-sim-in').fill('1');
+    await p.waitForTimeout(150);
+    const sim = (await p.locator('#m-pop').innerText()).replace(/\s+/g, ' ');
+    const iSim = sim.search(/con el trazado de esta cotización/i);
+    ok(iSim >= 0 && /2\.19 kW al freno, motor de 5 → 3 HP/.test(sim) && !/Calcular qué mueve/i.test(sim), `la ventana prueba valores contra el ventilador del trazado (${sim.slice(iSim, iSim + 170)})`);
+    await p.keyboard.press('Escape');
+    // se guardan con las demás tablas
+    ok(await R(() => { const x = JSON.parse(localStorage.getItem('cotizap.maestros.v2') || '{}'); const pa = x.parche || x; return pa.calculo && pa.calculo.eficiencia_ventilador === 0.55 && pa.calculo.coeficientes.codo.gajos_5[2] === 0.48; }), 'el parche guardado trae la eficiencia y el codo');
+    // el trazado los usa: la salida, la nota y el JSON lo dicen
+    await p.click('#tab-trazado');
+    await p.waitForSelector('.ti-calc-vent', { timeout: 3000 }).catch(() => {});
+    const vent = (await p.locator('.ti-calc-vent').innerText()).replace(/\s+/g, ' ');
+    ok(/1,906 Pa/.test(vent) && /ventilador al 55 %/.test(vent) && /motor de 5 HP/.test(vent), `la salida del trazo con las tablas del taller (${vent})`);
+    ok(/Coeficientes de las tablas del taller, cambiados en codos/.test(await p.locator('#ti-calc-metodo').innerText()), 'la nota del método dice qué se cambió');
+    ok(await R(() => /del taller \(cambiada en codos\)/.test(window.COTIZAP.trazadoTablero.calculo(window.COTIZAP.web.trazadoUI.estado()).sistema.resultados.metodo)), 'y el método del JSON exportado también');
+    ok(await R(() => window.COTIZAP.trazadoTablero.calculo(window.COTIZAP.web.trazadoUI.estado()).sistema.accesorios.some((a) => /^Tablas del taller: codo de 5 gajos/.test((a.perdida || {}).referencia || ''))), 'cada codo dice de dónde sale su K');
+    // deshacer en las tablas regresa al ejemplo exacto
+    await p.click('#tab-maestros');
+    await p.click('#maestros-deshacer');
+    await p.click('#maestros-deshacer');
+    ok(await R(() => window.COTIZAP.web.estadoApp.M.calculo.eficiencia_ventilador) === 0.65, 'deshacer: la eficiencia vuelve a 0.65');
+    await p.click('#tab-trazado');
+    await p.waitForSelector('.ti-calc-vent', { timeout: 3000 }).catch(() => {});
+    ok(await calculado() === JSON.stringify(EJ) && /motor de 3 HP/.test(await p.locator('.ti-calc-vent').innerText()), 'con las tablas de referencia, el ejemplo calculado otra vez');
+    // una tabla imposible (llegada de otra versión, por ejemplo) no rompe: el cálculo dice qué está mal y lleva a corregirlo
+    await R(() => { const W = window.COTIZAP.web; W.estadoApp.M.calculo.coeficientes.contraccion[2] = 3; W.recalcular(); });
+    await p.waitForSelector('#ti-calc-estado', { timeout: 3000 }).catch(() => {});
+    ok(/Contracción a 15°: el factor L de la contracción va de 0 a 1/.test(await p.locator('#ti-calc-estado').innerText().catch(() => '')) && await p.locator('#ti-calc-tablas').count() === 1, 'un coeficiente imposible: el porqué y el botón a las tablas');
+    await R(() => { const W = window.COTIZAP.web; W.estadoApp.M.calculo.coeficientes.contraccion[2] = 0.08; W.recalcular(); });
+    // en el celular, la tabla más ancha se desplaza dentro de su caja, no la página
+    await p.setViewportSize({ width: 390, height: 800 });
+    await p.click('#tab-maestros');
+    await p.locator('.m-grupo[data-grupo="calculo"]').evaluate((g) => { g.open = true; });
+    ok(await R(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'en el celular, sin desplazamiento horizontal de la página');
+    await p.close();
+  }
+
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

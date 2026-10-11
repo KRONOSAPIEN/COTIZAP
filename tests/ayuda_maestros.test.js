@@ -19,8 +19,12 @@ const clave = (ruta) => ruta.join('.');
 
 test('recorrer: ve los mismos datos que dibuja el editor (grupos, secciones, datos y tablas)', () => {
   const porTipo = (t) => unidades.filter((u) => u.tipo === t).length;
-  assert.equal(porTipo('grupo'), 12);
-  assert.equal(porTipo('tabla'), 13, 'tablas: servicios 3, proveedor 2, velocidades de corte 3, rolado, engargolado, soldadura, selección de perfil y bridas por metros');
+  assert.equal(porTipo('grupo'), 13);
+  assert.equal(porTipo('tabla'), 17, 'tablas: servicios 3, proveedor 2, velocidades de corte 3, rolado, engargolado, soldadura, selección de perfil, bridas por metros y las 4 de coeficientes');
+  assert.deepEqual(unidades.filter((u) => u.ruta[0] === 'calculo').map((u) => `${u.tipo} ${clave(u.ruta)}`), [
+    'grupo calculo', 'fila calculo.eficiencia_ventilador', 'fila calculo.eficiencia_transmision', 'tabla calculo.coeficientes.codo', 'fila calculo.coeficientes.codo.inglete_90',
+    'tabla calculo.coeficientes.entrada_ramal', 'tabla calculo.coeficientes.expansion', 'tabla calculo.coeficientes.contraccion',
+  ], 'el cálculo de la red: sus tablas de ejes fijos, no un renglón por valor');
   assert.ok(unidades.some((u) => u.tipo === 'sub' && clave(u.ruta) === 'proceso.soldadura.procesos.GMAW'));
   assert.ok(unidades.some((u) => u.tipo === 'fila' && clave(u.ruta) === 'herrajes.perfiles.SOL38x4.8.ancho_mm'), 'las claves con punto (SOL38x4.8) son una sola clave');
   assert.ok(unidades.some((u) => u.tipo === 'fila' && clave(u.ruta) === 'proceso.costuras.PITTSBURGH.cordon'), 'un valor null se dibuja como dato');
@@ -112,6 +116,7 @@ test('tablas: la ayuda explica exactamente las columnas que el editor dibuja', (
     const k = clave(u.ruta);
     if (k === 'proveedor.hojas') return ['Concepto', 'Hoja', 'Precio cotizado (con IVA)', 'Sin IVA', 'kg por hoja', '$/kg sin IVA', 'Uso'];
     if (k === 'proveedor.barras') return ['Concepto', 'Barra', 'Precio cotizado (con IVA)', 'Sin IVA', 'kg por barra', '$/kg sin IVA', 'Uso'];
+    if (u.ruta[0] === 'calculo') return A.COLUMNAS_CALCULO[u.ruta[2]];
     const t = leer(u.ruta);
     if (Array.isArray(t[0]) && t[0].length === 2) return ['Espesor (mm)', 'Velocidad (m/min)'];
     return Object.keys(t[0]).map((c) => A.etiqueta(c));

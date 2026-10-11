@@ -44,6 +44,7 @@
     lim: 'Qué se acepta capturar',
     info: 'Sólo informa',
     rapida: 'Cotización rápida',
+    calc: 'Cálculo del trazado',
   };
 
   /* ---------- Unidades y presentación de los valores (las usa también el editor) ---------- */
@@ -267,6 +268,71 @@
     'En min reales. 15 min (el de Proceso › Soportería, ilustrativo). 0 = el de Proceso › Soportería.',
     'Sube la mano de obra de cada abrazadera.',
     { afecta: ['rapida'], tip: [5, 60] });
+
+  /* ---------------------------------------- Cálculo de la red ---------------------------------------- */
+  E('calculo', 'Cálculo de la red (trazado)',
+    'Con qué se calcula la red del trazado isométrico: las eficiencias con que se elige el motor del ventilador y los coeficientes de pérdida de codos, ramales y cambios de sección.',
+    'Los valores de arranque son los de referencia del manual Industrial Ventilation de la ACGIH. Cámbielos si su edición del manual, el fabricante o una medición dicen otra cosa. Los ejes de cada tabla son fijos.',
+    'No mueve el precio de la cotización: mueve la succión, el balanceo y el ventilador del trazado. La salida del trazo dice cuándo la tabla es la del taller.',
+    { origen: 'norma', origenTxt: 'Valores de referencia del manual Industrial Ventilation de la ACGIH: cotéjelos con su edición.', afecta: ['calc'] });
+  E('calculo.eficiencia_ventilador', 'Eficiencia del ventilador',
+    'Qué parte de la potencia al freno del ventilador llega al aire como caudal y presión.',
+    'Fracción de más de 0 a 1 (0.65 = 65 %). Use la del ventilador que se va a comprar, en su punto de operación; si todavía no se sabe, 0.65 es conservador para un centrífugo de polvo.',
+    'Potencia al freno = potencia del aire ÷ eficiencia. Bajar de 0.65 a 0.55 sube ≈ 18 % los kW al freno y puede pedir el motor comercial siguiente.',
+    { afecta: ['calc'], tip: [0.4, 0.85], ej: '1.00 kW de aire ÷ 0.65 = 1.54 kW al freno.' });
+  E('calculo.eficiencia_transmision', 'Eficiencia de las bandas',
+    'Lo que se pierde entre el motor y el ventilador en las bandas y poleas (1 = acople directo, sin pérdida).',
+    'Fracción de más de 0 a 1. Bandas en V: 0.95; acople directo: 1.',
+    'Potencia del motor = potencia al freno ÷ esta eficiencia; con ella se elige el motor comercial siguiente.',
+    { afecta: ['calc'], tip: [0.85, 1], ej: '1.54 kW al freno ÷ 0.95 = 1.62 kW = 2.17 HP → motor de 3 HP.' });
+  E('calculo.coeficientes.codo', 'Codos de 90°: K por R/D',
+    'La pérdida de un codo de 90° como fracción de la presión dinámica (K), según su radio de eje entre su diámetro (R/D) y sus gajos.',
+    'Un renglón por R/D y una columna por tipo de codo; los de 4 y 5 gajos no se hacen a R/D 0.5. Entre renglones se interpola. Un codo de otro ángulo usa K × θ/90 con los gajos equivalentes.',
+    'Sube o baja la pérdida de cada codo en proporción a su K. Las curvas de las mangueras usan la columna del liso.',
+    { afecta: ['calc'], ej: 'Codo de 5 gajos a R/D 1.5: K 0.24; con 400 Pa de presión dinámica pierde 96 Pa.',
+      cols: {
+        'R/D': 'Radio del eje del codo entre su diámetro (1.5 = el radio es 1.5 veces el diámetro).',
+        'Liso o estampado': 'Codo de una pieza; también las curvas de la manguera.',
+        '5 gajos': 'Codo de 5 gajos (4 juntas).',
+        '4 gajos': 'Codo de 4 gajos (3 juntas).',
+        '3 gajos': 'Codo de 3 gajos (2 juntas).',
+      } });
+  E('calculo.coeficientes.codo.inglete_90', 'Codo de inglete (2 gajos) a 90°',
+    'El K del codo de 90° hecho con un solo corte (dos gajos, una junta): el más brusco.',
+    'Un número. Con menos de 3 gajos para su ángulo, el K se interpola entre este valor y la columna de 3 gajos.',
+    'Sólo mueve los codos de 2 gajos (o los de muy pocos gajos para su ángulo).',
+    { afecta: ['calc'], tip: [0.8, 1.6], ej: 'K 1.2: con 400 Pa de presión dinámica, el inglete pierde 480 Pa.' });
+  E('calculo.coeficientes.entrada_ramal', 'Entrada de ramal: K por ángulo',
+    'La pérdida con que un ramal entra al tronco (injertos, reducciones con injerto, pantalones y T), sobre la presión dinámica del ramal.',
+    'Un renglón por ángulo de entrada, de 10° a 90°. Entre renglones se interpola. El paso del tronco no lleva K aquí: va en su fricción.',
+    'Sube o baja la succión del ramal y con ella el balanceo de la confluencia: un K mayor hace más probable que haya que corregir el caudal.',
+    { afecta: ['calc'], ej: 'Injerto a 45°: K 0.28; con 300 Pa de presión dinámica en el ramal pierde 84 Pa.',
+      cols: {
+        Ángulo: 'Ángulo entre el ramal y el tronco (30° y 45° son los del taller; 90° es la T).',
+        K: 'Coeficiente sobre la presión dinámica del ramal.',
+      } });
+  E('calculo.coeficientes.expansion', 'Expansión: recuperación R',
+    'Qué parte de la presión dinámica que sobra se recupera cuando el ducto crece en el sentido del aire (D₂ mayor que D₁).',
+    'Un renglón por semiángulo del cono (el último, brusca) y una columna por D₂/D₁. Valores de 0 a 1; entre renglones y columnas se interpola.',
+    'La pérdida es (1 − R)·(pv₁ − pv₂): un R menor pierde más. Mueve las reducciones que abren en el sentido del aire.',
+    { afecta: ['calc'], ej: 'De 6″ a 9″ (D₂/D₁ 1.5) con semiángulo de 15°: R 0.70; se pierde el 30 % de la presión dinámica que sobra.',
+      cols: {
+        Semiángulo: 'Medio ángulo del cono; «brusca» es el cambio de sección sin cono.',
+        'D₂/D₁ 1.25': 'El diámetro de salida es 1.25 veces el de llegada.',
+        'D₂/D₁ 1.5': 'El diámetro de salida es 1.5 veces el de llegada.',
+        'D₂/D₁ 1.75': 'El diámetro de salida es 1.75 veces el de llegada.',
+        'D₂/D₁ 2': 'El diámetro de salida es el doble del de llegada.',
+        'D₂/D₁ 2.5': 'El diámetro de salida es 2.5 veces el de llegada.',
+      } });
+  E('calculo.coeficientes.contraccion', 'Contracción: factor L',
+    'La pérdida cuando el ducto se cierra en el sentido del aire (D₂ menor que D₁), como fracción del aumento de la presión dinámica.',
+    'Un renglón por semiángulo del cono, de 5° a 90° (brusca). Valores de 0 a 1; entre renglones se interpola.',
+    'La pérdida es L·(pv₂ − pv₁): un L mayor pierde más. Mueve las reducciones que cierran en el sentido del aire.',
+    { afecta: ['calc'], ej: 'Semiángulo de 15°: L 0.08; si la presión dinámica sube 200 Pa se pierden 16 Pa.',
+      cols: {
+        Semiángulo: 'Medio ángulo del cono (90° = brusca).',
+        L: 'Factor sobre el aumento de la presión dinámica.',
+      } });
 
   /* ---------------------------------------- Precios ---------------------------------------- */
   const P = (clave, t, que, como, efecto, extra) => E(`precios.${clave}`, t, que, como, efecto, extra);
@@ -1645,7 +1711,14 @@
   }
 
   /* ---------- Recorrido de las tablas tal como las dibuja el editor ---------- */
-  const GRUPOS = ['proveedor', 'precios', 'compras', 'mano_obra', 'merma', 'capas', 'rapida', 'proceso', 'herrajes', 'materiales', 'calibres', 'servicios'];
+  const GRUPOS = ['proveedor', 'precios', 'compras', 'mano_obra', 'merma', 'capas', 'rapida', 'proceso', 'herrajes', 'materiales', 'calibres', 'servicios', 'calculo'];
+  /** Las columnas que el editor dibuja en cada tabla de coeficientes del cálculo (sus ejes son fijos: los del manual). */
+  const COLUMNAS_CALCULO = {
+    codo: ['R/D', 'Liso o estampado', '5 gajos', '4 gajos', '3 gajos'],
+    entrada_ramal: ['Ángulo', 'K'],
+    expansion: ['Semiángulo', 'D₂/D₁ 1.25', 'D₂/D₁ 1.5', 'D₂/D₁ 1.75', 'D₂/D₁ 2', 'D₂/D₁ 2.5'],
+    contraccion: ['Semiángulo', 'L'],
+  };
   const esObj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
   const esTablaPares = (v) => Array.isArray(v) && v.length > 0 && v.every((x) => Array.isArray(x) && x.length === 2 && x.every((y) => typeof y === 'number'));
   const esTablaObjetos = (v) => Array.isArray(v) && v.length > 0 && v.every((x) => esObj(x));
@@ -1654,7 +1727,8 @@
   /**
    * Todo lo que el editor de tablas maestras dibuja y que debe poder explicarse:
    * [{ ruta, tipo: 'grupo' | 'sub' | 'fila' | 'tabla' }]. Los datos que el editor no muestra (meta, y los campos de
-   * cada renglón del proveedor que no sean su precio) no se incluyen.
+   * cada renglón del proveedor que no sean su precio) no se incluyen. El cálculo de la red se dibuja con sus tablas de
+   * ejes fijos: sus dos eficiencias, las cuatro tablas y el codo de inglete.
    */
   function recorrer(M) {
     const salida = [];
@@ -1681,6 +1755,10 @@
       if (g === 'proveedor') {
         salida.push({ ruta: ['proveedor', 'fecha'], tipo: 'fila' }, { ruta: ['proveedor', 'iva_incluido_pct'], tipo: 'fila' },
           { ruta: ['proveedor', 'hojas'], tipo: 'tabla' }, { ruta: ['proveedor', 'barras'], tipo: 'tabla' });
+      } else if (g === 'calculo') {
+        const t = (k) => ({ ruta: ['calculo', 'coeficientes', k], tipo: 'tabla' });
+        salida.push({ ruta: ['calculo', 'eficiencia_ventilador'], tipo: 'fila' }, { ruta: ['calculo', 'eficiencia_transmision'], tipo: 'fila' },
+          t('codo'), { ruta: ['calculo', 'coeficientes', 'codo', 'inglete_90'], tipo: 'fila' }, t('entrada_ramal'), t('expansion'), t('contraccion'));
       } else visitar(M[g], [g]);
     });
     return salida;
@@ -1695,7 +1773,7 @@
   }
 
   return {
-    AFECTA, ORIGENES, UNIDADES, FAMILIAS, OPERACIONES, MATERIALES, SISTEMAS, ARTICULOS, CATALOGO: CAT, GRUPOS,
+    AFECTA, ORIGENES, UNIDADES, FAMILIAS, OPERACIONES, MATERIALES, SISTEMAS, ARTICULOS, CATALOGO: CAT, GRUPOS, COLUMNAS_CALCULO,
     esPct, etiqueta, unidadDe, mostrado, buscar, coincide, recorrer, fueraDeRango,
   };
 }));
