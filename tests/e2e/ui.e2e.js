@@ -3012,6 +3012,78 @@ const ok = (cond, msg) => {
     await p.close();
   }
 
+  console.log('39) La tapa: en el trazo (herramienta A, ramal ciego, el cálculo y las partidas, quitarla) y en la cotización detallada');
+  {
+    const p = await nuevaPagina();
+    const R = (fn, a) => p.evaluate(fn, a);
+    const soltar = async () => { await R(() => document.activeElement && document.activeElement.blur()); await p.keyboard.press('Escape'); };
+    await p.click('#tab-trazado');
+    await p.click('#ti-ejemplo');
+    // un ramal ciego desde el tronco: se abre como un trazo guardado
+    const ext = await R(() => {
+      const C = window.COTIZAP;
+      const W = C.web;
+      const M = W.estadoApp.M;
+      let t = W.trazadoUI.estado().t;
+      const op = C.trazadoIso.candidatas(t, M, { tramo: 'TR-003', s_mm: 1500 }).find((o) => o.direccion.elevacion_deg === 0);
+      t = C.trazadoIso.trazar(t, M, { tramo: 'TR-003', s_mm: 1500 }, { direccion: op.direccion, largo_mm: 1500, diametro_in: 5 });
+      W.estadoApp.cot.trazado_iso = t;
+      W.trazadoUI.render();
+      return t.ultimo.nodo;
+    });
+    ok(/queda abierto/.test(await p.locator('#ti-problemas').innerText().catch(() => '')) || (await R(() => window.COTIZAP.web.trazadoUI.estado().problemas.some((v) => v.codigo === 'EXTREMO_ABIERTO'))), 'el ramal nuevo queda abierto');
+    ok(await p.locator('#ti-b-tapa').getAttribute('aria-disabled') === null && /Tapa \(A\)/.test(await p.locator('#ti-b-tapa').getAttribute('title')), 'el bloque Tapa ya no tiene candado');
+    // A y un clic en el extremo: la tapa
+    await soltar();
+    await p.keyboard.press('a');
+    const q = await R((nid) => {
+      const s = window.COTIZAP.web.trazadoUI.estado();
+      const P = s.g.pos.get(nid);
+      const q0 = window.COTIZAP.trazadoTablero.pantalla(s, P);
+      const r = document.querySelector('#ti-lienzo').getBoundingClientRect();
+      return { x: r.left + (q0.x * r.width) / s.ancho, y: r.top + (q0.y * r.height) / s.alto };
+    }, ext);
+    await p.mouse.click(q.x, q.y);
+    const msg = await p.locator('#ti-msg').innerText();
+    ok(new RegExp(`^Tapa TA-001 en ${ext}\\. TR-\\d{3} queda ciego hasta la tapa de ${ext}: no lleva aire, y ahí se junta el material\\.$`).test(msg), `con A y un clic, la tapa y el aviso del ramal ciego (${msg})`);
+    ok(await p.locator('#ti-b-tapa .ti-n').innerText() === '1' && (await p.locator('#ti-lienzo .ti-pieza-txt').allTextContents()).includes('Tapa'), 'la tapa se ve en el lienzo y en la paleta');
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.trazado_iso.nodos.some((n) => n.tapa)), 'se guarda con la cotización');
+    // la salida: el cálculo corre (el ramal ciego sin aire) y las partidas llevan la tapa
+    await p.click('#ti-fase-5');
+    ok(!(await p.locator('#ti-calc-estado').count()) && /Ventilador de Colector de polvo/.test(await p.locator('.ti-calc-vent').innerText()), 'con la tapa, el cálculo corre');
+    const ciego = await R(() => window.COTIZAP.trazadoTablero.informeCalculo(window.COTIZAP.web.trazadoUI.estado()).tramos.find((x) => x.caudal_m3_h === 0));
+    ok(ciego && ciego.velocidad_m_s === 0, `el ramal ciego en la hoja, sin aire (${ciego && ciego.tramo})`);
+    ok(/^Despiece definitivo: \d+ partidas/.test(await p.locator('#ti-part-estado').innerText()), 'el despiece sale definitivo');
+    await p.click('#ti-pasar');
+    await p.waitForSelector('#dlg-unifilar[open]', { timeout: 3000 });
+    const tapaP = await R(() => window.COTIZAP.web.estadoApp.cot.partidas.find((x) => x.unifilar_id === 'TAPA-001'));
+    ok(tapaP && tapaP.familia === 'TAPA' && tapaP.D_mm === 127, 'la tapa de 5″ pasa a la cotización como partida');
+    ok(await R(() => window.COTIZAP.web.estadoApp.res.partidas.find((f) => f.entrada.unifilar_id === 'TAPA-001').ok), 'y se cotiza');
+    await p.click('#uf-listo');
+    // quitarla desde el inspector de su nodo: vuelve a quedar abierto y el cálculo pide tapa
+    await R((nid) => { const s = window.COTIZAP.web.trazadoUI.estado(); s.sel = { tipo: 'NODO', id: nid }; window.COTIZAP.web.trazadoUI.render(); }, ext);
+    ok(/queda ciego hasta la tapa/.test(await p.locator('#ti-inspector').innerText()), 'el inspector del nodo dice que el ramal queda ciego');
+    await p.locator('#ti-n-quitar-tapa').click();
+    ok(new RegExp(`^Se quitó la tapa de ${ext}: el extremo queda abierto\\.$`).test(await p.locator('#ti-msg').innerText()), 'Quitar la tapa');
+    await soltar();
+    await p.waitForSelector('#ti-calc-estado', { timeout: 3000 }).catch(() => {});
+    ok(/la red está abierta \(llévelo a una toma o póngale tapa\)/.test(await p.locator('#ti-calc-estado').innerText().catch(() => '')), 'sin tapa, el cálculo dice qué falta');
+    // en la cotización detallada: la familia Tapa, plana
+    await p.click('#tab-cotizacion');
+    await p.click('#btn-agregar');
+    await p.waitForSelector('#dlg-partida[open]');
+    await p.locator('#dlg-familias button', { hasText: 'Tapa' }).click();
+    await p.fill('#f_L_cuello_mm', '0');
+    await p.dispatchEvent('#f_L_cuello_mm', 'input');
+    await p.waitForTimeout(200);
+    const vista = await p.locator('#dlg-partida svg.plano').getAttribute('aria-label').catch(() => '');
+    ok(/^Tapa Ø12″ plana$/.test(vista || ''), `la vista previa: la tapa plana (${vista})`);
+    await p.click('#dlg-guardar');
+    const nueva = await R(() => { const st = window.COTIZAP.web.estadoApp; const pt = st.cot.partidas[st.cot.partidas.length - 1]; return { familia: pt.familia, L: pt.L_cuello_mm, ok: st.res.partidas[st.res.partidas.length - 1].ok }; });
+    ok(nueva.familia === 'TAPA' && Number(nueva.L) === 0 && nueva.ok, `la partida de la tapa plana se cotiza (${JSON.stringify(nueva)})`);
+    await p.close();
+  }
+
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

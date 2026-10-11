@@ -8,7 +8,8 @@
  *   nodos y aristas   los tramos rígidos con su Ø y su largo a ejes; la manguera no es una arista (se compra): su equipo va en
  *                     el punto de transición, con conexión MANGUERA
  *   ángulos           cada codo y cada derivación llevan su ángulo anotado (el del trazo, no el de la hoja)
- *   notas             «COMPUERTA» en el nodo de cada compuerta, «EXC» en el de cada reducción excéntrica
+ *   notas             «COMPUERTA» en el nodo de cada compuerta, «EXC» en el de cada reducción excéntrica, «TAPA» en el
+ *                     extremo de cada tapa
  *   equipos           el colector y cada toma con la boca del Ø de su puerto (respondida): con brida, en su nodo; con
  *                     manguera, en el punto de transición, con un tramo del catálogo (respondido) y su adaptador si la
  *                     manguera no es del Ø del ducto
@@ -148,6 +149,7 @@
       if (!pant.has(a.nodo)) return;
       if (a.tipo === 'CODO' || ['INJERTO', 'REDUCCION_INJERTO', 'T_90', 'PANTALON'].includes(a.tipo)) texto(a.nodo, `${a.tipo === 'T_90' ? 90 : a.geometria.angulo_deg}°`, 'ANGULO');
       if (a.tipo === 'COMPUERTA') texto(a.nodo, 'COMPUERTA', 'NOTA');
+      if (a.tipo === 'TAPA') texto(a.nodo, 'TAPA', 'NOTA');
       if ((a.tipo === 'REDUCCION' || a.tipo === 'ADAPTADOR') && /^EXCENTRICA/.test(a.geometria.forma || '')) texto(a.nodo, 'EXC', 'NOTA');
       if (a.tipo === 'T_90') avisos.push(`La T a 90° de ${a.nodo} no la fabrica el taller: el despiece propone en su lugar un injerto a 45° con los largos del trazo y lo pregunta. Para que cuadre, trace ese ramal con un injerto.`);
     });
@@ -233,7 +235,7 @@
     });
     const equipoEn = new Map(bom.equipos.map((e) => [e.nodo_id, e]));
     // la T a 90° no se fabrica: las reglas proponen en su lugar un injerto (o una reducción con injerto) a 45° y lo preguntan
-    const piezaPara = { CODO: ['CODO'], REDUCCION: ['REDUCCION'], ADAPTADOR: ['REDUCCION'], INJERTO: ['INJERTO'], REDUCCION_INJERTO: ['REDUCCION_INJERTO'], T_90: ['INJERTO', 'REDUCCION_INJERTO'], COMPUERTA: ['COMPUERTA'] };
+    const piezaPara = { CODO: ['CODO'], REDUCCION: ['REDUCCION'], ADAPTADOR: ['REDUCCION'], INJERTO: ['INJERTO'], REDUCCION_INJERTO: ['REDUCCION_INJERTO'], T_90: ['INJERTO', 'REDUCCION_INJERTO'], COMPUERTA: ['COMPUERTA'], TAPA: ['TAPA'] };
     const usadas = new Set();
     s.accesorios.forEach((a) => {
       const tipos = piezaPara[a.tipo];

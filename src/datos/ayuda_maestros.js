@@ -78,7 +78,7 @@
 
   const FAMILIAS = {
     RECTO: 'Tramo recto', CODO: 'Codo', REDUCCION: 'Reducción', TRANSICION: 'Transición', RAMAL: 'Injerto simple',
-    REDUCCION_INJERTO: 'Reducción con injerto', PANTALON: 'Pantalón (familia retirada)', PERSONALIZADO: 'Pieza personalizada', PERFIL: 'Aros de brida (perfil)',
+    REDUCCION_INJERTO: 'Reducción con injerto', TAPA: 'Tapa', PANTALON: 'Pantalón (familia retirada)', PERSONALIZADO: 'Pieza personalizada', PERFIL: 'Aros de brida (perfil)',
   };
   const OPERACIONES = {
     corte: 'Corte', rolado: 'Rolado y plegado', armado: 'Armado y punteo', aros: 'Fabricación de aros de brida', soldadura: 'Soldadura',
@@ -494,6 +494,7 @@
         TRANSICION: 'Pasar de redondo a rectangular deja mucho recorte por la forma alabeada.',
         RAMAL: 'El injerto simple pierde lámina por la silleta (la boca) del cuerpo y del ramal.',
         REDUCCION_INJERTO: 'Cono con injerto: tiene recortes de cono, de silleta y de ramal juntos.',
+        TAPA: 'El disco sale de un cuadro de lámina: sus cuatro esquinas (21.5 % del cuadro) son recorte.',
         PANTALON: 'Familia retirada: sólo se usa para abrir cotizaciones anteriores.',
         PERSONALIZADO: 'Piezas capturadas por el usuario con su propia geometría.',
         PERFIL: 'Se aplica a los aros de brida (perfil rolado): el recorte es el corte de cada aro.',
@@ -819,6 +820,11 @@
     'En mm. 25 evita que el injerto se encime con la costura o la brida.',
     'Más margen acorta el espacio útil del cono; un injerto grande puede ya no caber y el cotizador pide alargar la reducción.',
     { afecta: ['geo'], tip: [0, 100] });
+  E('proceso.tapa_cuello_mm', 'Cuello de la tapa',
+    'El largo del cuello de una tapa: el disco que cierra el ducto va soldado a un cuello corto que lleva la brida.',
+    'En mm. 50 deja lugar para la brida y el cordón; 0 hace un disco plano con la brida a su orilla.',
+    'Más cuello es más lámina, más rolado y más costura; la partida puede pedir otro.',
+    { afecta: ['mat', 'mo'], tip: [0, 150] });
   E('proceso.injerto_inclinado_hacia', 'Hacia dónde se inclina el injerto',
     'En la reducción con injerto, hacia qué extremo se inclina el ramal.',
     'Se elige de la lista. El taller siempre inclina el injerto del extremo mayor al menor: déjelo en «MENOR».',

@@ -981,3 +981,55 @@ test('Una caminata de operaciones al azar nunca deja el trazo inválido ni lanza
   assert.ok(hechas > 40, `se hicieron ${hechas} operaciones`);
   assert.ok(calculados > 0, 'alguno se pudo calcular');
 });
+
+test('Tapa: cierra un extremo libre, su cuello ocupa el final del tramo, el ramal queda ciego, va y vuelve por el JSON, se quita sola al seguir el trazo', () => {
+  const ej = terminado(ejemploDesdeLasTomas());
+  // un ramal ciego desde el tronco: injerto a 45° de lado, de 1.5 m, para conectar después
+  const op = T.candidatas(ej, M, { tramo: 'TR-003', s_mm: 1500 }).find((o) => o.direccion.elevacion_deg === 0);
+  const u = T.trazar(ej, M, { tramo: 'TR-003', s_mm: 1500 }, { direccion: op.direccion, largo_mm: 1500, diametro_in: 5 });
+  const ext = u.ultimo.nodo;
+  const tramo = u.ultimo.tramos[0];
+  assert.ok(T.revisar(u, M).some((v) => v.codigo === 'EXTREMO_ABIERTO' && v.elementos[0] === ext), 'sin tapa, abierto');
+  const t = T.ponerTapa(u, M, ext);
+  assert.deepEqual([t.ultimo.operacion, t.ultimo.info], ['ponerTapa', []], 'la tapa la pone quien traza');
+  assert.equal(t.nodos.find((n) => n.id === ext).tapa, true);
+  const g = T.calcular(t, M);
+  const tp = g.piezas.find((p) => p.tipo === 'TAPA');
+  assert.deepEqual([tp.id, tp.nodo, tp.familia_cotizap, tp.geometria.largo_mm], ['TA-001', ext, 'TAPA', M.proceso.tapa_cuello_mm]);
+  assert.equal(g.neta.get(tramo), T.calcular(u, M).neta.get(tramo) - M.proceso.tapa_cuello_mm, 'el cuello sale del largo neto');
+  // la revisión: ya no está abierto; el ramal queda ciego (en polvo, un aviso)
+  const rv = T.revisar(t, M);
+  assert.ok(!rv.some((v) => v.codigo === 'EXTREMO_ABIERTO' && v.elementos[0] === ext));
+  const ciego = rv.find((v) => v.codigo === 'RAMAL_CIEGO');
+  assert.deepEqual([ciego.severidad, ciego.elementos], ['AVISO', [ext, tramo]]);
+  assert.match(ciego.mensaje, new RegExp(`^${tramo} queda ciego hasta la tapa de ${ext}: no lleva aire, y ahí se junta el material\\.$`));
+  const vent = T.cambiarProyecto(t, M, { servicio: 'VENTILACION' });
+  assert.equal(T.revisar(vent, M).find((v) => v.codigo === 'RAMAL_CIEGO').severidad, 'INFO', 'en ventilación sólo se informa');
+  // el sistema: la tapa con su brida; el tramo llega con brida, sin aire; cumple el esquema y va y vuelve
+  const s = T.aSistema(t, M);
+  assert.deepEqual(validarEsquema(s, ESQUEMA), []);
+  const a = s.accesorios.find((x) => x.tipo === 'TAPA');
+  assert.deepEqual([a.id, a.nodo, a.perdida.modelo, a.familia_cotizap, a.geometria.largo_mm], ['TA-001', ext, 'TAPA', 'TAPA', 50]);
+  const st = s.tramos.find((x) => x.id === tramo);
+  assert.deepEqual([st.uniones.aguas_arriba, st.caudal_m3_h, st.nodo_aguas_arriba], ['BRIDA', 0, ext]);
+  const de = T.desdeSistema(s, M);
+  assert.deepEqual(de.errores, []);
+  assert.deepEqual(T.aSistema(de.modelo, M), s);
+  assert.deepEqual(T.validar(JSON.parse(JSON.stringify(t)), M).modelo.nodos.find((n) => n.id === ext), t.nodos.find((n) => n.id === ext), 'se guarda con la cotización');
+  // lo que no va: dos veces, en un nodo con tres tramos, en una brida de equipo
+  falla(() => T.ponerTapa(t, M, ext), 'DATO_INVALIDO', /ya tiene tapa/);
+  falla(() => T.ponerTapa(t, M, 'N-002'), 'DATO_INVALIDO', /extremo libre del ducto: a N-002 llegan 3 tramos/);
+  falla(() => T.ponerTapa(t, M, puerto(t, 'EQ-02').nodo), 'DATO_INVALIDO', /hay un equipo/);
+  // importado en un nodo que no es extremo: TAPA_NO_VA
+  const mal = JSON.parse(JSON.stringify(t));
+  mal.nodos.find((n) => n.id === 'N-002').tapa = true;
+  assert.ok(T.validar(mal, M).errores.some((e) => /La tapa de N-002 va en un extremo libre del ducto: ahí sigue el ducto/.test(e)));
+  // seguir el trazo desde el extremo tapado quita la tapa (y lo dice)
+  const sigue = T.trazar(t, M, ext, { direccion: op.direccion, largo_mm: 500 });
+  assert.deepEqual(sigue.ultimo.info.filter((i) => i.codigo === 'TAPA_QUITADA').map((i) => i.mensaje), [`Se quitó la tapa de ${ext}: el ducto sigue desde ahí.`]);
+  assert.ok(!sigue.nodos.some((n) => n.tapa));
+  // quitarla: vuelve a quedar abierto
+  const q = T.quitarTapa(t, M, ext);
+  assert.ok(T.revisar(q, M).some((v) => v.codigo === 'EXTREMO_ABIERTO' && v.elementos[0] === ext));
+  falla(() => T.quitarTapa(q, M, ext), 'DATO_INVALIDO', /no tiene tapa/);
+});

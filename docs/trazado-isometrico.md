@@ -553,7 +553,9 @@ En el ejemplo, desde lo alto de la subida del cepillo:
 | REDUCCION_BRUSCA | AVISO | D₂/D₁ < 0.5 | — | — |
 | T_90_ALTA_PERDIDA | AVISO | Una T permitida (ventilación o humos); COTIZAP todavía no la cotiza | — | — |
 | MANGUERA_LARGA · MANGUERA_TORCIDA | AVISO | §2.8.2 | — | — |
-| EXTREMO_ABIERTO | AVISO | Un extremo libre sin equipo | — | Equipo o tapa |
+| EXTREMO_ABIERTO | AVISO | Un extremo libre sin equipo ni tapa | — | Equipo o tapa |
+| RAMAL_CIEGO | AVISO en polvo y abrasivos; INFO en los demás | Los tramos de un extremo con tapa hasta donde ya llega aire (§5.7) | «TR-008 queda ciego hasta la tapa de N-009: no lleva aire, y ahí se junta el material.» | Mantenerlo corto o ponerle una compuerta cerrada junto al tronco |
+| TAPA_NO_VA | ERROR | Una tapa fuera de un extremo libre del ducto: donde sigue el ducto, en una brida de equipo o en un punto de transición | «La tapa de N-002 va en un extremo libre del ducto: ahí sigue el ducto.» | Quitarla |
 | CHOQUE_MANGUERA | AVISO | §2.10 | «La manguera TR-004 pasa a 40 mm de Sierra de banco.» | — |
 | EQUIPO_SIN_PUERTOS | AVISO | Un equipo sin tomas ni bocas | — | Agregar sus tomas o quitarlo |
 | TRONCO_MENOR_QUE_RAMAL | AVISO | §2.6 | — | — |
@@ -741,8 +743,8 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
     "id_puerto": { "type": "string", "pattern": "^PU-[0-9]{2,3}$" },
     "id_nodo": { "type": "string", "pattern": "^N-[0-9]{3,4}$" },
     "id_tramo": { "type": "string", "pattern": "^TR-[0-9]{3,4}$" },
-    "id_accesorio": { "type": "string", "pattern": "^(CO|RE|AD|IN|RI|PA|TE|CP)-[0-9]{3,4}$" },
-    "id_elemento": { "type": "string", "pattern": "^(EQ|PU|N|TR|CO|RE|AD|IN|RI|PA|TE|CP)-[0-9]{2,4}$" },
+    "id_accesorio": { "type": "string", "pattern": "^(CO|RE|AD|IN|RI|PA|TE|CP|TA)-[0-9]{3,4}$" },
+    "id_elemento": { "type": "string", "pattern": "^(EQ|PU|N|TR|CO|RE|AD|IN|RI|PA|TE|CP|TA)-[0-9]{2,4}$" },
     "nodo_o_null": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/id_nodo" }] },
     "tramo_o_null": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/id_tramo" }] },
     "accesorio_o_null": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/id_accesorio" }] },
@@ -1012,7 +1014,7 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
       "required": ["id", "tipo", "nodo", "conexiones", "geometria", "perdida", "familia_cotizap"],
       "properties": {
         "id": { "$ref": "#/$defs/id_accesorio" },
-        "tipo": { "type": "string", "enum": ["CODO", "REDUCCION", "ADAPTADOR", "INJERTO", "REDUCCION_INJERTO", "PANTALON", "T_90", "COMPUERTA"] },
+        "tipo": { "type": "string", "enum": ["CODO", "REDUCCION", "ADAPTADOR", "INJERTO", "REDUCCION_INJERTO", "PANTALON", "T_90", "COMPUERTA", "TAPA"] },
         "nodo": { "$ref": "#/$defs/id_nodo" },
         "conexiones": {
           "type": "array",
@@ -1036,13 +1038,13 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
           "required": ["modelo", "K_paso", "K_ramal", "referencia"],
           "description": "Con qué se calcula su pérdida local; los K los llena la etapa de cálculo con la tabla de coeficientes.",
           "properties": {
-            "modelo": { "type": "string", "enum": ["CODO_GAJOS", "EXPANSION", "CONTRACCION", "CONFLUENCIA_RAMAL", "CONFLUENCIA_PANTALON", "CONFLUENCIA_T", "COMPUERTA"] },
+            "modelo": { "type": "string", "enum": ["CODO_GAJOS", "EXPANSION", "CONTRACCION", "CONFLUENCIA_RAMAL", "CONFLUENCIA_PANTALON", "CONFLUENCIA_T", "COMPUERTA", "TAPA"] },
             "K_paso": { "$ref": "#/$defs/numero_o_null" },
             "K_ramal": { "$ref": "#/$defs/numero_o_null" },
             "referencia": { "type": ["string", "null"] }
           }
         },
-        "familia_cotizap": { "type": ["string", "null"], "enum": ["CODO", "REDUCCION", "RAMAL", "REDUCCION_INJERTO", "PANTALON", "TRANSICION", null] }
+        "familia_cotizap": { "type": ["string", "null"], "enum": ["CODO", "REDUCCION", "RAMAL", "REDUCCION_INJERTO", "PANTALON", "TRANSICION", "TAPA", null] }
       }
     },
     "geometria_accesorio": {
@@ -2127,7 +2129,7 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
 | Reducción con injerto | Reducción con injerto | Arrastrar desde un tramo | J | Ramal y el tronco reducido aguas arriba |
 | T a 90° · Pantalón | Pantalón | — | — | Con candado mientras la política lo prohíba |
 | Compuerta | (comprado) | Clic en un tramo | G | Compuerta de regulación (para balancear) |
-| Extremo o tapa | — | Clic en un extremo | — | Abierto o tapado |
+| Tapa | Tapa | Clic en un extremo libre (o en su tramo) | A | Cierra el extremo: el ramal queda ciego (§5.7); otro clic la quita |
 | Seleccionar | — | Clic; arrastrar el fondo mueve la vista | S, Esc | — |
 | Mover segmento | — | Arrastrar un tramo | M | §1.3, paso 10 |
 | Medir | — | Clic en dos puntos | D | Distancia real y por eje |
@@ -2266,7 +2268,7 @@ Es la pestaña **Trazado isométrico** de COTIZAP: otro apartado, al lado de la 
 6. **El rombo y el círculo** de la manguera coinciden mientras no hay desvío: decide el primer arrastre (a lo largo del eje de la toma, el rombo; de lado, el círculo).
 7. **El color del fantasma:** verde si se puede; ámbar si se puede pero deja un aviso o un error del catálogo (por ejemplo, un choque); rojo con el motivo si el modelo lo rechaza. Una red que todavía no llega al colector y el extremo de la cadena no lo pintan de ámbar: son normales mientras se traza.
 8. **Rapidez:** cada fantasma nuevo se prueba en el modelo (`trazar` y `revisar`) y se guarda en una caché mientras dura el trazo. Con trazos de decenas de tramos tarda unos milisegundos; con 481 tramos, de 20 a 60 ms. La rejilla gruesa de choques de §2.10 lo bajaría en trazos grandes.
-9. **Pendiente:** el menú radial de 400 ms en el teléfono (§4.5), la regla de niveles con nombre, la tapa (su bloque sale con candado y el porqué) y la rejilla gruesa de choques. «Corregir» llegó con la etapa 3 (§5.3), la compuerta después de la etapa 4 (§5.5) y el paso a partidas con la etapa 5 (§5.6).
+9. **Pendiente:** el menú radial de 400 ms en el teléfono (§4.5), la regla de niveles con nombre y la rejilla gruesa de choques. «Corregir» llegó con la etapa 3 (§5.3), la compuerta después de la etapa 4 (§5.5), el paso a partidas con la etapa 5 (§5.6) y la tapa después (§5.7).
 
 ### 5.3 Etapa 3, hecha: validar y dimensionar
 
@@ -2463,6 +2465,36 @@ Lo verifican:
 - `tests/unifilar.test.js`: las juntas de las reducciones pegadas y el adaptador de la manguera.
 - `tests/trazado_tablero.test.js`: el despiece guardado mientras el trazo y la yarda no cambien.
 - La sección 38 de `tests/e2e/ui.e2e.js`: el botón, el diálogo, «Ver en la cotización» y reemplazar tras un cambio.
+
+### 5.7 Después de la etapa 5: la tapa
+
+**La tapa** (bloque Tapa, tecla A) cierra un extremo libre del ducto. Sirve para dejar un ramal preparado para una máquina que llegará después, o para cerrar el final de un tronco.
+
+- **La pieza.** Sale de la familia TAPA del motor de COTIZAP: un disco con un cuello corto que lleva su brida, para atornillarla a la del ducto. El cuello es el de las tablas (`proceso.tapa_cuello_mm`, 50 mm; 0 = disco plano) y ocupa el final del tramo, así que sale de su largo neto. En el sistema es el accesorio TAPA (TA-…), y el tramo llega a ella con brida.
+- **En el trazo.**
+  - `ponerTapa(t, M, nodo)` marca el nodo; sólo va en un extremo libre del ducto, ni en una brida de equipo ni en un punto de transición. Fuera de ahí sale TAPA_NO_VA.
+  - `quitarTapa` la quita y el extremo vuelve a quedar abierto (EXTREMO_ABIERTO).
+  - Seguir el trazo desde un extremo tapado, o llegar a él con el imán, quita la tapa y lo dice (TAPA_QUITADA).
+  - Va y vuelve por el JSON y se guarda con la cotización.
+- **El ramal ciego.**
+  - Los tramos del extremo tapado hasta donde ya llega aire no llevan aire. La revisión lo dice con RAMAL_CIEGO: un aviso en polvo y abrasivos, porque ahí se junta el material, y una nota en los demás servicios.
+  - El cálculo de pérdidas los deja fuera del flujo. En la hoja salen con caudal 0 y la succión del punto donde se unen a la red, y esa unión no se balancea porque sólo le llega una corriente. La entrada del ramal (K) cuenta sólo si el aire entra por el ramal.
+  - Un extremo abierto sin tapa sigue deteniendo el cálculo, ahora con el porqué: «la red está abierta (llévelo a una toma o póngale tapa)».
+- **En el tablero.**
+  - La herramienta toca el extremo o su tramo.
+  - Tocar una tapa otra vez la quita, y Borrar sobre su nodo también.
+  - El inspector del nodo tiene «Poner tapa (A)» o «Quitar la tapa», y dice qué tramos quedan ciegos.
+- **En las partidas.** El paso a la cotización (§5.6) anota «TAPA» en el nodo. Las reglas del unifilar la ponen como partida de la familia Tapa, con la junta bridada del tramo, en lugar de preguntar si el extremo queda abierto. La misma nota sirve en la foto y en el dibujo: «TAPA» o «TAPÓN» junto a un extremo.
+
+Lo verifican:
+
+- `tests/tapa.test.js`: la familia en el motor, con oráculo de área, corte, soldadura, aro y merma; la plana; el galvanizado; los rechazos; el plano.
+- `tests/trazado_iso.test.js`: poner, ocupar, el ramal ciego, el JSON, los rechazos, quitarla al seguir el trazo y quitarla a mano.
+- `tests/perdidas.test.js`: el ramal ciego con sus números, y la caminata al azar con ramales ciegos y sus invariantes (sin aire, la succión de su unión, sin balancear contra él).
+- `tests/unifilar.test.js`: la nota «TAPA».
+- `tests/trazado_tablero.test.js`: la herramienta, quitarla y Borrar.
+- `tests/trazado_lectura.test.js`: la caminata al azar con tapas.
+- La sección 39 de `tests/e2e/ui.e2e.js`: la herramienta A, el cálculo, las partidas, quitarla desde el inspector y la familia en la cotización detallada.
 
 ---
 

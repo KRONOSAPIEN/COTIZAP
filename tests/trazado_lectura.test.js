@@ -246,6 +246,16 @@ test('Caminata al azar: el despiece cuadra con el trazo, cada junta es del Ø de
       () => { const g = TZ.calcular(t, M); const tr = uno(t.tramos.filter((x) => x.tipo === 'RIGIDO' && g.neta.get(x.id) < t.politicas.recto_min_entre_accesorios_mm)); return tr ? TZ.decidirCorto(t, M, tr.id, uno(['PEGAR', 'ACEPTAR', null])) : t; },
       () => { const tr = uno(t.tramos.filter((x) => x.tipo === 'RIGIDO')); return TZ.reducir(t, M, { tramo: tr.id, s_mm: 1000 * Math.round(TZ.calcular(t, M).seg.get(tr.id).L / 2000) || 500 }, uno([4, 5, 6])); },
       () => TZ.cambiarMaterial(t, M, uno(['GALVANIZADO', 'ACERO_CARBON']), uno([20, 22, 18]), { todos: azar() < 0.7 }),
+      () => { // un ramal ciego con su tapa
+        const g = TZ.calcular(t, M);
+        const tr = uno(t.tramos.filter((x) => x.tipo === 'RIGIDO' && g.conocido(x.id) && g.seg.get(x.id).L > 1200));
+        if (!tr) return t;
+        const desde = { tramo: tr.id, s_mm: 100 * Math.round(g.seg.get(tr.id).L / 200) };
+        const c = TZ.candidatas(t, M, desde);
+        if (!c.length) return t;
+        const m = TZ.trazar(t, M, desde, { direccion: uno(c).direccion, largo_mm: uno([800, 1500]), diametro_in: uno([4, 5]) });
+        return TZ.ponerTapa(m, M, m.ultimo.nodo);
+      },
     ];
     for (let i = 0; i < 35; i += 1) {
       const antes = t;
@@ -274,5 +284,5 @@ test('Caminata al azar: el despiece cuadra con el trazo, cada junta es del Ø de
     }
   });
   assert.ok(total >= 140, `se revisaron ${total} trazos`);
-  ['CODO', 'REDUCCION', 'INJERTO', 'REDUCCION_INJERTO', 'COMPUERTA'].forEach((x) => assert.ok(vistos.has(x), `salió ${x} (${[...vistos].join(', ')})`));
+  ['CODO', 'REDUCCION', 'INJERTO', 'REDUCCION_INJERTO', 'COMPUERTA', 'TAPA'].forEach((x) => assert.ok(vistos.has(x), `salió ${x} (${[...vistos].join(', ')})`));
 });

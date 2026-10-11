@@ -97,6 +97,7 @@
       D1_mm: dim('Diámetro mayor D1'), D2_mm: dim('Diámetro menor D2'), d_mm: dim('Diámetro del injerto'), beta_deg: real('Ángulo del injerto', 0, 180, '°'),
       L_reduccion_mm: largo('Longitud de la reducción', { cero: true }), L_ramal_mm: largo('Longitud del injerto', { cero: true }),
     }),
+    TAPA: () => ({ D_mm: dim('Diámetro de la tapa'), L_cuello_mm: real('Cuello de la tapa', 0, 1000, 'mm') }), // 0 = disco plano; vacío = el de las tablas
     PANTALON: () => ({
       D_mm: dim('Diámetro del tronco'), d1_mm: dim('Diámetro del ramal 1'), d2_mm: dim('Diámetro del ramal 2'),
       L_tronco_mm: largo('Longitud del tronco'), L1_mm: largo('Longitud del ramal 1'), L2_mm: largo('Longitud del ramal 2'), k_entrepierna: real('Factor de entrepierna', 0, 1, ''),

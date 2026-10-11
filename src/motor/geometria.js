@@ -68,6 +68,7 @@
     TRANSICION: ['redondo', 'rectangular'],
     RAMAL: ['tronco_1', 'tronco_2', 'injerto'],
     REDUCCION_INJERTO: ['D1', 'D2', 'injerto'],
+    TAPA: ['tapa'],
   };
 
   /** Protección del motor, aunque los maestros no traigan límites: ningún arreglo de extremos o piezas pasa de esto. */
@@ -768,6 +769,36 @@
     return PF;
   }
 
+  /**
+   * Tapa: cierra el extremo de un ducto (un ramal que se deja para después, el final de un tronco). Es un disco de lámina con
+   * un cuello corto (`L_cuello_mm`; vacío = proceso.tapa_cuello_mm) que lleva la brida para atornillarla a la del ducto. El
+   * disco se suelda al cuello (en galvanizado se engargola) y el cuello se rola y se cierra con su costura. Con cuello 0 es un
+   * disco plano con la brida a su orilla.
+   */
+  function tapa(p, e, M) {
+    const PF = nuevoPF('TAPA');
+    exigir(p.D_mm > 0, 'El diámetro de la tapa debe ser mayor que 0.');
+    const L = p.L_cuello_mm === undefined || p.L_cuello_mm === null ? M.proceso.tapa_cuello_mm : p.L_cuello_mm;
+    exigir(Number.isFinite(L) && L >= 0, 'El cuello de la tapa debe ser de 0 mm o más.');
+    const d = dimensionesRedondas(p.D_mm, e, p.ref_diametro);
+    const A_disco = (PI * d.D_med * d.D_med) / 4;
+    const A_cuello = PI * d.D_med * L;
+    PF.A_neta_m2 = (A_disco + A_cuello) / 1e6;
+    PF.n_piezas = L > 0 ? 2 : 1;
+    PF.n_virolas = L > 0 ? 1 : 0;
+    PF.L_virola_m = L / 1000;
+    PF.L_corte_m = (PI * d.D_med + (L > 0 ? 2 * (PI * d.D_med + L) : 0)) / 1000;
+    PF.sold.tope_m = L / 1000; // la costura del cuello
+    PF.sold.filete_m = L > 0 ? (PI * d.D_med) / 1000 : 0; // el disco al cuello
+    PF.sold_transversal_m = PF.sold.filete_m;
+    PF.n_juntas_internas = L > 0 ? 1 : 0;
+    PF.extremos = [extremoRedondo(d, 'tapa')];
+    PF.espigas_defecto = 1;
+    PF.D_ref_mm = d.D_med;
+    PF.detalle = { D_disco_mm: d.D_med, L_cuello_mm: L, A_disco_m2: A_disco / 1e6, A_cuello_m2: A_cuello / 1e6 };
+    return PF;
+  }
+
   function personalizado(p, e) {
     const PF = nuevoPF('PERSONALIZADO');
     exigir(p.A_neta_m2 > 0, 'El área neta de la pieza personalizada debe ser mayor que 0.');
@@ -880,6 +911,7 @@
       case 'RAMAL': PF = ramal(p, e, M); break;
       case 'REDUCCION_INJERTO': PF = reduccionInjerto(p, e, M); break;
       case 'PANTALON': PF = pantalon(p, e, M); break; // retirada: sólo para abrir cotizaciones anteriores
+      case 'TAPA': PF = tapa(p, e, M); break;
       case 'PERSONALIZADO': PF = personalizado(p, e); break;
       case 'BRIDA': PF = bridas(p, e); break;
       case 'UNION': PF = union(p, e); break;

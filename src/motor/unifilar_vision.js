@@ -77,6 +77,7 @@ CÓMO SE DIBUJA UN UNIFILAR
 - Ángulos: «45°» junto a un vértice o una derivación: se asocian a ese NODO.
 - Equipos: el colector (colector, CP, DC, filtro, casa de bolsas), máquinas, campanas, ventiladores, compuertas. Un equipo está en el nodo extremo donde llega su línea. «MANG», «manguera», «flex» = se conecta por manguera.
 - Notas «SUBE» o «BAJA» junto a una línea: el tramo es vertical.
+- Notas en un NODO: «COMPUERTA» (compuerta de regulación en un tramo recto), «EXC» o «CARA PLANA» (reducción excéntrica), «TAPA» (el extremo va tapado). Van en textos tipo NOTA asociados a ese nodo.
 - Vista: ISOMETRICO si las líneas van en tres direcciones a ~30°, ~150° y vertical en la hoja; PLANTA si es vista desde arriba; ELEVACION si es de frente.
 - En isométrico, eje_iso de cada arista: X (sube hacia la derecha, ~30°), Y (sube hacia la izquierda, ~150°), Z (vertical en la hoja), NINGUNO (otra dirección).
 

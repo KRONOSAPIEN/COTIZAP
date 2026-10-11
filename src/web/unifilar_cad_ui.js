@@ -72,9 +72,9 @@
     { id: 'BORRAR', nombre: 'Borrar', icono: 'borrar', tecla: 'b', grupo: 'Editar', soloIcono: true, ayuda: 'Toque un tramo para quitarlo con todo lo que sigue después, o un equipo para quitarlo. Se puede deshacer.' },
   ];
   const HERR = Object.fromEntries(HERRAMIENTAS.map((x) => [x.id, x]));
-  const EQUIPOS = ['MAQUINA_MANGUERA', 'MAQUINA_BRIDA', 'CAMPANA', 'ABIERTO'];
+  const EQUIPOS = ['MAQUINA_MANGUERA', 'MAQUINA_BRIDA', 'CAMPANA', 'ABIERTO', 'TAPA'];
   const AYUDA_EQUIPO = {
-    MAQUINA_MANGUERA: 'una máquina con manguera', MAQUINA_BRIDA: 'una máquina con brida (la otra media junta la pone el equipo)', CAMPANA: 'una campana (con brida del taller)', ABIERTO: 'un extremo abierto (sin brida)',
+    MAQUINA_MANGUERA: 'una máquina con manguera', MAQUINA_BRIDA: 'una máquina con brida (la otra media junta la pone el equipo)', CAMPANA: 'una campana (con brida del taller)', ABIERTO: 'un extremo abierto (sin brida)', TAPA: 'una tapa (cierra el extremo; el ramal queda ciego, para conectarlo después)',
   };
 
   const cad = {
@@ -575,7 +575,7 @@
     if (a.tipo === 'REDUCCION') return `Reducción de ${pulg(a.diametro_entrada_in)} a ${pulg(a.diametro_salida_in)}`;
     return a.tipo;
   }
-  const LETRA = { COLECTOR: 'COL', MAQUINA_MANGUERA: 'M', MAQUINA_BRIDA: 'MB', CAMPANA: 'CA', ABIERTO: '◌' };
+  const LETRA = { COLECTOR: 'COL', MAQUINA_MANGUERA: 'M', MAQUINA_BRIDA: 'MB', CAMPANA: 'CA', ABIERTO: '◌', TAPA: 'TP' };
 
   /** Los elementos con problema: errores del dibujo, preguntas y avisos de las reglas. */
   function marcas() {

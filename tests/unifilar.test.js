@@ -339,6 +339,30 @@ test('Notas en un nodo: «COMPUERTA» en un tramo recto (comprada, ocupa 150 mm,
   assert.ok(C.cotizarPartida(exc.partida_cotizap, M).ok !== false);
 });
 
+test('«TAPA» en un extremo: la tapa de taller (su cuello ocupa el final del tramo, junta bridada) en lugar de preguntar si queda abierto', () => {
+  const nota = (id, nodo, txt) => ({ id, contenido_crudo: txt, contenido_normalizado: txt, tipo: 'NOTA', bbox_px: { x: 0, y: 0, w: 40, h: 20 }, confianza_ocr: 0.95, asociado_a: nodo });
+  // colector — 2 m — N-2 (injerto) — 2 m — máquina; el ramal de N-2 a N-4 (1.5 m) queda suelto
+  const red = (textos) => planta([['N-1', 0, 0], ['N-2', 400, 0], ['N-3', 800, 0], ['N-4', 700, -300]],
+    [['A-1', 'N-1', 'N-2', 6, 2], ['A-2', 'N-2', 'N-3', 6, 2], ['A-3', 'N-2', 'N-4', 4, 1.5]],
+    [['COL', 'COLECTOR', 'N-1', 'BRIDA_EQUIPO', 6], ['M1', 'MAQUINA', 'N-3', 'BRIDA_TALLER']], { textos });
+  const abierto = despiezar(UF.leer(red([])).lectura);
+  assert.ok(codigos(abierto, 'CONFIRMAR').includes('TRAZO_SIN_CONECTAR'), 'sin la nota, se pregunta si queda abierto');
+  const tapado = despiezar(UF.leer(red([nota('T-1', 'N-4', 'TAPA')])).lectura);
+  assert.ok(!codigos(tapado).includes('TRAZO_SIN_CONECTAR'));
+  const tp = tapado.accesorios.find((a) => a.tipo === 'TAPA');
+  assert.deepEqual([tp.id, tp.nodo_id, tp.aristas, tp.partida_cotizap.familia, tp.partida_cotizap.D_mm], ['TAPA-001', 'N-4', ['A-3'], 'TAPA', 101.6]);
+  const L = M.proceso.tapa_cuello_mm;
+  assert.equal(ducto(tapado, 'A-3').longitud_neta_mm, r1(ducto(abierto, 'A-3').longitud_neta_mm - L), 'el cuello ocupa el final del tramo');
+  assert.deepEqual([ducto(abierto, 'A-3').extremo_fin, ducto(tapado, 'A-3').extremo_fin], ['ABIERTO', 'BRIDA'], 'el tramo llega con brida a la tapa');
+  assert.deepEqual(tapado.elementos_union.filter((j) => j.nodo_id === 'N-4').map((j) => `${j.tipo} ${j.piezas.join('+')} ${j.diametro_in} ${j.aros}`), ['JUNTA_BRIDADA DUCT-003+TAPA-001 4 2']);
+  const r = C.cotizar({ yarda_mm: 914.4, partidas: UF.aPartidas(tapado) }, M);
+  assert.ok(r.partidas.every((f) => f.ok), r.partidas.filter((f) => !f.ok).map((f) => f.errores).join(' '));
+  assert.ok(r.partidas.some((f) => f.familia === 'TAPA' && f.precio.unitario > 0));
+  // «TAPÓN» también; una nota de tapa en un nodo que no es extremo no hace nada
+  assert.ok(despiezar(UF.leer(red([nota('T-1', 'N-4', 'TAPÓN')])).lectura).accesorios.some((a) => a.tipo === 'TAPA'));
+  assert.ok(!despiezar(UF.leer(red([nota('T-1', 'N-2', 'TAPA')])).lectura).accesorios.some((a) => a.tipo === 'TAPA'));
+});
+
 test('Reducciones pegadas: cada junta es del Ø de su lado (boca menor que el ducto, codo con reducción) y la manguera de otro Ø lleva su adaptador', () => {
   const juntas = (bom, nodo) => bom.elementos_union.filter((j) => j.nodo_id === nodo).map((j) => `${j.tipo} ${j.piezas.join('+')} ${j.diametro_in}`).sort();
   const cotiza = (bom) => {

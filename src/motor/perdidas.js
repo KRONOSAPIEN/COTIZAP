@@ -202,23 +202,49 @@
       puertos.set(p.id, { ...p, equipo: e });
       if (p.nodo) puertoEn.set(p.nodo, puertos.get(p.id));
     }));
-    const entran = new Map();
-    const sale = new Map();
+    const entranTodo = new Map();
+    const saleTodo = new Map();
     s.tramos.forEach((t) => {
       dato(N.has(t.nodo_aguas_arriba) && N.has(t.nodo_aguas_abajo), `El tramo ${t.id} va a un nodo que no existe.`, [t.id]);
       dato(finito(t.diametro_interior_mm) && t.diametro_interior_mm > 0 && finito(t.longitud_neta_mm) && t.longitud_neta_mm >= 0 && finito(t.rugosidad_mm) && t.rugosidad_mm >= 0, `Al tramo ${t.id} le faltan su diámetro, su largo neto o su rugosidad.`, [t.id]);
-      if (!entran.has(t.nodo_aguas_abajo)) entran.set(t.nodo_aguas_abajo, []);
-      entran.get(t.nodo_aguas_abajo).push(t);
-      if (sale.has(t.nodo_aguas_arriba)) falla('NO_ES_ARBOL', `Del nodo ${t.nodo_aguas_arriba} salen dos tramos: el aire tiene un solo camino al colector.`, [t.nodo_aguas_arriba]);
-      sale.set(t.nodo_aguas_arriba, t);
+      if (!entranTodo.has(t.nodo_aguas_abajo)) entranTodo.set(t.nodo_aguas_abajo, []);
+      entranTodo.get(t.nodo_aguas_abajo).push(t);
+      if (saleTodo.has(t.nodo_aguas_arriba)) falla('NO_ES_ARBOL', `Del nodo ${t.nodo_aguas_arriba} salen dos tramos: el aire tiene un solo camino al colector.`, [t.nodo_aguas_arriba]);
+      saleTodo.set(t.nodo_aguas_arriba, t);
     });
     const piezasEn = new Map();
     s.accesorios.forEach((a) => {
       if (!piezasEn.has(a.nodo)) piezasEn.set(a.nodo, []);
       piezasEn.get(a.nodo).push(a);
     });
+    // Ramales ciegos: los tramos a los que no les llega ninguna toma, sólo extremos con tapa. No llevan aire: el cálculo los
+    // deja fuera (con la succión del punto donde se unen) y su confluencia no se balancea.
+    const tapado = (n) => (piezasEn.get(n) || []).some((a) => a.tipo === 'TAPA');
+    const vivo = new Set();
+    for (let cambio = true; cambio;) {
+      cambio = false;
+      s.tramos.forEach((t) => {
+        if (vivo.has(t.id)) return;
+        const inc = entranTodo.get(t.nodo_aguas_arriba) || [];
+        const p = puertoEn.get(t.nodo_aguas_arriba);
+        if ((!inc.length && p && p.rol === 'TOMA') || inc.some((x) => vivo.has(x.id))) { vivo.add(t.id); cambio = true; }
+      });
+    }
+    const ciegos = new Set(s.tramos.filter((t) => !vivo.has(t.id)).map((t) => t.id));
+    s.tramos.filter((t) => ciegos.has(t.id) && !entranTodo.has(t.nodo_aguas_arriba)).forEach((t) => {
+      const up = t.nodo_aguas_arriba;
+      dato(tapado(up), `El tramo ${t.id} empieza en ${up}, que no es una toma: la red está abierta (llévelo a una toma o póngale tapa).`, [t.id, up]);
+    });
+    dato(ciegos.size < s.tramos.length, 'Ningún tramo lleva aire: no hay tomas con ducto.');
+    const entran = new Map();
+    const sale = new Map();
+    s.tramos.filter((t) => !ciegos.has(t.id)).forEach((t) => {
+      if (!entran.has(t.nodo_aguas_abajo)) entran.set(t.nodo_aguas_abajo, []);
+      entran.get(t.nodo_aguas_abajo).push(t);
+      sale.set(t.nodo_aguas_arriba, t);
+    });
     // Arranques: las tomas con caudal; llegadas: la boca de un colector o de un ventilador.
-    s.tramos.forEach((t) => {
+    s.tramos.filter((t) => !ciegos.has(t.id)).forEach((t) => {
       const up = t.nodo_aguas_arriba;
       if (!entran.has(up)) {
         const p = puertoEn.get(up);
@@ -235,14 +261,14 @@
     // Orden de las tomas al colector (cada tramo después de los que le llegan).
     const orden = [];
     const listo = new Set();
-    let pend = [...s.tramos];
+    let pend = s.tramos.filter((t) => !ciegos.has(t.id));
     while (pend.length) {
       const resto = pend.filter((t) => !(entran.get(t.nodo_aguas_arriba) || []).every((x) => listo.has(x.id)));
       if (resto.length === pend.length) falla('NO_ES_ARBOL', 'La red tiene un ciclo: el aire no tiene un sentido.', resto.map((t) => t.id));
       pend.filter((t) => !resto.includes(t)).sort((a, b) => (a.id < b.id ? -1 : 1)).forEach((t) => { orden.push(t); listo.add(t.id); });
       pend = resto;
     }
-    return { T, puertos, puertoEn, entran, sale, piezasEn, orden };
+    return { T, puertos, puertoEn, entran, sale, piezasEn, orden, ciegos, saleTodo };
   }
 
   /** El camino de una toma a la boca: los tramos en el sentido del aire. */
@@ -403,6 +429,14 @@
       f.sp_final = f.sp_inicio + f.friccion + enSP + dSP;
       fila.set(t.id, f);
     });
+    // Los ramales ciegos: sin aire; toda su succión es la del punto donde se unen a la red que sí lleva.
+    R.ciegos.forEach((id) => {
+      let t = R.T.get(id);
+      while (t && R.ciegos.has(t.id)) t = R.saleTodo.get(t.nodo_aguas_abajo);
+      const sp = t && fila.has(t.id) ? fila.get(t.id).sp_inicio : 0;
+      const tr = R.T.get(id);
+      fila.set(id, { tramo: id, tipo: tr.tipo, D_mm: D(tr), Q: 0, locales: [], sp_inicio: sp, sp_final: sp, v: 0, pv: 0, Re: 0, f: 0, friccion: 0, local: 0, ciego: true });
+    });
     return { fila, conf, factor };
   }
 
@@ -439,6 +473,8 @@
         const l = [...h.fila.values()].flatMap((f) => f.locales).find((x) => x.id === a.id);
         if (l) a.perdida = { modelo: l.que, K_paso: redondo(l.K, 4), K_ramal: null, referencia: `ACGIH: ${l.que === 'EXPANSION' ? 'expansión' : 'contracción'} de ${l.d1}″ a ${l.d2}″ con semiángulo de ${redondo(l.alfa, 2)}°, sobre la pv de la sección menor` };
         else a.perdida = { modelo: P.modelo || 'EXPANSION', K_paso: 0, K_ramal: null, referencia: 'Sin cambio de sección: sin pérdida' };
+      } else if (a.tipo === 'TAPA') {
+        a.perdida = { modelo: 'TAPA', K_paso: null, K_ramal: null, referencia: 'Tapa: cierra un ramal ciego, que no lleva aire' };
       } else if (a.tipo === 'COMPUERTA') {
         const cierre = h.conf.flatMap((c) => c.corrientes).map((c) => c.cierre).find((x) => x && x.pieza === a.id);
         a.perdida = cierre ? { modelo: 'COMPUERTA', K_paso: redondo(cierre.K, 4), K_ramal: null, referencia: `Cerrada hasta K ${num(cierre.K, 2)} (${num(cierre.Pa, 0)} Pa) para balancear; abierta, sin pérdida` }

@@ -531,3 +531,20 @@ test('topes: no más de 500 tramos en un dibujo', () => {
   assert.equal(m.tramos.length, 500);
   falla(() => CAD.agregarTramo(m, M, 'N-501', H(0, 1000, 6)), /llegó a 500 tramos/);
 });
+
+test('La tapa en el dibujo: no es un equipo; en la lectura es la nota «TAPA» de su nodo y las reglas ponen la pieza', () => {
+  const m = CAD.dibujoEjemplo(M);
+  const ext = m.equipos.find((e) => e.clase === 'CAMPANA').nodo;
+  const t = CAD.ponerEquipo(CAD.quitarEquipo(m, ext), ext, 'TAPA').modelo;
+  assert.deepEqual(CAD.validar(clonar(t), M).modelo.equipos.find((e) => e.nodo === ext).clase, 'TAPA', 'se guarda con el dibujo');
+  const { lectura } = CAD.aLectura(t, M, {});
+  assert.ok(!lectura.equipos.some((e) => e.nodo_id === ext), 'no hay equipo en ese extremo');
+  assert.equal(lectura.red.nodos.find((n) => n.id === ext).equipo_id, null);
+  assert.deepEqual(lectura.red.textos.filter((x) => x.tipo === 'NOTA').map((x) => [x.asociado_a, x.contenido_normalizado, x.origen]), [[ext, 'TAPA', 'USUARIO']]);
+  const bom = despiece(t);
+  const tp = bom.accesorios.find((a) => a.tipo === 'TAPA');
+  assert.deepEqual([tp.nodo_id, tp.partida_cotizap.familia], [ext, 'TAPA']);
+  assert.ok(!pendientes(bom).includes('TRAZO_SIN_CONECTAR'), 'no se pregunta si queda abierto');
+  const r = C.cotizar({ yarda_mm: 914.4, partidas: UF.aPartidas(bom) }, M);
+  assert.ok(r.partidas.every((f) => f.ok));
+});

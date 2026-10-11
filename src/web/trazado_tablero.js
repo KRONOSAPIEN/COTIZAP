@@ -447,8 +447,9 @@
     RINJ: 'Arrastre desde un tramo: sale un injerto del Ø activo y el tronco de aguas arriba queda del Ø de «tronco después».',
     MOVER: 'Arrastre un tramo de lado: sus vecinos se alargan o se acortan (M).',
     MEDIR: 'Toque dos puntos: la distancia real y por eje (D).',
-    BORRAR: 'Toque un tramo, un equipo, una toma o una manguera para quitarlo (Mayús: el ramal completo hasta sus tomas); en una compuerta, la quita.',
+    BORRAR: 'Toque un tramo, un equipo, una toma o una manguera para quitarlo (Mayús: el ramal completo hasta sus tomas); en una compuerta o una tapa, la quita.',
     COMPUERTA: 'Toque un tramo recto donde va la compuerta de regulación (se ajusta a 50 mm). En la salida, el balanceo dice cuánto cerrarla (G).',
+    TAPA: 'Toque un extremo libre del ducto para cerrarlo con una tapa (A): el ramal queda ciego, sin aire, para conectarlo después. Si sigue el trazo desde ahí, la tapa se quita sola.',
   };
   /** La fase a la que pertenece cada herramienta (la barra de fases la sigue al elegirla). */
   const FASE_DE_HERR = { EQUIPO: 1, TOMA: 1, MANGUERA: 2, BRIDA: 2, TRAMO: 3, VERTICAL: 3, REDUCCION: 3, INJERTO: 3, RINJ: 3, MOVER: 3 };
@@ -1051,6 +1052,25 @@
     }
     return decir(s, `No cabe una compuerta en el tramo propio de ${tramoId}: alárguelo o póngala a mano.`, true);
   }
+  /** Tapa (A): cierra el extremo libre tocado (un nodo, o el extremo libre del tramo tocado). Tocar uno tapado la quita. */
+  function tapaEn(s, hit) {
+    let nodo = hit && hit.tipo === 'NODO' ? hit.id : null;
+    if (hit && hit.tipo === 'TRAMO') {
+      const t = s.g.tramos.get(hit.id);
+      nodo = [t.a, t.b].find((n) => (s.g.ady.get(n) || []).length === 1 && !s.g.puertoDeNodo.get(n) && !s.g.pt.has(n)) || null;
+    }
+    if (!nodo) return decir(s, 'Toque un extremo libre del ducto.', true);
+    if ((s.t.nodos.find((x) => x.id === nodo) || {}).tapa) return quitarTapa(s, nodo);
+    return !!hacer(s, (t) => TZ.ponerTapa(t, s.M, nodo), (m) => {
+      const ciego = TZ.revisar(m, s.M).find((v) => v.codigo === 'RAMAL_CIEGO' && v.elementos[0] === nodo);
+      return `Tapa ${(m.piezas[nodo] || {}).TAPA} en ${nodo}.${ciego ? ` ${ciego.mensaje}` : ''}`;
+    });
+  }
+  /** Quita la tapa de un extremo: vuelve a quedar abierto. */
+  function quitarTapa(s, nodo) {
+    const r = hacer(s, (m) => TZ.quitarTapa(m, s.M, nodo), `Se quitó la tapa de ${nodo}: el extremo queda abierto.`);
+    return !!r;
+  }
   /** Quita la compuerta de un nodo (los dos tramos se vuelven a fundir si siguen en línea). */
   function quitarCompuerta(s, nodo) {
     const r = hacer(s, (m) => TZ.quitarCompuerta(m, s.M, nodo), `Se quitó la compuerta de ${nodo}.`);
@@ -1116,6 +1136,7 @@
     }
     if (x.tipo === 'NODO') {
       if ((s.g.piezasDe.get(x.id) || []).some((p) => p.tipo === 'COMPUERTA')) return quitarCompuerta(s, x.id);
+      if ((s.t.nodos.find((y) => y.id === x.id) || {}).tapa) return quitarTapa(s, x.id);
       const ad = s.g.ady.get(x.id) || [];
       if (ad.length === 1) return borrar(s, { tipo: 'TRAMO', id: ad[0].tramo.id }, ramal);
       return decir(s, 'Seleccione un tramo para borrarlo.', true);
@@ -1244,6 +1265,10 @@
         case 'COMPUERTA':
           nombre = `Compuerta de regulación de ${pulg(c[0].diametro_in)} (${n(ga.largo_mm)} mm con sus cuellos)`;
           corto = 'Compuerta';
+          break;
+        case 'TAPA':
+          nombre = `Tapa de ${pulg(c[0].diametro_in)}${ga.largo_mm > 0 ? ` con cuello de ${n(ga.largo_mm)} mm` : ' plana'} (con su brida)`;
+          corto = 'Tapa';
           break;
         default:
           nombre = p.tipo;
@@ -1374,7 +1399,7 @@
     colocarEquipo, moverEquipo, ponerToma, puntoDelPiso,
     mangueraDe, acoplar, semaforoManguera, alturaPorArrastre, desvioPorArrastre, previaManguera, moverManguera,
     arranqueDe, empezar, teclasSostenidas, planoDeTrabajo, leerCaja, teclear, fantasma, alinear, confirmar, cancelar, fijar, siguienteOpcion, cambiarDiametroActivo, cambiarNivel,
-    reducirEn, compuertaEn, compuertaSugerida, quitarCompuerta, desplazamientoSegmento, moverSegmento, borrar, medir,
+    reducirEn, compuertaEn, compuertaSugerida, quitarCompuerta, tapaEn, quitarTapa, desplazamientoSegmento, moverSegmento, borrar, medir,
     correccionesDe, correccionesListas, corregir, cambiarDiametroTramo, cambiarDiametroEnCadena, decidirCorto,
     infoTramo, piezasDe, velocidadSemaforo, calculo, informeCalculo, filaCalculo, NOMBRE_ACCION, despiece, exportar, importar, ejemplo,
   };

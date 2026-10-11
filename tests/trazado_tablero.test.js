@@ -638,3 +638,32 @@ test('Salida: el trazo a partidas con las reglas del unifilar, guardado mientras
   assert.ok(TB.hacer(s, (t) => TZ.cambiarLargo(t, M, 'TR-005', 150), ''));
   assert.equal(TB.despiece(s).error, 'Para pasarlo a partidas, primero corrija el problema del trazo: Los accesorios del tramo TR-005 ocupan 40 mm más que su largo.');
 });
+
+test('Tapa en el tablero: la herramienta (A) en un extremo libre o en su tramo, tocarla otra vez la quita, Borrar también; su nombre', () => {
+  const s = nuevoTablero();
+  TB.reemplazar(s, TB.ejemplo(M), 'ejemplo');
+  const op = TZ.candidatas(s.t, M, { tramo: 'TR-003', s_mm: 1500 }).find((o) => o.direccion.elevacion_deg === 0);
+  assert.ok(TB.hacer(s, (t) => TZ.trazar(t, M, { tramo: 'TR-003', s_mm: 1500 }, { direccion: op.direccion, largo_mm: 1500, diametro_in: 5 }), ''));
+  const ext = s.t.ultimo.nodo;
+  const ramal = s.t.ultimo.tramos[0];
+  assert.equal(TB.tapaEn(s, { tipo: 'NODO', id: 'N-002' }), false, 'en un nodo con tres tramos, no');
+  assert.equal(TB.tapaEn(s, null), false);
+  assert.match(s.msg, /Toque un extremo libre del ducto/);
+  assert.ok(TB.tapaEn(s, { tipo: 'TRAMO', id: ramal }), 'tocar el tramo la pone en su extremo libre');
+  assert.equal(s.msg, `Tapa TA-001 en ${ext}. ${ramal} queda ciego hasta la tapa de ${ext}: no lleva aire, y ahí se junta el material.`);
+  assert.deepEqual(TB.piezasDe(s, ext).map((p) => [p.id, p.corto, p.nombre]), [['TA-001', 'Tapa', 'Tapa de 5″ con cuello de 50 mm (con su brida)']]);
+  assert.ok(TB.tapaEn(s, { tipo: 'NODO', id: ext }), 'tocarla otra vez la quita');
+  assert.equal(s.msg, `Se quitó la tapa de ${ext}: el extremo queda abierto.`);
+  assert.ok(!s.t.nodos.find((n) => n.id === ext).tapa);
+  TB.deshacer(s);
+  assert.ok(s.t.nodos.find((n) => n.id === ext).tapa, 'deshacer la regresa');
+  assert.ok(TB.borrar(s, { tipo: 'NODO', id: ext }), 'Borrar sobre su nodo la quita (no el tramo)');
+  assert.ok(s.t.tramos.some((t) => t.id === ramal) && !s.t.nodos.find((n) => n.id === ext).tapa);
+  // con la tapa, la salida calcula y el ramal ciego pasa a partidas con su tapa
+  assert.ok(TB.tapaEn(s, { tipo: 'NODO', id: ext }));
+  assert.equal(TB.informeCalculo(s).error, undefined);
+  const d = TB.despiece(s);
+  assert.deepEqual([d.bom.resumen.estado, d.diferencias], ['DEFINITIVA', []]);
+  assert.ok(d.bom.accesorios.some((a) => a.tipo === 'TAPA' && a.nodo_id === ext));
+  assert.match(TB.AYUDA.TAPA, /extremo libre/);
+});

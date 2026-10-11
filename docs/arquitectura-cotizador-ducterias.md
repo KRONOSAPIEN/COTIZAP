@@ -1029,6 +1029,22 @@ Acabado, consumibles de soldadura, inspección: como cualquier pieza; sin corte,
 
 Las piezas que se unen van en sus partidas **sin brida** en esos extremos (`extremos_sin_brida`, o «brida en un extremo» en el tramo recto): así la unión no se cobra dos veces y el cuadre de bridas no las pide. Como toda partida, una unión cobra al menos el cargo mínimo de partida (`cargo_minimo_partida`, T9).
 
+#### 3.6.5 Tapa (`TAPA`)
+
+Cierra el extremo de un ducto: un ramal que se deja para conectar después o el final de un tronco. Es un disco de lámina con un cuello corto que lleva su brida, para atornillarla a la brida del ducto. El cuello es `proceso.tapa_cuello_mm` (50 mm de arranque) o el de la partida; con cuello 0 es un disco plano con la brida a su orilla.
+
+```text
+D_med   = D + e (o D − e, si la medida es exterior)
+Lámina  A = π·D_med²/4 + π·D_med·L_cuello          # el disco y el cuello
+Corte   L = π·D_med + 2·(π·D_med + L_cuello)        # el disco y el rectángulo del cuello (sin cuello, sólo el disco)
+Rolado  1 virola de L_cuello (sin cuello, ninguna)
+Costura del cuello: tope L_cuello; el disco al cuello: filete π·D_med (en galvanizado, los dos se engargolan)
+Extremo «tapa»: un aro de brida con su media junta (sin brida, si la partida lo pide: se mete o se remacha)
+Merma   25 % (merma.TAPA): el disco sale de un cuadro y sus esquinas son 21.5 % del cuadro
+```
+
+Su plano la dibuja de lado: el cuello con su largo, el disco que lo cierra (con su cordón) y la brida en la boca.
+
 ---
 
 ## 4. Módulo 3 — Mano de obra y consumibles
@@ -2096,6 +2112,7 @@ Qué se dibuja de cada familia:
 | Brida de solera y brida de placa comprada | De frente: el aro, el círculo de barrenos y los barrenos | Dext, Dint; nota con Dperf y los barrenos |
 | Soportería | La abrazadera (media vuelta, o las dos mitades de la vuelta completa) con sus orejas, o la pieza de barra | D del ducto y oreja, o el largo |
 | Armado de piezas | Las dos bocas que se unen (cortadas: las piezas siguen en sus partidas) y el cordón | D; nota con las uniones; en la hoja se llama como lo escribió quien lo pide («Unir injerto de 11″ con codo de 60° para obtener 90°») |
+| Tapa | Lateral: el cuello con su largo, el disco que lo cierra (soldado o engargolado) y la brida en la boca; la plana, el disco | D, cuello |
 
 En las piezas bridadas se dibuja la brida en cada boca que la lleva (vista de lado, saliendo del ducto el ancho de la solera) y los datos dicen qué extremos van sin brida. Lo que sólo importa al cotizar —«bridas de otra partida»— aparece en el desglose pero no en las hojas para el proveedor.
 

@@ -21,6 +21,7 @@
     ['TRANSICION', 'Transición'],
     ['RAMAL', 'Injerto simple'],
     ['REDUCCION_INJERTO', 'Reducción con injerto'],
+    ['TAPA', 'Tapa'],
     ['BRIDA', 'Bridas sueltas'],
     ['UNION', 'Armado de piezas'],
     ['PERSONALIZADO', 'Personalizada'],
@@ -48,6 +49,7 @@
     TRANSICION: [['redondo', 'El extremo redondo'], ['rectangular', 'El extremo rectangular']],
     RAMAL: [['tronco_1', 'Un extremo del tronco'], ['tronco_2', 'El otro extremo del tronco'], ['injerto', 'El injerto']],
     REDUCCION_INJERTO: [['D1', 'El extremo mayor (D1)'], ['D2', 'El extremo menor (D2)'], ['injerto', 'El injerto']],
+    TAPA: [['tapa', 'La boca de la tapa']],
   };
   /** Familias que ya no se ofrecen para partidas nuevas, pero que se siguen calculando para abrir cotizaciones anteriores. */
   W.FAMILIAS_RETIRADAS = [['PANTALON', 'Pantalón (retirado)']];
@@ -143,6 +145,10 @@
       { id: 'beta_deg', etiqueta: 'Ángulo del injerto', tipo: 'select', opciones: 'angulos_injerto', numerico: true, sufijoFuera: '° (no permitido)', defecto: 45 },
       { id: 'L_reduccion_mm', etiqueta: 'Longitud de la reducción', tipo: 'dim', opcional: true, ayuda: 'Vacío = automático (la menor que aloja el injerto sobre el cono, con holgura)' },
       { id: 'L_ramal_mm', etiqueta: 'Longitud del injerto', tipo: 'dim', opcional: true, ayuda: 'Sobre su eje, desde el eje de la reducción. Vacío = automático' },
+    ],
+    TAPA: [ // cierra el extremo de un ducto: un disco con un cuello corto que lleva la brida (0 = disco plano)
+      { id: 'D_mm', etiqueta: 'Diámetro del ducto', tipo: 'dim', defecto: 304.8, ayuda: 'El del ducto que cierra: la tapa se atornilla a su brida' },
+      { id: 'L_cuello_mm', etiqueta: 'Cuello', tipo: 'dim', opcional: true, min: 0, ayuda: 'Vacío = el de las tablas (50 mm). 0 = disco plano, con la brida a su orilla' },
     ],
     PANTALON: [ // retirado: sólo para editar cotizaciones anteriores
       { id: 'D_mm', etiqueta: 'Diámetro del tronco', tipo: 'dim', defecto: 500 },
@@ -364,6 +370,10 @@
         return `${d(p.D_mm)} + injerto ${d(p.d_mm)} a ${p.beta_deg}°`;
       case 'REDUCCION_INJERTO':
         return `${d(p.D1_mm)} → ${d(p.D2_mm)} + injerto ${d(p.d_mm)} a ${p.beta_deg}°`;
+      case 'TAPA': {
+        const L = p.L_cuello_mm;
+        return `${d(p.D_mm)} · ${L === undefined || L === null || L === '' ? 'cuello de las tablas' : Number(L) === 0 ? 'plana' : `cuello ${l(L)}`}`;
+      }
       case 'PANTALON':
         return `${d(p.D_mm)} → ${d(p.d1_mm)} + ${d(p.d2_mm)}`;
       case 'PERSONALIZADO':

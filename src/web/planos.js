@@ -464,6 +464,35 @@
     d.cotas.push(nota(P(0, -R), 60, n > 1 ? `${n} uniones ${modo}s` : `Unión ${modo}`, 'n_uniones'));
   }
 
+  /**
+   * Tapa vista de lado: el cuello (abierto a la izquierda, donde va la brida) y el disco que lo cierra a la derecha. Con cuello 0
+   * es un disco plano: se dibuja con un grueso de vista y la brida a su orilla.
+   */
+  function tapa(f, d) {
+    const p = f.entrada;
+    const D = p.D_mm;
+    const R = D / 2;
+    const L = f.geometria.detalle.L_cuello_mm;
+    const t = Math.max(D * 0.03, 3); // el grueso del disco, sólo para que se vea
+    const eng = f.geometria.costura === 'ENGARGOLADA';
+    d.titulo = `Tapa ${diam(D)}${L > 0 ? ` con cuello de ${mm(L)} mm` : ' plana'}`;
+    d.titulo_corto = `Tapa ${diam(D)}`;
+    d.datos = [`D = ${nominal(D)}`, L > 0 ? `Cuello ${mm(L)} mm` : 'Disco plano', L > 0 ? `Disco ${eng ? 'engargolado' : 'soldado'} al cuello` : 'Brida a la orilla del disco'];
+    if (L > 0) {
+      d.trazos.push({ t: 'relleno', d: [P(0, -R), P(L, -R), P(L, R), P(0, R)] });
+      d.trazos.push(ruta([P(0, -R), P(L, -R), P(L, R), P(0, R)], 'pieza'));
+      d.trazos.push(ruta([P(L, -R), P(L, R)], eng ? 'engargolado' : 'soldadura'));
+      d.cotas.push(cota(P(0, R), P(L, R), mm(L), 'L_cuello_mm', 1, -1));
+    } else {
+      d.trazos.push({ t: 'relleno', d: [P(0, -R), P(t, -R), P(t, R), P(0, R)] });
+      d.trazos.push(ruta([P(0, -R), P(t, -R), P(t, R), P(0, R)], 'pieza', true));
+    }
+    const x1 = Math.max(L, t);
+    d.trazos.push(ruta([P(-R * 0.25, 0), P(x1 + R * 0.25, 0)], 'eje'));
+    d.cotas.push(cota(P(x1, -R), P(x1, R), diam(D), 'D_mm', 1, -1));
+    d.caras.tapa = { c: P(0, 0), dir: P(-1, 0), R };
+  }
+
   /** Brida vista de lado en la boca `cara`: sobresale del ducto el ancho de la solera; la suelta va punteada y separada. */
   function bridaLado(d, cara, ancho, suelta) {
     const n = P(-cara.dir[1], cara.dir[0]);
@@ -479,7 +508,7 @@
     if (d.bridasLado) d.bridasLado.forEach((b) => bridaLado(d, b.cara, ancho, b.suelta));
     else her.bridas.forEach((b) => { if (d.caras[b.extremo]) bridaLado(d, d.caras[b.extremo], ancho, b.suelta); });
     const sin = f.geometria.extremos_sin_brida || [];
-    const nombres = { A: 'un extremo', B: 'el otro extremo', D1: 'el extremo mayor', D2: 'el extremo menor', injerto: 'el injerto', tronco_1: 'un extremo del tronco', tronco_2: 'el otro extremo del tronco', redondo: 'el extremo redondo', rectangular: 'el extremo rectangular' };
+    const nombres = { tapa: 'la boca', A: 'un extremo', B: 'el otro extremo', D1: 'el extremo mayor', D2: 'el extremo menor', injerto: 'el injerto', tronco_1: 'un extremo del tronco', tronco_2: 'el otro extremo del tronco', redondo: 'el extremo redondo', rectangular: 'el extremo rectangular' };
     if (sin.length) {
       const lista = sin.map((x) => nombres[x] || x);
       const t = sin.length === 2 && sin.includes('tronco_1') && sin.includes('tronco_2') ? ['los dos extremos del tronco'] : f.familia === 'CODO' && sin.length === 2 ? ['los dos extremos'] : lista;
@@ -509,6 +538,7 @@
       case 'COMPRADO': ok = comprada(f, d, M); break;
       case 'SOPORTE': ok = soporte(f, d, M); break;
       case 'UNION': union(f, d); break;
+      case 'TAPA': tapa(f, d); break;
       default: ok = false;
     }
     if (ok && !['BRIDA', 'COMPRADO', 'SOPORTE', 'UNION'].includes(f.familia)) bridasDeLaPieza(f, d);
@@ -542,6 +572,8 @@
         return n(p.D_mm) ? `Brida de ${nominal(Number(p.D_mm))}` : '';
       case 'SOPORTE':
         return n(p.abrazadera_D_mm) && !n(p.largo_pieza_mm) ? `Abrazadera para ducto de ${nominal(Number(p.abrazadera_D_mm))}` : '';
+      case 'TAPA':
+        return n(p.D_mm) ? `Tapa ${diam(Number(p.D_mm))}${p.L_cuello_mm !== undefined && p.L_cuello_mm !== null && p.L_cuello_mm !== '' && Number(p.L_cuello_mm) === 0 ? ' plana' : ''}` : '';
       case 'UNION':
         return n(p.D_mm) ? `${Number(p.n_uniones) > 1 ? `${Number(p.n_uniones)} uniones` : 'Unión'} de piezas ${diam(Number(p.D_mm))}` : '';
       default:

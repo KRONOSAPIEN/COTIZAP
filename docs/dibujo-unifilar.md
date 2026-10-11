@@ -38,7 +38,7 @@ Al dar **«Listo»** el dibujo pasa por **las mismas reglas** que un croquis le�
 | **Injerto simple** | I | Injerto simple | Arrastrar desde la mitad de un tramo horizontal (o desde un punto donde el tronco sigue recto) | Un ramal a 30° o 45°, a favor del flujo, del Ø del trazo (no mayor que el tronco). |
 | **Reducción** | R | Reducción | Tocar un tramo | De ese punto en adelante el tramo queda del Ø del trazo (menor). Tocado cerca de su inicio (a menos de 15 cm), cambia todo el tramo. |
 | **Reducción con injerto** | J | Reducción con injerto | Arrastrar desde la mitad de un tramo | El injerto del Ø del trazo y el tronco sigue reducido al Ø de «tronco después». |
-| **Equipo** | E | — | Tocar el final de un ramal | Pone el equipo elegido en la lista de al lado: máquina con manguera, máquina con brida, campana o extremo abierto. |
+| **Equipo** | E | — | Tocar el final de un ramal | Pone el equipo elegido en la lista de al lado: máquina con manguera, máquina con brida, campana, extremo abierto o tapa (cierra el extremo: el ramal queda ciego, para conectarlo después). |
 | **Seleccionar** | S | — | Tocar un tramo o un punto; arrastrar el fondo | Muestra y deja cambiar sus medidas en el panel; arrastrar el fondo mueve el dibujo. |
 | **Borrar** | B | — | Tocar un tramo o un equipo | Quita el tramo con todo lo que sigue después (tramos y equipos), o sólo el equipo. |
 
@@ -147,7 +147,7 @@ Toda operación es pura (devuelve un modelo nuevo) y, si no se puede, rechaza co
 | `INJERTO_NO_PERMITIDO` | Error | Una derivación sin tronco recto, en vertical o a un ángulo que no es de injerto. |
 | `CRUCE` | Error | Tres o más tramos salen del mismo punto. |
 | `DIAMETRO_CRECE` · `INJERTO_MAYOR` | Error | El diámetro crece alejándose del colector, o un injerto es mayor que su tronco. |
-| `EXTREMO_SIN_EQUIPO` | Aviso | Un extremo sin máquina, campana ni «extremo abierto»: al revisar se pregunta si se deja abierto. |
+| `EXTREMO_SIN_EQUIPO` | Aviso | Un extremo sin máquina, campana, «extremo abierto» ni tapa: al revisar se pregunta si se deja abierto. |
 | `CHOQUE` | Aviso | Los ejes de dos tramos que no se tocan pasan más cerca que la suma de sus radios (con su distancia y la necesaria): «Los tramos A-002 y A-004 se cruzan: sus ejes pasan a 0 mm y necesitan 254 mm». A otra altura no chocan. |
 
 Además el panel muestra, mientras se dibuja, lo que las reglas del unifilar dirán en la revisión (§7).
@@ -161,7 +161,7 @@ Además el panel muestra, mientras se dibuja, lo que las reglas del unifilar dir
 | Cada punto | Un nodo con su posición en la hoja: la proyección **isométrica** del punto a 1 px por cm (con margen), su tipo (extremo, vértice, unión colineal o derivación) y confianza 1. |
 | Cada tramo | Una arista con el mismo identificador, `nodo_a` del lado del colector, **`eje_iso`** `X` (rumbo 0° o 180°), `Y` (90° o 270°), `Z` (vertical) o `NINGUNO` (diagonal), su orientación en la hoja, y **diámetro y cota de origen `USUARIO` con confianza 1**. |
 | Cada codo y cada injerto | Un texto `ANGULO` asociado a su nodo, con el ángulo exacto del dibujo, confianza 1 y **`origen: USUARIO`**: las reglas usan ese ángulo y el accesorio sale con `angulo.origen = USUARIO`. |
-| Cada equipo | Un equipo con su tipo y su conexión: colector y máquina con brida → `BRIDA_EQUIPO` (con su boca, `USUARIO`, si se dio); máquina con manguera → `MANGUERA`; campana → `BRIDA_TALLER`; extremo abierto → `OTRO` con `LISO`. |
+| Cada equipo | Un equipo con su tipo y su conexión: colector y máquina con brida → `BRIDA_EQUIPO` (con su boca, `USUARIO`, si se dio); máquina con manguera → `MANGUERA`; campana → `BRIDA_TALLER`; extremo abierto → `OTRO` con `LISO`. La tapa no es un equipo: es la nota «TAPA» en su nodo, y las reglas ponen la pieza (familia Tapa, con la junta bridada del tramo). |
 | Material y calibre | `metadatos.material` y `metadatos.calibre` de origen `USUARIO`. |
 | — | `vista: ISOMETRICO`, `convencion_cotas: EJES`, `fuente.archivo: "dibujo"` (así la revisión sabe que salió del dibujo y ofrece «Editar el dibujo»), `flujo_hacia` = el colector, sin cotas totales ni alertas de lectura. |
 | La yarda | La de la cotización (o la de las tablas si la cotización no elige): 1 220 mm o 914.4 mm. |

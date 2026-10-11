@@ -22,8 +22,8 @@
     "id_puerto": { "type": "string", "pattern": "^PU-[0-9]{2,3}$" },
     "id_nodo": { "type": "string", "pattern": "^N-[0-9]{3,4}$" },
     "id_tramo": { "type": "string", "pattern": "^TR-[0-9]{3,4}$" },
-    "id_accesorio": { "type": "string", "pattern": "^(CO|RE|AD|IN|RI|PA|TE|CP)-[0-9]{3,4}$" },
-    "id_elemento": { "type": "string", "pattern": "^(EQ|PU|N|TR|CO|RE|AD|IN|RI|PA|TE|CP)-[0-9]{2,4}$" },
+    "id_accesorio": { "type": "string", "pattern": "^(CO|RE|AD|IN|RI|PA|TE|CP|TA)-[0-9]{3,4}$" },
+    "id_elemento": { "type": "string", "pattern": "^(EQ|PU|N|TR|CO|RE|AD|IN|RI|PA|TE|CP|TA)-[0-9]{2,4}$" },
     "nodo_o_null": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/id_nodo" }] },
     "tramo_o_null": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/id_tramo" }] },
     "accesorio_o_null": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/id_accesorio" }] },
@@ -293,7 +293,7 @@
       "required": ["id", "tipo", "nodo", "conexiones", "geometria", "perdida", "familia_cotizap"],
       "properties": {
         "id": { "$ref": "#/$defs/id_accesorio" },
-        "tipo": { "type": "string", "enum": ["CODO", "REDUCCION", "ADAPTADOR", "INJERTO", "REDUCCION_INJERTO", "PANTALON", "T_90", "COMPUERTA"] },
+        "tipo": { "type": "string", "enum": ["CODO", "REDUCCION", "ADAPTADOR", "INJERTO", "REDUCCION_INJERTO", "PANTALON", "T_90", "COMPUERTA", "TAPA"] },
         "nodo": { "$ref": "#/$defs/id_nodo" },
         "conexiones": {
           "type": "array",
@@ -317,13 +317,13 @@
           "required": ["modelo", "K_paso", "K_ramal", "referencia"],
           "description": "Con qué se calcula su pérdida local; los K los llena la etapa de cálculo con la tabla de coeficientes.",
           "properties": {
-            "modelo": { "type": "string", "enum": ["CODO_GAJOS", "EXPANSION", "CONTRACCION", "CONFLUENCIA_RAMAL", "CONFLUENCIA_PANTALON", "CONFLUENCIA_T", "COMPUERTA"] },
+            "modelo": { "type": "string", "enum": ["CODO_GAJOS", "EXPANSION", "CONTRACCION", "CONFLUENCIA_RAMAL", "CONFLUENCIA_PANTALON", "CONFLUENCIA_T", "COMPUERTA", "TAPA"] },
             "K_paso": { "$ref": "#/$defs/numero_o_null" },
             "K_ramal": { "$ref": "#/$defs/numero_o_null" },
             "referencia": { "type": ["string", "null"] }
           }
         },
-        "familia_cotizap": { "type": ["string", "null"], "enum": ["CODO", "REDUCCION", "RAMAL", "REDUCCION_INJERTO", "PANTALON", "TRANSICION", null] }
+        "familia_cotizap": { "type": ["string", "null"], "enum": ["CODO", "REDUCCION", "RAMAL", "REDUCCION_INJERTO", "PANTALON", "TRANSICION", "TAPA", null] }
       }
     },
     "geometria_accesorio": {

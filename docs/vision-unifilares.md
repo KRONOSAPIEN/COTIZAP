@@ -94,6 +94,7 @@ flowchart LR
 | `GALV`, `NEGRO`, `INOX` | Material | `GALVANIZADO`, `ACERO_CARBON`, `INOX_304` | |
 | `EXC`, `EXCÉNTRICA`, `CARA PLANA` | Reducción excéntrica | `excentrica: CARA_PLANA` | La nota va en el nodo de la reducción |
 | `COMPUERTA` | Compuerta de regulación en un tramo recto | Accesorio COMPUERTA (comprado): ocupa 150 mm, media junta de cada lado | La nota va en el nodo, entre dos tramos rectos del mismo Ø |
+| `TAPA`, `TAPÓN` | El extremo va tapado | Accesorio TAPA (de taller: disco con su cuello y su brida); el tramo llega con brida, sin preguntar si queda abierto | La nota va en el nodo del extremo |
 | `MANG 6"` | Manguera | Artículo `MANGUERA_6` del catálogo | |
 | `SUBE`, `BAJA`, `↑`, `↓` | Posición vertical | `posicion: VERTICAL` | Decide el espaciamiento de las ménsulas |
 
@@ -146,7 +147,7 @@ Si los dos mejores candidatos de un texto quedan a menos de 15 % uno del otro, s
 - **Árbol conexo**: aristas = nodos − 1 y todo nodo alcanzable desde la raíz.
 - **Dirección**: un recorrido desde el colector orienta cada arista; su `nodo_a` es el lado del colector (aguas abajo del aire).
 - **Monotonía del Ø**: alejándose del colector el diámetro no crece. Una violación casi siempre es un error de lectura (`DIAMETRO_INCONSISTENTE`): se revisan primero las confusiones de la §4.2.
-- **Extremos**: todo nodo de grado 1 termina en un equipo o en una manguera; si no, `TRAZO_SIN_CONECTAR`.
+- **Extremos**: todo nodo de grado 1 termina en un equipo, en una manguera o en una tapa (nota «TAPA»); si no, `TRAZO_SIN_CONECTAR`.
 
 ## 5. Clasificación de nodos: de la topología a las piezas
 
@@ -313,7 +314,7 @@ Con la regla del taller (`proceso.soportes.espaciado`, documento de arquitectura
 | `CALIBRE_FALTANTE` / `MATERIAL_FALTANTE` | Sin anotación | El del taller | CONFIRMAR |
 | `TEXTO_SIN_ASOCIAR` | Un texto lejos de todo | Se descarta | INFO |
 | `ASOCIACION_AMBIGUA` | Dos candidatos casi iguales | Re-lectura dirigida | CONFIRMAR si persiste |
-| `TRAZO_SIN_CONECTAR` | Extremo sin equipo (reglas) o arista sin tinta (lectura) | El extremo queda abierto, sin brida; la arista sin tinta la descarta la lectura | CONFIRMAR (BLOQUEANTE si una parte no llega al colector) |
+| `TRAZO_SIN_CONECTAR` | Extremo sin equipo ni tapa (reglas) o arista sin tinta (lectura) | El extremo queda abierto, sin brida; la arista sin tinta la descarta la lectura | CONFIRMAR (BLOQUEANTE si una parte no llega al colector) |
 | `CRUCE_SIN_NODO` | Dos aristas se cruzan sin unión dibujada | Pasan por encima (no se unen) | CONFIRMAR |
 | `CICLO_EN_RED` | La red tiene un ciclo | Ninguna | BLOQUEANTE |
 | `PANTALON_RETIRADO` | Y simétrica | Injerto sobre el hijo de mayor Ø | CONFIRMAR |
@@ -405,7 +406,7 @@ Es el archivo [`docs/unifilar-bom.schema.json`](unifilar-bom.schema.json) (JSON 
   "$defs": {
     "confianza": { "type": "number", "minimum": 0, "maximum": 1, "description": "0 = no se sabe, 1 = certeza. Umbrales en §6 del documento." },
     "id_red": { "type": "string", "pattern": "^(N|A|T|TR)-[0-9]{3,4}$" },
-    "id_pieza": { "type": "string", "pattern": "^((DUCT|CODO|RED|RINJ|INJ|PANT|TRAN|COMP|EQ|JNT|SOP)-[0-9]{2,3}|EQ-[0-9]{2,3}-PU-[0-9]{2,3})$" },
+    "id_pieza": { "type": "string", "pattern": "^((DUCT|CODO|RED|RINJ|INJ|PANT|TRAN|COMP|TAPA|EQ|JNT|SOP)-[0-9]{2,3}|EQ-[0-9]{2,3}-PU-[0-9]{2,3})$" },
     "medida": {
       "type": "object",
       "description": "Un dato leído o inferido, con su procedencia. valor null = faltante (y entonces hay una alerta).",
@@ -543,7 +544,7 @@ Es el archivo [`docs/unifilar-bom.schema.json`](unifilar-bom.schema.json) (JSON 
       "description": "Partida lista para cotizar() de src/motor/cotizador.js (familia y campos del motor). La valida normalizarPartida del motor, no este esquema.",
       "required": ["familia", "cantidad"],
       "properties": {
-        "familia": { "type": "string", "enum": ["RECTO", "CODO", "REDUCCION", "TRANSICION", "RAMAL", "REDUCCION_INJERTO", "PANTALON", "BRIDA", "UNION", "SOPORTE", "COMPRADO", "INSTALACION"] },
+        "familia": { "type": "string", "enum": ["RECTO", "CODO", "REDUCCION", "TRANSICION", "RAMAL", "REDUCCION_INJERTO", "TAPA", "PANTALON", "BRIDA", "UNION", "SOPORTE", "COMPRADO", "INSTALACION"] },
         "cantidad": { "type": "integer", "minimum": 1 }
       }
     },
@@ -594,8 +595,8 @@ Es el archivo [`docs/unifilar-bom.schema.json`](unifilar-bom.schema.json) (JSON 
       "additionalProperties": false,
       "required": ["id", "tipo", "nodo_id", "aristas", "diametro_entrada_in", "diametro_salida_in", "d_ramal_in", "angulo", "k_R", "gajos", "excentrica", "partida_cotizap"],
       "properties": {
-        "id": { "type": "string", "pattern": "^(CODO|RED|RINJ|INJ|PANT|TRAN|COMP)-[0-9]{3}$" },
-        "tipo": { "type": "string", "enum": ["CODO", "REDUCCION", "REDUCCION_INJERTO", "INJERTO", "PANTALON", "TRANSICION", "COMPUERTA"] },
+        "id": { "type": "string", "pattern": "^(CODO|RED|RINJ|INJ|PANT|TRAN|COMP|TAPA)-[0-9]{3}$" },
+        "tipo": { "type": "string", "enum": ["CODO", "REDUCCION", "REDUCCION_INJERTO", "INJERTO", "PANTALON", "TRANSICION", "COMPUERTA", "TAPA"] },
         "nodo_id": { "$ref": "#/$defs/id_red" },
         "aristas": { "type": "array", "description": "Lado del colector primero; en una derivación, el ramal al último.", "items": { "$ref": "#/$defs/id_red" } },
         "diametro_entrada_in": { "type": "number", "minimum": 1, "description": "Del lado del colector (el mayor)." },

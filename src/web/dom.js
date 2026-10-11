@@ -91,6 +91,7 @@
     TRANSICION: '<rect x="5" y="6" width="14" height="20" rx="1"/><circle cx="37" cy="16" r="7"/><path d="M19 6l12 4M19 26l12-4"/>',
     RAMAL: '<path d="M4 16h40M4 26h40M17 16L29 4M25 16L37 4"/>',
     REDUCCION_INJERTO: '<path d="M4 15h22l18 4v6l-18 4H4z"/><path d="M8 15L20 3M16 15L28 3"/>',
+    TAPA: '<path d="M12 9h22v14H12"/><path d="M34 7v18"/><path d="M8 5v22"/><path d="M8 5h4v22H8"/>',
     PANTALON: '<path d="M20 29V19M28 29V19M20 19L9 6M28 19l11-13M9 6h6M33 6h6"/>',
     PERSONALIZADO: '<path d="M10 25l15-15 6 6-15 15H10z"/><path d="M28 7l3-3 6 6-3 3"/>',
     COMPRADO: '<path d="M8 11l16-7 16 7v14l-16 6-16-6z"/><path d="M8 11l16 6 16-6M24 17v14"/>',

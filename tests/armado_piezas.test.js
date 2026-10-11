@@ -45,7 +45,7 @@ test('Tramo recto: el extremo final vale sin tramo de ajuste («brida en un extr
 
 test('Extremos sin brida: cada familia nombra sus extremos y la brida del que se une a otra pieza no se cotiza', () => {
   assert.deepEqual(G.EXTREMOS_FAMILIA, {
-    CODO: ['A', 'B'], REDUCCION: ['D1', 'D2'], TRANSICION: ['redondo', 'rectangular'], RAMAL: ['tronco_1', 'tronco_2', 'injerto'], REDUCCION_INJERTO: ['D1', 'D2', 'injerto'],
+    CODO: ['A', 'B'], REDUCCION: ['D1', 'D2'], TRANSICION: ['redondo', 'rectangular'], RAMAL: ['tronco_1', 'tronco_2', 'injerto'], REDUCCION_INJERTO: ['D1', 'D2', 'injerto'], TAPA: ['tapa'],
   });
   const codo = { familia: 'CODO', D_mm: 127, theta_deg: 90, k_R: 1.5, n_gajos: 5 };
   const dos = calc(codo).qto.her;

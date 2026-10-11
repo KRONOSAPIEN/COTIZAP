@@ -32,7 +32,7 @@
   "$defs": {
     "confianza": { "type": "number", "minimum": 0, "maximum": 1, "description": "0 = no se sabe, 1 = certeza. Umbrales en §6 del documento." },
     "id_red": { "type": "string", "pattern": "^(N|A|T|TR)-[0-9]{3,4}$" },
-    "id_pieza": { "type": "string", "pattern": "^((DUCT|CODO|RED|RINJ|INJ|PANT|TRAN|COMP|EQ|JNT|SOP)-[0-9]{2,3}|EQ-[0-9]{2,3}-PU-[0-9]{2,3})$" },
+    "id_pieza": { "type": "string", "pattern": "^((DUCT|CODO|RED|RINJ|INJ|PANT|TRAN|COMP|TAPA|EQ|JNT|SOP)-[0-9]{2,3}|EQ-[0-9]{2,3}-PU-[0-9]{2,3})$" },
     "medida": {
       "type": "object",
       "description": "Un dato leído o inferido, con su procedencia. valor null = faltante (y entonces hay una alerta).",
@@ -170,7 +170,7 @@
       "description": "Partida lista para cotizar() de src/motor/cotizador.js (familia y campos del motor). La valida normalizarPartida del motor, no este esquema.",
       "required": ["familia", "cantidad"],
       "properties": {
-        "familia": { "type": "string", "enum": ["RECTO", "CODO", "REDUCCION", "TRANSICION", "RAMAL", "REDUCCION_INJERTO", "PANTALON", "BRIDA", "UNION", "SOPORTE", "COMPRADO", "INSTALACION"] },
+        "familia": { "type": "string", "enum": ["RECTO", "CODO", "REDUCCION", "TRANSICION", "RAMAL", "REDUCCION_INJERTO", "TAPA", "PANTALON", "BRIDA", "UNION", "SOPORTE", "COMPRADO", "INSTALACION"] },
         "cantidad": { "type": "integer", "minimum": 1 }
       }
     },
@@ -221,8 +221,8 @@
       "additionalProperties": false,
       "required": ["id", "tipo", "nodo_id", "aristas", "diametro_entrada_in", "diametro_salida_in", "d_ramal_in", "angulo", "k_R", "gajos", "excentrica", "partida_cotizap"],
       "properties": {
-        "id": { "type": "string", "pattern": "^(CODO|RED|RINJ|INJ|PANT|TRAN|COMP)-[0-9]{3}$" },
-        "tipo": { "type": "string", "enum": ["CODO", "REDUCCION", "REDUCCION_INJERTO", "INJERTO", "PANTALON", "TRANSICION", "COMPUERTA"] },
+        "id": { "type": "string", "pattern": "^(CODO|RED|RINJ|INJ|PANT|TRAN|COMP|TAPA)-[0-9]{3}$" },
+        "tipo": { "type": "string", "enum": ["CODO", "REDUCCION", "REDUCCION_INJERTO", "INJERTO", "PANTALON", "TRANSICION", "COMPUERTA", "TAPA"] },
         "nodo_id": { "$ref": "#/$defs/id_red" },
         "aristas": { "type": "array", "description": "Lado del colector primero; en una derivación, el ramal al último.", "items": { "$ref": "#/$defs/id_red" } },
         "diametro_entrada_in": { "type": "number", "minimum": 1, "description": "Del lado del colector (el mayor)." },

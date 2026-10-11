@@ -317,12 +317,24 @@ function invariantes(r, msg) {
   // 1) caudal: cada tramo lleva la suma de lo que le llega (con la corrección de cada confluencia)
   const kDe = new Map(); // nodo|tramo → factor de la corriente que llega por ese tramo
   r.hoja.confluencias.forEach((c) => c.corrientes.forEach((x) => kDe.set(`${c.nodo}|${x.t.id}`, x.k)));
+  // (un ramal ciego, hasta una tapa, no lleva aire: su succión es la del punto donde se une, y ahí no hay confluencia)
+  const tapados = new Set(S.accesorios.filter((a) => a.tipo === 'TAPA').map((a) => a.nodo));
   S.tramos.forEach((t) => {
     const inc = entran(t.nodo_aguas_arriba);
+    if (hoja.get(t.id).ciego) {
+      assert.equal(hoja.get(t.id).Q, 0, `${msg}: ${t.id} ciego`);
+      assert.ok(inc.length ? inc.every((x) => hoja.get(x.id).ciego) : tapados.has(t.nodo_aguas_arriba), `${msg}: ${t.id} es ciego porque sólo le llegan tapas`);
+      let abajo = T.get(t.id);
+      while (abajo && hoja.get(abajo.id).ciego) abajo = S.tramos.find((x) => x.nodo_aguas_arriba === abajo.nodo_aguas_abajo);
+      cerca(hoja.get(t.id).sp_final, hoja.get(abajo.id).sp_inicio, 1e-9, `${msg}: la succión de ${t.id} es la de su unión`);
+      return;
+    }
+    const vivos = inc.filter((x) => !hoja.get(x.id).ciego);
     const q = !inc.length ? puertos.get(S.equipos.flatMap((e) => e.puertos).find((p) => p.nodo === t.nodo_aguas_arriba).id).caudal_m3_h
-      : inc.reduce((a, x) => a + hoja.get(x.id).Q * (inc.length > 1 ? kDe.get(`${t.nodo_aguas_arriba}|${x.id}`) : 1), 0);
+      : vivos.reduce((a, x) => a + hoja.get(x.id).Q * (vivos.length > 1 ? kDe.get(`${t.nodo_aguas_arriba}|${x.id}`) : 1), 0);
     cerca(hoja.get(t.id).Q, q, 1e-6, `${msg}: Q de ${t.id}`);
   });
+  R.balance.forEach((b) => assert.ok(!hoja.get(b.corriente_menor).ciego, `${msg}: no se balancea contra un ramal ciego (${b.nodo})`));
   // y al ventilador llega lo que jalan las tomas
   const sumaTomas = R.por_toma.reduce((a, x) => a + x.caudal_corregido_m3_h, 0);
   cerca(R.ventiladores.reduce((a, v) => a + v.caudal_m3_h, 0), sumaTomas, 0.1 * R.por_toma.length + 0.2, `${msg}: Σ tomas = ventilador`);
@@ -387,8 +399,9 @@ test('Invariantes del cálculo en redes al azar: caudal, balance, compuerta, suc
   const ESTABLES = ['POLVO', 'VENTILACION'];
   let total = 0;
   const conCompuerta = { cerrada: 0, abierta: 0 };
+  let conTapa = 0;
   const acciones = new Set();
-  [11, 2026, 77, 31337, 909].forEach((semilla0) => {
+  [11, 2026, 77, 31337, 909, 5].forEach((semilla0) => {
     let semilla = semilla0;
     const azar = () => { semilla = (semilla * 1103515245 + 12345) % 2147483648; return semilla / 2147483648; };
     const uno = (xs) => xs[Math.floor(azar() * xs.length)];
@@ -414,20 +427,56 @@ test('Invariantes del cálculo en redes al azar: caudal, balance, compuerta, suc
       () => { const p = uno(t.equipos.flatMap((e) => e.puertos).filter((x) => x.rol === 'TOMA')); return TZ.editarPuerto(t, M, p.id, uno([{ coef_entrada_K: uno([0, 0.25, 0.5, 1, 2]) }, { caudal_m3_h: uno([400, 800, 1300, 2000]) }])); },
       () => TZ.aplicarDimensiones(t, M),
       () => { const tr = uno(t.tramos.filter((x) => x.tipo === 'RIGIDO')); return TZ.cambiarDiametro(t, M, tr.id, uno([5, 6, 7, 8, 9]), { cadena: true }); },
+      () => { // un ramal ciego con su tapa, para conectar después (a veces con un tramo más)
+        const g = TZ.calcular(t, M);
+        const tr = uno(t.tramos.filter((x) => x.tipo === 'RIGIDO' && g.conocido(x.id) && g.seg.get(x.id).L > 1200));
+        if (!tr) return t;
+        const desde = { tramo: tr.id, s_mm: 100 * Math.round(g.seg.get(tr.id).L / 200) };
+        const ops0 = TZ.candidatas(t, M, desde);
+        if (!ops0.length) return t;
+        let m = TZ.trazar(t, M, desde, { direccion: uno(ops0).direccion, largo_mm: uno([800, 1200, 1500]), diametro_in: uno([4, 5]) });
+        if (azar() < 0.4) { const c2 = TZ.candidatas(m, M, m.ultimo.nodo); if (c2.length) m = TZ.trazar(m, M, m.ultimo.nodo, { direccion: uno(c2).direccion, largo_mm: 700 }); }
+        return TZ.ponerTapa(m, M, m.ultimo.nodo);
+      },
+      () => { const n = uno(t.nodos.filter((x) => x.tapa)); return n ? TZ.quitarTapa(t, M, n.id) : t; },
     ];
     for (let i = 0; i < 45; i += 1) {
+      const antes = t; // un paso que deja el trazo sin calcular (con problemas o abierto) se deshace
       try { t = uno(ops)(); } catch (e) { if (!(e instanceof TZ.TrazadoError)) throw e; }
       let s;
-      try { s = TZ.aSistema(t, M); } catch (e) { if (e instanceof TZ.TrazadoError) continue; throw e; }
+      try { s = TZ.aSistema(t, M); } catch (e) { if (e instanceof TZ.TrazadoError) { t = antes; continue; } throw e; }
       let r;
-      try { r = P.calcular(s); } catch (e) { if (e instanceof P.CalculoError) continue; throw e; }
+      try { r = P.calcular(s); } catch (e) { if (e instanceof P.CalculoError) { t = antes; continue; } throw e; }
       invariantes(r, `semilla ${semilla0}, paso ${i}`);
       total += 1;
       r.sistema.resultados.balance.forEach((b) => acciones.add(b.accion));
       r.sistema.accesorios.filter((a) => a.tipo === 'COMPUERTA').forEach((a) => { conCompuerta[a.perdida.K_paso > 0 ? 'cerrada' : 'abierta'] += 1; });
+      if ([...r.hoja.filas.values()].some((f) => f.ciego)) conTapa += 1;
     }
   });
   assert.ok(total > 60, `se revisaron ${total} cálculos`);
   ['NINGUNA', 'AJUSTAR_CAUDAL', 'COMPUERTA'].forEach((a) => assert.ok(acciones.has(a), `salió ${a} (${[...acciones].join(', ')})`));
   assert.ok(conCompuerta.cerrada > 0 && conCompuerta.abierta > 0, JSON.stringify(conCompuerta));
+  assert.ok(conTapa > 0, `salieron ramales ciegos (${conTapa})`);
+});
+
+test('Ramal ciego hasta una tapa: no lleva aire, su succión es la de su unión, no se balancea; abierto, el cálculo pide tapa', () => {
+  let t = TB.ejemplo(M);
+  const op = TZ.candidatas(t, M, { tramo: 'TR-003', s_mm: 1500 }).find((o) => o.direccion.elevacion_deg === 0);
+  t = TZ.trazar(t, M, { tramo: 'TR-003', s_mm: 1500 }, { direccion: op.direccion, largo_mm: 1500, diametro_in: 5 });
+  const ext = t.ultimo.nodo;
+  const ramal = t.ultimo.tramos[0];
+  assert.throws(() => P.calcular(TZ.aSistema(t, M)), (e) => e instanceof P.CalculoError && e.message === `El tramo ${ramal} empieza en ${ext}, que no es una toma: la red está abierta (llévelo a una toma o póngale tapa).`);
+  const r = P.calcular(TZ.aSistema(TZ.ponerTapa(t, M, ext), M));
+  assert.deepEqual(validarEsquema(r.sistema, ESQUEMA), []);
+  const R = r.sistema.resultados;
+  const fila = (id) => R.por_tramo.find((x) => x.tramo === id);
+  assert.deepEqual([fila(ramal).caudal_m3_h, fila(ramal).velocidad_m_s, fila(ramal).perdida_friccion_Pa, fila(ramal).perdida_local_Pa], [0, 0, 0, 0]);
+  const union = r.sistema.tramos.find((x) => x.id === ramal).nodo_aguas_abajo;
+  const sigue = r.sistema.tramos.find((x) => x.nodo_aguas_arriba === union);
+  cerca(fila(ramal).presion_estatica_Pa, r.hoja.filas.get(sigue.id).sp_inicio, 0.006, 'la succión de su unión');
+  assert.ok(!R.balance.some((b) => b.nodo === union), 'en la unión no hay confluencia que balancear');
+  assert.deepEqual(R.balance.map((b) => [b.nodo, b.accion]), [['N-002', 'AJUSTAR_CAUDAL']], 'la del ejemplo sigue igual');
+  assert.equal(R.ventiladores[0].caudal_m3_h, 2283.4, 'al ventilador llega lo mismo');
+  assert.equal(r.sistema.accesorios.find((a) => a.tipo === 'TAPA').perdida.modelo, 'TAPA');
 });

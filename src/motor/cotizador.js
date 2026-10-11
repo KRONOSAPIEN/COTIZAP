@@ -26,6 +26,7 @@
     TRANSICION: 'Transición redondo → rectángulo',
     RAMAL: 'Injerto simple',
     REDUCCION_INJERTO: 'Reducción con injerto',
+    TAPA: 'Tapa',
     PANTALON: 'Pantalón (familia retirada)',
     PERSONALIZADO: 'Pieza personalizada (CAD)',
     COMPRADO: 'Artículo comprado',

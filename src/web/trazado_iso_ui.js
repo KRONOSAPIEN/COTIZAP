@@ -86,9 +86,9 @@
     { grupo: 'Utilidades', bloques: [
       { id: 'SELECCIONAR', nombre: 'Seleccionar', herr: 'SELECCIONAR', tecla: 'S' }, { id: 'MOVER', nombre: 'Mover segmento', herr: 'MOVER', tecla: 'M' },
       { id: 'MEDIR', nombre: 'Medir', herr: 'MEDIR', tecla: 'D' }, { id: 'BORRAR', nombre: 'Borrar', herr: 'BORRAR', tecla: 'Supr' },
-      { id: 'COMPUERTA', nombre: 'Compuerta', herr: 'COMPUERTA', tecla: 'G' }, { id: 'TAPA', nombre: 'Extremo o tapa', apagado: 'tapa' }] },
+      { id: 'COMPUERTA', nombre: 'Compuerta', herr: 'COMPUERTA', tecla: 'G' }, { id: 'TAPA', nombre: 'Tapa', herr: 'TAPA', tecla: 'A' }] },
   ];
-  const TECLA_HERR = { s: 'SELECCIONAR', t: 'TRAMO', c: 'TRAMO', v: 'VERTICAL', r: 'REDUCCION', i: 'INJERTO', j: 'RINJ', m: 'MOVER', d: 'MEDIR', p: 'TOMA', g: 'COMPUERTA' };
+  const TECLA_HERR = { s: 'SELECCIONAR', t: 'TRAMO', c: 'TRAMO', v: 'VERTICAL', r: 'REDUCCION', i: 'INJERTO', j: 'RINJ', m: 'MOVER', d: 'MEDIR', p: 'TOMA', g: 'COMPUERTA', a: 'TAPA' };
   const VISTAS_BTN = [['NE', 'Iso', '1'], ['PLANTA', 'Planta', '2'], ['ELEV_XZ', 'Elev. X-Z', '3'], ['ELEV_YZ', 'Elev. Y-Z', '4']];
 
   const ui = { s: null, montado: false, puntero: null, gesto: null, punteros: new Map(), hover: null, cuadro: 0, espacio: false, abierto: false, dim: null, paleta: null };
@@ -741,6 +741,7 @@
         break;
       case 'REDUCCION': ok = T.reducirEn(s, hit); break;
       case 'COMPUERTA': ok = T.compuertaEn(s, hit); break;
+      case 'TAPA': ok = T.tapaEn(s, hit); break;
       case 'MEDIR': T.medir(s, hit, p.x, p.y); pintarEstado(); programarCapa(); return;
       case 'BORRAR': ok = T.borrar(s, hit && { tipo: hit.tipo, id: hit.id }, ui.mayus); break;
       default: seleccionar(hit); return;
@@ -823,7 +824,6 @@
   const MOTIVO_APAGADO = {
     t90: (s) => (s.t.politicas.permite_t_90 ? 'La T a 90° sale sola al trazar un ramal a 90° (esta política la permite); COTIZAP todavía no la cotiza.' : 'El taller no hace T a 90° en este servicio: use un injerto a 30° o 45°.'),
     pantalon: () => 'El taller retiró el pantalón: use un injerto.',
-    tapa: () => 'Un extremo libre queda abierto (aviso EXTREMO_ABIERTO) hasta llevarlo a un equipo o a la boca. La tapa, para dejar una preparación cerrada, llega después.',
   };
   function contar(id) {
     const s = ui.s;
@@ -836,6 +836,7 @@
       REDUCCION: pz.filter((p) => p.tipo === 'REDUCCION' || p.tipo === 'ADAPTADOR').length, INJERTO: pz.filter((p) => p.tipo === 'INJERTO').length, RINJ: pz.filter((p) => p.tipo === 'REDUCCION_INJERTO').length,
       T90: pz.filter((p) => p.tipo === 'T_90').length,
       COMPUERTA: pz.filter((p) => p.tipo === 'COMPUERTA').length,
+      TAPA: pz.filter((p) => p.tipo === 'TAPA').length,
     }[id] || 0;
   }
   function pintarPaleta() {
@@ -1127,6 +1128,8 @@
     const pz = TB().piezasDe(s, nid);
     const codo = pz.find((p) => p.tipo === 'CODO');
     const compuerta = pz.find((p) => p.tipo === 'COMPUERTA');
+    const tapa = pz.find((p) => p.tipo === 'TAPA');
+    const ciego = tapa ? s.problemas.find((v) => v.codigo === 'RAMAL_CIEGO' && v.elementos[0] === nid) : null;
     const inf = compuerta ? TB().informeCalculo(s) : null;
     const cierre = inf && !inf.error ? (inf.balance.map((b) => b.cierre).find((c) => c && c.pieza === compuerta.id) || null) : null;
     const ancla = h('input', { type: 'checkbox', id: 'ti-n-ancla', checked: nd.ancla });
@@ -1149,10 +1152,13 @@
     }
     return h('section', { class: 'ti-ins' },
       titulo(`Nodo ${nid}`, `X ${n0(nd.posicion_mm.x)}, Y ${n0(nd.posicion_mm.y)}, Z ${n0(nd.posicion_mm.z)}`),
-      pz.length ? h('ul', { class: 'ti-lista' }, pz.map((p) => h('li', null, `${p.id} · ${p.nombre}`))) : h('p', { class: 'ti-nota' }, libre ? 'Extremo libre: siga el trazo desde aquí o llévelo a un equipo.' : 'Sin pieza: los tramos siguen rectos.'),
+      pz.length ? h('ul', { class: 'ti-lista' }, pz.map((p) => h('li', null, `${p.id} · ${p.nombre}`))) : h('p', { class: 'ti-nota' }, libre ? 'Extremo libre: siga el trazo desde aquí, llévelo a un equipo o tápelo.' : 'Sin pieza: los tramos siguen rectos.'),
       codo ? campo('Ángulo del codo', selector('ti-n-angulo', s.t.politicas.angulos_codo_deg.map((a) => [a, `${a}°`]), codo.angulo, (v) => aplicar((m) => T.cambiarAngulo(m, M(), nid, Number(v)), `Codo de ${nid} a ${v}°.`), 'Ángulo del codo')) : null,
       compuerta ? h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-peligro', id: 'ti-n-quitar-compuerta', onclick: () => { if (TB().quitarCompuerta(s, nid)) cambio(); else pintarEstado(); } }, 'Quitar la compuerta')) : null,
       compuerta ? h('p', { class: 'ti-nota' }, cierre ? `En el balanceo se cierra hasta K ${W.num(cierre.K, 2)}: pierde ${n0(cierre.Pa)} Pa para que su ramal no jale de más.` : 'Abierta: el balanceo de la salida dice si hay que cerrarla y cuánto.') : null,
+      tapa ? h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-peligro', id: 'ti-n-quitar-tapa', onclick: () => { if (TB().quitarTapa(s, nid)) cambio(); else pintarEstado(); } }, 'Quitar la tapa')) : null,
+      tapa ? h('p', { class: 'ti-nota' }, ciego ? `${ciego.mensaje}${ciego.sugerencia ? ` ${ciego.sugerencia}` : ''}` : 'El tramo hasta la tapa no lleva aire.') : null,
+      libre && !tapa && !s.g.puertoDeNodo.get(nid) && !s.g.pt.has(nid) ? h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-n-tapa', onclick: () => { if (TB().tapaEn(s, { tipo: 'NODO', id: nid })) cambio(); else pintarEstado(); } }, 'Poner tapa (A)')) : null,
       h('label', { class: 'ti-check', for: 'ti-n-ancla' }, ancla, 'Anclar (punto fijo: no se mueve al editar)'),
       agregar);
   }

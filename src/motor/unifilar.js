@@ -49,6 +49,7 @@
   // Una nota en un nodo: compuerta de regulación en un tramo recto; reducción excéntrica (cara plana)
   const NOTA_COMPUERTA = /\bCOMPUERTA\b/i;
   const NOTA_EXCENTRICA = /\b(EXC[EÉ]NTRIC[AO]|EXC|CARA\s+PLANA)\b/i;
+  const NOTA_TAPA = /\b(TAPA|TAPADO|TAPON|TAPÓN)\b/i;
   /** Lo que ocupa una compuerta de guillotina con sus dos cuellos (la mitad de cada lado). */
   const LARGO_COMPUERTA_MM = 150;
 
@@ -513,6 +514,18 @@
       return id;
     }
 
+    /** La tapa (nota «TAPA» en un extremo): un disco con su cuello (de las tablas) y su brida; el cuello ocupa el final del tramo. */
+    function agregarTapa(nid, ap, Dt) {
+      const id = nuevoId('TAPA');
+      const partida = { ...base, familia: 'TAPA', D_mm: r1(Dt * IN) };
+      try {
+        const L = cotizarAcc(partida).geometria.detalle.L_cuello_mm;
+        if (L > 0) ocupar(ap, id, L);
+      } catch (err) { errorMotor([nid], err); return null; }
+      piezas.acc.push({ id, tipo: 'TAPA', nodo_id: nid, aristas: [ap], diametro_entrada_in: Dt, diametro_salida_in: Dt, d_ramal_in: null, angulo: null, k_R: null, gajos: null, excentrica: null, partida_cotizap: partida });
+      return id;
+    }
+
     function agregarCodo(nid, ap, ah, theta, angulo) {
       const id = nuevoId('CODO');
       const Dc = D.get(ap);
@@ -540,6 +553,8 @@
       if (n.equipo_id || !p) { n.tipo = 'EXTREMO'; return; }
       if (h.length === 0) {
         n.tipo = 'EXTREMO';
+        // «TAPA» en el extremo: lo cierra (el tramo llega con brida a la tapa)
+        if (notaEn(nid, NOTA_TAPA)) { n.accesorio_id = agregarTapa(nid, p, D.get(p)); return; }
         piezas.abiertos.push(nid);
         if (resp(nid, 'aceptado')) resuelta('TRAZO_SIN_CONECTAR', [nid], `El extremo ${nid} queda abierto (sin brida).`, pregunta('ACEPTAR', nid, 'aceptado', null, [], true));
         else alerta('CONFIRMAR', 'TRAZO_SIN_CONECTAR', [nid], `El extremo ${nid} no llega a ningún equipo.`, 'Se deja abierto (sin brida).', '¿Se deja abierto?', pregunta('ACEPTAR', nid, 'aceptado', null, [], true));
@@ -844,6 +859,7 @@
       if (x.tipo === 'INJERTO') return ['tronco_1', 'tronco_2', 'injerto'][i];
       if (x.tipo === 'REDUCCION_INJERTO') return i === 2 ? 'injerto' : (D.get(aid) >= x.diametro_entrada_in - 1e-9 ? 'D1' : 'D2');
       if (x.tipo === 'REDUCCION') return D.get(aid) >= x.diametro_entrada_in - 1e-9 ? 'D1' : 'D2';
+      if (x.tipo === 'TAPA') return 'tapa';
       return null;
     };
     uniones.forEach((u) => {

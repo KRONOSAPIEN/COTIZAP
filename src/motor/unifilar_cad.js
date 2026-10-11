@@ -40,6 +40,8 @@
     MAQUINA_BRIDA: { tipo: 'MAQUINA', conexion: 'BRIDA_EQUIPO', nombre: 'Máquina', texto: 'Máquina con brida' },
     CAMPANA: { tipo: 'CAMPANA', conexion: 'BRIDA_TALLER', nombre: 'Campana', texto: 'Campana (brida del taller)' },
     ABIERTO: { tipo: 'OTRO', conexion: 'LISO', nombre: 'Extremo abierto', texto: 'Extremo abierto (sin brida)' },
+    // la tapa no es un equipo: en la lectura es la nota «TAPA» en su nodo, y las reglas ponen la pieza
+    TAPA: { tipo: null, conexion: null, nombre: 'Tapa', texto: 'Tapa (cierra el extremo: el ramal queda ciego)', tapa: true },
   };
   const CON_BOCA = ['COLECTOR', 'MAQUINA_BRIDA'];
   const DIRS = ['H', 'SUBE', 'BAJA'];
@@ -783,15 +785,20 @@
       const p = px(nid);
       textos.push({ id: id3('T', textos.length + 1), contenido_crudo: `${grados}°`, contenido_normalizado: String(grados), tipo: 'ANGULO', bbox_px: { x: r1(p.x + 8), y: r1(p.y - 30), w: 40, h: 22 }, confianza_ocr: 1, asociado_a: nid, origen: 'USUARIO' });
     });
+    const esTapa = (e) => !!(e && CLASES[e.clase].tapa);
+    m.equipos.filter(esTapa).forEach((e) => {
+      const p = px(e.nodo);
+      textos.push({ id: id3('T', textos.length + 1), contenido_crudo: 'TAPA', contenido_normalizado: 'TAPA', tipo: 'NOTA', bbox_px: { x: r1(p.x + 8), y: r1(p.y + 8), w: 44, h: 22 }, confianza_ocr: 1, asociado_a: e.nodo, origen: 'USUARIO' });
+    });
     const nodos = g.orden.map((nid) => {
       const ar = m.tramos.filter((t) => t.de === nid || t.a === nid).map((t) => t.id);
       const eq = g.equipo.get(nid);
       const ti = g.entra.get(nid);
       const sal = g.salen(nid);
       const tipo = ar.length <= 1 ? 'EXTREMO' : ar.length === 2 ? (giro(ti, sal[0]).grados === 0 ? 'UNION_COLINEAL' : 'VERTICE') : 'DERIVACION';
-      return { id: nid, tipo, grado: ar.length, pos_px: px(nid), aristas: ar, equipo_id: eq ? eq.id : null, accesorio_id: null, confianza: 1 };
+      return { id: nid, tipo, grado: ar.length, pos_px: px(nid), aristas: ar, equipo_id: eq && !esTapa(eq) ? eq.id : null, accesorio_id: null, confianza: 1 };
     });
-    const equipos = m.equipos.map((e) => ({
+    const equipos = m.equipos.filter((e) => !esTapa(e)).map((e) => ({
       id: e.id, tipo: CLASES[e.clase].tipo, nombre: e.nombre, nodo_id: e.nodo, conexion: CLASES[e.clase].conexion, texto_id: null, confianza: 1,
       boca_diametro: CON_BOCA.includes(e.clase) && finito(e.boca_in) ? usuario(e.boca_in, 'in') : null,
     }));

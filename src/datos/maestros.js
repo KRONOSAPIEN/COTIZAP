@@ -228,6 +228,7 @@
       TRANSICION: 0.22,
       RAMAL: 0.25, // injerto simple
       REDUCCION_INJERTO: 0.28,
+      TAPA: 0.25, // el disco sale de un cuadro: sus esquinas (21.5 %) más el corte del cuello
       PANTALON: 0.28, // familia retirada: sólo para abrir cotizaciones anteriores
       PERSONALIZADO: 0.15,
       PERFIL: 0.05,
@@ -265,7 +266,8 @@
       angulos_injerto_deg: [30, 45], // TODO injerto, simple o en la reducción
       angulos_codo_deg: [30, 45, 60, 90],
       injerto_largo_extra_mm: 150, // tramo recto del injerto más allá de su generatriz más larga, si no se captura su largo
-      injerto_margen_cono_mm: 25, // holgura entre la silleta del injerto y cada extremo del cono (reducción con injerto)
+      injerto_margen_cono_mm: 25,
+      tapa_cuello_mm: 50, // la tapa: un disco con un cuello de este largo, que lleva su brida (0 = disco plano con la brida a su orilla) // holgura entre la silleta del injerto y cada extremo del cono (reducción con injerto)
       injerto_inclinado_hacia: 'MENOR', // el injerto de la reducción siempre va de extremo mayor a menor: se inclina hacia D2 ('MAYOR' lo inclinaría hacia D1)
       k_entrepierna: 0.08, // pantalón (retirado)
       tolerancia_area_pantalon: 0.15, // pantalón (retirado)

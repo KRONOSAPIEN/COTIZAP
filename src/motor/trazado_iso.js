@@ -60,8 +60,9 @@
   const NOMBRE_EQUIPO = { COLECTOR: 'Colector', MAQUINA: 'Máquina', CAMPANA: 'Campana', VENTILADOR: 'Ventilador' };
   const MATERIALES = ['GALVANIZADO', 'ACERO_CARBON', 'INOX_304', 'INOX_316'];
   const VISTAS = { NE: 0, NO: 90, SO: 180, SE: 270 };
-  const PREFIJO = { CODO: 'CO', REDUCCION: 'RE', ADAPTADOR: 'AD', INJERTO: 'IN', REDUCCION_INJERTO: 'RI', PANTALON: 'PA', T_90: 'TE', COMPUERTA: 'CP' };
-  const ORDEN_PIEZA = ['CODO', 'REDUCCION', 'ADAPTADOR', 'INJERTO', 'REDUCCION_INJERTO', 'T_90', 'PANTALON', 'COMPUERTA'];
+  const PREFIJO = { CODO: 'CO', REDUCCION: 'RE', ADAPTADOR: 'AD', INJERTO: 'IN', REDUCCION_INJERTO: 'RI', PANTALON: 'PA', T_90: 'TE', COMPUERTA: 'CP', TAPA: 'TA' };
+  const ORDEN_PIEZA = ['CODO', 'REDUCCION', 'ADAPTADOR', 'INJERTO', 'REDUCCION_INJERTO', 'T_90', 'PANTALON', 'COMPUERTA', 'TAPA'];
+  const RE_ACCESORIO = /^(CO|RE|AD|IN|RI|PA|TE|CP|TA)-\d{3,4}$/;
   const SEVERIDADES = ['BLOQUEANTE', 'ERROR', 'AVISO', 'INFO'];
   const PASO_EQUIPO_MM = 100;
   /** La compuerta de guillotina con sus dos cuellos: lo que ocupa del tramo (la mitad de cada lado). */
@@ -417,7 +418,7 @@
     m.cuenta[pref] += 1;
     return (corto ? id2 : id3)(pref, m.cuenta[pref]);
   }
-  const cuentaVacia = () => ({ EQ: 0, PU: 0, N: 0, TR: 0, CO: 0, RE: 0, AD: 0, IN: 0, RI: 0, PA: 0, TE: 0, CP: 0 });
+  const cuentaVacia = () => ({ EQ: 0, PU: 0, N: 0, TR: 0, CO: 0, RE: 0, AD: 0, IN: 0, RI: 0, PA: 0, TE: 0, CP: 0, TA: 0 });
 
   const texto = (v, porOmision, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : porOmision);
   function coordenada(p, que) {
@@ -708,8 +709,11 @@
       const rig = ad.filter((x) => rigido(x.tramo)).map((x) => x.tramo);
       const pid = g.puertoDeNodo.get(nid);
       const sinCompuerta = (porque) => { if (nd.compuerta) prob('COMPUERTA_NO_VA', `La compuerta de ${nid} va en un tramo recto del mismo Ø: ${porque}.`, [nid], 'Quítela de ahí y póngala en un tramo recto.'); };
+      const sinTapa = (porque) => { if (nd.tapa) prob('TAPA_NO_VA', `La tapa de ${nid} va en un extremo libre del ducto: ${porque}.`, [nid], 'Quítela de ahí.'); };
       if (pid || g.pt.has(nid)) sinCompuerta(pid ? 'ahí está la brida del equipo' : 'ahí empieza la manguera');
       else if (rig.length !== 2 || rig.length !== ad.length) sinCompuerta(rig.length > 2 ? 'ahí hay una derivación' : 'ahí termina el ducto');
+      if (pid || g.pt.has(nid)) sinTapa(pid ? 'ahí está la brida del equipo' : 'ahí empieza la manguera');
+      else if (rig.length !== 1 || ad.length !== 1) sinTapa(rig.length ? 'ahí sigue el ducto' : 'ahí no hay ducto');
       if (pid || g.pt.has(nid)) {
         g.tipo.set(nid, pid ? 'PUERTO' : 'TRANSICION');
         if (!pid) {
@@ -736,7 +740,23 @@
       }
       if (!ad.length) { g.tipo.set(nid, 'EXTREMO'); return; }
       if (rig.length !== ad.length) { prob('DATO_INVALIDO', `En ${nid} hay una manguera que no sale de una toma.`, [nid]); return; }
-      if (rig.length === 1) { g.tipo.set(nid, 'EXTREMO'); return; }
+      if (rig.length === 1) {
+        g.tipo.set(nid, 'EXTREMO');
+        // la tapa: cierra el extremo; su cuello (el de las tablas) ocupa el final del tramo
+        if (nd.tapa && ad.length === 1) {
+          const t = rig[0];
+          const r = motor(M, baseMotor(t), { familia: 'TAPA', D_mm: r1(t.diametro_in * IN) });
+          if (!r.ok) { prob('PIEZA_NO_FABRICABLE', `El motor no puede fabricar la tapa de ${nid}: ${r.error}`, [nid]); return; }
+          const L = r.d.L_cuello_mm;
+          const pz = pieza('TAPA', nid, {
+            conexiones: [{ rol: g.abajo.get(t.id) === nid ? 'ENTRADA' : 'SALIDA', tramo: t.id, diametro_in: t.diametro_in }],
+            geometria: { ...geomVacia(), largo_mm: L },
+            perdida: { modelo: 'TAPA', K_paso: null, K_ramal: null, referencia: 'Tapa: cierra el ducto; el tramo hasta ella no lleva aire' }, familia_cotizap: 'TAPA',
+          });
+          if (L > 0) ocupar(pz, t, L, nid);
+        }
+        return;
+      }
       if (rig.some((t) => !g.seg.get(t.id).dir)) { g.tipo.set(nid, rig.length === 2 ? 'VERTICE' : 'DERIVACION'); return; }
       if (rig.length === 2) {
         let [ti, to] = rig;
@@ -966,7 +986,7 @@
       const previo = m.piezas[pz.nodo] && m.piezas[pz.nodo][pz.tipo];
       pz.id = previo || nuevoId(m, PREFIJO[pz.tipo]);
       (nuevo[pz.nodo] = nuevo[pz.nodo] || {})[pz.tipo] = pz.id;
-      if (!previo && pz.tipo !== 'COMPUERTA') { // la compuerta la pone quien traza: no es una pieza que salió sola
+      if (!previo && pz.tipo !== 'COMPUERTA' && pz.tipo !== 'TAPA') { // la compuerta y la tapa las pone quien traza: no salieron solas
         const que = { CODO: `Codo de ${pz.geometria.angulo_deg}°`, REDUCCION: `Reducción de ${pulgadas(pz.D1)} a ${pulgadas(pz.D2)}`, ADAPTADOR: `Adaptador de ${pulgadas(pz.D_puerto)} a ${pulgadas(pz.conexiones[0].diametro_in)}`,
           INJERTO: `Injerto a ${pz.geometria.angulo_deg}°`, REDUCCION_INJERTO: `Reducción con injerto a ${pz.geometria.angulo_deg}°`, T_90: 'T a 90°' }[pz.tipo] || pz.tipo;
         const codigo = { CODO: 'CODO_INSERTADO', REDUCCION: 'REDUCCION_INSERTADA', ADAPTADOR: 'ADAPTADOR_INSERTADO' }[pz.tipo] || 'DERIVACION_INSERTADA';
@@ -996,6 +1016,8 @@
     return m;
   }
   const marcar = (m, operacion, x) => { m.ultimo = { operacion, nodo: null, tramos: [], info: [], ...x }; };
+  /** Lo que se dice cuando un trazo sale de (o llega a) un extremo con tapa: la tapa se quita. */
+  const infoTapaQuitada = (nid) => ({ codigo: 'TAPA_QUITADA', severidad: 'INFO', elementos: [nid], mensaje: `Se quitó la tapa de ${nid}: el ducto sigue desde ahí.`, sugerencia: null });
 
   /** Si un tramo es corto (0 ≤ neta < el recto mínimo) y tiene piezas: las piezas de sus extremos (sin repetir) y sus nodos. */
   function cortoDe(m, g, t) {
@@ -1462,9 +1484,11 @@
     m.tramos.push({ ...t, id: nuevoId(m, 'TR'), a: J, b });
     return J;
   }
-  function arranque(m, M, g, desde) {
+  /** Desde dónde sale un trazo. Si es un extremo con tapa, la tapa se quita (el ducto sigue) y se anota en `quitadas`. */
+  function arranque(m, M, g, desde, quitadas) {
     if (typeof desde === 'string') {
       const nd = nodoDe(m, desde);
+      if (nd.tapa) { delete nd.tapa; if (quitadas) quitadas.push(nd.id); }
       const pid = g.puertoDeNodo.get(nd.id);
       if (pid) {
         const p = g.puertos.get(pid).puerto;
@@ -1505,7 +1529,8 @@
     const g = calcular(m, M);
     const dir = direccionValida(x.direccion, m.politicas, 'El tramo');
     const L = largoValido(m, x.largo_mm, 'El tramo');
-    const a = arranque(m, M, g, desde);
+    const quitadas = [];
+    const a = arranque(m, M, g, desde, quitadas);
     const g2 = calcular(m, M);
     const D = diametroValido(m, x.diametro_in === undefined ? diametroPorOmision(m, g2, a) : x.diametro_in, 'El tramo');
     const P0 = nodoDe(m, a).posicion_mm;
@@ -1518,7 +1543,7 @@
     } else b = crearNodo(m, P);
     const tid = nuevoId(m, 'TR');
     m.tramos.push({ id: tid, tipo: 'RIGIDO', a, b, diametro_in: D, diametro_bloqueado: !!x.bloquear, material: m.material.material, calibre: m.material.calibre });
-    marcar(m, 'trazar', { nodo: b, tramos: [tid] });
+    marcar(m, 'trazar', { nodo: b, tramos: [tid], info: quitadas.map(infoTapaQuitada) });
     return terminar(m, M);
   }
 
@@ -1530,7 +1555,8 @@
     const m = inicio(t0);
     dato(esObjeto(propuesta) && Array.isArray(propuesta.segmentos) && propuesta.segmentos.length >= 1 && propuesta.segmentos.length <= 4 && esObjeto(propuesta.objetivo), 'La ruta lleva de 1 a 4 segmentos y un objetivo.');
     const g = calcular(m, M);
-    const a = arranque(m, M, g, desde);
+    const quitadas = [];
+    const a = arranque(m, M, g, desde, quitadas);
     const segs = propuesta.segmentos.map((s, i) => ({ dir: direccionValida(s.direccion, m.politicas, `El segmento ${i + 1}`), L: largoValido(m, s.largo_mm, `El segmento ${i + 1}`) }));
     const ob = propuesta.objetivo;
     let destino;
@@ -1538,7 +1564,11 @@
       const tr = tramoDe(m, ob.tramo);
       if (!g.conocido(tr.id)) falla('FLUJO_DESCONOCIDO', `Conecte primero el tramo ${tr.id} al colector para saber hacia dónde va el aire.`, [tr.id]);
       destino = partir(m, calcular(m, M), tr.id, ob.s_mm);
-    } else destino = nodoDe(m, ob.nodo).id;
+    } else {
+      const nd = nodoDe(m, ob.nodo);
+      if (nd.tapa) { delete nd.tapa; quitadas.push(nd.id); }
+      destino = nd.id;
+    }
     dato(destino !== a, 'La ruta no puede terminar donde empieza.');
     const g2 = calcular(m, M);
     const D = diametroValido(m, propuesta.diametro_in === undefined ? diametroPorOmision(m, g2, a) : propuesta.diametro_in, 'La ruta');
@@ -1564,7 +1594,7 @@
       nuevos.push(tid);
       prev = b;
     });
-    marcar(m, 'conectar', { nodo: destino, tramos: nuevos });
+    marcar(m, 'conectar', { nodo: destino, tramos: nuevos, info: quitadas.map(infoTapaQuitada) });
     return terminar(m, M);
   }
 
@@ -2020,6 +2050,32 @@
     return terminar(m, M);
   }
 
+  /**
+   * Pone una tapa (§4.3, bloque Tapa) en un extremo libre del ducto: lo cierra. La pieza sale de la familia TAPA del motor
+   * (un disco con su cuello, que ocupa el final del tramo, y su brida). El tramo hasta la tapa queda ciego: no lleva aire.
+   */
+  function ponerTapa(t0, M, nodoId) {
+    const m = inicio(t0);
+    const nd = nodoDe(m, nodoId);
+    dato(!nd.tapa, `${nodoId} ya tiene tapa.`, [nodoId]);
+    const g = calcular(m, M);
+    dato(!g.puertoDeNodo.get(nodoId) && !g.pt.has(nodoId), `La tapa va en un extremo libre: en ${nodoId} hay un equipo.`, [nodoId]);
+    const ad = g.ady.get(nodoId) || [];
+    dato(ad.length === 1 && rigido(ad[0].tramo), `La tapa va en un extremo libre del ducto: a ${nodoId} ${ad.length > 1 ? `llegan ${ad.length} tramos` : ad.length ? 'llega una manguera' : 'no llega ningún tramo'}.`, [nodoId]);
+    nd.tapa = true;
+    marcar(m, 'ponerTapa', { nodo: nodoId, tramos: [ad[0].tramo.id] });
+    return terminar(m, M);
+  }
+  /** Quita la tapa de un extremo: vuelve a quedar abierto. */
+  function quitarTapa(t0, M, nodoId) {
+    const m = inicio(t0);
+    const nd = nodoDe(m, nodoId);
+    dato(nd.tapa, `${nodoId} no tiene tapa.`, [nodoId]);
+    delete nd.tapa;
+    marcar(m, 'quitarTapa', { nodo: nodoId });
+    return terminar(m, M);
+  }
+
   /** Ancla un nodo (punto fijo; no se funde) o lo suelta. */
   function anclar(t0, M, nodoId, si) {
     const m = inicio(t0);
@@ -2280,7 +2336,20 @@
       });
     });
     t.nodos.forEach((x) => {
-      if (g.tipo.get(x.id) === 'EXTREMO' && g.ady.get(x.id).length === 1) add('EXTREMO_ABIERTO', 'AVISO', [x.id], `El extremo ${x.id} queda abierto.`, 'Llévelo a un equipo o tápelo.');
+      if (g.tipo.get(x.id) !== 'EXTREMO' || g.ady.get(x.id).length !== 1) return;
+      if (!x.tapa) { add('EXTREMO_ABIERTO', 'AVISO', [x.id], `El extremo ${x.id} queda abierto.`, 'Llévelo a un equipo o tápelo.'); return; }
+      // el ramal ciego: del extremo tapado hasta donde ya lleva aire
+      const ciegos = [];
+      for (let nid = x.id, tr = g.ady.get(x.id)[0].tramo; tr && g.Q.get(tr.id) === 0 && !ciegos.includes(tr.id);) {
+        ciegos.push(tr.id);
+        nid = tr.a === nid ? tr.b : tr.a;
+        const sig = g.ady.get(nid).filter((y) => y.tramo.id !== tr.id);
+        tr = sig.length === 1 ? sig[0].tramo : null;
+      }
+      if (!ciegos.length) return;
+      const polvo = ['POLVO', 'ABRASIVO'].includes(t.proyecto.servicio);
+      add('RAMAL_CIEGO', polvo ? 'AVISO' : 'INFO', [x.id, ...ciegos], `${lista(ciegos, 'y')} ${ciegos.length > 1 ? 'quedan ciegos' : 'queda ciego'} hasta la tapa de ${x.id}: no ${ciegos.length > 1 ? 'llevan' : 'lleva'} aire${polvo ? ', y ahí se junta el material' : ''}.`,
+        polvo ? 'Manténgalo corto o póngale una compuerta cerrada junto al tronco.' : null);
     });
     t.equipos.forEach((e) => { if (!e.puertos.length) add('EQUIPO_SIN_PUERTOS', 'AVISO', [e.id], `${e.nombre} (${e.id}) no tiene tomas ni bocas.`, 'Agregue sus tomas o quítelo.'); });
     // INFO
@@ -2598,17 +2667,17 @@
           largo_ramal_mm: p.geometria.largo_ramal_mm === null ? null : r3(p.geometria.largo_ramal_mm) },
         perdida: { ...(p.perdida || perdidaReduccion(true)) }, familia_cotizap: p.familia_cotizap,
       })),
-      validaciones: vals.map((v) => ({ codigo: v.codigo, severidad: v.severidad, elementos: v.elementos.filter((e) => /^(EQ|PU|N|TR|CO|RE|AD|IN|RI|PA|TE|CP)-[0-9]{2,4}$/.test(e)), mensaje: v.mensaje, sugerencia: v.sugerencia })),
+      validaciones: vals.map((v) => ({ codigo: v.codigo, severidad: v.severidad, elementos: v.elementos.filter((e) => /^(EQ|PU|N|TR|CO|RE|AD|IN|RI|PA|TE|CP|TA)-[0-9]{2,4}$/.test(e)), mensaje: v.mensaje, sugerencia: v.sugerencia })),
       resultados: null,
     };
     return sistema;
   }
-  /** Cómo termina un tramo rígido en un nodo: contra la brida de un equipo, liso para la manguera, abierto o con brida. */
+  /** Cómo termina un tramo rígido en un nodo: contra la brida de un equipo, liso para la manguera, abierto o con brida (la de una pieza o la de su tapa). */
   function union(g, nid) {
     const pid = g.puertoDeNodo.get(nid);
     if (pid) return 'BRIDA_EQUIPO';
     if (g.pt.has(nid)) return 'LISA';
-    if (g.ady.get(nid).length === 1) return 'ABIERTA';
+    if (g.ady.get(nid).length === 1) return (g.piezasDe.get(nid) || []).some((pz) => pz.tipo === 'TAPA') ? 'BRIDA' : 'ABIERTA';
     return 'BRIDA';
   }
 
@@ -2626,13 +2695,14 @@
         if (Math.abs(v - calc[k]) > Math.abs(calc[k]) * 1e-9) m.proyecto.aire[k] = v;
       });
       m.politicas = validarPoliticas(s.politicas);
-      const reId = { EQ: /^EQ-\d{2,3}$/, PU: /^PU-\d{2,3}$/, N: /^N-\d{3,4}$/, TR: /^TR-\d{3,4}$/, AC: /^(CO|RE|AD|IN|RI|PA|TE|CP)-\d{3,4}$/ };
+      const reId = { EQ: /^EQ-\d{2,3}$/, PU: /^PU-\d{2,3}$/, N: /^N-\d{3,4}$/, TR: /^TR-\d{3,4}$/, AC: RE_ACCESORIO };
       const vistos = new Set();
       const unico = (id, re, que) => { dato(typeof id === 'string' && re.test(id) && !vistos.has(id), `${que} sin identificador válido (${String(id)}).`); vistos.add(id); return id; };
       const conCompuerta = new Set(s.accesorios.filter((a) => esObjeto(a) && a.tipo === 'COMPUERTA').map((a) => a.nodo));
+      const conTapa = new Set(s.accesorios.filter((a) => esObjeto(a) && a.tipo === 'TAPA').map((a) => a.nodo));
       s.nodos.forEach((x) => {
         unico(x.id, reId.N, 'Un nodo');
-        m.nodos.push({ id: x.id, posicion_mm: coordenada(x.posicion_mm, `El nodo ${x.id}`), puerto: null, ancla: x.tipo === 'UNION' && Array.isArray(x.accesorios) && !x.accesorios.length, ...(conCompuerta.has(x.id) ? { compuerta: true } : {}) });
+        m.nodos.push({ id: x.id, posicion_mm: coordenada(x.posicion_mm, `El nodo ${x.id}`), puerto: null, ancla: x.tipo === 'UNION' && Array.isArray(x.accesorios) && !x.accesorios.length, ...(conCompuerta.has(x.id) ? { compuerta: true } : {}), ...(conTapa.has(x.id) ? { tapa: true } : {}) });
       });
       const nodos = new Set(m.nodos.map((x) => x.id));
       const materiales = new Map();
@@ -2736,7 +2806,7 @@
       x.nodos.forEach((nd) => {
         dato(esObjeto(nd), 'Un nodo no es válido.');
         unico(nd.id, /^N-\d{3,4}$/, 'Un nodo');
-        m.nodos.push({ id: nd.id, posicion_mm: coordenada(nd.posicion_mm, `El nodo ${nd.id}`), puerto: typeof nd.puerto === 'string' ? nd.puerto : null, ancla: nd.ancla === true, ...(nd.compuerta === true ? { compuerta: true } : {}) });
+        m.nodos.push({ id: nd.id, posicion_mm: coordenada(nd.posicion_mm, `El nodo ${nd.id}`), puerto: typeof nd.puerto === 'string' ? nd.puerto : null, ancla: nd.ancla === true, ...(nd.compuerta === true ? { compuerta: true } : {}), ...(nd.tapa === true ? { tapa: true } : {}) });
       });
       const nodos = new Set(m.nodos.map((y) => y.id));
       x.tramos.forEach((tr) => {
@@ -2892,7 +2962,7 @@
     ponerEquipo, editarEquipo, moverEquipo, quitarEquipo, agregarPuerto, editarPuerto, quitarPuerto,
     acoplarBrida, acoplarManguera, moverTransicion, desacoplar,
     candidatas, textoCandidatas, elegirDireccion, ajustarLargo, trazar, conectar, rutas,
-    cambiarLargo, moverSegmento, cambiarAngulo, cambiarDiametro, reducir, decidirCorto, ponerCompuerta, quitarCompuerta, anclar, borrarTramo, dimensionar, aplicarDimensiones,
+    cambiarLargo, moverSegmento, cambiarAngulo, cambiarDiametro, reducir, decidirCorto, ponerCompuerta, quitarCompuerta, ponerTapa, quitarTapa, anclar, borrarTramo, dimensionar, aplicarDimensiones,
     CORREGIBLES, correcciones, corregir,
   };
 }));
