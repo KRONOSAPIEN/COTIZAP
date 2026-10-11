@@ -941,6 +941,17 @@
         if (dd <= ALINEAR_PX && norma(resta(P2, nd.posicion_mm)) > 1 && (!mejor || dd < mejor.dd)) mejor = { dd, largo: r3(L2), guia: { de: P2, a: nd.posicion_mm, eje: k.toUpperCase(), nodo: nd.id } };
       });
     });
+    // lo que sube o baja también se ajusta a la altura de los niveles con nombre (§2.7)
+    if (Math.abs(u.z) > 1e-9) {
+      (s.t.proyecto.niveles || []).forEach((nv) => {
+        const L2 = (nv.z_mm - P0.z) / u.z;
+        if (L2 < min - 1e-9 || L2 > 100000) return;
+        const P2 = suma(P0, por(u, L2));
+        const q2 = pantalla(s, P2);
+        const dd = Math.hypot(q2.x - q1.x, q2.y - q1.y);
+        if (dd <= ALINEAR_PX && (!mejor || dd < mejor.dd)) mejor = { dd, largo: r3(L2), guia: { de: P2, a: P2, eje: 'Z', nivel: nv.nombre } };
+      });
+    }
     return mejor;
   }
   /** El nodo de la derivación que acaba de salir de un trazo desde { tramo } (el arranque del ramal). */
@@ -1026,10 +1037,61 @@
     if (s.traza) s.traza.tab = 0;
     return decir(s, `${k === 'D2' ? 'Tronco después' : 'Ø activo'}: ${pulg(s[k])}.`, false);
   }
-  /** RePág y AvPág: sube o baja el nivel de trabajo (donde se colocan los equipos y empiezan los trazos sueltos). */
-  function cambiarNivel(s, paso) {
-    s.nivel = Math.max(0, s.nivel + paso * PASO_NIVEL_MM);
-    return decir(s, `Nivel de trabajo: z = ${n(s.nivel)} mm.`, false);
+  /* ------------------------------------------------------------------ niveles (§2.7) */
+
+  /** Los niveles del proyecto con el piso: [{ nombre, z_mm, piso? }], de abajo hacia arriba. */
+  function niveles(s) {
+    const propios = (s.t.proyecto.niveles || []).map((x) => ({ ...x }));
+    return propios.some((x) => x.z_mm === 0) ? propios : [{ nombre: 'Piso', z_mm: 0, piso: true }, ...propios];
+  }
+  /** El nombre del nivel que está a esa z (a 1 mm), o null. */
+  const nivelEn = (s, z) => { const x = niveles(s).find((q) => Math.abs(q.z_mm - z) < 1); return x ? x.nombre : null; };
+  const textoNivel = (s) => { const nom = nivelEn(s, s.nivel); return `Nivel de trabajo: z = ${n(s.nivel)} mm${nom ? ` (${nom})` : ''}.`; };
+  /**
+   * RePág y AvPág: sube o baja el nivel de trabajo (donde se colocan los equipos y empiezan los trazos sueltos) un paso de
+   * 100 mm, deteniéndose en los niveles con nombre que encuentre; con salto (Mayús), va directo al siguiente nivel.
+   */
+  function cambiarNivel(s, paso, salto) {
+    const zs = niveles(s).map((x) => x.z_mm);
+    const sig = paso > 0 ? zs.find((z) => z > s.nivel + 0.5) : [...zs].reverse().find((z) => z < s.nivel - 0.5);
+    if (salto) {
+      if (sig === undefined) return decir(s, paso > 0 ? 'No hay otro nivel arriba: nombre uno en el proyecto (fase 1).' : 'No hay otro nivel abajo.', true);
+      s.nivel = sig;
+    } else {
+      const z = Math.max(0, s.nivel + paso * PASO_NIVEL_MM);
+      s.nivel = sig !== undefined && (paso > 0 ? sig < z : sig > z) ? sig : z;
+    }
+    return decir(s, textoNivel(s), false);
+  }
+  /** El nivel de trabajo a una z dada (al tocar la regla de niveles). */
+  function irANivel(s, z) {
+    if (!(Number.isFinite(z) && z >= 0)) return decir(s, 'Esa altura no sirve.', true);
+    s.nivel = z;
+    return decir(s, textoNivel(s), false);
+  }
+  /** Agrega un nivel con nombre a esa z (con deshacer). Sin nombre, «Nivel z». */
+  function nombrarNivel(s, nombre, z) {
+    const nom = (nombre || '').trim() || `Nivel ${n(z)}`;
+    return !!hacer(s, (t) => TZ.cambiarProyecto(t, s.M, { niveles: [...(t.proyecto.niveles || []), { nombre: nom, z_mm: z }] }), `Nivel «${nom}» a z = ${n(z)} mm. RePág y AvPág se detienen en él, y el trazo que sube o baja se ajusta a su altura.`);
+  }
+  /** Quita un nivel con nombre (los ductos no se mueven). */
+  function quitarNivel(s, nombre) {
+    const lista = s.t.proyecto.niveles || [];
+    if (!lista.some((x) => x.nombre === nombre)) return decir(s, `No hay un nivel «${nombre}».`, true);
+    return !!hacer(s, (t) => TZ.cambiarProyecto(t, s.M, { niveles: lista.filter((x) => x.nombre !== nombre) }), `Se quitó el nivel «${nombre}»; los ductos se quedan donde están.`);
+  }
+  /**
+   * La regla de niveles (§4.2): cada nivel con su y en la pantalla, medida sobre la vertical que pasa por el centro del trazo
+   * (de sus nodos y equipos; sin nada, el origen), para que coincida con el dibujo; null en planta (ahí la z no se ve).
+   * [{ nombre, z_mm, y, trabajo, piso }]
+   */
+  function reglaNiveles(s) {
+    if (s.vista === 'PLANTA') return null;
+    const pts = [...s.t.nodos.map((x) => x.posicion_mm), ...s.t.equipos.map((e) => e.posicion_mm)];
+    const G = pts.length ? V3(pts.reduce((a, q) => a + q.x, 0) / pts.length, pts.reduce((a, q) => a + q.y, 0) / pts.length, 0) : V3(0, 0, 0);
+    const marcas = niveles(s).map((x) => ({ ...x, piso: !!x.piso, trabajo: Math.abs(x.z_mm - s.nivel) < 1 }));
+    if (!marcas.some((x) => x.trabajo)) marcas.push({ nombre: 'Nivel de trabajo', z_mm: s.nivel, piso: false, trabajo: true, suelto: true });
+    return marcas.map((x) => ({ ...x, y: pantalla(s, V3(G.x, G.y, x.z_mm)).y })).sort((a, b) => a.z_mm - b.z_mm);
   }
 
   /* ------------------------------------------------------------------ editar (§1.3 pasos 9 a 11) */
@@ -1569,6 +1631,7 @@
     colocarEquipo, moverEquipo, ponerToma, puntoDelPiso,
     mangueraDe, acoplar, semaforoManguera, alturaPorArrastre, desvioPorArrastre, previaManguera, moverManguera,
     arranqueDe, empezar, teclasSostenidas, planoDeTrabajo, leerCaja, teclear, fantasma, alinear, confirmar, cancelar, fijar, siguienteOpcion, cambiarDiametroActivo, cambiarNivel,
+    niveles, irANivel, nombrarNivel, quitarNivel, reglaNiveles, PASO_NIVEL_MM,
     reducirEn, compuertaEn, compuertaSugerida, quitarCompuerta, tapaEn, quitarTapa, RADIAL_MS, radial, radialElegir, desplazamientoSegmento, moverSegmento, borrar, medir,
     correccionesDe, correccionesListas, corregir, cambiarDiametroTramo, cambiarDiametroEnCadena, decidirCorto,
     infoTramo, piezasDe, velocidadSemaforo, calcularTrazo, calculo, efectoEnTrazo, informeCalculo, filaCalculo, NOMBRE_ACCION, despiece, exportar, importar, ejemplo,

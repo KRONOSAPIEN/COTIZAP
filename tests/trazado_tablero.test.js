@@ -754,3 +754,61 @@ test('Menú radial (§4.5): las piezas posibles en lo tocado, probadas contra el
   assert.ok(TB.hacer(chico, (t) => TZ.trazar(t, M, { tramo: 'TR-003', s_mm: 1500 }, { direccion: opc.direccion, largo_mm: 1500, diametro_in: menor }), ''));
   assert.ok(!TB.radial(chico, { tipo: 'TRAMO', id: chico.t.ultimo.tramos[0], s_mm: 700, rigido: true }).opciones.some((o) => o.id === 'REDUCCION'), `ya de ${menor}″, no hay reducción`);
 });
+
+test('Niveles con nombre en el tablero (§2.7): RePág y AvPág se detienen en ellos, Mayús salta, el trazo que sube se ajusta a su altura y la regla los muestra', () => {
+  const s = nuevoTablero();
+  TB.reemplazar(s, TB.ejemplo(M), 'ejemplo');
+  assert.deepEqual(TB.niveles(s), [{ nombre: 'Piso', z_mm: 0, piso: true }], 'sin niveles, el piso');
+  assert.ok(TB.nombrarNivel(s, 'Nivel de ductería 4 470', 4470));
+  assert.match(s.msg, /^Nivel «Nivel de ductería 4 470» a z = 4470 mm\. RePág y AvPág se detienen en él/);
+  assert.ok(TB.nombrarNivel(s, '', 250), 'sin nombre, «Nivel z»');
+  assert.deepEqual(TB.niveles(s).map((x) => [x.nombre, x.z_mm]), [['Piso', 0], ['Nivel 250', 250], ['Nivel de ductería 4 470', 4470]]);
+  assert.equal(TB.nombrarNivel(s, 'Otro', 250), false, 'dos a la misma altura, no');
+  assert.match(s.msg, /a la misma altura/);
+  // los pasos de 100 mm se detienen en los niveles; con Mayús se salta al siguiente
+  s.nivel = 0;
+  const zs = [1, 1, 1, 1].map(() => { TB.cambiarNivel(s, 1); return s.nivel; });
+  assert.deepEqual(zs, [100, 200, 250, 350], 'se detiene en los 250');
+  TB.cambiarNivel(s, 1, true);
+  assert.equal(s.nivel, 4470);
+  assert.equal(s.msg, 'Nivel de trabajo: z = 4470 mm (Nivel de ductería 4 470).');
+  assert.equal(TB.cambiarNivel(s, 1, true), false, 'arriba ya no hay');
+  assert.match(s.msg, /No hay otro nivel arriba/);
+  TB.cambiarNivel(s, -1, true);
+  TB.cambiarNivel(s, -1, true);
+  assert.equal(s.nivel, 0, 'y de bajada, al piso');
+  TB.cambiarNivel(s, -1);
+  assert.equal(s.nivel, 0, 'no baja del piso');
+  assert.ok(TB.irANivel(s, 250) && s.nivel === 250 && s.msg === 'Nivel de trabajo: z = 250 mm (Nivel 250).');
+  assert.equal(TB.irANivel(s, -1), false);
+  // la regla: de abajo hacia arriba, el de trabajo marcado; un nivel de trabajo sin nombre aparece suelto; en planta, no hay
+  let r = TB.reglaNiveles(s);
+  assert.deepEqual(r.map((x) => [x.nombre, x.trabajo]), [['Piso', false], ['Nivel 250', true], ['Nivel de ductería 4 470', false]]);
+  assert.ok(r[0].y > r[1].y && r[1].y > r[2].y, 'más alto, más arriba en la pantalla');
+  s.nivel = 1200;
+  r = TB.reglaNiveles(s);
+  assert.deepEqual(r.filter((x) => x.trabajo).map((x) => [x.nombre, x.z_mm, x.suelto]), [['Nivel de trabajo', 1200, true]]);
+  TB.ponerVista(s, 'PLANTA');
+  assert.equal(TB.reglaNiveles(s), null);
+  TB.ponerVista(s, 'NE');
+  s.cam = { ...CAMARA };
+  // el trazo que sube desde un extremo libre se ajusta a la altura del nivel (no al puntero)
+  const op = TZ.candidatas(s.t, M, { tramo: 'TR-003', s_mm: 1500 }).find((o) => o.direccion.elevacion_deg === 0);
+  assert.ok(TB.hacer(s, (t) => TZ.trazar(t, M, { tramo: 'TR-003', s_mm: 1500 }, { direccion: op.direccion, largo_mm: 1500, diametro_in: 5 }), ''));
+  const ext = s.t.ultimo.nodo;
+  const Pe = s.g.pos.get(ext);
+  assert.equal(TB.radialElegir(s, { tipo: 'NODO', id: ext, nodo: ext, extremo: true }, 'SUBE_BAJA'), 'TRAZO');
+  const q = TB.pantalla(s, V3(Pe.x, Pe.y, 4470 + 12));
+  const f = TB.fantasma(s, q.x, q.y, false);
+  assert.ok(f.ok && f.largo === 1470 && f.guia && f.guia.nivel === 'Nivel de ductería 4 470', `al nivel: ${f.largo} ${JSON.stringify(f.guia)}`);
+  assert.ok(TB.confirmar(s, q.x, q.y, false));
+  assert.equal(s.g.pos.get(s.t.ultimo.nodo).z, 4470, 'el extremo queda en el nivel');
+  // quitar un nivel no mueve nada, y se deshace
+  const antes = JSON.stringify(s.t.nodos);
+  assert.ok(TB.quitarNivel(s, 'Nivel 250'));
+  assert.equal(s.msg, 'Se quitó el nivel «Nivel 250»; los ductos se quedan donde están.');
+  assert.equal(JSON.stringify(s.t.nodos), antes);
+  assert.equal(TB.quitarNivel(s, 'Nivel 250'), false);
+  TB.deshacer(s);
+  assert.equal(TB.niveles(s).length, 3);
+});

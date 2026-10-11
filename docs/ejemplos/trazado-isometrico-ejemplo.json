@@ -21,7 +21,8 @@
     },
     "ejes": "X_ESTE_Y_NORTE_Z_ARRIBA",
     "origen": "Centro de la base del colector, sobre el piso terminado",
-    "vista_iso": "NE"
+    "vista_iso": "NE",
+    "niveles": []
   },
   "politicas": {
     "angulos_codo_deg": [

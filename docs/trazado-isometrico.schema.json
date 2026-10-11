@@ -60,7 +60,7 @@
     "proyecto": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "nombre", "servicio", "material_transportado", "aire", "unidades", "ejes", "origen", "vista_iso"],
+      "required": ["id", "nombre", "servicio", "material_transportado", "aire", "unidades", "ejes", "origen", "vista_iso", "niveles"],
       "properties": {
         "id": { "type": "string" },
         "nombre": { "type": "string" },
@@ -92,7 +92,17 @@
         },
         "ejes": { "const": "X_ESTE_Y_NORTE_Z_ARRIBA" },
         "origen": { "type": "string", "description": "Qué punto de la nave es (0, 0, 0)." },
-        "vista_iso": { "type": "string", "enum": ["NE", "NO", "SE", "SO"], "description": "Desde dónde se mira el isométrico (sólo cambia el dibujo, no los datos)." }
+        "vista_iso": { "type": "string", "enum": ["NE", "NO", "SE", "SO"], "description": "Desde dónde se mira el isométrico (sólo cambia el dibujo, no los datos)." },
+        "niveles": {
+          "type": "array",
+          "description": "Los niveles con nombre (§2.7): la z del eje de los ductos de ese nivel, de menor a mayor (hasta 20). Sin niveles, la lista vacía.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["nombre", "z_mm"],
+            "properties": { "nombre": { "type": "string" }, "z_mm": { "type": "number", "minimum": 0, "maximum": 30000 } }
+          }
+        }
       }
     },
     "politicas": {

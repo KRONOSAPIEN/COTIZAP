@@ -3295,6 +3295,57 @@ const ok = (cond, msg) => {
     await p.close();
   }
 
+  console.log('42) Niveles con nombre: agregarlos en el proyecto, la regla al borde del lienzo, RePág y AvPág con sus paradas, y quitarlos');
+  {
+    const p = await nuevaPagina();
+    const R = (fn, a) => p.evaluate(fn, a);
+    const nivel = () => R(() => window.COTIZAP.web.trazadoUI.estado().nivel);
+    await p.click('#tab-trazado');
+    await p.click('#ti-ejemplo');
+    await p.click('#ti-fase-0');
+    ok(/Sin niveles con nombre/.test(await p.locator('#ti-niveles').innerText()), 'el proyecto explica qué es un nivel');
+    await p.fill('#ti-nv-nombre', 'Nivel de ductería 3 000');
+    await p.fill('#ti-nv-z', '3000');
+    await p.click('#ti-nv-agregar');
+    await p.fill('#ti-nv-nombre', 'Techo');
+    await p.fill('#ti-nv-z', '6500');
+    await p.press('#ti-nv-z', 'Enter');
+    ok(JSON.stringify(await p.locator('#ti-nv-lista li').evaluateAll((e) => e.map((x) => x.dataset.nivel))) === JSON.stringify(['Nivel de ductería 3 000', 'Techo']), 'los dos niveles en la lista, de abajo hacia arriba');
+    ok(await R(() => JSON.stringify(window.COTIZAP.web.estadoApp.cot.trazado_iso.proyecto.niveles)) === JSON.stringify([{ nombre: 'Nivel de ductería 3 000', z_mm: 3000 }, { nombre: 'Techo', z_mm: 6500 }]), 'se guardan con el trazo de la cotización');
+    await p.fill('#ti-nv-nombre', 'Otro');
+    await p.fill('#ti-nv-z', '3000');
+    await p.click('#ti-nv-agregar');
+    ok(/«Nivel de ductería 3 000» y «Otro» están a la misma altura/.test(await p.locator('#ti-msg').innerText()), 'dos a la misma altura se rechazan con el porqué');
+    // la regla: el piso, los dos niveles; el de trabajo resaltado
+    const marcas = await p.locator('#ti-regla .ti-regla-marca').evaluateAll((e) => e.map((x) => [x.dataset.nivelZ, x.classList.contains('ti-regla-trabajo'), x.textContent.replace(/\s+/g, ' ')]));
+    ok(marcas.length === 3 && marcas.some(([z, tr]) => z === '0' && tr) && marcas.some(([z, , t]) => z === '3000' && /Nivel de ductería 3 000 · 3\.0 m/.test(t)), `la regla con el piso (de trabajo) y los niveles (${JSON.stringify(marcas)})`);
+    // RePág se detiene en los niveles; Mayús+RePág salta
+    await p.locator('#ti-lienzo').focus();
+    for (let i = 0; i < 3; i += 1) await p.keyboard.press('PageUp');
+    ok(await nivel() === 300, 'RePág sube de 100 en 100 mm');
+    await p.keyboard.press('Shift+PageUp');
+    ok(await nivel() === 3000 && /^Nivel de trabajo: z = 3000 mm \(Nivel de ductería 3 000\)\.$/.test(await p.locator('#ti-msg').innerText()), 'Mayús+RePág salta al nivel de 3 000');
+    ok(await p.locator('#ti-regla .ti-regla-trabajo').getAttribute('data-nivel-z') === '3000', 'y la regla lo marca de trabajo');
+    // tocar el techo en la regla
+    await p.locator('#ti-regla .ti-regla-marca[data-nivel-z="6500"] rect').click();
+    ok(await nivel() === 6500 && /\(Techo\)/.test(await p.locator('#ti-msg').innerText()), 'tocar un nivel en la regla lo hace el de trabajo');
+    await p.keyboard.press('PageDown');
+    ok(await nivel() === 6400, 'AvPág baja 100 mm');
+    // en planta la regla no se dibuja (la z no se ve)
+    await p.click('#ti-vista-planta');
+    ok(await p.locator('#ti-regla .ti-regla-marca').count() === 0, 'en planta no hay regla');
+    await p.click('#ti-vista-ne');
+    // quitarlo: los ductos no se mueven; el JSON del sistema los lleva
+    const nodos = await R(() => JSON.stringify(window.COTIZAP.web.trazadoUI.estado().t.nodos));
+    await p.click('#ti-fase-0');
+    await p.locator('#ti-nv-lista li[data-nivel="Techo"] .ti-nv-quitar').click();
+    ok(/^Se quitó el nivel «Techo»; los ductos se quedan donde están\.$/.test(await p.locator('#ti-msg').innerText()) && await R(() => JSON.stringify(window.COTIZAP.web.trazadoUI.estado().t.nodos)) === nodos, 'quitar un nivel no mueve los ductos');
+    ok(await R(() => JSON.stringify(window.COTIZAP.trazadoIso.aSistema(window.COTIZAP.web.trazadoUI.estado().t, window.COTIZAP.web.estadoApp.M).proyecto.niveles)) === JSON.stringify([{ nombre: 'Nivel de ductería 3 000', z_mm: 3000 }]), 'el sistema exportado lleva sus niveles');
+    await p.keyboard.press('Control+z');
+    ok(await p.locator('#ti-nv-lista li').count() === 2, 'deshacer lo regresa');
+    await p.close();
+  }
+
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

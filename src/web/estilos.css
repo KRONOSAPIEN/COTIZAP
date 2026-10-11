@@ -1197,6 +1197,18 @@ kbd { font: 500 11.5px var(--font-mono); padding: 1px 6px; border: 1px solid var
 .ti-vista-activa { background: var(--accent-soft); border-color: var(--accent); }
 .ti-vistas .btn-icono { width: 32px; height: 32px; }
 .ti-cubo { position: absolute; top: 6px; right: 6px; width: 96px; height: 96px; }
+/* Regla de niveles (§4.2) al borde derecho del lienzo */
+.ti-regla-eje { stroke: var(--line-strong); stroke-width: 1.5; }
+.ti-regla-marca { cursor: pointer; }
+.ti-regla-raya { stroke: var(--fg-3); stroke-width: 2; }
+.ti-regla-guia { stroke: var(--fg-3); stroke-width: 1; }
+.ti-regla-caja { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; }
+.ti-regla-txt { font: 600 11px var(--font-ui); fill: var(--fg-2); pointer-events: none; }
+.ti-regla-marca:hover .ti-regla-caja { stroke: var(--accent); }
+.ti-regla-trabajo .ti-regla-caja { fill: var(--accent-soft); stroke: var(--accent); }
+.ti-regla-trabajo .ti-regla-txt { fill: var(--accent); }
+.ti-regla-trabajo .ti-regla-raya { stroke: var(--accent); }
+.ti-guia-nivel { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 8 4; fill: none; }
 /* Menú radial (§4.5): el dedo quieto 400 ms sobre un nodo o un tramo, o clic derecho */
 .ti-radial { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
 .ti-radial[hidden] { display: none; }

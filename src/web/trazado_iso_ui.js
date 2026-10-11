@@ -239,6 +239,7 @@
     lugar.ocupar({ x: s.ancho - 104, y: 0, w: 104, h: 104 }, 8);
     lugar.ocupar({ x: 0, y: s.alto - 88, w: 88, h: 88 }, 8);
     lugar.ocupar({ x: s.ancho - 300, y: s.alto - 26, w: 300, h: 26 }, 8); // la escala de la rejilla
+    const regla = dibujarRegla(lugar);
     const items = [];
     const prof = (p) => TB().profundidad(s, p);
     const clase = (id, base) => [base, err.has(id) ? 'ti-err' : aviso.has(id) ? 'ti-aviso' : '', sel && sel.id === id ? 'ti-sel' : '', ui.hover === id ? 'ti-hover' : ''].filter(Boolean).join(' ');
@@ -374,11 +375,48 @@
       if (r) etiquetas.append(svg('text', { x: f1(r.x), y: f1(r.y + 12), class: `ti-txt${c.err ? ' ti-txt-err' : c.sem === 'AMBAR' ? ' ti-txt-ambar' : c.sem === 'VERDE' ? ' ti-txt-ok' : ''}`, 'data-cota': c.t.id }, c.txt));
     });
     const defs = svg('defs', null, svg('marker', { id: 'ti-punta', viewBox: '0 0 10 10', refX: '8', refY: '5', markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse' }, svg('path', { d: 'M0 0L10 5L0 10z', class: 'ti-punta' })));
-    el.replaceChildren(defs, grid, escena, sobre, etiquetas, gizmo(), svg('g', { id: 'ti-capa' }));
+    el.replaceChildren(defs, grid, escena, sobre, etiquetas, regla, gizmo(), svg('g', { id: 'ti-capa' }));
     const esc = $('#ti-escala');
     if (esc) esc.textContent = `Rejilla de ${W.num(paso / 1000, paso < 1000 ? 1 : 0)} m · ${TB().NOMBRE_VISTA[s.vista]} · nivel z = ${n0(s.nivel)} mm`;
     dibujarCapa();
     dibujarCubo();
+  }
+
+  /**
+   * La regla de niveles (§4.2) al borde derecho: el piso, los niveles con nombre y el de trabajo, a su altura en la vista.
+   * Los que quedan fuera se marcan en la orilla con ▲ o ▼; tocar uno lo hace el nivel de trabajo. En planta no se dibuja.
+   */
+  function dibujarRegla(lugar) {
+    const s = ui.s;
+    const marcas = TB().reglaNiveles(s);
+    const g = svg('g', { class: 'ti-regla', id: 'ti-regla' });
+    if (!marcas) return g;
+    const x = s.ancho - 12;
+    const arriba = 112;
+    const abajo = s.alto - 34;
+    g.append(svg('line', { x1: x, y1: arriba, x2: x, y2: abajo, class: 'ti-regla-eje' }));
+    // las etiquetas no se enciman: de abajo hacia arriba, cada una al menos 19 px sobre la anterior
+    let tope = Infinity;
+    marcas.map((m) => ({ ...m, yc: Math.max(arriba, Math.min(abajo, m.y)) })).sort((a, b) => b.yc - a.yc).forEach((m) => {
+      const ye = Math.min(m.yc, tope - 19);
+      tope = ye;
+      const fuera = m.y < arriba - 0.5 ? '▲ ' : m.y > abajo + 0.5 ? '▼ ' : '';
+      // en un lienzo angosto (el teléfono) sólo la altura, salvo el nivel de trabajo, para no tapar el dibujo
+      const corta = s.ancho < 640 && !m.trabajo;
+      const nom = m.suelto ? 'Trabajo' : m.nombre.length > 22 && s.ancho < 640 ? `${m.nombre.slice(0, 20)}…` : m.nombre;
+      const t = `${fuera}${corta ? '' : `${nom} · `}${metros(m.z_mm)}`;
+      const w = anchoTexto(t, 11) + 14;
+      const caja = { x: x - 12 - w, y: ye - 9, w, h: 18 };
+      lugar.ocupar(caja, 2);
+      const gg = svg('g', { class: `ti-regla-marca${m.trabajo ? ' ti-regla-trabajo' : ''}${m.piso ? ' ti-regla-piso' : ''}`, 'data-nivel-z': String(m.z_mm), role: 'button', 'aria-label': `${m.nombre}: z = ${n0(m.z_mm)} mm` });
+      gg.append(svg('title', null, `${m.nombre}: z = ${n0(m.z_mm)} mm.${m.trabajo ? ' Es el nivel de trabajo.' : ' Tóquelo para trabajar en él.'}`));
+      gg.append(svg('line', { x1: x - 6, y1: f1(m.yc), x2: x + 6, y2: f1(m.yc), class: 'ti-regla-raya' }));
+      if (Math.abs(ye - m.yc) > 0.5) gg.append(svg('line', { x1: x - 12, y1: f1(ye), x2: x - 6, y2: f1(m.yc), class: 'ti-regla-guia' }));
+      gg.append(svg('rect', { x: f1(caja.x), y: f1(caja.y), width: f1(w), height: 18, rx: 9, class: 'ti-regla-caja' }));
+      gg.append(svg('text', { x: f1(caja.x + w / 2), y: f1(ye + 4), 'text-anchor': 'middle', class: 'ti-regla-txt' }, t));
+      g.append(gg);
+    });
+    return g;
   }
 
   /** El gizmo de ejes (abajo a la izquierda): X rojo, Y verde, Z azul, cada uno con su letra. */
@@ -486,7 +524,12 @@
         hijos.push(svg('line', { x1: f1(a.x), y1: f1(a.y), x2: f1(b.x), y2: f1(b.y), 'stroke-width': f1(Math.max(4, f.D * IN * s.cam.k)), class: `ti-fantasma ${cls}` }));
         if (f.ok && f.estado !== 'OK') hijos.push(svg('path', { d: `M${f1(b.x)} ${f1(b.y - 10)}L${f1(b.x + 9)} ${f1(b.y + 6)}L${f1(b.x - 9)} ${f1(b.y + 6)}Z`, class: 'ti-triangulo' }));
         hijos.push(svg('circle', { cx: f1(b.x), cy: f1(b.y), r: 5, class: `ti-fantasma-fin ${cls}` }));
-        if (f.guia) {
+        if (f.guia && f.guia.nivel) {
+          // al nivel con nombre: una raya horizontal del nivel por el extremo del fantasma
+          const g0 = P({ ...f.guia.de, x: f.guia.de.x - 900 });
+          const g1 = P({ ...f.guia.de, x: f.guia.de.x + 900 });
+          hijos.push(svg('line', { x1: f1(g0.x), y1: f1(g0.y), x2: f1(g1.x), y2: f1(g1.y), class: 'ti-guia ti-guia-nivel' }));
+        } else if (f.guia) {
           const g0 = P(f.guia.de);
           const g1 = P(f.guia.a);
           hijos.push(svg('line', { x1: f1(g0.x), y1: f1(g0.y), x2: f1(g1.x), y2: f1(g1.y), class: `ti-guia ti-eje-${f.guia.eje.toLowerCase()}` }));
@@ -594,6 +637,8 @@
   }
   function alBajar(ev) {
     if (ui.radial) { cerrarRadial(); ev.preventDefault(); return; } // tocar fuera del menú lo cierra
+    const marca = ev.target && ev.target.closest ? ev.target.closest('[data-nivel-z]') : null;
+    if (marca) { ev.preventDefault(); TB().irANivel(ui.s, Number(marca.dataset.nivelZ)); dibujarLienzo(); pintarEstado(); return; } // la regla de niveles
     if (ev.pointerType === 'mouse' && ev.button !== 0 && ev.button !== 1) return;
     const s = ui.s;
     const el = ev.currentTarget;
@@ -893,7 +938,7 @@
       if (mov) { hecho(); if (T.moverEquipo(s, eq.id, mov)) cambio(); else pintarEstado(); return; }
       if (k === 'r' || k === 'R') { hecho(); if (T.moverEquipo(s, eq.id, { giro: ev.shiftKey ? 90 : 15 })) cambio(); else pintarEstado(); return; }
     }
-    if (k === 'PageUp' || k === 'PageDown') { hecho(); T.cambiarNivel(s, k === 'PageUp' ? 1 : -1); dibujarLienzo(); return; }
+    if (k === 'PageUp' || k === 'PageDown') { hecho(); T.cambiarNivel(s, k === 'PageUp' ? 1 : -1, ev.shiftKey); dibujarLienzo(); pintarEstado(); return; }
     if (k === 'Delete' || k === 'Backspace') { hecho(); if (T.borrar(s, sel, ev.shiftKey)) cambio(); else pintarEstado(); return; }
     if (k === 'Enter' && sel) { const campo = $('#ti-inspector input, #ti-inspector select'); if (campo) { hecho(); campo.focus(); } return; }
     const mover = { ArrowLeft: [60, 0], ArrowRight: [-60, 0], ArrowUp: [0, 60], ArrowDown: [0, -60] }[k];
@@ -1282,6 +1327,7 @@
         campo('Altitud (m)', entrada('ti-pr-alt', pr.aire.altitud_m, (v) => aplicar((t) => T.cambiarProyecto(t, M(), { aire: { altitud_m: num(v) } }), 'Altitud.'))),
         campoAncho('Origen', entrada('ti-pr-origen', pr.origen, (v) => aplicar((t) => T.cambiarProyecto(t, M(), { origen: v }), 'Origen.'), { inputmode: 'text' }))),
       h('p', { class: 'ti-nota', id: 'ti-pr-aire' }, `Aire: ${W.num(a.presion_Pa / 1000, 2)} kPa, ρ = ${W.num(a.densidad_kg_m3, 4)} kg/m³, μ = ${cientifico(a.viscosidad_Pa_s)} Pa·s.`),
+      seccionNiveles(),
       h('h4', null, 'Ducto nuevo'),
       h('div', { class: 'ti-rejilla-campos' },
         campoAncho('Material', selector('ti-pr-material', Object.keys(M().materiales).filter((k) => ['GALVANIZADO', 'ACERO_CARBON', 'INOX_304', 'INOX_316'].includes(k)).map((k) => [k, M().materiales[k].nombre || k]), s.t.material.material, (v) => {
@@ -1296,6 +1342,25 @@
           pp('velocidad_min_m_s', 'Velocidad mínima (m/s)'), pp('velocidad_max_m_s', 'Velocidad máxima (m/s)'), pp('holgura_min_mm', 'Holgura (mm)'), pp('altura_libre_min_mm', 'Altura libre (mm)'),
           campo('Direcciones', selector('ti-pol-rejilla', [['FINA', 'Finas: 170'], ['EJES_45', 'Ejes y 45°: 26'], ['EJES', 'Sólo ejes: 6']], rejillaModo, (v) => aplicar((t) => T.cambiarPoliticas(t, M(), { rejilla: T.REJILLAS[v] }), 'Rejilla de direcciones.'), 'Rejilla de direcciones')),
           h('label', { class: 'ti-check', for: 'ti-pol-t90' }, t90, 'Permitir T a 90°'))));
+  }
+
+  /** Los niveles con nombre del proyecto (§2.7): la lista con su altura y el formulario para agregar uno. */
+  function seccionNiveles() {
+    const s = ui.s;
+    const lista = s.t.proyecto.niveles || [];
+    const nombre = h('input', { id: 'ti-nv-nombre', type: 'text', autocomplete: 'off', placeholder: `Nivel ${Math.round(s.nivel || 3000)}`, 'aria-label': 'Nombre del nivel' });
+    const z = h('input', { id: 'ti-nv-z', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: String(s.nivel || 3000), 'aria-label': 'Altura del nivel (mm)' });
+    const agregar = () => { if (TB().nombrarNivel(s, nombre.value, num(z.value))) cambio(); else { pintarEstado(); pintarInspector(); } };
+    [nombre, z].forEach((el) => el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); agregar(); } }));
+    return h('div', { class: 'ti-niveles', id: 'ti-niveles' },
+      h('h4', null, 'Niveles'),
+      lista.length
+        ? h('ul', { class: 'ti-lista', id: 'ti-nv-lista' }, lista.map((x) => h('li', { 'data-nivel': x.nombre },
+          h('button', { type: 'button', class: 'enlace', title: 'Trabajar en este nivel', onclick: () => { TB().irANivel(s, x.z_mm); pintar(); } }, x.nombre), ` · z = ${n0(x.z_mm)} mm `,
+          h('button', { type: 'button', class: 'btn-texto ti-nv-quitar', 'aria-label': `Quitar el nivel ${x.nombre}`, onclick: () => { if (TB().quitarNivel(s, x.nombre)) cambio(); else pintarEstado(); } }, 'Quitar'))))
+        : h('p', { class: 'ti-nota' }, 'Sin niveles con nombre. Un nivel es la altura del eje de los ductos («Nivel de ductería 3 000»): RePág y AvPág se detienen en él, Mayús+RePág salta al siguiente y el trazo que sube o baja se ajusta a su altura.'),
+      h('div', { class: 'ti-rejilla-campos' }, campo('Nombre', nombre), campo('Altura (mm)', z)),
+      h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-nv-agregar', onclick: agregar }, 'Agregar nivel')));
   }
 
   function inspectorValidar() {
@@ -1436,7 +1501,7 @@
           h('li', null, 'Cerca del tronco o de la boca, el imán propone la llegada: Tab alterna, clic acepta.'),
           h('li', null, 'En el teléfono, deje el dedo quieto sobre un nodo o un tramo: sale el menú de las piezas posibles ahí (recto, codo, sube o baja, injerto, reducción, compuerta, tapa). Deslice hasta una y suelte, o tóquela. Con el ratón, clic derecho.'),
           h('li', null, 'Validar: dimensionar por caudal y revisar los problemas. Salida: pasar el trazo a la cotización, el cálculo de pérdidas, el balanceo, el ventilador y el JSON.'))),
-      h('p', { class: 'ti-nota' }, 'Vista: Q y E giran el isométrico; 1 iso, 2 planta, 3 y 4 elevaciones; F o 0 encuadra; rueda o + y − acercan; Espacio y arrastrar mueve. Ctrl+Z y Ctrl+Y deshacen y rehacen.'));
+      h('p', { class: 'ti-nota' }, 'Vista: Q y E giran el isométrico; 1 iso, 2 planta, 3 y 4 elevaciones; F o 0 encuadra; rueda o + y − acercan; Espacio y arrastrar mueve. RePág y AvPág suben o bajan el nivel de trabajo (Mayús salta entre niveles con nombre). Ctrl+Z y Ctrl+Y deshacen y rehacen.'));
   }
 
   function pintarInspector() {
@@ -1490,7 +1555,7 @@
     const aj = $('#ti-ajuste');
     if (aj) {
       const f = s.traza ? ui.ultimoFantasma : null;
-      aj.textContent = !s.traza ? TB().FASES[s.fase].nombre : f && f.ruta ? `Imán: ${f.iman.nombre}` : f && f.guia ? `Alineado en ${f.guia.eje} con ${f.guia.nodo}` : f && f.tecleado ? 'Largo tecleado' : 'Dirección y largo';
+      aj.textContent = !s.traza ? TB().FASES[s.fase].nombre : f && f.ruta ? `Imán: ${f.iman.nombre}` : f && f.guia ? (f.guia.nivel ? `Al nivel ${f.guia.nivel}` : `Alineado en ${f.guia.eje} con ${f.guia.nodo}`) : f && f.tecleado ? 'Largo tecleado' : 'Dirección y largo';
     }
     const pl = $('#ti-plano');
     if (pl) {

@@ -457,7 +457,7 @@ En el ejemplo, desde lo alto de la subida del cepillo:
 
 - **Piso:** todo punto del ducto debe quedar sobre el piso: z ≥ D/2. Si no, BLOQUEANTE (BAJO_PISO).
 - **Altura libre:** bajo un tramo horizontal o inclinado, el fondo z − D/2 ≥ `altura_libre_min_mm` (AVISO). Se puede ajustar por zonas.
-- **Niveles con nombre** («Nivel de ductería 3 000»): RePág y AvPág mueven el plano de trabajo un paso. El trazo se ajusta a la z de los niveles y de los nodos cercanos.
+- **Niveles con nombre** («Nivel de ductería 3 000»): RePág y AvPág mueven el plano de trabajo un paso. El trazo se ajusta a la z de los niveles y de los nodos cercanos. Están hechos (§5.10): `proyecto.niveles` en el JSON.
 - **Pendiente:** en polvo no se pide. Para humos con condensado iría a ≥ 1 % hacia un drenaje (fuera de alcance; quedaría como política).
 
 ### 2.8 Tomas y conexiones
@@ -781,7 +781,7 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
     "proyecto": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "nombre", "servicio", "material_transportado", "aire", "unidades", "ejes", "origen", "vista_iso"],
+      "required": ["id", "nombre", "servicio", "material_transportado", "aire", "unidades", "ejes", "origen", "vista_iso", "niveles"],
       "properties": {
         "id": { "type": "string" },
         "nombre": { "type": "string" },
@@ -813,7 +813,17 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
         },
         "ejes": { "const": "X_ESTE_Y_NORTE_Z_ARRIBA" },
         "origen": { "type": "string", "description": "Qué punto de la nave es (0, 0, 0)." },
-        "vista_iso": { "type": "string", "enum": ["NE", "NO", "SE", "SO"], "description": "Desde dónde se mira el isométrico (sólo cambia el dibujo, no los datos)." }
+        "vista_iso": { "type": "string", "enum": ["NE", "NO", "SE", "SO"], "description": "Desde dónde se mira el isométrico (sólo cambia el dibujo, no los datos)." },
+        "niveles": {
+          "type": "array",
+          "description": "Los niveles con nombre (§2.7): la z del eje de los ductos de ese nivel, de menor a mayor (hasta 20). Sin niveles, la lista vacía.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["nombre", "z_mm"],
+            "properties": { "nombre": { "type": "string" }, "z_mm": { "type": "number", "minimum": 0, "maximum": 30000 } }
+          }
+        }
       }
     },
     "politicas": {
@@ -1202,7 +1212,8 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
     },
     "ejes": "X_ESTE_Y_NORTE_Z_ARRIBA",
     "origen": "Centro de la base del colector, sobre el piso terminado",
-    "vista_iso": "NE"
+    "vista_iso": "NE",
+    "niveles": []
   },
   "politicas": {
     "angulos_codo_deg": [
@@ -2093,7 +2104,7 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
   - plano de trabajo como un rectángulo translúcido con su z;
   - gizmo de ejes con X rojo, Y verde y Z azul, cada uno además con su letra;
   - cubo de vista;
-  - regla de niveles al borde derecho con los niveles con nombre.
+  - regla de niveles al borde derecho con los niveles con nombre (hecha, §5.10).
 - **Elementos del lienzo:**
   - ductos con su ancho real;
   - flechas del sentido del aire;
@@ -2146,7 +2157,8 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
 | Siempre | rueda, + y − | Acercar y alejar |
 | Siempre | Espacio + arrastrar, o botón central | Mover la vista |
 | Siempre | [ · ] | Bajar o subir el Ø activo |
-| Siempre | RePág · AvPág | Subir o bajar el plano de trabajo un paso |
+| Siempre | RePág · AvPág | Subir o bajar el plano de trabajo un paso (se detiene en los niveles con nombre) |
+| Siempre | Mayús+RePág · Mayús+AvPág | Saltar al nivel con nombre siguiente (§5.10) |
 | Trazando | ↑ · → · ← · H · V · Mayús · Tab | §1.3, paso 5 |
 | Trazando | dígitos, `<`, `@`, `^` y Entrar | Caja de valores (§1.3, paso 4) |
 | Trazando | Esc | Cancela el trazo; otra vez, termina la cadena |
@@ -2268,7 +2280,7 @@ Es la pestaña **Trazado isométrico** de COTIZAP: otro apartado, al lado de la 
 6. **El rombo y el círculo** de la manguera coinciden mientras no hay desvío: decide el primer arrastre (a lo largo del eje de la toma, el rombo; de lado, el círculo).
 7. **El color del fantasma:** verde si se puede; ámbar si se puede pero deja un aviso o un error del catálogo (por ejemplo, un choque); rojo con el motivo si el modelo lo rechaza. Una red que todavía no llega al colector y el extremo de la cadena no lo pintan de ámbar: son normales mientras se traza.
 8. **Rapidez:** cada fantasma nuevo se prueba en el modelo (`trazar` y `revisar`) y se guarda en una caché mientras dura el trazo. Con trazos de decenas de tramos tarda unos milisegundos; con 481 tramos, de 20 a 60 ms. La rejilla gruesa de choques de §2.10 lo bajaría en trazos grandes.
-9. **Pendiente:** la regla de niveles con nombre y la rejilla gruesa de choques. «Corregir» llegó con la etapa 3 (§5.3), la compuerta después de la etapa 4 (§5.5), el paso a partidas con la etapa 5 (§5.6), la tapa después (§5.7) y el menú radial del teléfono al final (§5.9).
+9. **Pendiente:** la rejilla gruesa de choques. «Corregir» llegó con la etapa 3 (§5.3), la compuerta después de la etapa 4 (§5.5), el paso a partidas con la etapa 5 (§5.6), la tapa después (§5.7), el menú radial del teléfono (§5.9) y los niveles con nombre (§5.10).
 
 ### 5.3 Etapa 3, hecha: validar y dimensionar
 
@@ -2554,6 +2566,32 @@ Lo verifican:
 
 - `tests/trazado_tablero.test.js`: las piezas en un extremo, un tramo, el tronco, un codo, una confluencia, la boca, una manguera y un equipo; que probar no cambia el trazo; lo que hace cada una (las direcciones del trazo, la herramienta, la reducción al comercial anterior, compuerta y tapa con su quitar, propiedades); y lo que no sale.
 - La sección 41 de `tests/e2e/ui.e2e.js`, con toques de verdad en un celular (CDP): el toque corto que no abre; el largo que abre; deslizar a «Tapa» y soltar; soltar y tocar «Codo»; el menú en el tronco, dentro del lienzo; tocar fuera; el arrastre que mueve la vista; y en escritorio, el clic derecho, Esc y «Propiedades».
+
+### 5.10 Los niveles con nombre
+
+Un nivel con nombre es la altura del eje de los ductos de un nivel de la nave («Nivel de ductería 3 000», «Techo»). Sirve para trazar a alturas de verdad sin teclearlas cada vez (§2.7).
+
+- **En el modelo.**
+  - `proyecto.niveles`: [{ nombre, z_mm }], hasta 20, de 0 a 30 m, ordenados de abajo hacia arriba.
+  - Se cambian con `cambiarProyecto(t, M, { niveles })`. No se aceptan dos con el mismo nombre ni dos a la misma altura (a 1 mm), y cada rechazo dice por qué.
+  - Van y vuelven por el JSON del trazo y por el del sistema (§3; sin niveles, la lista vacía). Un trazo guardado antes de los niveles abre sin ellos.
+  - Quitar un nivel no mueve ningún ducto.
+- **En el tablero** (`src/web/trazado_tablero.js`).
+  - `niveles(s)` da la lista con el piso.
+  - RePág y AvPág mueven el nivel de trabajo 100 mm y se detienen en cada nivel que encuentran. Mayús+RePág y Mayús+AvPág saltan al siguiente.
+  - Lo que sube o baja se ajusta a la altura de un nivel cercano en la pantalla (a 8 px), como con los nodos (§1.3): el largo queda exacto y la guía es una raya del nivel por el extremo.
+  - `nombrarNivel` y `quitarNivel` lo hacen con deshacer.
+- **La regla** (§4.2).
+  - Va al borde derecho del lienzo, con el piso, los niveles y el nivel de trabajo resaltado. La altura se mide sobre la vertical que pasa por el centro del trazo, para que coincida con el dibujo.
+  - Las etiquetas no se enciman. Lo que queda fuera de la vista se marca en la orilla con ▲ o ▼.
+  - Tocar un nivel lo hace el de trabajo. En el teléfono sólo se ve la altura, salvo el nivel de trabajo. En planta no se dibuja.
+- **En el inspector del proyecto** (fase 1): la lista de niveles (tocar uno lo hace el de trabajo; «Quitar») y el formulario para agregar uno.
+
+Lo verifican:
+
+- `tests/trazado_iso.test.js`: la validación con cada rechazo, el orden, la pureza, el JSON del trazo (también uno guardado sin niveles) y el del sistema contra el esquema.
+- `tests/trazado_tablero.test.js`: las paradas de RePág, el salto con Mayús, el piso, `irANivel`, la regla (orden, el de trabajo, el suelto, la planta), el trazo que sube al nivel exacto, quitarlo sin mover nada y deshacer.
+- La sección 42 de `tests/e2e/ui.e2e.js`: agregarlos, el rechazo de dos a la misma altura, la regla, RePág, Mayús+RePág, tocar la regla, la planta, quitarlo, el sistema exportado y deshacer.
 
 ---
 

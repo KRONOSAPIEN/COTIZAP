@@ -41,6 +41,9 @@
   const MAX_EQUIPOS = 300;
   const MAX_PUERTOS = 24;
   const MAX_NODOS = 2000;
+  /** Los niveles con nombre (§2.7): cuántos, y hasta qué altura (la z del eje de los ductos de ese nivel). */
+  const MAX_NIVELES = 20;
+  const Z_MAX_NIVEL_MM = 30000;
   const ELEVACIONES = [-90, -60, -45, -30, 0, 30, 45, 60, 90];
   const REJILLAS = {
     EJES: { paso_azimut_deg: 90, elevaciones_deg: [-90, 0, 90] },
@@ -449,7 +452,7 @@
     const m = {
       version: VERSION,
       proyecto: { id: 'TRAZADO-01', nombre: 'Trazado', servicio: 'POLVO', material_transportado: null, aire: { temperatura_C: 20, altitud_m: 0, presion_Pa: null, densidad_kg_m3: null, viscosidad_Pa_s: null },
-        diametro_unidad: 'in', origen: 'Origen del proyecto', vista_iso: 'NE' },
+        diametro_unidad: 'in', origen: 'Origen del proyecto', vista_iso: 'NE', niveles: [] },
       politicas: politicasDe(M, 'POLVO'),
       material: { material: 'GALVANIZADO', calibre: 22 },
       equipos: [], nodos: [], tramos: [], piezas: {}, cuenta: cuentaVacia(), ultimo: null,
@@ -481,6 +484,29 @@
     if (c.diametro_unidad !== undefined) { dato(['in', 'mm'].includes(c.diametro_unidad), 'El diámetro se muestra en in o en mm.'); pr.diametro_unidad = c.diametro_unidad; }
     if (c.origen !== undefined) pr.origen = texto(c.origen, pr.origen, 200);
     if (c.vista_iso !== undefined) { dato(Object.prototype.hasOwnProperty.call(VISTAS, c.vista_iso), 'La vista es NE, NO, SE o SO.'); pr.vista_iso = c.vista_iso; }
+    if (c.niveles !== undefined) pr.niveles = nivelesValidos(c.niveles);
+  }
+  /**
+   * Los niveles con nombre (§2.7): [{ nombre, z_mm }] con nombre (hasta 60 letras) y z de 0 a 30 m, sin dos con el mismo
+   * nombre ni a la misma z (a 1 mm); se ordenan de abajo hacia arriba.
+   */
+  function nivelesValidos(lista) {
+    dato(Array.isArray(lista), 'Los niveles son una lista.');
+    dato(lista.length <= MAX_NIVELES, `Hasta ${MAX_NIVELES} niveles.`);
+    const salida = lista.map((x, i) => {
+      dato(esObjeto(x), `El nivel ${i + 1} no es válido.`);
+      const nombre = texto(x.nombre, '', 60);
+      dato(nombre !== '', `El nivel ${i + 1} no tiene nombre.`);
+      dato(finito(x.z_mm) && x.z_mm >= 0 && x.z_mm <= Z_MAX_NIVEL_MM, `«${nombre}»: la altura de un nivel va de 0 a 30 m.`);
+      return { nombre, z_mm: r3(x.z_mm) };
+    }).sort((a, b) => a.z_mm - b.z_mm);
+    salida.forEach((x, i) => {
+      if (!i) return;
+      dato(x.z_mm - salida[i - 1].z_mm >= 1, `«${salida[i - 1].nombre}» y «${x.nombre}» están a la misma altura.`);
+    });
+    const nombres = salida.map((x) => x.nombre.toLowerCase());
+    nombres.forEach((x, i) => dato(nombres.indexOf(x) === i, `Hay dos niveles «${salida[i].nombre}».`));
+    return salida;
   }
   function aplicarMaterial(m, M, material, calibre) {
     dato(MATERIALES.includes(material) && M.materiales[material], `El material es ${MATERIALES.join(', ')}.`);
@@ -2622,6 +2648,7 @@
         aire: { temperatura_C: pr.aire.temperatura_C, altitud_m: pr.aire.altitud_m, presion_Pa: pr.aire.presion_Pa === null ? calc.presion_Pa : pr.aire.presion_Pa,
           densidad_kg_m3: pr.aire.densidad_kg_m3 === null ? calc.densidad_kg_m3 : pr.aire.densidad_kg_m3, viscosidad_Pa_s: pr.aire.viscosidad_Pa_s === null ? calc.viscosidad_Pa_s : pr.aire.viscosidad_Pa_s },
         unidades: { longitud: 'mm', diametro: pr.diametro_unidad, caudal: 'm3/h', presion: 'Pa', velocidad: 'm/s' }, ejes: 'X_ESTE_Y_NORTE_Z_ARRIBA', origen: pr.origen, vista_iso: pr.vista_iso,
+        niveles: (pr.niveles || []).map((x) => ({ ...x })),
       },
       politicas: clonar(t.politicas),
       equipos: t.equipos.map((e) => ({
@@ -2687,7 +2714,7 @@
       dato(esObjeto(s) && s.version === '1.0' && esObjeto(s.proyecto) && esObjeto(s.politicas) && Array.isArray(s.equipos) && Array.isArray(s.nodos) && Array.isArray(s.tramos) && Array.isArray(s.accesorios), 'No es un sistema de trazado isométrico 1.0.');
       dato(s.tramos.length <= MAX_TRAMOS && s.nodos.length <= MAX_NODOS && s.equipos.length <= MAX_EQUIPOS, 'El sistema es demasiado grande.');
       const pr = s.proyecto;
-      const m = nuevo(M, { proyecto: { id: pr.id, nombre: pr.nombre, servicio: pr.servicio, material_transportado: pr.material_transportado, aire: { temperatura_C: pr.aire && pr.aire.temperatura_C, altitud_m: pr.aire && pr.aire.altitud_m }, origen: pr.origen, vista_iso: pr.vista_iso, diametro_unidad: pr.unidades && pr.unidades.diametro } });
+      const m = nuevo(M, { proyecto: { id: pr.id, nombre: pr.nombre, servicio: pr.servicio, material_transportado: pr.material_transportado, aire: { temperatura_C: pr.aire && pr.aire.temperatura_C, altitud_m: pr.aire && pr.aire.altitud_m }, origen: pr.origen, vista_iso: pr.vista_iso, diametro_unidad: pr.unidades && pr.unidades.diametro, ...(pr.niveles !== undefined ? { niveles: pr.niveles } : {}) } });
       const calc = aire(m.proyecto.aire.temperatura_C, m.proyecto.aire.altitud_m);
       ['presion_Pa', 'densidad_kg_m3', 'viscosidad_Pa_s'].forEach((k) => {
         const v = pr.aire[k];
@@ -2798,7 +2825,7 @@
       dato(esObjeto(x) && x.version === VERSION && Array.isArray(x.nodos) && Array.isArray(x.tramos) && Array.isArray(x.equipos) && esObjeto(x.cuenta) && esObjeto(x.proyecto), 'No es un trazo isométrico de esta versión.');
       dato(x.tramos.length <= MAX_TRAMOS && x.nodos.length <= MAX_NODOS && x.equipos.length <= MAX_EQUIPOS, 'El trazo es demasiado grande.');
       const m = nuevo(M, { proyecto: { id: x.proyecto.id, nombre: x.proyecto.nombre, servicio: x.proyecto.servicio, material_transportado: x.proyecto.material_transportado === undefined ? null : x.proyecto.material_transportado,
-        aire: x.proyecto.aire, diametro_unidad: x.proyecto.diametro_unidad, origen: x.proyecto.origen, vista_iso: x.proyecto.vista_iso } });
+        aire: x.proyecto.aire, diametro_unidad: x.proyecto.diametro_unidad, origen: x.proyecto.origen, vista_iso: x.proyecto.vista_iso, niveles: x.proyecto.niveles === undefined ? [] : x.proyecto.niveles } });
       m.politicas = validarPoliticas(x.politicas);
       aplicarMaterial(m, M, x.material && x.material.material, x.material && x.material.calibre);
       const ids = new Set();
@@ -2952,7 +2979,7 @@
   }
 
   return {
-    VERSION, IN, LARGO_COMPUERTA_MM, REJILLAS, SERVICIOS, TIPOS_EQUIPO, TrazadoError,
+    VERSION, IN, LARGO_COMPUERTA_MM, MAX_NIVELES, REJILLAS, SERVICIOS, TIPOS_EQUIPO, TrazadoError,
     // geometría
     vectorDe, direccionDeVector, rejilla, textoDireccion, proyectar, rayoDeVista, alPlano, planoHorizontal, planoVertical, aire, politicasDe, validarPoliticas,
     resolverManguera, puntosManguera,

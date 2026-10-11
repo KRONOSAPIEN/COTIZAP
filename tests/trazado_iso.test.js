@@ -1033,3 +1033,32 @@ test('Tapa: cierra un extremo libre, su cuello ocupa el final del tramo, el rama
   assert.ok(T.revisar(q, M).some((v) => v.codigo === 'EXTREMO_ABIERTO' && v.elementos[0] === ext));
   falla(() => T.quitarTapa(q, M, ext), 'DATO_INVALIDO', /no tiene tapa/);
 });
+
+test('Niveles con nombre (§2.7): se validan, se ordenan, van y vuelven por el JSON y por el sistema, y un trazo viejo sin ellos sigue abriendo', () => {
+  const t0 = T.nuevo(M, { proyecto: PROYECTO });
+  assert.deepEqual(t0.proyecto.niveles, [], 'de arranque, sin niveles');
+  const t = T.cambiarProyecto(t0, M, { niveles: [{ nombre: ' Techo ', z_mm: 6500 }, { nombre: 'Nivel de ductería 3 000', z_mm: 3000.0004 }] });
+  assert.deepEqual(t.proyecto.niveles, [{ nombre: 'Nivel de ductería 3 000', z_mm: 3000 }, { nombre: 'Techo', z_mm: 6500 }], 'de abajo hacia arriba, sin espacios de más');
+  assert.deepEqual(t0.proyecto.niveles, [], 'puro: el trazo de antes no cambia');
+  falla(() => T.cambiarProyecto(t0, M, { niveles: 'x' }), 'DATO_INVALIDO', /Los niveles son una lista/);
+  falla(() => T.cambiarProyecto(t0, M, { niveles: [{ nombre: '', z_mm: 1 }] }), 'DATO_INVALIDO', /El nivel 1 no tiene nombre/);
+  falla(() => T.cambiarProyecto(t0, M, { niveles: [{ nombre: 'Sótano', z_mm: -200 }] }), 'DATO_INVALIDO', /«Sótano»: la altura de un nivel va de 0 a 30 m/);
+  falla(() => T.cambiarProyecto(t0, M, { niveles: [{ nombre: 'A', z_mm: 31000 }] }), 'DATO_INVALIDO', /de 0 a 30 m/);
+  falla(() => T.cambiarProyecto(t0, M, { niveles: [{ nombre: 'A', z_mm: 3000 }, { nombre: 'B', z_mm: 3000.5 }] }), 'DATO_INVALIDO', /«A» y «B» están a la misma altura/);
+  falla(() => T.cambiarProyecto(t0, M, { niveles: [{ nombre: 'Techo', z_mm: 1 }, { nombre: 'techo', z_mm: 900 }] }), 'DATO_INVALIDO', /Hay dos niveles «techo»/);
+  falla(() => T.cambiarProyecto(t0, M, { niveles: Array.from({ length: T.MAX_NIVELES + 1 }, (_, i) => ({ nombre: `N${i}`, z_mm: i * 100 })) }), 'DATO_INVALIDO', /Hasta 20 niveles/);
+  // el JSON del trazo y el sistema los llevan; de regreso, igual
+  const v = T.validar(JSON.parse(JSON.stringify(t)), M);
+  assert.deepEqual(v.modelo.proyecto.niveles, t.proyecto.niveles);
+  const viejo = JSON.parse(JSON.stringify(t0));
+  delete viejo.proyecto.niveles;
+  assert.deepEqual(T.validar(viejo, M).modelo.proyecto.niveles, [], 'un trazo guardado antes de los niveles abre sin ellos');
+  assert.deepEqual(T.cambiarProyecto(viejo, M, { nombre: 'Otro' }).proyecto.niveles, undefined, 'y se puede editar sin tocarlos');
+  const ej = T.desdeSistema(EJ, M).modelo;
+  const conNiveles = T.cambiarProyecto(ej, M, { niveles: [{ nombre: 'Nivel de ductería 3 000', z_mm: 3000 }] });
+  const sis = T.aSistema(conNiveles, M);
+  assert.deepEqual(sis.proyecto.niveles, [{ nombre: 'Nivel de ductería 3 000', z_mm: 3000 }]);
+  assert.deepEqual(validarEsquema(ESQUEMA, sis), [], 'el sistema con niveles cumple el esquema');
+  assert.deepEqual(T.desdeSistema(sis, M).modelo.proyecto.niveles, sis.proyecto.niveles, 'y vuelve con ellos');
+  assert.deepEqual(T.aSistema(ej, M).proyecto.niveles, [], 'sin niveles, la lista vacía');
+});
