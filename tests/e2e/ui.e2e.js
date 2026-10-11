@@ -3162,6 +3162,139 @@ const ok = (cond, msg) => {
     await p.close();
   }
 
+  console.log('41) El menú radial en el teléfono: el dedo quieto 400 ms sobre un nodo o un tramo, deslizar y soltar, o tocar; y el clic derecho');
+  {
+    const m = await nuevaPagina({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const R = (fn, a) => m.evaluate(fn, a);
+    // toques de verdad (CDP): el navegador los convierte en eventos de puntero táctiles
+    const cdp = await m.context().newCDPSession(m);
+    const toque = (tipo, x, y) => cdp.send('Input.dispatchTouchEvent', { type: tipo, touchPoints: tipo === 'touchEnd' ? [] : [{ x, y }] });
+    const ops = () => m.locator('#ti-radial .ti-radial-op').evaluateAll((e) => e.map((x) => x.dataset.op));
+    const abierto = () => m.locator('#ti-radial').isVisible();
+    const centro = async (sel) => { const b = await m.locator(sel).boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
+    await m.click('#tab-trazado');
+    await m.click('#ti-ejemplo');
+    // un ramal de 5″ con su extremo libre (como lo deja el trazo)
+    const ext = await R(() => {
+      const C = window.COTIZAP;
+      const s = C.web.trazadoUI.estado();
+      const M = C.web.estadoApp.M;
+      const op = C.trazadoIso.candidatas(s.t, M, { tramo: 'TR-003', s_mm: 1500 }).find((o) => o.direccion.elevacion_deg === 0);
+      C.trazadoTablero.hacer(s, (t) => C.trazadoIso.trazar(t, M, { tramo: 'TR-003', s_mm: 1500 }, { direccion: op.direccion, largo_mm: 1500, diametro_in: 5 }), '');
+      C.web.estadoApp.cot.trazado_iso = s.t;
+      C.web.trazadoUI.render();
+      return s.t.ultimo.nodo;
+    });
+    await m.locator('#ti-lienzo').scrollIntoViewIfNeeded();
+    const enPantalla = (id) => R((nid) => {
+      const s = window.COTIZAP.web.trazadoUI.estado();
+      const q = window.COTIZAP.trazadoTablero.pantalla(s, s.g.pos.get(nid));
+      const r = document.querySelector('#ti-lienzo').getBoundingClientRect();
+      return { x: r.left + (q.x * r.width) / s.ancho, y: r.top + (q.y * r.height) / s.alto };
+    }, id);
+    let q = await enPantalla(ext);
+    // un toque corto no abre el menú
+    await toque('touchStart', q.x, q.y);
+    await m.waitForTimeout(120);
+    await toque('touchEnd');
+    await m.waitForTimeout(500);
+    ok(!(await abierto()), 'un toque corto no abre el menú');
+    // el dedo quieto: el menú con las piezas posibles en el extremo
+    await toque('touchStart', q.x, q.y);
+    await m.waitForTimeout(480);
+    ok(await abierto() && JSON.stringify(await ops()) === JSON.stringify(['RECTO', 'CODO', 'SUBE_BAJA', 'TAPA', 'PROPIEDADES']), `400 ms quieto sobre el extremo: recto, codo, sube o baja, tapa y propiedades (${await ops()})`);
+    ok(new RegExp(`^${ext}$`).test(await m.locator('#ti-radial .ti-radial-centro').innerText()) && await m.locator('#ti-radial').getAttribute('aria-label') === `Piezas en ${ext}`, 'el centro dice qué se tocó');
+    // deslizar hasta «Tapa» la resalta; soltar la pone
+    const tapa = await centro('#ti-radial .ti-radial-op[data-op="TAPA"]');
+    await toque('touchMove', tapa.x, tapa.y);
+    await m.waitForTimeout(60);
+    ok(await m.locator('#ti-radial .ti-radial-op.activa').getAttribute('data-op') === 'TAPA', 'deslizar el dedo resalta la opción');
+    await toque('touchEnd');
+    await m.waitForTimeout(200);
+    ok(!(await abierto()) && new RegExp(`^Tapa TA-001 en ${ext}\\.`).test(await m.locator('#ti-msg').innerText()), 'soltar sobre «Tapa» la pone y cierra el menú');
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.trazado_iso.nodos.some((n) => n.tapa)), 'y se guarda con la cotización');
+    // soltar sin moverse deja el menú abierto; tocar una opción la elige
+    q = await enPantalla(ext);
+    await toque('touchStart', q.x, q.y);
+    await m.waitForTimeout(480);
+    await toque('touchEnd');
+    await m.waitForTimeout(150);
+    ok(await abierto() && (await ops()).includes('QUITAR_TAPA'), 'soltar sin moverse deja el menú abierto (ya con «Quitar tapa»)');
+    const codo = await centro('#ti-radial .ti-radial-op[data-op="CODO"]');
+    await toque('touchStart', codo.x, codo.y);
+    await m.waitForTimeout(60);
+    await toque('touchEnd');
+    await m.waitForTimeout(200);
+    const tr = await R(() => { const s = window.COTIZAP.web.trazadoUI.estado(); return { herr: s.herr, traza: !!s.traza, codos: s.traza && s.traza.ops.every((o) => o.pieza === 'CODO') }; });
+    ok(!(await abierto()) && tr.herr === 'TRAMO' && tr.traza && tr.codos && /^Codo desde N-\d{3} \(30°, 45°, 60°, 90°\)/.test(await m.locator('#ti-msg').innerText()), `tocar «Codo» empieza el trazo con sólo las vueltas (${JSON.stringify(tr)})`);
+    ok(await m.locator('#ti-b-tramo').getAttribute('aria-pressed') === 'true', 'y la paleta marca la herramienta');
+    await m.keyboard.press('Escape');
+    // en un tramo: injerto, reducción, compuerta; tocar fuera cierra
+    await R(() => { const s = window.COTIZAP.web.trazadoUI.estado(); s.traza = null; s.herr = 'SELECCIONAR'; window.COTIZAP.web.trazadoUI.render(); });
+    // el punto del tronco más alejado (en la pantalla) de los nodos, con la vista acercada: ahí el dedo toca el tramo, no un nodo
+    await m.locator('#ti-acercar').click();
+    await m.locator('#ti-acercar').click();
+    const enTramo = await R(() => {
+      const TB = window.COTIZAP.trazadoTablero;
+      const s = window.COTIZAP.web.trazadoUI.estado();
+      const t = s.g.tramos.get('TR-003');
+      const a = s.g.pos.get(t.a);
+      const b = s.g.pos.get(t.b);
+      const nodos = [...s.g.pos.values()].map((q) => TB.pantalla(s, q));
+      let mejor = null;
+      for (let f = 0.05; f < 0.96; f += 0.05) {
+        const p = TB.pantalla(s, { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, z: a.z + (b.z - a.z) * f });
+        const d = Math.min(...nodos.map((n) => Math.hypot(n.x - p.x, n.y - p.y)));
+        if (!mejor || d > mejor.d) mejor = { p, d };
+      }
+      const r = document.querySelector('#ti-lienzo').getBoundingClientRect();
+      return { x: r.left + (mejor.p.x * r.width) / s.ancho, y: r.top + (mejor.p.y * r.height) / s.alto };
+    });
+    await toque('touchStart', enTramo.x, enTramo.y);
+    await m.waitForTimeout(480);
+    await toque('touchEnd');
+    await m.waitForTimeout(150);
+    ok(await abierto() && JSON.stringify(await ops()) === JSON.stringify(['INJERTO', 'REDUCCION', 'COMPUERTA', 'PROPIEDADES']), `en el tronco: injerto, reducción, compuerta y propiedades (${await ops()})`);
+    const caja = await m.locator('#ti-radial').boundingBox();
+    const lienzo = await m.locator('#ti-lienzo').boundingBox();
+    ok(await m.locator('#ti-radial .ti-radial-op').evaluateAll((els, l) => els.every((e) => { const b = e.getBoundingClientRect(); return b.left >= l.x - 1 && b.right <= l.x + l.width + 1 && b.top >= l.y - 1 && b.bottom <= l.y + l.height + 1; }), lienzo) && caja.width > 0, 'el menú cabe en el lienzo');
+    await toque('touchStart', lienzo.x + 20, lienzo.y + lienzo.height - 20);
+    await toque('touchEnd');
+    await m.waitForTimeout(100);
+    ok(!(await abierto()), 'tocar fuera lo cierra');
+    // mover el dedo antes de los 400 ms mueve la vista, no abre el menú
+    const cam0 = await R(() => ({ ...window.COTIZAP.web.trazadoUI.estado().cam }));
+    q = await enPantalla(ext);
+    await toque('touchStart', q.x, q.y);
+    await m.waitForTimeout(80);
+    await toque('touchMove', q.x + 40, q.y + 30);
+    await m.waitForTimeout(450);
+    ok(!(await abierto()), 'arrastrar antes de los 400 ms no abre el menú');
+    await toque('touchEnd');
+    ok(await R((c) => { const k = window.COTIZAP.web.trazadoUI.estado().cam; return k.ox !== c.ox || k.oy !== c.oy; }, cam0), 'y mueve la vista');
+    await m.close();
+    // con el ratón: clic derecho abre el mismo menú, con el foco en la primera opción; Esc lo cierra
+    const p = await nuevaPagina();
+    const Rp = (fn, a) => p.evaluate(fn, a);
+    await p.click('#tab-trazado');
+    await p.click('#ti-ejemplo');
+    const enN3 = await Rp(() => {
+      const s = window.COTIZAP.web.trazadoUI.estado();
+      const q3 = window.COTIZAP.trazadoTablero.pantalla(s, s.g.pos.get('N-003'));
+      const r = document.querySelector('#ti-lienzo').getBoundingClientRect();
+      return { x: r.left + (q3.x * r.width) / s.ancho, y: r.top + (q3.y * r.height) / s.alto };
+    });
+    await p.mouse.click(enN3.x, enN3.y, { button: 'right' });
+    ok(await p.locator('#ti-radial').isVisible() && JSON.stringify(await p.locator('#ti-radial .ti-radial-op').evaluateAll((e) => e.map((x) => x.dataset.op))) === JSON.stringify(['REDUCCION', 'PROPIEDADES'])
+      && await Rp(() => document.activeElement && document.activeElement.dataset.op) === 'REDUCCION', 'clic derecho en un codo: reducción y propiedades, con el foco en la primera');
+    await p.keyboard.press('Escape');
+    ok(!(await p.locator('#ti-radial').isVisible()), 'Esc lo cierra');
+    await p.mouse.click(enN3.x, enN3.y, { button: 'right' });
+    await p.locator('#ti-radial .ti-radial-op[data-op="PROPIEDADES"]').click();
+    ok(await Rp(() => JSON.stringify(window.COTIZAP.web.trazadoUI.estado().sel)) === JSON.stringify({ tipo: 'NODO', id: 'N-003' }) && /N-003/.test(await p.locator('#ti-inspector').innerText()), '«Propiedades» abre el inspector de lo tocado');
+    await p.close();
+  }
+
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

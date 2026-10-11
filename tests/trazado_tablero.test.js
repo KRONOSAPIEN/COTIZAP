@@ -667,3 +667,90 @@ test('Tapa en el tablero: la herramienta (A) en un extremo libre o en su tramo, 
   assert.ok(d.bom.accesorios.some((a) => a.tipo === 'TAPA' && a.nodo_id === ext));
   assert.match(TB.AYUDA.TAPA, /extremo libre/);
 });
+
+test('Menú radial (§4.5): las piezas posibles en lo tocado, probadas contra el modelo, y lo que hace cada una', () => {
+  assert.equal(TB.RADIAL_MS, 400, 'el dedo quieto 400 ms');
+  const s = nuevoTablero();
+  TB.reemplazar(s, TB.ejemplo(M), 'ejemplo');
+  const op = TZ.candidatas(s.t, M, { tramo: 'TR-003', s_mm: 1500 }).find((o) => o.direccion.elevacion_deg === 0);
+  assert.ok(TB.hacer(s, (t) => TZ.trazar(t, M, { tramo: 'TR-003', s_mm: 1500 }, { direccion: op.direccion, largo_mm: 1500, diametro_in: 5 }), ''));
+  const ext = s.t.ultimo.nodo;
+  const ramal = s.t.ultimo.tramos[0];
+  const ids = (hit) => { const r = TB.radial(s, hit); return r && r.opciones.map((o) => o.id); };
+  const enExt = { tipo: 'NODO', id: ext, nodo: ext, extremo: true };
+  const enRamal = { tipo: 'TRAMO', id: ramal, s_mm: 700, rigido: true };
+  // probar no cambia nada: ni el trazo ni deshacer
+  const t0 = s.t;
+  const h0 = s.hist.length;
+  assert.deepEqual(ids(enExt), ['RECTO', 'CODO', 'SUBE_BAJA', 'TAPA', 'PROPIEDADES'], 'un extremo libre: seguir recto, dar vuelta, subir o bajar, o taparlo');
+  assert.deepEqual(ids(enRamal), ['INJERTO', 'REDUCCION', 'COMPUERTA', 'TAPA', 'PROPIEDADES'], 'un tramo: injertarle, reducirlo, la compuerta y la tapa de su extremo libre');
+  assert.deepEqual(ids({ tipo: 'TRAMO', id: 'TR-003', s_mm: 600, rigido: true }), ['INJERTO', 'REDUCCION', 'COMPUERTA', 'PROPIEDADES'], 'el tronco no tiene extremo libre');
+  assert.deepEqual(ids({ tipo: 'NODO', id: 'N-003', nodo: 'N-003' }), ['REDUCCION', 'PROPIEDADES'], 'un codo: la reducción del tramo que le llega');
+  assert.deepEqual(ids({ tipo: 'NODO', id: 'N-002', nodo: 'N-002' }), ['PROPIEDADES'], 'una confluencia ocupada');
+  assert.deepEqual(ids({ tipo: 'PUERTO', id: 'PU-01', nodo: 'N-001' }), ['PROPIEDADES'], 'la boca, ya conectada');
+  const manguera = s.t.tramos.find((t) => t.tipo === 'FLEXIBLE');
+  assert.deepEqual(ids({ tipo: 'TRAMO', id: manguera.id, rigido: false }), ['PROPIEDADES'], 'una manguera no se parte ni se reduce');
+  assert.equal(TB.radial(s, { tipo: 'EQUIPO', id: 'EQ-01' }), null, 'un equipo no tiene menú');
+  assert.equal(TB.radial(s, null), null);
+  assert.equal(TB.radial(s, enExt).titulo, ext);
+  assert.deepEqual(TB.radial(s, enExt).opciones[0], { id: 'RECTO', nombre: 'Recto', icono: 'TRAMO' });
+  assert.ok(s.t === t0 && s.hist.length === h0, 'el menú sólo prueba');
+  // las que trazan: empiezan el trazo con sólo sus direcciones y dejan la herramienta elegida
+  assert.equal(TB.radialElegir(s, enExt, 'RECTO'), 'TRAZO');
+  assert.ok(s.herr === 'TRAMO' && s.traza.ops.length === 1 && s.traza.ops[0].pieza === 'RECTO', 'recto: sólo la dirección del tramo que llega');
+  assert.match(s.msg, new RegExp(`^Recto desde ${ext}, en rumbo \\d+°: arrastre hasta donde llega, o teclee el largo y Entrar\\. Esc termina\\.$`));
+  teclas(s, '1');
+  const f = TB.fantasma(s, 0, 0, true);
+  assert.ok(f.ok && f.op.pieza === 'RECTO', 'el largo tecleado sigue recto');
+  TB.cancelar(s);
+  TB.cancelar(s);
+  assert.equal(TB.radialElegir(s, enExt, 'CODO'), 'TRAZO');
+  assert.ok(s.traza.ops.length > 1 && s.traza.ops.every((o) => o.pieza === 'CODO'), 'codo: sólo las vueltas');
+  assert.match(s.msg, /^Codo desde N-\d{3} \(30°, 45°, 60°, 90°\): arrastre hacia donde sigue/);
+  assert.equal(TB.radialElegir(s, enExt, 'SUBE_BAJA'), 'TRAZO');
+  assert.ok(s.herr === 'VERTICAL' && s.traza.ops.every((o) => o.direccion.elevacion_deg !== 0), 'sube o baja: la herramienta vertical, sólo lo que sube o baja');
+  assert.equal(TB.radialElegir(s, { tipo: 'TRAMO', id: 'TR-003', s_mm: 600, rigido: true }, 'INJERTO'), 'TRAZO');
+  assert.ok(s.herr === 'INJERTO' && s.traza.ops.every((o) => o.pieza === 'INJERTO'), 'injerto desde un tramo');
+  assert.match(s.msg, /^Injerto desde TR-003 a 0\.6 m de N-002 \(30°, 45°\): arrastre hacia la máquina/);
+  s.traza = null;
+  assert.equal(TB.radialElegir(s, { tipo: 'NODO', id: 'N-003', nodo: 'N-003' }, 'RECTO'), false, 'lo que no sale de ahí se dice');
+  assert.equal(s.error, true);
+  assert.equal(s.traza, null);
+  // las que se ponen: con deshacer
+  s.D = 8;
+  assert.equal(TB.radialElegir(s, enRamal, 'REDUCCION'), 'MODELO');
+  assert.match(s.msg, /el ducto queda de 4″/, 'si el Ø activo no es menor, el comercial anterior');
+  TB.deshacer(s);
+  assert.equal(TB.radialElegir(s, enRamal, 'COMPUERTA'), 'MODELO');
+  const cp = s.t.ultimo.nodo;
+  assert.match(s.msg, /^Compuerta CP-001 en N-\d{3}: abierta/);
+  assert.deepEqual(ids({ tipo: 'NODO', id: cp, nodo: cp }), ['INJERTO', 'QUITAR_COMPUERTA', 'PROPIEDADES'], 'en el nodo de la compuerta: un injerto o quitarla');
+  assert.equal(TB.radialElegir(s, { tipo: 'NODO', id: cp, nodo: cp }, 'QUITAR_COMPUERTA'), 'MODELO');
+  assert.ok(!Object.values(s.t.piezas).some((p) => p.COMPUERTA), 'se quitó');
+  assert.equal(TB.radialElegir(s, enExt, 'TAPA'), 'MODELO');
+  assert.ok(s.t.nodos.find((x) => x.id === ext).tapa);
+  assert.deepEqual(ids(enExt), ['RECTO', 'CODO', 'SUBE_BAJA', 'QUITAR_TAPA', 'PROPIEDADES'], 'tapado: quitar la tapa');
+  assert.deepEqual(ids(enRamal), ['INJERTO', 'REDUCCION', 'COMPUERTA', 'QUITAR_TAPA', 'PROPIEDADES']);
+  assert.equal(TB.radialElegir(s, enRamal, 'QUITAR_TAPA'), 'MODELO', 'desde su tramo también');
+  assert.ok(!s.t.nodos.find((x) => x.id === ext).tapa);
+  // propiedades: el inspector de lo tocado
+  assert.equal(TB.radialElegir(s, { tipo: 'PT', id: 'PU-03', nodo: 'N-007' }, 'PROPIEDADES'), 'SEL');
+  assert.deepEqual(s.sel, { tipo: 'PUERTO', id: 'PU-03' });
+  assert.equal(TB.radialElegir(s, enRamal, 'PROPIEDADES'), 'SEL');
+  assert.deepEqual(s.sel, { tipo: 'TRAMO', id: ramal });
+  assert.equal(TB.radialElegir(s, enRamal, 'NADA'), false);
+  assert.equal(TB.radialElegir(s, null, 'TAPA'), false);
+  // un Ø activo que el trazo no acepta ahí (el tronco de 8″ a 3″): el comercial anterior
+  const tronco = nuevoTablero();
+  TB.reemplazar(tronco, TB.ejemplo(M), 'ejemplo');
+  tronco.D = 3;
+  assert.equal(TB.radialElegir(tronco, { tipo: 'TRAMO', id: 'TR-003', s_mm: 600, rigido: true }, 'REDUCCION'), 'MODELO');
+  assert.match(tronco.msg, /el ducto queda de 7″: TR-003\. Reducción de 8″ a 7″/);
+  // ya en el Ø más chico, la reducción no se ofrece
+  const chico = nuevoTablero();
+  TB.reemplazar(chico, TB.ejemplo(M), 'ejemplo');
+  const menor = Math.min(...chico.t.politicas.diametros_comerciales_in);
+  const opc = TZ.candidatas(chico.t, M, { tramo: 'TR-003', s_mm: 1500 }).find((o) => o.direccion.elevacion_deg === 0);
+  assert.ok(TB.hacer(chico, (t) => TZ.trazar(t, M, { tramo: 'TR-003', s_mm: 1500 }, { direccion: opc.direccion, largo_mm: 1500, diametro_in: menor }), ''));
+  assert.ok(!TB.radial(chico, { tipo: 'TRAMO', id: chico.t.ultimo.tramos[0], s_mm: 700, rigido: true }).opciones.some((o) => o.id === 'REDUCCION'), `ya de ${menor}″, no hay reducción`);
+});

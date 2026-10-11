@@ -55,6 +55,7 @@
     PANTALON: '<path d="M10 21v-6M14 21v-6M10 15L5 4M14 15l5-11"/>',
     COMPUERTA: '<path d="M3 9h18M3 15h18M12 6v12M8 8l8 8"/>',
     TAPA: '<path d="M3 9h12M3 15h12M15 6v12"/>',
+    CODO: '<path d="M5 21V12a7 7 0 0 1 7-7h9"/><path d="M9 21v-9a3 3 0 0 1 3-3h9" opacity=".5"/>',
     MEDIR: '<path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/>',
     SELECCIONAR: '<path d="M6 3l12 9-5.5 1.2L15 20l-2.4 1-2.6-6.6L6 18z"/>',
     MOVER: '<path d="M12 3v18M3 12h18M8 7l4-4 4 4M8 17l4 4 4-4"/>',
@@ -91,7 +92,7 @@
   const TECLA_HERR = { s: 'SELECCIONAR', t: 'TRAMO', c: 'TRAMO', v: 'VERTICAL', r: 'REDUCCION', i: 'INJERTO', j: 'RINJ', m: 'MOVER', d: 'MEDIR', p: 'TOMA', g: 'COMPUERTA', a: 'TAPA' };
   const VISTAS_BTN = [['NE', 'Iso', '1'], ['PLANTA', 'Planta', '2'], ['ELEV_XZ', 'Elev. X-Z', '3'], ['ELEV_YZ', 'Elev. Y-Z', '4']];
 
-  const ui = { s: null, montado: false, puntero: null, gesto: null, punteros: new Map(), hover: null, cuadro: 0, espacio: false, abierto: false, dim: null, paleta: null };
+  const ui = { s: null, montado: false, puntero: null, gesto: null, punteros: new Map(), hover: null, cuadro: 0, espacio: false, abierto: false, dim: null, paleta: null, radial: null, tRadial: 0 };
 
   /* ------------------------------------------------------------------ el tablero y la cotización */
 
@@ -586,11 +587,13 @@
     return { x: ((ev.clientX - r.left) / Math.max(1, r.width)) * ui.s.ancho, y: ((ev.clientY - r.top) / Math.max(1, r.height)) * ui.s.alto, tactil: ev.pointerType === 'touch' || ev.pointerType === 'pen' };
   }
   const DE_TRAZO = ['TRAMO', 'VERTICAL', 'INJERTO', 'RINJ'];
+  const CON_RADIAL = new Set(['NODO', 'PUERTO', 'PT', 'TRAMO']); // lo que abre el menú radial con el dedo quieto
   function programarCapa() {
     if (ui.cuadro) return;
     ui.cuadro = root.requestAnimationFrame(() => { ui.cuadro = 0; dibujarCapa(); });
   }
   function alBajar(ev) {
+    if (ui.radial) { cerrarRadial(); ev.preventDefault(); return; } // tocar fuera del menú lo cierra
     if (ev.pointerType === 'mouse' && ev.button !== 0 && ev.button !== 1) return;
     const s = ui.s;
     const el = ev.currentTarget;
@@ -611,6 +614,9 @@
     const tir = tiradorBajo(p.x, p.y);
     if (tir) { ui.gesto = { ...base, modo: tir.tipo, pid: tir.pid, h0: tir.mg.h, h: tir.mg.h, ev: tir.mg.ev, previa: false }; return; }
     const hit = TB().tocar(s, p.x, p.y, p.tactil);
+    // el dedo quieto 400 ms sobre un nodo o un tramo abre el menú radial (§4.5), si no se está trazando; qué piezas trae se
+    // calcula hasta que se abre (probarlas contra el modelo cuesta, y la mayoría de los toques no llegan a los 400 ms)
+    if (p.tactil && !s.traza && hit && CON_RADIAL.has(hit.tipo)) programarRadial(hit, p);
     if (s.traza) { ui.gesto = { ...base, modo: 'TRAZO', hit }; return; }
     if (DE_TRAZO.includes(s.herr) && (hit || (s.herr === 'TRAMO' && !p.tactil))) {
       if (TB().empezar(s, hit, p.x, p.y)) { ui.gesto = { ...base, modo: 'TRAZO', nuevo: true }; pintarEstado(); programarCapa(); return; }
@@ -647,7 +653,9 @@
       return;
     }
     if (Math.hypot(p.x - gs.x0, p.y - gs.y0) > (gs.tactil ? 10 : 5)) gs.movio = true;
+    if (gs.modo === 'RADIAL') { marcarRadial(ev); return; }
     if (!gs.movio) return;
+    clearTimeout(ui.tRadial);
     if (gs.modo === 'VISTA' || gs.modo === 'TOQUE') {
       gs.modo = 'VISTA';
       s.cam = { ...gs.cam0 };
@@ -685,8 +693,16 @@
   function alSubir(ev) {
     const s = ui.s;
     ui.punteros.delete(ev.pointerId);
+    clearTimeout(ui.tRadial);
     const gs = ui.gesto;
     if (!gs) return;
+    if (gs.modo === 'RADIAL') {
+      // soltar sobre una opción la elige; soltar en otro lado deja el menú abierto para tocarla
+      ui.gesto = null;
+      const op = opcionBajo(ev);
+      if (op) elegirRadial(op.dataset.op);
+      return;
+    }
     if (gs.modo === 'PELLIZCO') { if (!ui.punteros.size) ui.gesto = null; return; }
     ui.gesto = null;
     const p = local(ev);
@@ -713,6 +729,7 @@
   }
   function alCancelar(ev) {
     ui.punteros.delete(ev.pointerId);
+    clearTimeout(ui.tRadial);
     ui.gesto = null;
     programarCapa();
   }
@@ -726,6 +743,85 @@
     TB().zoom(ui.s, Math.pow(1.0015, -Math.max(-400, Math.min(400, ev.deltaY))), p.x, p.y);
     dibujarLienzo();
   }
+  /* ------------------------------------------------------------------ menú radial (§4.5) */
+
+  /** Programa el menú radial: si el dedo sigue quieto sobre lo tocado al cumplirse el tiempo, se abre. */
+  function programarRadial(hit, p) {
+    clearTimeout(ui.tRadial);
+    ui.tRadial = setTimeout(() => {
+      const gs = ui.gesto;
+      if (!gs || gs.movio || ui.punteros.size !== 1 || !['TOQUE', 'TRAZO', 'EQUIPO', 'MOVER', 'VISTA'].includes(gs.modo)) return;
+      if (gs.modo === 'TRAZO' && gs.nuevo) ui.s.traza = null; // el trazo que empezó con el toque no sigue: manda el menú
+      ui.gesto = { modo: 'RADIAL', x0: p.x, y0: p.y, movio: false };
+      abrirRadial(hit, p);
+      if (root.navigator && typeof root.navigator.vibrate === 'function') { try { root.navigator.vibrate(12); } catch (e) { /* sin vibración */ } }
+    }, TB().RADIAL_MS);
+  }
+  /** Abre el menú con las piezas posibles en lo tocado, alrededor del punto (en unidades del lienzo). */
+  function abrirRadial(hit, p) {
+    const s = ui.s;
+    const m = TB().radial(s, hit);
+    const caja = $('#ti-radial');
+    if (!m || !caja) return;
+    const r = $('#ti-lienzo').getBoundingClientRect();
+    const marco = caja.parentElement.getBoundingClientRect();
+    const n = m.opciones.length;
+    const R = n > 6 ? 84 : 74;
+    const borde = R + 34;
+    const cx = Math.max(borde, Math.min(r.width - borde, (p.x * r.width) / s.ancho)) + (r.left - marco.left);
+    const cy = Math.max(borde, Math.min(r.height - borde, (p.y * r.height) / s.alto)) + (r.top - marco.top);
+    ui.radial = { hit, p };
+    caja.setAttribute('aria-label', `Piezas en ${m.titulo}`);
+    W.reemplazar(caja,
+      // el centro sólo dice qué se tocó: al soltar el dedo, el clic del navegador cae ahí y no debe cerrar el menú
+      h('span', { class: 'ti-radial-centro', style: `left:${cx}px;top:${cy}px`, 'aria-hidden': 'true' }, m.titulo),
+      ...m.opciones.map((o, i) => {
+        const a = -Math.PI / 2 + (2 * Math.PI * i) / n;
+        return h('button', {
+          type: 'button', role: 'menuitem', class: 'ti-radial-op', 'data-op': o.id, 'aria-label': o.nombre,
+          style: `left:${(cx + R * Math.cos(a)).toFixed(1)}px;top:${(cy + R * Math.sin(a)).toFixed(1)}px`, onclick: () => elegirRadial(o.id),
+        }, icono(o.icono), h('span', { class: 'ti-radial-et' }, o.nombre));
+      }));
+    caja.hidden = false;
+    TB().decir(s, `Piezas en ${m.titulo}: elija una (o toque fuera para cerrar).`, false);
+    pintarEstado();
+    programarCapa();
+  }
+  function cerrarRadial() {
+    const caja = $('#ti-radial');
+    if (caja) { caja.hidden = true; caja.replaceChildren(); }
+    ui.radial = null;
+    if (ui.gesto && ui.gesto.modo === 'RADIAL') ui.gesto = null;
+  }
+  /** La opción del menú bajo el dedo (al arrastrar sobre el menú abierto, se resalta). */
+  function opcionBajo(ev) {
+    const el = document.elementFromPoint(ev.clientX, ev.clientY);
+    return el && el.closest ? el.closest('.ti-radial-op') : null;
+  }
+  function marcarRadial(ev) {
+    const op = opcionBajo(ev);
+    document.querySelectorAll('#ti-radial .ti-radial-op').forEach((b) => b.classList.toggle('activa', b === op));
+  }
+  function elegirRadial(id) {
+    const r = ui.radial;
+    cerrarRadial();
+    if (!r) return;
+    const res = TB().radialElegir(ui.s, r.hit, id);
+    if (res === 'MODELO') cambio();
+    else pintar(); // la selección, el trazo que empezó (con su herramienta en la paleta) o el porqué
+  }
+  /** Clic derecho (o la tecla de menú): el mismo menú, con el ratón. */
+  function alMenuContextual(ev) {
+    ev.preventDefault();
+    if (!ui.s || ui.s.traza || ui.radial) return; // en el teléfono el dedo largo ya lo abrió
+    const p = local(ev);
+    const hit = TB().tocar(ui.s, p.x, p.y, false);
+    if (!hit || !TB().radial(ui.s, hit)) return;
+    abrirRadial(hit, p);
+    const primera = $('#ti-radial .ti-radial-op');
+    if (primera) primera.focus({ preventScroll: true });
+  }
+
   /** Un toque sin arrastre, según la herramienta. */
   function tocarCon(hit, p) {
     const s = ui.s;
@@ -763,6 +859,7 @@
     const s = ui.s;
     const T = TB();
     const k = ev.key;
+    if (ui.radial && k === 'Escape') { ev.preventDefault(); cerrarRadial(); $('#ti-lienzo').focus({ preventScroll: true }); return; }
     if (k === 'Shift' || k === 'Alt') { ui.mayus = ev.shiftKey; T.teclasSostenidas(s, ev.shiftKey, ev.altKey); programarCapa(); return; }
     if (escribiendo(ev.target)) return;
     const enBoton = ev.target && /^(BUTTON|A|SUMMARY)$/.test(ev.target.tagName);
@@ -1337,6 +1434,7 @@
           h('li', null, 'Acoples: con la toma seleccionada, F manguera o B brida. Arrastre el rombo (altura) y el círculo (desvío).'),
           h('li', null, 'Trazado: presione en una toma con brida, un punto de transición, la boca o un extremo y arrastre; el trazo sigue en cadena. ↑ fija Z, → X, ← Y, H horizontal, V vertical; teclee 3.25, <45, @135 o ^45 y Entrar; Tab cambia de opción; Mayús conserva la dirección; Esc termina.'),
           h('li', null, 'Cerca del tronco o de la boca, el imán propone la llegada: Tab alterna, clic acepta.'),
+          h('li', null, 'En el teléfono, deje el dedo quieto sobre un nodo o un tramo: sale el menú de las piezas posibles ahí (recto, codo, sube o baja, injerto, reducción, compuerta, tapa). Deslice hasta una y suelte, o tóquela. Con el ratón, clic derecho.'),
           h('li', null, 'Validar: dimensionar por caudal y revisar los problemas. Salida: pasar el trazo a la cotización, el cálculo de pérdidas, el balanceo, el ventilador y el JSON.'))),
       h('p', { class: 'ti-nota' }, 'Vista: Q y E giran el isométrico; 1 iso, 2 planta, 3 y 4 elevaciones; F o 0 encuadra; rueda o + y − acercan; Espacio y arrastrar mueve. Ctrl+Z y Ctrl+Y deshacen y rehacen.'));
   }
@@ -1519,7 +1617,7 @@
     lienzo.addEventListener('pointercancel', alCancelar);
     lienzo.addEventListener('pointerleave', alSalir);
     lienzo.addEventListener('wheel', alRueda, { passive: false });
-    lienzo.addEventListener('contextmenu', (ev) => ev.preventDefault());
+    lienzo.addEventListener('contextmenu', alMenuContextual);
     const cubo = svg('svg', { id: 'ti-cubo', class: 'ti-cubo', viewBox: '0 0 82 82', role: 'group', 'aria-label': 'Cubo de vista' });
     cubo.addEventListener('click', (ev) => { const c = ev.target.closest('[data-vista]'); if (c) { TB().ponerVista(ui.s, c.dataset.vista); pintar(); } });
     const vistas = h('div', { class: 'ti-vistas', role: 'group', 'aria-label': 'Vista' },
@@ -1534,7 +1632,8 @@
       h('div', { class: 'ti-cuerpo' },
         h('aside', { class: 'ti-paleta', id: 'ti-paleta', 'aria-label': 'Bloques de construcción' }),
         h('div', { class: 'ti-centro' },
-          h('div', { class: 'ti-lienzo-marco' }, lienzo, vistas, cubo, h('span', { class: 'ti-escala', id: 'ti-escala', 'aria-hidden': 'true' })),
+          h('div', { class: 'ti-lienzo-marco' }, lienzo, vistas, cubo, h('span', { class: 'ti-escala', id: 'ti-escala', 'aria-hidden': 'true' }),
+            h('div', { class: 'ti-radial', id: 'ti-radial', role: 'menu', hidden: true })),
           h('div', { class: 'ti-estado' },
             h('span', { class: 'ti-coords', id: 'ti-coords' }, '—'), h('span', { class: 'ti-sep', id: 'ti-ajuste' }), h('span', { class: 'ti-sep', id: 'ti-plano' }),
             h('span', { class: 'ti-sep ti-d', id: 'ti-d' }), h('span', { class: 'ti-sep ti-caja', id: 'ti-caja', title: 'Caja de valores: 3.25, 3250mm, <45, @135, ^45 y Entrar' }, '▸')),
@@ -1557,6 +1656,8 @@
     $('#ti-rehacer').addEventListener('click', () => { TB().rehacer(ui.s); cambio(); });
     document.addEventListener('keydown', alTecla);
     document.addEventListener('keyup', alSoltarTecla);
+    // tocar fuera del tablero también cierra el menú radial
+    document.addEventListener('pointerdown', (ev) => { if (ui.radial && ev.target.closest && !ev.target.closest('#ti-radial, #ti-lienzo')) cerrarRadial(); }, true);
     root.addEventListener('blur', () => { ui.espacio = false; if (ui.s) TB().teclasSostenidas(ui.s, false, false); });
     if (typeof root.ResizeObserver === 'function') new root.ResizeObserver(() => { if (ui.abierto && medir()) dibujarLienzo(); }).observe(lienzo);
     else root.addEventListener('resize', () => { if (ui.abierto && medir()) dibujarLienzo(); });

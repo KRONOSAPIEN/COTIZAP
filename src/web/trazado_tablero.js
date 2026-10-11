@@ -1080,6 +1080,129 @@
       return `Tapa ${(m.piezas[nodo] || {}).TAPA} en ${nodo}.${ciego ? ` ${ciego.mensaje}` : ''}`;
     });
   }
+  /* ------------------------------------------------------------------ menú radial (§4.5) */
+
+  /** Cuánto se deja el dedo quieto sobre un nodo o un tramo para abrir el menú radial. */
+  const RADIAL_MS = 400;
+  const PIEZAS_RADIAL = {
+    RECTO: { nombre: 'Recto', icono: 'TRAMO' },
+    CODO: { nombre: 'Codo', icono: 'CODO' },
+    SUBE_BAJA: { nombre: 'Sube o baja', icono: 'VERTICAL' },
+    INJERTO: { nombre: 'Injerto', icono: 'INJERTO' },
+    REDUCCION: { nombre: 'Reducción', icono: 'REDUCCION' },
+    COMPUERTA: { nombre: 'Compuerta', icono: 'COMPUERTA' },
+    QUITAR_COMPUERTA: { nombre: 'Quitar compuerta', icono: 'COMPUERTA' },
+    TAPA: { nombre: 'Tapa', icono: 'TAPA' },
+    QUITAR_TAPA: { nombre: 'Quitar tapa', icono: 'TAPA' },
+    PROPIEDADES: { nombre: 'Propiedades', icono: 'SELECCIONAR' },
+  };
+  /** ¿El modelo acepta el cambio? (se prueba en seco: las funciones del modelo no mutan el trazo). */
+  const acepta = (fn) => { try { fn(); return true; } catch (e) { if (e instanceof TZ.TrazadoError) return false; throw e; } };
+  /**
+   * El Ø al que baja una reducción tocada en un ducto de Ø D0 (desde `desde`): el activo si es menor y el modelo lo acepta;
+   * si no, el comercial anterior a D0. null si ninguno.
+   */
+  function diametroReducido(s, desde, D0) {
+    const menores = (s.t.politicas.diametros_comerciales_in || []).filter((d) => d < D0);
+    const opciones = [...(s.D < D0 ? [s.D] : []), ...(menores.length ? [Math.max(...menores)] : [])];
+    return opciones.find((D) => acepta(() => TZ.reducir(s.t, s.M, desde, D))) || null;
+  }
+  /** Dónde va una reducción, compuerta o tapa tocada (como en reducirEn, compuertaEn y tapaEn), y el Ø del ducto ahí. */
+  function puntoDe(s, hit) {
+    if (hit.tipo === 'TRAMO') {
+      const t = s.g.tramos.get(hit.id);
+      const libre = [t.a, t.b].find((nid) => tipoNodo(s, nid) === 'EXTREMO') || null;
+      return { desde: { tramo: hit.id, s_mm: ajustar(hit.s_mm || 0, 50) }, D0: t.diametro_in, libre };
+    }
+    const nid = hit.nodo || hit.id;
+    const rig = (s.g.ady.get(nid) || []).filter((x) => x.tramo.tipo === 'RIGIDO');
+    return { desde: nid, D0: rig.length ? Math.max(...rig.map((x) => x.tramo.diametro_in)) : null, libre: tipoNodo(s, nid) === 'EXTREMO' ? nid : null };
+  }
+  /** Qué direcciones del arranque deja cada pieza que traza. */
+  const FILTRO_RADIAL = {
+    RECTO: (o) => o.pieza === 'RECTO',
+    CODO: (o) => o.pieza === 'CODO',
+    SUBE_BAJA: (o) => (o.pieza === 'RECTO' || o.pieza === 'CODO') && o.direccion.elevacion_deg !== 0,
+    INJERTO: (o) => o.pieza === 'INJERTO' || o.pieza === 'T_90',
+  };
+  /**
+   * El menú radial (§4.5): las piezas posibles en lo tocado (un nodo, una toma, un punto de transición o un tramo), cada
+   * una probada contra el modelo. { titulo, opciones: [{ id, nombre, icono }] } o null si ahí no hay menú. Siempre
+   * termina con «Propiedades» (el inspector de lo tocado).
+   */
+  function radial(s, hit) {
+    if (!hit || !['NODO', 'PUERTO', 'PT', 'TRAMO'].includes(hit.tipo)) return null;
+    const ids = [];
+    const rigido = hit.tipo !== 'TRAMO' || s.g.tramos.get(hit.id).tipo === 'RIGIDO';
+    if (rigido) {
+      // lo que se traza: desde un nodo, la toma o el punto de transición; desde un tramo, el injerto
+      const a = arranqueDe(s, hit);
+      let ops = [];
+      if (!a.error) ops = intentarEnSeco(() => TZ.candidatas(s.t, s.M, a.desde)) || [];
+      if (hit.tipo === 'TRAMO') { if (ops.length) ids.push('INJERTO'); } else ['RECTO', 'CODO', 'SUBE_BAJA', 'INJERTO'].forEach((k) => { if (ops.some(FILTRO_RADIAL[k])) ids.push(k); });
+      // lo que se pone ahí
+      const pt = puntoDe(s, hit);
+      const nodo = typeof pt.desde === 'string' ? s.t.nodos.find((x) => x.id === pt.desde) : null;
+      if (pt.D0 && hit.tipo !== 'PUERTO' && hit.tipo !== 'PT' && diametroReducido(s, pt.desde, pt.D0)) ids.push('REDUCCION');
+      if (nodo && (s.t.piezas[nodo.id] || {}).COMPUERTA) ids.push('QUITAR_COMPUERTA');
+      else if (acepta(() => TZ.ponerCompuerta(s.t, s.M, pt.desde))) ids.push('COMPUERTA');
+      const libre = pt.libre && s.t.nodos.find((x) => x.id === pt.libre);
+      if (libre && libre.tapa) ids.push('QUITAR_TAPA');
+      else if (libre && acepta(() => TZ.ponerTapa(s.t, s.M, libre.id))) ids.push('TAPA');
+    }
+    ids.push('PROPIEDADES');
+    const titulo = hit.tipo === 'TRAMO' ? hit.id : hit.tipo === 'NODO' ? hit.id : `${hit.id} (${hit.nodo})`;
+    return { titulo, opciones: ids.map((id) => ({ id, ...PIEZAS_RADIAL[id] })) };
+  }
+  /** Como intentar, pero sin decir nada: el resultado o null. */
+  function intentarEnSeco(fn) {
+    try { return fn(); } catch (e) { if (e instanceof TZ.TrazadoError) return null; throw e; }
+  }
+  /**
+   * Hace lo elegido en el menú radial sobre lo tocado: las piezas que se trazan empiezan el trazo desde ahí con sólo sus
+   * direcciones (la herramienta queda elegida); las que se ponen se ponen. Devuelve 'MODELO' si el trazo cambió, 'TRAZO'
+   * si empezó un trazo, 'SEL' si se seleccionó, o false (con el porqué en el mensaje).
+   */
+  function radialElegir(s, hit, id) {
+    if (!hit) return false;
+    if (FILTRO_RADIAL[id]) {
+      const herr = id === 'SUBE_BAJA' ? 'VERTICAL' : id === 'INJERTO' && hit.tipo === 'TRAMO' ? 'INJERTO' : 'TRAMO';
+      s.herr = herr;
+      s.traza = null;
+      if (!empezar(s, hit)) return false;
+      const tr = s.traza;
+      const ops = hit.tipo === 'TRAMO' ? tr.ops : tr.ops.filter(FILTRO_RADIAL[id]);
+      if (!ops.length) { s.traza = null; return decir(s, `Desde ${tr.nombre} no sale ${PIEZAS_RADIAL[id].nombre.toLowerCase()}.`, true); }
+      tr.ops = ops;
+      const giros = [...new Set(ops.map((o) => o.giro_deg).filter((g) => g > 0))].sort((a, b) => a - b).map((g) => `${g}°`);
+      const como = {
+        RECTO: `Recto desde ${tr.nombre}${ops.length === 1 ? `, en ${TZ.textoDireccion(ops[0].direccion)}` : ''}: arrastre hasta donde llega`,
+        CODO: `Codo desde ${tr.nombre} (${giros.join(', ')}): arrastre hacia donde sigue`,
+        SUBE_BAJA: `Sube o baja desde ${tr.nombre}: arrastre hacia arriba o hacia abajo`,
+        INJERTO: `Injerto desde ${tr.nombre}${giros.length ? ` (${giros.join(', ')})` : ''}: arrastre hacia la máquina`,
+      }[id];
+      decir(s, `${como}, o teclee el largo y Entrar. Esc termina.`, false);
+      return 'TRAZO';
+    }
+    const pt = hit.tipo === 'EQUIPO' ? null : puntoDe(s, hit);
+    switch (id) {
+      case 'REDUCCION': {
+        const D = pt && pt.D0 ? diametroReducido(s, pt.desde, pt.D0) : null;
+        if (!D) return decir(s, 'Aquí no cabe una reducción: el ducto ya es del Ø comercial más chico, o el más chico no lo acepta el trazo.', true);
+        return hacer(s, (t) => TZ.reducir(t, s.M, pt.desde, D), (m) => `Desde ${m.ultimo.nodo} hacia las tomas el ducto queda de ${pulg(D)}: ${m.ultimo.tramos.join(', ')}.`) ? 'MODELO' : false;
+      }
+      case 'COMPUERTA': return compuertaEn(s, hit) ? 'MODELO' : false;
+      case 'QUITAR_COMPUERTA': return quitarCompuerta(s, pt.desde) ? 'MODELO' : false;
+      case 'TAPA':
+      case 'QUITAR_TAPA': return pt.libre && tapaEn(s, { tipo: 'NODO', id: pt.libre }) ? 'MODELO' : false;
+      case 'PROPIEDADES':
+        s.sel = hit.tipo === 'PT' ? { tipo: 'PUERTO', id: hit.id } : { tipo: hit.tipo, id: hit.id };
+        decir(s, '', false);
+        return 'SEL';
+      default: return false;
+    }
+  }
+
   /** Quita la tapa de un extremo: vuelve a quedar abierto. */
   function quitarTapa(s, nodo) {
     const r = hacer(s, (m) => TZ.quitarTapa(m, s.M, nodo), `Se quitó la tapa de ${nodo}: el extremo queda abierto.`);
@@ -1446,7 +1569,7 @@
     colocarEquipo, moverEquipo, ponerToma, puntoDelPiso,
     mangueraDe, acoplar, semaforoManguera, alturaPorArrastre, desvioPorArrastre, previaManguera, moverManguera,
     arranqueDe, empezar, teclasSostenidas, planoDeTrabajo, leerCaja, teclear, fantasma, alinear, confirmar, cancelar, fijar, siguienteOpcion, cambiarDiametroActivo, cambiarNivel,
-    reducirEn, compuertaEn, compuertaSugerida, quitarCompuerta, tapaEn, quitarTapa, desplazamientoSegmento, moverSegmento, borrar, medir,
+    reducirEn, compuertaEn, compuertaSugerida, quitarCompuerta, tapaEn, quitarTapa, RADIAL_MS, radial, radialElegir, desplazamientoSegmento, moverSegmento, borrar, medir,
     correccionesDe, correccionesListas, corregir, cambiarDiametroTramo, cambiarDiametroEnCadena, decidirCorto,
     infoTramo, piezasDe, velocidadSemaforo, calcularTrazo, calculo, efectoEnTrazo, informeCalculo, filaCalculo, NOMBRE_ACCION, despiece, exportar, importar, ejemplo,
   };

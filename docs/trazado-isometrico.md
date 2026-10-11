@@ -2162,7 +2162,7 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
   - un dedo desde un elemento traza;
   - un dedo sobre el fondo mueve la vista;
   - dos dedos acercan y mueven;
-  - dejar el dedo 400 ms sobre un nodo abre un menú radial con las piezas posibles en ese punto (recto, codos, sube o baja, injerto, reducción, tapa).
+  - dejar el dedo 400 ms sobre un nodo abre un menú radial con las piezas posibles en ese punto (recto, codos, sube o baja, injerto, reducción, tapa). Está hecho (§5.9), también sobre un tramo y con el clic derecho.
 - **Captura de medidas:** el radio de captura es de 20 px. La caja de valores abre el teclado numérico, con botones de eje (X, Y, Z) en lugar de las flechas.
 
 ### 4.6 Accesibilidad y estados
@@ -2268,7 +2268,7 @@ Es la pestaña **Trazado isométrico** de COTIZAP: otro apartado, al lado de la 
 6. **El rombo y el círculo** de la manguera coinciden mientras no hay desvío: decide el primer arrastre (a lo largo del eje de la toma, el rombo; de lado, el círculo).
 7. **El color del fantasma:** verde si se puede; ámbar si se puede pero deja un aviso o un error del catálogo (por ejemplo, un choque); rojo con el motivo si el modelo lo rechaza. Una red que todavía no llega al colector y el extremo de la cadena no lo pintan de ámbar: son normales mientras se traza.
 8. **Rapidez:** cada fantasma nuevo se prueba en el modelo (`trazar` y `revisar`) y se guarda en una caché mientras dura el trazo. Con trazos de decenas de tramos tarda unos milisegundos; con 481 tramos, de 20 a 60 ms. La rejilla gruesa de choques de §2.10 lo bajaría en trazos grandes.
-9. **Pendiente:** el menú radial de 400 ms en el teléfono (§4.5), la regla de niveles con nombre y la rejilla gruesa de choques. «Corregir» llegó con la etapa 3 (§5.3), la compuerta después de la etapa 4 (§5.5), el paso a partidas con la etapa 5 (§5.6) y la tapa después (§5.7).
+9. **Pendiente:** la regla de niveles con nombre y la rejilla gruesa de choques. «Corregir» llegó con la etapa 3 (§5.3), la compuerta después de la etapa 4 (§5.5), el paso a partidas con la etapa 5 (§5.6), la tapa después (§5.7) y el menú radial del teléfono al final (§5.9).
 
 ### 5.3 Etapa 3, hecha: validar y dimensionar
 
@@ -2529,6 +2529,31 @@ Lo verifican:
 - `tests/coeficientes.test.js`: que las tablas de arranque son la referencia y dan el ejemplo exacto, un codo cambiado (K, referencias y método), las eficiencias, los rechazos con su porqué, la pureza, el parche (ida y vuelta y listas de otro largo) y el tablero (`usarMaestros`, el informe, una tabla imposible y el efecto en el ventilador).
 - `tests/ayuda_maestros.test.js`: la ayuda de cada dato y de cada tabla, con las columnas que el editor dibuja.
 - La sección 40 de `tests/e2e/ui.e2e.js`: el botón de la salida, el cuadro, las tablas con sus ejes, la eficiencia y una celda con su efecto, el rechazo de una R de 1.4, la ayuda que prueba contra el trazado, el parche guardado, la salida y el JSON con la tabla del taller, deshacer de vuelta al ejemplo, una tabla imposible y el celular.
+
+### 5.9 El menú radial del teléfono
+
+En el teléfono, el dedo quieto 400 ms sobre un nodo, una toma, un punto de transición o un tramo abre un menú radial (§4.5) con las piezas posibles en ese punto. Con el ratón, el clic derecho abre el mismo menú.
+
+- **Qué ofrece.** Cada pieza se prueba en seco contra el modelo antes de mostrarse, así que el menú sólo trae lo que de verdad cabe:
+  - **Recto, Codo, Sube o baja:** desde un extremo libre, una toma con brida o un punto de transición. Sale lo que dan sus direcciones (`candidatas`): recto si se puede seguir derecho, codo si hay vueltas, sube o baja si hay direcciones con elevación.
+  - **Injerto:** desde un tramo que ya llega al colector, o desde un nodo que lo permite (un codo de 30° o 45°, o un paso recto).
+  - **Reducción:** en un tramo o en un codo. Baja al Ø activo si el trazo lo acepta; si no, al comercial anterior.
+  - **Compuerta** o **Quitar compuerta**, y **Tapa** o **Quitar tapa** (también desde el tramo de un extremo libre).
+  - **Propiedades:** el inspector de lo tocado. Siempre está.
+- **Cómo se usa.**
+  - Un toque corto sigue siendo un toque, y mover el dedo antes de los 400 ms mueve la vista o traza como siempre.
+  - Abierto el menú, se elige deslizando el dedo hasta la pieza (se resalta) y soltando. También se puede soltar sin moverse y luego tocarla.
+  - Tocar fuera o Esc lo cierra. Con el clic derecho, el foco queda en la primera opción.
+  - El centro dice qué se tocó; es sólo una etiqueta, para que el clic que el navegador genera al soltar el dedo no cierre el menú.
+- **Qué hace cada pieza.**
+  - Las que se trazan empiezan el trazo desde ahí con sólo sus direcciones (Recto: la del tramo que llega) y dejan la herramienta elegida en la paleta. «Sube o baja» usa la herramienta vertical. El mensaje dice qué sigue: «Codo desde N-009 (30°, 45°, 60°, 90°): arrastre hacia donde sigue, o teclee el largo y Entrar».
+  - Las que se ponen se ponen con deshacer, como con su herramienta.
+- **En el código.** `radial(s, hit)` y `radialElegir(s, hit, id)` en `src/web/trazado_tablero.js` (puros, sin pantalla), y `RADIAL_MS` = 400. La interfaz (`src/web/trazado_iso_ui.js`) los usa con el temporizador del toque, el arrastre sobre las opciones y el clic derecho.
+
+Lo verifican:
+
+- `tests/trazado_tablero.test.js`: las piezas en un extremo, un tramo, el tronco, un codo, una confluencia, la boca, una manguera y un equipo; que probar no cambia el trazo; lo que hace cada una (las direcciones del trazo, la herramienta, la reducción al comercial anterior, compuerta y tapa con su quitar, propiedades); y lo que no sale.
+- La sección 41 de `tests/e2e/ui.e2e.js`, con toques de verdad en un celular (CDP): el toque corto que no abre; el largo que abre; deslizar a «Tapa» y soltar; soltar y tocar «Codo»; el menú en el tronco, dentro del lienzo; tocar fuera; el arrastre que mueve la vista; y en escritorio, el clic derecho, Esc y «Propiedades».
 
 ---
 
