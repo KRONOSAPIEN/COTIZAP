@@ -512,7 +512,7 @@ En el ejemplo, desde lo alto de la subida del cepillo:
 - **Cálculo:**
   - Segmento contra segmento: los puntos más cercanos en forma cerrada (la función `distanciaSegmentos` de COTIZAP).
   - Segmento contra caja: en el sistema de la caja, contra la caja crecida en el radio más la holgura (prueba de losas del segmento).
-  - Fase gruesa: rejilla uniforme de 2 m. Cada segmento entra en las celdas que toca su caja crecida, y sólo se prueba lo que tocó la última operación.
+  - Fase gruesa: rejilla uniforme de 2 m. Cada segmento entra en las celdas que toca su caja crecida, y sólo se prueba lo que tocó la última operación. Está hecha (§5.11), pero se prueba todo lo que comparte celda en cada revisión, no sólo lo que tocó la última operación: con eso ya cabe en el presupuesto.
 - **Presupuesto:** menos de 8 ms por operación con 500 tramos. Durante el arrastre, el fantasma se prueba contra todo: un choque lo pone ámbar y deja soltar (se puede mover lo otro después), pero impide exportar.
 
 ### 2.11 Catálogo de validaciones
@@ -2227,7 +2227,7 @@ El trazo se guarda tal cual (posiciones de los nodos, tramos con su Ø y su mate
 - El JSON del ejemplo se lee de regreso con `desdeSistema` y se vuelve a escribir igual.
 - Lo demás, caso por caso: la proyección y su inversa; la rejilla (170, 26 y 6 direcciones); la manguera en sus cuatro formas; las 33 direcciones que salen de un extremo horizontal; cada regla que rechaza, con su código y su mensaje; el imán (las entradas de lado a 45° y 30° del ejemplo, la entrada por arriba, nunca por abajo); la compensación con una y con dos direcciones; los equipos que se mueven; la revisión; la pureza; y la lectura de datos rotos.
 - Una caminata de 160 operaciones al azar: después de cada una el trazo se vuelve a validar y su JSON cumple el esquema.
-- Con 481 tramos: `calcular` tarda 2.6 ms, `trazar` 12 ms y `revisar` 16 ms. La rejilla gruesa de §2.10 queda para el arrastre de la etapa 2.
+- Con 481 tramos: `calcular` tarda 2.6 ms, `trazar` 12 ms y `revisar` 16 ms. La rejilla gruesa de §2.10 llegó después (§5.11): con 500 tramos y 99 equipos, `revisar` tarda 5 ms.
 
 **Precisiones que salieron al programarlo** (el resto del documento ya las incluye):
 
@@ -2279,8 +2279,8 @@ Es la pestaña **Trazado isométrico** de COTIZAP: otro apartado, al lado de la 
 5. **Las caras que no se ven** no se pueden tocar: la boca en la cara +X del colector del ejemplo se pone girando la vista (E) o desde el inspector del equipo (cara y dos coordenadas).
 6. **El rombo y el círculo** de la manguera coinciden mientras no hay desvío: decide el primer arrastre (a lo largo del eje de la toma, el rombo; de lado, el círculo).
 7. **El color del fantasma:** verde si se puede; ámbar si se puede pero deja un aviso o un error del catálogo (por ejemplo, un choque); rojo con el motivo si el modelo lo rechaza. Una red que todavía no llega al colector y el extremo de la cadena no lo pintan de ámbar: son normales mientras se traza.
-8. **Rapidez:** cada fantasma nuevo se prueba en el modelo (`trazar` y `revisar`) y se guarda en una caché mientras dura el trazo. Con trazos de decenas de tramos tarda unos milisegundos; con 481 tramos, de 20 a 60 ms. La rejilla gruesa de choques de §2.10 lo bajaría en trazos grandes.
-9. **Pendiente:** la rejilla gruesa de choques. «Corregir» llegó con la etapa 3 (§5.3), la compuerta después de la etapa 4 (§5.5), el paso a partidas con la etapa 5 (§5.6), la tapa después (§5.7), el menú radial del teléfono (§5.9) y los niveles con nombre (§5.10).
+8. **Rapidez:** cada fantasma nuevo se prueba en el modelo (`trazar` y `revisar`) y se guarda en una caché mientras dura el trazo. Con trazos de decenas de tramos tarda unos milisegundos; con 481 tramos, de 20 a 60 ms. Con la rejilla gruesa de choques (§5.11), `revisar` baja de 56 a 3 ms con 300 tramos.
+9. **Lo que vino después:** «Corregir» llegó con la etapa 3 (§5.3), la compuerta después de la etapa 4 (§5.5), el paso a partidas con la etapa 5 (§5.6), la tapa después (§5.7), el menú radial del teléfono (§5.9), los niveles con nombre (§5.10) y la rejilla gruesa de choques (§5.11).
 
 ### 5.3 Etapa 3, hecha: validar y dimensionar
 
@@ -2592,6 +2592,35 @@ Lo verifican:
 - `tests/trazado_iso.test.js`: la validación con cada rechazo, el orden, la pureza, el JSON del trazo (también uno guardado sin niveles) y el del sistema contra el esquema.
 - `tests/trazado_tablero.test.js`: las paradas de RePág, el salto con Mayús, el piso, `irANivel`, la regla (orden, el de trabajo, el suelto, la planta), el trazo que sube al nivel exacto, quitarlo sin mover nada y deshacer.
 - La sección 42 de `tests/e2e/ui.e2e.js`: agregarlos, el rechazo de dos a la misma altura, la regla, RePág, Mayús+RePág, tocar la regla, la planta, quitarlo, el sistema exportado y deshacer.
+
+### 5.11 La rejilla gruesa de choques
+
+La revisión de choques (§2.10) probaba todo contra todo: cada par de tramos, cada tramo contra cada equipo (con una búsqueda ternaria de su distancia a la caja girada) y cada par de equipos. Con 500 tramos y 99 equipos tardaba 135 ms, lejos de los 8 ms del presupuesto. Ahora tiene su fase gruesa:
+
+- **La rejilla** (`rejillaDeCajas`). Es uniforme, de 2 m (`CELDA_CHOQUES_MM`).
+  - Cada tramo entra, con su caja crecida en su radio y la holgura, en las celdas que toca. Dos cajas que se tocan comparten al menos una celda, así que la rejilla nunca pierde un par: sólo ahorra los lejanos.
+  - Una caja que tocaría más de 512 celdas (un tramo muy largo en diagonal) va aparte y se compara con todas.
+  - Las claves de las celdas son números.
+- **Lo que se prueba.**
+  - Ducto contra ducto: sólo los pares que comparten celda. Se recorren en el mismo orden que antes, así que los problemas salen en el mismo orden.
+  - Ducto contra equipo: los tramos de las celdas de la caja alineada del equipo, y sólo si sus cajas se tocan. Si no, el tramo está a más de su radio y la holgura.
+  - Manguera contra equipo: lo mismo con la caja de los puntos de la manguera.
+  - Equipos encimados: sólo si sus cajas, crecidas media holgura en sus propios ejes y luego alineadas, se tocan. Crecer la caja ya alineada sería más chico con el equipo girado, y perdería un par que sólo se toca en la esquina.
+  - Cada filtro es exacto: descarta sólo lo que de verdad no choca.
+- **Lo que tarda** `revisar`, sin cambiar nada de lo que encuentra:
+
+  | Trazo | Antes | Ahora |
+  | --- | --- | --- |
+  | 300 tramos, 64 equipos | 56 ms | 3 ms |
+  | 500 tramos, 99 equipos | 135 ms | 5 ms |
+
+  `revisar(t, M, g, { fuerza_bruta: true })` hace la revisión de antes, todo contra todo, para las pruebas.
+
+Lo verifica `tests/trazado_iso.test.js`:
+
+- la rejilla con 400 cajas al azar (chicas, largas en diagonal, negativas, que apenas se tocan en el borde de una celda) no pierde ningún par que se toque;
+- una caminata al azar con equipos girados, tramos de hasta 30 m y mangueras da exactamente la misma revisión con la fase gruesa que todo contra todo, y ve choques de cada tipo;
+- el caso de esquina de dos equipos, uno girado 45°, que sólo se tocan en la esquina de la caja crecida. Si la caja se creciera ya alineada, esta prueba falla.
 
 ---
 

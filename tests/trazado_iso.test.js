@@ -1062,3 +1062,67 @@ test('Niveles con nombre (§2.7): se validan, se ordenan, van y vuelven por el J
   assert.deepEqual(T.desdeSistema(sis, M).modelo.proyecto.niveles, sis.proyecto.niveles, 'y vuelve con ellos');
   assert.deepEqual(T.aSistema(ej, M).proyecto.niveles, [], 'sin niveles, la lista vacía');
 });
+
+test('Choques con la fase gruesa (§2.10): la rejilla de 2 m nunca pierde un par, y revisar da exactamente lo mismo que todo contra todo', () => {
+  // la rejilla: para cajas al azar (chicas, largas en diagonal, negativas, que apenas se tocan), lo que dice «cerca» incluye
+  // a todas las que de verdad tocan
+  let semilla = 4242;
+  const azar = () => { semilla = (semilla * 1103515245 + 12345) % 2147483648; return semilla / 2147483648; };
+  const uno = (xs) => xs[Math.floor(azar() * xs.length)];
+  const cajaAlAzar = () => {
+    const p = { x: (azar() - 0.5) * 60000, y: (azar() - 0.5) * 60000, z: azar() * 9000 };
+    const t = uno([300, 1500, 4000, 40000]);
+    const lado = () => azar() * t;
+    return { lo: p, hi: { x: p.x + lado(), y: p.y + lado(), z: p.z + (azar() < 0.2 ? 0 : lado() / 4) } };
+  };
+  const cajas = Array.from({ length: 400 }, cajaAlAzar);
+  // dos que se tocan justo en el borde de una celda
+  cajas.push({ lo: { x: 0, y: 0, z: 0 }, hi: { x: T.CELDA_CHOQUES_MM, y: 10, z: 10 } }, { lo: { x: T.CELDA_CHOQUES_MM, y: 5, z: 5 }, hi: { x: T.CELDA_CHOQUES_MM + 5, y: 6, z: 6 } });
+  const rj = T.rejillaDeCajas(cajas);
+  const tocan = (p, q) => !(p.hi.x < q.lo.x || q.hi.x < p.lo.x || p.hi.y < q.lo.y || q.hi.y < p.lo.y || p.hi.z < q.lo.z || q.hi.z < p.lo.z);
+  let pares = 0;
+  cajas.forEach((p, i) => {
+    const c = new Set(rj.cercaDe(i));
+    assert.deepEqual(rj.cerca(p), rj.cercaDe(i), 'las dos formas de preguntar dan lo mismo');
+    cajas.forEach((q, j) => { if (tocan(p, q)) { pares += 1; assert.ok(c.has(j), `la caja ${i} toca a la ${j} y la rejilla no la trae`); } });
+  });
+  assert.ok(pares > cajas.length, `se probaron pares que se tocan (${pares})`);
+  // revisar: escenas al azar con equipos girados, tramos largos y mangueras; la fase gruesa contra todo contra todo
+  const vistos = { CHOQUE_DUCTOS: 0, CHOQUE_EQUIPO: 0, CHOQUE_MANGUERA: 0, EQUIPOS_ENCIMADOS: 0 };
+  [7, 99, 2027].forEach((sem) => {
+    semilla = sem;
+    let t = terminado(ejemploDesdeLasTomas());
+    const ops = [
+      () => T.ponerEquipo(t, M, { tipo: 'MAQUINA', posicion_mm: { x: Math.round(azar() * 40 - 10) * 250, y: Math.round(azar() * 40 - 20) * 250, z: uno([0, 0, 500]) }, rotacion_z_deg: uno([0, 15, 30, 45, 60, 90, 135]), caja_mm: { largo: uno([600, 1500, 3000]), ancho: uno([600, 900]), alto: uno([800, 2500]) } }),
+      () => { const e = uno(t.equipos.filter((x) => x.tipo === 'MAQUINA')); if (!e) return t; return T.agregarPuerto(t, M, e.id, { posicion_local_mm: { x: 0, y: 0, z: e.caja_mm.alto }, diametro_in: uno([4, 5, 6]), caudal_m3_h: 600 }); },
+      () => { const p = uno(t.equipos.flatMap((e) => e.puertos).filter((x) => x.rol === 'TOMA' && !x.acople)); if (!p) return t; return T.acoplarManguera(t, M, p.id, { altura_mm: uno([600, 1200]), desvio_mm: uno([0, 300]), desvio_azimut_deg: uno([0, 90]) }); },
+      () => {
+        const libres = t.nodos.filter((x) => t.tramos.filter((q) => q.a === x.id || q.b === x.id).length === 1 && !x.puerto);
+        const desde = libres.length && azar() < 0.6 ? uno(libres).id : (() => { const tr = uno(t.tramos.filter((q) => q.tipo === 'RIGIDO')); return { tramo: tr.id, s_mm: 600 }; })();
+        const c = T.candidatas(t, M, desde);
+        return c.length ? T.trazar(t, M, desde, { direccion: uno(c).direccion, largo_mm: uno([800, 2600, 6000, 30000]), diametro_in: uno([4, 6]) }) : t;
+      },
+      () => { const e = uno(t.equipos); return e ? T.moverEquipo(t, M, e.id, { rotacion_z_deg: uno([0, 30, 45, 90]) }) : t; },
+    ];
+    for (let i = 0; i < 90; i += 1) {
+      try { t = uno(ops)(); } catch (e) { if (!(e instanceof T.TrazadoError)) throw e; }
+      if (i % 6 !== 5) continue;
+      const g = T.calcular(t, M);
+      const rapido = T.revisar(t, M, g);
+      assert.deepEqual(rapido, T.revisar(t, M, g, { fuerza_bruta: true }), `semilla ${sem}, paso ${i}`);
+      Object.keys(vistos).forEach((k) => { vistos[k] += rapido.filter((v) => v.codigo === k).length; });
+    }
+  });
+  assert.ok(Object.values(vistos).every((x) => x > 0), `la caminata vio choques de cada tipo: ${JSON.stringify(vistos)}`);
+  // un caso de esquina: un equipo girado 45° y otro que sólo lo alcanza en la esquina de su caja crecida (crecer la caja
+  // alineada, en vez de crecerla en sus ejes, perdería este par)
+  let e2 = T.nuevo(M, { proyecto: PROYECTO });
+  const k = e2.politicas.holgura_min_mm / 2;
+  const real = (500 + k) * Math.SQRT2;
+  const ingenua = 500 * Math.SQRT2 + k;
+  e2 = T.ponerEquipo(e2, M, { tipo: 'MAQUINA', nombre: 'Girada', posicion_mm: { x: 0, y: 0, z: 0 }, rotacion_z_deg: 45, caja_mm: { largo: 1000, ancho: 1000, alto: 1000 } });
+  e2 = T.ponerEquipo(e2, M, { tipo: 'MAQUINA', nombre: 'Recta', posicion_mm: { x: (real + ingenua) / 2 + k + 1000, y: 0, z: 0 }, caja_mm: { largo: 2000, ancho: 1000, alto: 1000 } });
+  const r2 = T.revisar(e2, M);
+  assert.ok(r2.some((v) => v.codigo === 'EQUIPOS_ENCIMADOS'), 'la esquina girada sí se encima');
+  assert.deepEqual(r2, T.revisar(e2, M, null, { fuerza_bruta: true }));
+});

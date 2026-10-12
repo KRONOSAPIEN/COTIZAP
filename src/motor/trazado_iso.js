@@ -2202,6 +2202,62 @@
 
   /* ------------------------------------------------------------------ revisar (§2.10 y §2.11) */
 
+  /**
+   * Fase gruesa de los choques (§2.10): una rejilla uniforme de 2 m. Cada caja alineada { lo, hi } entra en las celdas que
+   * toca; dos cajas que se tocan comparten al menos una celda, así que la rejilla nunca pierde un par (sólo ahorra los
+   * lejanos). Una caja que tocaría más de CELDAS_MAX celdas (un tramo muy largo en diagonal) va aparte y se compara con todas.
+   */
+  const CELDA_CHOQUES_MM = 2000;
+  const CELDAS_MAX = 512;
+  function rejillaDeCajas(cajas) {
+    const celdas = new Map();
+    const grandes = [];
+    // la clave de una celda es un número (más rápido que un texto), única de −10 000 a 10 000 celdas por eje (±20 km); más
+    // lejos dos celdas podrían compartir clave, y eso sólo agrega candidatos: la rejilla nunca pierde un par
+    const clave = (x, y, z) => ((x + 10000) * 20001 + (y + 10000)) * 20001 + (z + 10000);
+    const celdasDe = (c) => {
+      const x0 = Math.floor(c.lo.x / CELDA_CHOQUES_MM);
+      const x1 = Math.floor(c.hi.x / CELDA_CHOQUES_MM);
+      const y0 = Math.floor(c.lo.y / CELDA_CHOQUES_MM);
+      const y1 = Math.floor(c.hi.y / CELDA_CHOQUES_MM);
+      const z0 = Math.floor(c.lo.z / CELDA_CHOQUES_MM);
+      const z1 = Math.floor(c.hi.z / CELDA_CHOQUES_MM);
+      if ((x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1) > CELDAS_MAX) return null;
+      const ks = [];
+      for (let x = x0; x <= x1; x += 1) for (let y = y0; y <= y1; y += 1) for (let z = z0; z <= z1; z += 1) ks.push(clave(x, y, z));
+      return ks;
+    };
+    const propias = cajas.map((c, i) => {
+      const ks = celdasDe(c);
+      if (!ks) { grandes.push(i); return null; }
+      ks.forEach((k) => { const l = celdas.get(k); if (l) l.push(i); else celdas.set(k, [i]); });
+      return ks;
+    });
+    const juntar = (ks) => {
+      if (!ks) return cajas.map((_, i) => i);
+      const vistos = new Set(grandes);
+      ks.forEach((k) => { const l = celdas.get(k); if (l) l.forEach((i) => vistos.add(i)); });
+      return [...vistos].sort((a, b) => a - b);
+    };
+    /** Los índices de las cajas que pueden tocar a c (con las grandes), de menor a mayor y sin repetir. */
+    const cerca = (c) => juntar(celdasDe(c));
+    /** Lo mismo para la caja i de la rejilla (sus celdas ya están calculadas). */
+    const cercaDe = (i) => juntar(propias[i]);
+    return { cerca, cercaDe };
+  }
+  /** ¿Se tocan dos cajas alineadas (con sus bordes)? */
+  const cajasTocan = (p, q) => !(p.hi.x < q.lo.x || q.hi.x < p.lo.x || p.hi.y < q.lo.y || q.hi.y < p.lo.y || p.hi.z < q.lo.z || q.hi.z < p.lo.z);
+  /**
+   * La caja alineada de un equipo (girado), crecida `crece` mm en sus propios ejes: sus cuatro esquinas en planta, de su base
+   * a su altura. (Crecerla en sus ejes y después alinearla no es lo mismo que alinearla y crecerla: girada, la primera es
+   * mayor.)
+   */
+  function cajaDeEquipo(e, crece) {
+    const k = crece || 0;
+    const esq = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => suma(e.posicion_mm, girarZ(V3(sx * (e.caja_mm.largo / 2 + k), sy * (e.caja_mm.ancho / 2 + k), 0), e.rotacion_z_deg)));
+    return { lo: V3(Math.min(...esq.map((q) => q.x)), Math.min(...esq.map((q) => q.y)), e.posicion_mm.z - k), hi: V3(Math.max(...esq.map((q) => q.x)), Math.max(...esq.map((q) => q.y)), e.posicion_mm.z + e.caja_mm.alto + k) };
+  }
+
   /** La distancia más corta de un segmento a la caja (girada) de un equipo, por búsqueda ternaria (la función es convexa). */
   function distanciaCaja(p, q, e) {
     const loc = (x) => { const r = girarZ(resta(x, e.posicion_mm), -e.rotacion_z_deg); return r; };
@@ -2237,9 +2293,12 @@
   /**
    * El catálogo de §2.11 sobre el trazo: BLOQUEANTE (no debería haber: las operaciones no los dejan), ERROR (impide exportar),
    * AVISO e INFO. Cada uno { codigo, severidad, elementos, mensaje, sugerencia }, ordenados por severidad.
+   * Los choques usan la fase gruesa (§2.10); con opciones.fuerza_bruta se prueba todo contra todo, sin ella (para las pruebas:
+   * los dos caminos dan exactamente lo mismo).
    */
-  function revisar(t, M, g0) {
+  function revisar(t, M, g0, opciones) {
     const g = g0 || calcular(t, M);
+    const bruta = !!(opciones && opciones.fuerza_bruta);
     const pol = t.politicas;
     const out = [...g.problemas];
     const add = (codigo, severidad, elementos, mensaje, sugerencia) => out.push({ codigo, severidad, elementos, mensaje, sugerencia: sugerencia || null });
@@ -2257,29 +2316,39 @@
       const r = D(x) / 2 + pol.holgura_min_mm;
       return { x, A, B, lo: V3(Math.min(A.x, B.x) - r, Math.min(A.y, B.y) - r, Math.min(A.z, B.z) - r), hi: V3(Math.max(A.x, B.x) + r, Math.max(A.y, B.y) + r, Math.max(A.z, B.z) + r) };
     });
+    // la fase gruesa (§2.10): sólo se prueban los pares que comparten una celda de 2 m, en el mismo orden que todos contra todos
+    const rj = rejillaDeCajas(caja);
+    const todas = caja.map((_, i) => i);
     for (let i = 0; i < caja.length; i += 1) {
-      for (let j = i + 1; j < caja.length; j += 1) {
-        const p = caja[i];
+      const p = caja[i];
+      (bruta ? todas : rj.cercaDe(i)).forEach((j) => {
+        if (j <= i) return;
         const q = caja[j];
-        if (p.x.a === q.x.a || p.x.a === q.x.b || p.x.b === q.x.a || p.x.b === q.x.b) continue;
-        if (p.hi.x < q.lo.x || q.hi.x < p.lo.x || p.hi.y < q.lo.y || q.hi.y < p.lo.y || p.hi.z < q.lo.z || q.hi.z < p.lo.z) continue;
+        if (p.x.a === q.x.a || p.x.a === q.x.b || p.x.b === q.x.a || p.x.b === q.x.b) return;
+        if (!cajasTocan(p, q)) return;
         const dd = CAD.distanciaSegmentos(p.A, p.B, q.A, q.B);
         const nec = (D(p.x) + D(q.x)) / 2 + pol.holgura_min_mm;
         if (dd < nec - 1e-6) add('CHOQUE_DUCTOS', 'ERROR', [p.x.id, q.x.id], `${p.x.id} y ${q.x.id} se cruzan: sus ejes pasan a ${n(dd)} mm y necesitan ${n(nec)} mm.`, 'Mueva un segmento o cambie el nivel.');
-      }
+      });
     }
     const equipoDeNodo = new Map();
     g.puertos.forEach((pu) => equipoDeNodo.set(pu.puerto.nodo, pu.equipo.id));
+    const cajasEquipo = new Map(t.equipos.map((e) => [e.id, cajaDeEquipo(e)]));
     t.equipos.forEach((e) => {
-      caja.forEach((c) => {
+      const ce = cajasEquipo.get(e.id);
+      // un tramo cuya caja (crecida en su radio y la holgura) no toca la del equipo le queda a más de esa distancia
+      (bruta ? todas : rj.cerca(ce)).map((i) => caja[i]).forEach((c) => {
         if (equipoDeNodo.get(c.x.a) === e.id || equipoDeNodo.get(c.x.b) === e.id) return;
+        if (!bruta && !cajasTocan(c, ce)) return;
         const dd = distanciaCaja(c.A, c.B, e);
         if (dd < D(c.x) / 2 + pol.holgura_min_mm - 1e-6) add('CHOQUE_EQUIPO', 'ERROR', [c.x.id, e.id], `${c.x.id} pasa a ${n(dd)} mm de ${e.nombre}: necesita ${n(D(c.x) / 2 + pol.holgura_min_mm)} mm.`, 'Mueva el segmento o el equipo.');
       });
     });
+    // dos equipos cuyas cajas, crecidas media holgura en sus ejes y alineadas, no se tocan no se enciman
+    const crecida = t.equipos.map((e) => cajaDeEquipo(e, pol.holgura_min_mm / 2));
     for (let i = 0; i < t.equipos.length; i += 1) {
       for (let j = i + 1; j < t.equipos.length; j += 1) {
-        if (cajasSeEnciman(t.equipos[i], t.equipos[j], pol.holgura_min_mm)) add('EQUIPOS_ENCIMADOS', 'ERROR', [t.equipos[i].id, t.equipos[j].id], `${t.equipos[i].nombre} y ${t.equipos[j].nombre} se enciman (con ${n(pol.holgura_min_mm)} mm de holgura).`, 'Separe los equipos.');
+        if ((bruta || cajasTocan(crecida[i], crecida[j])) && cajasSeEnciman(t.equipos[i], t.equipos[j], pol.holgura_min_mm)) add('EQUIPOS_ENCIMADOS', 'ERROR', [t.equipos[i].id, t.equipos[j].id], `${t.equipos[i].nombre} y ${t.equipos[j].nombre} se enciman (con ${n(pol.holgura_min_mm)} mm de holgura).`, 'Separe los equipos.');
       }
     }
     g.comps.forEach((c) => {
@@ -2354,8 +2423,10 @@
       if (r.torcida) add('MANGUERA_TORCIDA', 'AVISO', [x.id, pid], `La manguera ${x.id} no queda en un plano.`);
       const pts = puntosManguera(r.entrada, r);
       const propio = equipoDeNodo.get(x.a);
+      const rm = D(x) / 2 + pol.holgura_min_mm;
+      const cm = { lo: V3(Math.min(...pts.map((q) => q.x)) - rm, Math.min(...pts.map((q) => q.y)) - rm, Math.min(...pts.map((q) => q.z)) - rm), hi: V3(Math.max(...pts.map((q) => q.x)) + rm, Math.max(...pts.map((q) => q.y)) + rm, Math.max(...pts.map((q) => q.z)) + rm) };
       t.equipos.forEach((e) => {
-        if (e.id === propio) return;
+        if (e.id === propio || (!bruta && !cajasTocan(cm, cajasEquipo.get(e.id)))) return;
         let dmin = Infinity;
         for (let i = 1; i < pts.length; i += 1) dmin = Math.min(dmin, distanciaCaja(pts[i - 1], pts[i], e));
         if (dmin < D(x) / 2 + pol.holgura_min_mm - 1e-6) add('CHOQUE_MANGUERA', 'AVISO', [x.id, e.id], `La manguera ${x.id} pasa a ${n(dmin)} mm de ${e.nombre}.`);
@@ -2984,7 +3055,7 @@
     vectorDe, direccionDeVector, rejilla, textoDireccion, proyectar, rayoDeVista, alPlano, planoHorizontal, planoVertical, aire, politicasDe, validarPoliticas,
     resolverManguera, puntosManguera,
     // modelo
-    nuevo, validar, calcular, revisar, resumen, aSistema, desdeSistema, renumerar,
+    nuevo, validar, calcular, revisar, resumen, aSistema, desdeSistema, renumerar, rejillaDeCajas, CELDA_CHOQUES_MM,
     cambiarProyecto, cambiarPoliticas, cambiarMaterial,
     ponerEquipo, editarEquipo, moverEquipo, quitarEquipo, agregarPuerto, editarPuerto, quitarPuerto,
     acoplarBrida, acoplarManguera, moverTransicion, desacoplar,
