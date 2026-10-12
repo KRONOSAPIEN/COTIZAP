@@ -406,7 +406,7 @@
     const ultimo = m.curva[m.curva.length - 1];
     const buscar = `ventiladores modelos catálogo curva rpm ${m.id} ${m.nombre} ${m.notas || ''}`.toLowerCase();
     return h('div', { class: 'm-tabla m-vent-modelo', dataset: { buscar, tabla: llave(RUTA_VENT), modelo: m.id } },
-      h('div', { class: 'm-tabla-tit' }, h('span', null, m.nombre), m.ilustrativo ? h('span', { class: 'm-chip m-chip-ilustrativo', title: 'Curva inventada para mostrar cómo se elige: no es de un fabricante' }, 'Ilustrativo') : null, W.ayudaUI.boton(RUTA_VENT, 'tabla')),
+      h('div', { class: 'm-tabla-tit' }, h('span', null, m.nombre), m.ilustrativo ? h('span', { class: 'm-chip m-chip-ilustrativo', title: 'Curva inventada para mostrar cómo se elige: no es de un fabricante' }, 'Ilustrativo') : null),
       h('div', { class: 'm-vent-campos' },
         campo('Nombre', m.nombre, 'txt', poner('nombre', 'nombre')),
         campo('Clave', m.id, 'txt', poner('id', 'clave')),
@@ -433,6 +433,7 @@
     };
     return h('div', { class: 'm-obj' },
       h('div', { class: 'm-calc-trazo', id: 'm-vent-trazo', 'aria-live': 'polite' }, h('p', { class: 'nota' }, C.trazadoTablero.efectoCatalogo(W.estadoApp.cot && W.estadoApp.cot.trazado_iso, M).txt)),
+      encabezadoTabla(RUTA_VENT), // una sola ⓘ para la tabla: cada tarjeta es un modelo de ella
       lista.length ? lista.map(tarjetaVentilador) : h('p', { class: 'nota', id: 'm-vent-vacio' }, 'Sin modelos: agregue los del catálogo de su proveedor.'),
       h('div', { class: 'm-vent-acciones' }, h('button', { type: 'button', class: 'btn btn-sec', id: 'm-vent-agregar', onclick: nuevo }, '+ Modelo')),
       h('p', { class: 'nota' }, 'Cada curva va como la da el fabricante a sus rpm, en aire estándar (1.2 kg/m³): caudal creciente, presión estática y potencia al freno (0 si no la trae). La salida del trazado mueve la curva a otras rpm con las leyes del ventilador y elige.'));
