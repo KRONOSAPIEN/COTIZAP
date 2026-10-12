@@ -2846,7 +2846,7 @@ const ok = (cond, msg) => {
     ok(/^Corregir: Cambiar en cadena: TR-\d+ y TR-\d+ a 8″$/.test(await p.locator('#ti-alternativa-btn').innerText()), 'la alternativa sube también lo que sigue');
     await p.click('#ti-alternativa-btn');
     ok(await R(() => window.COTIZAP.web.trazadoUI.estado().t.tramos.filter((t) => t.tipo === 'RIGIDO' && t.diametro_in === 8).length) === 3, 'y la cadena queda de 8″');
-    // un tramo corto armado con el teclado: nivel a 2.5 m, «2», «@90 0.5», «@180 2»
+    // un tramo corto armado con el teclado: nivel a 2.5 m, «2», «^90 0.5» (sube) y «@180 2» (después de la subida, en horizontal)
     await p.click('#ti-nuevo');
     await p.focus('#ti-lienzo');
     for (let i = 0; i < 25; i += 1) await p.keyboard.press('PageUp');
@@ -2855,7 +2855,7 @@ const ok = (cond, msg) => {
     await p.mouse.click(caja.x + caja.width / 2, caja.y + caja.height / 2);
     await p.keyboard.type('2');
     await p.keyboard.press('Enter');
-    await p.keyboard.type('@90 0.5');
+    await p.keyboard.type('^90 0.5');
     await p.keyboard.press('Enter');
     await p.keyboard.type('@180 2');
     await p.keyboard.press('Enter');
