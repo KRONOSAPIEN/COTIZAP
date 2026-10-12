@@ -364,7 +364,9 @@
       const t = pz.map((x) => x.corto).join(' + ');
       const w = anchoTexto(t, 11) + 10;
       const r = lugar.elegir([[q.x + 9, q.y - 27], [q.x - 9 - w, q.y - 27], [q.x + 9, q.y + 9], [q.x - 9 - w, q.y + 9], [q.x - w / 2, q.y - 34], [q.x - w / 2, q.y + 14]].map(([x, y]) => ({ x, y, w, h: 18 })), true);
-      etiquetas.append(svg('rect', { x: f1(r.x), y: f1(r.y), width: f1(w), height: 18, rx: 9, class: `ti-pieza${err.has(nd.id) ? ' ti-pieza-err' : ''}` }));
+      const elegida = s.sel && s.sel.tipo === 'NODO' && s.sel.id === nd.id;
+      // la etiqueta se toca: abre la ficha de la pieza (§5.14)
+      etiquetas.append(svg('rect', { x: f1(r.x), y: f1(r.y), width: f1(w), height: 18, rx: 9, class: `ti-pieza${err.has(nd.id) ? ' ti-pieza-err' : ''}${elegida ? ' ti-pieza-sel' : ''}${ui.hover === nd.id ? ' ti-pieza-hover' : ''}`, 'data-pieza-nodo': nd.id }, svg('title', null, `${pz.map((x) => x.nombre).join('; ')}: tóquela para cambiarla`)));
       etiquetas.append(svg('text', { x: f1(r.x + w / 2), y: f1(r.y + 13), 'text-anchor': 'middle', class: 'ti-pieza-txt' }, t));
     });
     items.filter((x) => x.etiqueta).forEach((x) => {
@@ -659,7 +661,9 @@
     if (ev.button === 1 || ui.espacio) { ui.gesto = { ...base, modo: 'VISTA' }; return; }
     const tir = tiradorBajo(p.x, p.y);
     if (tir) { ui.gesto = { ...base, modo: tir.tipo, pid: tir.pid, h0: tir.mg.h, h: tir.mg.h, ev: tir.mg.ev, previa: false }; return; }
-    const hit = TB().tocar(s, p.x, p.y, p.tactil);
+    // la etiqueta de una pieza (sin trazo en curso y con la flecha): tocarla es tocar su nodo
+    const etq = !s.traza && s.herr === 'SELECCIONAR' && ev.target && ev.target.closest ? ev.target.closest('[data-pieza-nodo]') : null;
+    const hit = etq ? { tipo: 'NODO', id: etq.dataset.piezaNodo, nodo: etq.dataset.piezaNodo } : TB().tocar(s, p.x, p.y, p.tactil);
     // el dedo quieto 400 ms sobre un nodo o un tramo abre el menú radial (§4.5), si no se está trazando; qué piezas trae se
     // calcula hasta que se abre (probarlas contra el modelo cuesta, y la mayoría de los toques no llegan a los 400 ms)
     if (p.tactil && !s.traza && hit && CON_RADIAL.has(hit.tipo)) programarRadial(hit, p);
@@ -1218,6 +1222,70 @@
       fc.lado === 'DESCARGA' ? h('dt', null, 'Presión al final') : h('dt', null, 'Succión al final'), h('dd', null, `${fc.lado === 'DESCARGA' && fc.presion_estatica_Pa > 0 ? '+' : ''}${n0(fc.presion_estatica_Pa)} Pa${fc.lado === 'DESCARGA' && fc.presion_estatica_Pa === 0 ? ' (sale a la atmósfera)' : ''}`));
   }
 
+  /** Cambia el Ø de un tramo; si la cadena lo impide, ofrece cambiarla con él (la alternativa del panel de estado). */
+  function cambiarDiametroDe(id, D) {
+    const s = ui.s;
+    const r = TB().cambiarDiametroTramo(s, id, D);
+    if (r.ok) { cambio(); return; }
+    ui.alternativa = r.alternativa ? { texto: r.alternativa.texto, hacer: () => TB().cambiarDiametroEnCadena(s, id, D) } : null;
+    pintarEstado();
+    pintarInspector();
+  }
+
+  /** El dibujo acotado de una pieza (el de los planos de pedido), con lo que tiene ahora; null si no se dibuja. */
+  function dibujoPieza(p) {
+    if (!p) return null;
+    try {
+      const d = C.planos.plano(C.cotizador.cotizarPartida(p, M()), M());
+      return d ? h('div', { class: 'ti-ficha-dibujo' }, W.svgArbol(C.planos.arbol(d, { px: 300, alto_max: 200 }))) : null;
+    } catch (e) { return null; }
+  }
+
+  /**
+   * La ficha de una pieza (§5.14): su dibujo y lo que se le cambia con un toque. La opción con punto es la del proyecto;
+   * la que no se puede dice por qué. Los Ø de sus lados son los de sus tramos.
+   */
+  function fichaPieza(f, nid) {
+    const s = ui.s;
+    const cambiar = (c) => { if (TB().cambiarPieza(s, nid, c)) cambio(); else { pintarEstado(); pintarInspector(); } };
+    const fila = (cp, ...control) => h('div', { class: 'ti-ficha-fila', 'data-campo': cp.clave }, h('span', { class: 'ti-ficha-et' }, cp.etiqueta), ...control, cp.nota ? h('p', { class: 'ti-nota' }, cp.nota) : null);
+    const control = (cp) => {
+      if (cp.tipo === 'OPCIONES') {
+        return fila(cp, h('div', { class: 'ti-ops', role: 'group', 'aria-label': `${cp.etiqueta} de ${f.id}` }, cp.opciones.map((o) => h('button', {
+          type: 'button', class: `ti-op${o.actual ? ' ti-op-activa' : ''}${o.regla ? ' ti-op-regla' : ''}`, 'data-valor': String(o.valor), 'aria-pressed': o.actual ? 'true' : 'false',
+          'aria-disabled': o.motivo ? 'true' : null, title: o.motivo || (o.regla ? 'La del proyecto' : ''),
+          onclick: () => {
+            if (o.actual) return;
+            if (o.motivo) { TB().decir(s, o.motivo, true); pintarEstado(); return; }
+            cambiar({ [cp.clave]: o.valor });
+          },
+        }, o.texto, o.sub ? h('small', null, o.sub) : null))));
+      }
+      if (cp.tipo === 'PASOS') {
+        const paso = (d, txt, etq) => h('button', { type: 'button', class: 'ti-paso', 'aria-label': etq, disabled: cp.valor + d < cp.min || cp.valor + d > cp.max, onclick: () => cambiar({ [cp.clave]: cp.valor + d }) }, txt);
+        return fila(cp, h('div', { class: 'ti-ficha-ctl' }, paso(-1, '−', `Un gajo menos a ${f.id}`), h('output', { class: 'ti-paso-v' }, String(cp.valor)), paso(1, '+', `Un gajo más a ${f.id}`),
+          cp.ajustado ? h('button', { type: 'button', class: 'btn-texto ti-ficha-regla', onclick: () => cambiar({ [cp.clave]: null }) }, `Los de la regla (${cp.regla})`) : h('small', { class: 'ti-sub' }, 'los de la regla')));
+      }
+      const inp = entrada(`ti-f-${cp.clave}-${f.id}`, cp.valor, (v) => {
+        const x = num(v);
+        if (!Number.isFinite(x)) { TB().decir(s, `Escriba el ${cp.etiqueta.toLowerCase()} en ${cp.unidad}.`, true); pintarEstado(); return; }
+        cambiar({ [cp.clave]: Math.round(x) });
+      }, { class: 'ti-ficha-num', 'aria-label': `${cp.etiqueta} de ${f.id} (${cp.unidad})` });
+      return fila(cp, h('div', { class: 'ti-ficha-ctl' }, inp, h('span', { class: 'ti-sub' }, cp.unidad),
+        cp.ajustado ? h('button', { type: 'button', class: 'btn-texto ti-ficha-regla', onclick: () => cambiar({ [cp.clave]: null }) }, `El mínimo (${cp.regla} ${cp.unidad})`) : h('small', { class: 'ti-sub' }, 'el mínimo')));
+    };
+    const lados = h('div', { class: 'ti-ficha-lados' }, f.lados.map((l) => (l.tramo
+      ? h('label', { class: 'ti-ficha-lado', 'data-lado': l.rol }, h('span', null, l.etiqueta, h('small', null, l.tramo)), selector(null, diametros(), l.diametro_in, (v) => cambiarDiametroDe(l.tramo, Number(v)), `Ø del lado que ${l.etiqueta.toLowerCase()} de ${f.id} (${l.tramo})`))
+      : h('span', { class: 'ti-ficha-lado', 'data-lado': l.rol }, h('span', null, l.etiqueta, h('small', null, 'su boca')), h('strong', null, pulg(l.diametro_in))))));
+    const ajustados = f.campos.filter((c) => c.ajustado).map((c) => [c.clave, null]);
+    return h('div', { class: `ti-ficha${f.ajustada ? ' ti-ficha-ajustada' : ''}`, 'data-pieza': f.id },
+      h('div', { class: 'ti-ficha-cab' }, h('strong', null, f.id), h('span', null, f.nombre), f.ajustada ? h('span', { class: 'ti-chip ti-chip-ajustada' }, 'ajustada') : null),
+      dibujoPieza(f.partida),
+      ...f.campos.map(control),
+      lados,
+      ajustados.length ? h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-sec btn-chico ti-ficha-restablecer', onclick: () => cambiar(Object.fromEntries(ajustados)) }, 'Como en el proyecto')) : null);
+  }
+
   function inspectorTramo(id) {
     const s = ui.s;
     const T = TZ();
@@ -1235,13 +1303,7 @@
     return h('section', { class: 'ti-ins' },
       titulo(`Tramo ${id}`, `${info.direccion}${info.sentido ? ` · aire ${info.sentido}` : ' · sin sentido todavía'}${info.descarga ? ' · descarga del ventilador' : ''}`),
       h('div', { class: 'ti-rejilla-campos' },
-        campo('Ø', selector('ti-t-d', diametros(), info.diametro_in, (v) => {
-          const r = TB().cambiarDiametroTramo(s, id, Number(v));
-          if (r.ok) { cambio(); return; }
-          ui.alternativa = r.alternativa ? { texto: r.alternativa.texto, hacer: () => TB().cambiarDiametroEnCadena(s, id, Number(v)) } : null;
-          pintarEstado();
-          pintarInspector();
-        }, 'Diámetro del tramo')),
+        campo('Ø', selector('ti-t-d', diametros(), info.diametro_in, (v) => cambiarDiametroDe(id, Number(v)), 'Diámetro del tramo')),
         h('label', { class: 'ti-check', for: 'ti-t-candado', title: 'El dimensionamiento por caudal no cambia un Ø con candado' }, candado, h('span', { html: ico(ICONOS.candado) }), 'Candado'),
         campo('Largo a ejes (m)', entrada('ti-t-largo', Math.round(info.largo_mm) / 1000, (v) => {
           const L = TB().leerCaja(v).largo;
@@ -1273,7 +1335,6 @@
     const T = TZ();
     const nd = s.t.nodos.find((x) => x.id === nid);
     const pz = TB().piezasDe(s, nid);
-    const codo = pz.find((p) => p.tipo === 'CODO');
     const compuerta = pz.find((p) => p.tipo === 'COMPUERTA');
     const tapa = pz.find((p) => p.tipo === 'TAPA');
     const ciego = tapa ? s.problemas.find((v) => v.codigo === 'RAMAL_CIEGO' && v.elementos[0] === nid) : null;
@@ -1299,9 +1360,8 @@
       agregar = h('div', { class: 'ti-agregar' }, h('h4', null, 'Agregar un tramo desde aquí'), ops.length ? h('div', { class: 'ti-rejilla-campos' }, campo('Dirección', dir), campo('Largo (m)', largo), h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-n-agregar', onclick: ok }, `Agregar de ${pulg(s.D)}`)) : h('p', { class: 'ti-nota' }, TZ().textoCandidatas(nid, ops)));
     }
     return h('section', { class: 'ti-ins' },
-      titulo(`Nodo ${nid}`, `X ${n0(nd.posicion_mm.x)}, Y ${n0(nd.posicion_mm.y)}, Z ${n0(nd.posicion_mm.z)}`),
-      pz.length ? h('ul', { class: 'ti-lista' }, pz.map((p) => h('li', null, `${p.id} · ${p.nombre}`))) : h('p', { class: 'ti-nota', id: salida ? 'ti-n-salida' : null }, salida ? 'Salida de la descarga del ventilador: aquí el aire sale a la atmósfera (a 0 Pa). Puede seguir la chimenea desde aquí; no lleva tapa.' : libre ? 'Extremo libre: siga el trazo desde aquí, llévelo a un equipo o tápelo.' : 'Sin pieza: los tramos siguen rectos.'),
-      codo ? campo('Ángulo del codo', selector('ti-n-angulo', s.t.politicas.angulos_codo_deg.map((a) => [a, `${a}°`]), codo.angulo, (v) => aplicar((m) => T.cambiarAngulo(m, M(), nid, Number(v)), `Codo de ${nid} a ${v}°.`), 'Ángulo del codo')) : null,
+      titulo(pz.length ? `${pz.map((p) => p.corto).join(' + ')} · ${nid}` : `Nodo ${nid}`, `X ${n0(nd.posicion_mm.x)}, Y ${n0(nd.posicion_mm.y)}, Z ${n0(nd.posicion_mm.z)}${pz.length ? ' · toque una opción para cambiar la pieza' : ''}`),
+      pz.length ? h('div', { class: 'ti-fichas' }, TB().fichasPieza(s, nid).map((f) => fichaPieza(f, nid))) : h('p', { class: 'ti-nota', id: salida ? 'ti-n-salida' : null }, salida ? 'Salida de la descarga del ventilador: aquí el aire sale a la atmósfera (a 0 Pa). Puede seguir la chimenea desde aquí; no lleva tapa.' : libre ? 'Extremo libre: siga el trazo desde aquí, llévelo a un equipo o tápelo.' : 'Sin pieza: los tramos siguen rectos.'),
       compuerta ? h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-peligro', id: 'ti-n-quitar-compuerta', onclick: () => { if (TB().quitarCompuerta(s, nid)) cambio(); else pintarEstado(); } }, 'Quitar la compuerta')) : null,
       compuerta ? h('p', { class: 'ti-nota' }, cierre ? `En el balanceo se cierra hasta K ${W.num(cierre.K, 2)}: pierde ${n0(cierre.Pa)} Pa para que su ramal no jale de más.` : 'Abierta: el balanceo de la salida dice si hay que cerrarla y cuánto.') : null,
       tapa ? h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-peligro', id: 'ti-n-quitar-tapa', onclick: () => { if (TB().quitarTapa(s, nid)) cambio(); else pintarEstado(); } }, 'Quitar la tapa')) : null,

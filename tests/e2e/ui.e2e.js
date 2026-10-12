@@ -3510,6 +3510,84 @@ const ok = (cond, msg) => {
     await p.close();
   }
 
+  console.log('46) Cada pieza del trazo se edita en su ficha: tocar su etiqueta, el radio y los gajos del codo, el ángulo del ramal, la forma y el largo de la reducción, el Ø de un lado y «Como en el proyecto»');
+  {
+    const p = await nuevaPagina();
+    const R = (fn, a) => p.evaluate(fn, a);
+    const ins = p.locator('#ti-inspector');
+    const msg = () => p.locator('#ti-msg').innerText();
+    const ajustes = (nid) => R((id) => (window.COTIZAP.web.estadoApp.cot.trazado_iso.nodos.find((x) => x.id === id) || {}).ajustes || null, nid);
+    await p.click('#tab-trazado');
+    await p.click('#ti-ejemplo');
+    // tocar la etiqueta «Codo 90°» del lienzo abre su ficha
+    ok(await p.locator('#ti-lienzo rect.ti-pieza[data-pieza-nodo]').count() === 3, 'cada pieza del lienzo tiene su etiqueta que se toca');
+    await p.locator('#ti-lienzo rect.ti-pieza[data-pieza-nodo="N-003"]').click();
+    ok(await R(() => JSON.stringify(window.COTIZAP.web.trazadoUI.estado().sel)) === JSON.stringify({ tipo: 'NODO', id: 'N-003' }), 'la etiqueta selecciona su nodo');
+    ok(/^Codo 90° · N-003/.test(await ins.locator('.ti-ins-tit').first().innerText()) && await p.locator('#ti-lienzo rect.ti-pieza-sel[data-pieza-nodo="N-003"]').count() === 1, 'el inspector es la ficha del codo, y su etiqueta se marca');
+    const ficha = ins.locator('.ti-ficha[data-pieza="CO-001"]');
+    ok(await ficha.locator('.ti-ficha-dibujo svg').count() === 1, 'con su dibujo acotado');
+    ok(await ficha.locator('[data-campo="radio_D"] .ti-op-activa').innerText() === '1.5 D\n229 mm' && await ficha.locator('[data-campo="radio_D"] .ti-op-regla').count() === 1, 'el radio de ahora (el del proyecto, con su punto)');
+    const ang45 = ficha.locator('[data-campo="angulo"] .ti-op[data-valor="45"]');
+    ok(await ang45.getAttribute('aria-disabled') === 'true' && /no se puede girar/.test(await ang45.getAttribute('title')), 'el ángulo que no se puede dice por qué');
+    await ang45.click({ force: true });
+    ok(/llegan a puntos fijos: no se puede girar/.test(await msg()), 'tocarlo lo explica, sin cambiar nada');
+    // el radio y los gajos: un toque
+    await ficha.locator('[data-campo="radio_D"] .ti-op[data-valor="2.5"]').click();
+    ok(await msg() === 'CO-001: Codo de 90° de 6″ (5 gajos, R 381 mm).', `R 2.5 D (${await msg()})`);
+    await ins.locator('.ti-ficha[data-pieza="CO-001"] [data-campo="gajos"] .ti-paso').first().click();
+    ok(/4 gajos, R 381 mm/.test(await msg()) && JSON.stringify(await ajustes('N-003')) === JSON.stringify({ radio_D: 2.5, gajos: 4 }), 'un gajo menos: se guarda con el trazo');
+    const f2 = ins.locator('.ti-ficha[data-pieza="CO-001"]');
+    ok(await f2.locator('.ti-chip-ajustada').count() === 1 && /Los de la regla \(5\)/.test(await f2.locator('[data-campo="gajos"]').innerText()), 'la ficha dice que está ajustada y cuáles son los de la regla');
+    ok(/4 gajos/.test(await f2.locator('.ti-ficha-dibujo').innerText()), 'el dibujo se rehace');
+    const neta = await R(() => window.COTIZAP.trazadoTablero.infoTramo(window.COTIZAP.web.trazadoUI.estado(), 'TR-002').neta_mm);
+    ok(Math.abs(neta - (6500 - 381 - 105.71)) < 0.1, `el codo más abierto ocupa más del tramo (${neta} mm netos)`);
+    // deshacer y «Como en el proyecto»
+    await R(() => document.activeElement && document.activeElement.blur());
+    await p.keyboard.press('Control+z');
+    ok(JSON.stringify(await ajustes('N-003')) === JSON.stringify({ radio_D: 2.5 }), 'Ctrl+Z deshace el último toque');
+    await ins.locator('.ti-ficha[data-pieza="CO-001"] .ti-ficha-restablecer').click();
+    ok(await ajustes('N-003') === null && /\(como en el proyecto\)\.$/.test(await msg()), '«Como en el proyecto» la regresa');
+    // la reducción con injerto: el ángulo del ramal, y el Ø de un lado
+    await p.locator('#ti-lienzo rect.ti-pieza[data-pieza-nodo="N-002"]').click();
+    const ri = ins.locator('.ti-ficha[data-pieza="RI-001"]');
+    ok(/^Red\. c\/ injerto 45° · N-002/.test(await ins.locator('.ti-ins-tit').first().innerText()) && await ri.locator('[data-lado]').count() === 3, 'la ficha del injerto con sus tres lados');
+    await ri.locator('[data-campo="angulo"] .ti-op[data-valor="30"]').click();
+    ok(await msg() === 'RI-001: Reducción con injerto a 30° de 8″ a 6″, ramal de 5″, de lado.', `el ramal a 30° (${await msg()})`);
+    ok((await p.locator('#ti-lienzo .ti-pieza-txt').allTextContents()).includes('Red. c/ injerto 30°'), 'el lienzo lo dibuja');
+    await ins.locator('.ti-ficha[data-pieza="RI-001"] [data-lado="RAMAL"] select').selectOption('4');
+    ok(/en N-005 el tramo anterior \(TR-005\) es de 5″/.test(await msg()) && /Cambiar en cadena: TR-006 y TR-005 a 4″/.test(await p.locator('#ti-alternativa-btn').innerText()), 'un ramal de 4″ tras uno de 5″ no: lo dice y ofrece la cadena');
+    await ins.locator('.ti-ficha[data-pieza="RI-001"] [data-lado="RAMAL"] select').selectOption('6');
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.trazado_iso.tramos.find((x) => x.id === 'TR-006').diametro_in) === 6, 'el Ø del ramal desde la ficha cambia su tramo');
+    // una reducción horizontal: excéntrica con la cara plana arriba y más larga; más corta, no
+    const hecho = await R(() => { const W = window.COTIZAP.web; const s = W.trazadoUI.estado(); s.D = 5; const r = window.COTIZAP.trazadoTablero.reducirEn(s, { tipo: 'TRAMO', id: 'TR-002', s_mm: 3000 }); W.estadoApp.cot.trazado_iso = s.t; W.trazadoUI.render(); return r || s.msg; });
+    ok(hecho === true, `reducir el tronco a 5″ desde la mitad de TR-002 (${hecho})`);
+    const nr = await R(() => { const s = window.COTIZAP.web.trazadoUI.estado(); return s.t.nodos.find((x) => (s.g.piezasDe.get(x.id) || []).some((q) => q.tipo === 'REDUCCION' && q.horizontal)).id; });
+    await p.locator(`#ti-lienzo rect.ti-pieza[data-pieza-nodo="${nr}"]`).click();
+    const red = ins.locator('.ti-ficha').first();
+    ok(await red.locator('[data-campo="forma"] .ti-op-activa').innerText() === 'Excéntrica, plana abajo', 'en polvo, la horizontal va excéntrica de cara plana abajo');
+    await red.locator('[data-campo="forma"] .ti-op[data-valor="EXCENTRICA_PLANA_ARRIBA"]').click();
+    ok(/Reducción excéntrica, plana arriba de 6″ a 5″/.test(await msg()), 'cara plana arriba');
+    const largo = ins.locator('.ti-ficha').first().locator('[data-campo="largo_reduccion_mm"] input');
+    await largo.fill('20');
+    await largo.press('Enter');
+    ok(/mide al menos \d+ mm/.test(await msg()), `más corta que la regla no (${await msg()})`);
+    const largo2 = ins.locator('.ti-ficha').first().locator('[data-campo="largo_reduccion_mm"] input');
+    await largo2.fill('250');
+    await largo2.press('Enter');
+    ok(/de 250 mm\.$/.test(await msg()) && JSON.stringify(await ajustes(nr)) === JSON.stringify({ forma: 'EXCENTRICA_PLANA_ARRIBA', largo_reduccion_mm: 250 }), 'de 250 mm');
+    // al pasar a la cotización, la reducción y el codo llevan lo que se les ajustó
+    await p.locator('#ti-lienzo rect.ti-pieza[data-pieza-nodo="N-003"]').click();
+    await ins.locator('.ti-ficha[data-pieza="CO-001"] [data-campo="radio_D"] .ti-op[data-valor="2"]').click();
+    await p.click('#ti-fase-5');
+    ok(/^Despiece definitivo/.test(await p.locator('#ti-part-estado').innerText()) && !(await p.locator('#ti-part-avisos').count()), 'el despiece sale definitivo y sin diferencias');
+    await p.click('#ti-pasar');
+    await p.waitForSelector('#dlg-unifilar[open]', { timeout: 3000 });
+    const part = await R(() => window.COTIZAP.web.estadoApp.cot.partidas.filter((x) => x.unifilar_id && (x.familia === 'CODO' || x.familia === 'REDUCCION')).map((x) => [x.familia, x.k_R || null, x.L_mm || null, x.excentrica || null]));
+    ok(part.some(([fam, kR]) => fam === 'CODO' && kR === 2) && part.some(([fam, , L, exc]) => fam === 'REDUCCION' && L === 250 && exc === 'CARA_PLANA'), `las partidas llevan el radio y el largo (${JSON.stringify(part)})`);
+    await p.click('#uf-listo');
+    await p.close();
+  }
+
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

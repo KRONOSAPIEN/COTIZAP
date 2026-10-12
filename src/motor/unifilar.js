@@ -44,7 +44,9 @@
   // Lo que una regla puso en un despiece anterior: al volver a leerlo se descarta y se vuelve a calcular
   const ORIGENES_DE_REGLA = ['INFERIDO', 'ESCALA', 'DEFECTO_TALLER'];
   /** Lo que el ingeniero puede contestar: respuestas[elemento][campo]. */
-  const CAMPOS = ['longitud_m', 'diametro_in', 'angulo_deg', 'posicion', 'boca_in', 'manguera_tramos', 'calibre', 'material', 'aceptado', 'encimado'];
+  // radio_D, gajos y largo_mm: los que trae cada pieza de un trazo isométrico ajustada a mano (trazado_lectura, §5.14)
+  const RADIO_CODO_D = 1.5; // el radio de los codos del croquis (R/D), si la pieza no trae otro
+  const CAMPOS = ['longitud_m', 'diametro_in', 'angulo_deg', 'posicion', 'boca_in', 'manguera_tramos', 'calibre', 'material', 'aceptado', 'encimado', 'radio_D', 'gajos', 'largo_mm'];
   // Una nota junto a un tramo que dice que es vertical
   const NOTA_VERTICAL = /\b(SUBE|BAJA|BAJADA|SUBIDA)\b/i;
   // Una nota en un nodo: compuerta de regulación en un tramo recto; reducción excéntrica (cara plana)
@@ -494,13 +496,16 @@
       const id = nuevoId('RED');
       // «EXC» o «CARA PLANA» en el nodo: excéntrica de cara plana (la de los tramos horizontales en polvo)
       const excentrica = notaEn(nid, NOTA_EXCENTRICA) ? 'CARA_PLANA' : 'NO';
+      // el largo, si el trazo lo ajustó (si no, el del semiángulo máximo de las tablas)
+      const Lp = resp(nid, 'largo_mm');
+      const largo = finito(Lp) && Lp > 0 && Lp <= 3000 ? { L_mm: Lp } : {};
       try {
-        const f = cotizarAcc({ familia: 'REDUCCION', D1_mm: r1(D1 * IN), D2_mm: r1(D2 * IN), excentrica });
+        const f = cotizarAcc({ familia: 'REDUCCION', D1_mm: r1(D1 * IN), D2_mm: r1(D2 * IN), excentrica, ...largo });
         const Lr = f.geometria.detalle.L_mm;
         if (todoEnMenor) ocupar(aMenor, id, Lr); else { if (aMayor) ocupar(aMayor, id, Lr / 2); ocupar(aMenor, id, Lr / 2); }
         piezas.acc.push({
           id, tipo: 'REDUCCION', nodo_id: nid, aristas: [aMayor, aMenor].filter(Boolean), diametro_entrada_in: D1, diametro_salida_in: D2, d_ramal_in: null, angulo: null, k_R: null, gajos: null, excentrica: excentrica === 'CARA_PLANA',
-          partida_cotizap: { ...base, familia: 'REDUCCION', D1_mm: r1(D1 * IN), D2_mm: r1(D2 * IN), excentrica },
+          partida_cotizap: { ...base, familia: 'REDUCCION', D1_mm: r1(D1 * IN), D2_mm: r1(D2 * IN), excentrica, ...largo },
         });
         if (D2 / D1 < 0.5 && A.get(aMenor).diametro.origen !== 'USUARIO') {
           alerta('ADVERTENCIA', 'REDUCCION_GRANDE', [nid, id, aMenor], `La reducción de ${pulgadas(D1)} a ${pulgadas(D2)} en ${nid} es de más de la mitad.`, 'Suele ser una derivación o un diámetro mal leído; se cotiza como está.',
@@ -545,15 +550,20 @@
     function agregarCodo(nid, ap, ah, theta, angulo) {
       const id = nuevoId('CODO');
       const Dc = D.get(ap);
+      // el radio y los gajos: los del trazo, si los trae; si no, R = RADIO_CODO_D y los gajos de las tablas
+      const rD = resp(nid, 'radio_D');
+      const kR = finito(rD) && rD >= 1 && rD <= 5 ? rD : RADIO_CODO_D;
+      const ng = resp(nid, 'gajos');
+      const gajos = Number.isInteger(ng) && ng >= 2 && ng <= 12 ? { n_gajos: ng } : {};
       try {
-        const f = cotizarAcc({ familia: 'CODO', D_mm: r1(Dc * IN), theta_deg: theta, k_R: 1.5 });
+        const f = cotizarAcc({ familia: 'CODO', D_mm: r1(Dc * IN), theta_deg: theta, k_R: kR, ...gajos });
         const g = f.geometria.detalle;
         const o = g.R_mm * Math.tan((theta * Math.PI) / 360) + (g.L_tangentes_mm || 0) / 2;
         ocupar(ap, id, o);
         ocupar(ah, id, o);
         piezas.acc.push({
-          id, tipo: 'CODO', nodo_id: nid, aristas: [ap, ah], diametro_entrada_in: Dc, diametro_salida_in: Dc, d_ramal_in: null, angulo, k_R: 1.5, gajos: g.n_gajos, excentrica: null,
-          partida_cotizap: { ...base, familia: 'CODO', D_mm: r1(Dc * IN), theta_deg: theta, k_R: 1.5 },
+          id, tipo: 'CODO', nodo_id: nid, aristas: [ap, ah], diametro_entrada_in: Dc, diametro_salida_in: Dc, d_ramal_in: null, angulo, k_R: kR, gajos: g.n_gajos, excentrica: null,
+          partida_cotizap: { ...base, familia: 'CODO', D_mm: r1(Dc * IN), theta_deg: theta, k_R: kR, ...gajos },
         });
         return id;
       } catch (err) { errorMotor([nid], err); return null; }
@@ -1105,5 +1115,5 @@
     return out;
   }
 
-  return { leer, despiezar, aPartidas, pendientes, respuestasValidas, CAMPOS, COMERCIALES_IN, SEVERIDADES, LARGO_COMPUERTA_MM };
+  return { leer, despiezar, aPartidas, pendientes, respuestasValidas, CAMPOS, COMERCIALES_IN, SEVERIDADES, LARGO_COMPUERTA_MM, RADIO_CODO_D };
 }));

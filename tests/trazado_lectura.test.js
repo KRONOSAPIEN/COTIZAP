@@ -221,6 +221,32 @@ test('verificar dice dónde no cuadra el despiece con el trazo', () => {
   ]);
 });
 
+test('Las piezas ajustadas a mano (§5.14) llegan al despiece: el radio y los gajos del codo, el largo y la forma de la reducción', () => {
+  let t = TZ.ajustarPieza(TB.ejemplo(M), M, 'N-003', { radio_D: 2, gajos: 4 });
+  t = TZ.reducir(t, M, { tramo: 'TR-002', s_mm: 3000 }, 5);
+  const nr = t.ultimo.nodo;
+  t = TZ.ajustarPieza(t, M, nr, { largo_reduccion_mm: 300, forma: 'EXCENTRICA_PLANA_ARRIBA' });
+  const r = despiece(t);
+  assert.deepEqual([r.bom.resumen.estado, r.diferencias], ['DEFINITIVA', []], 'cuadra con el trazo');
+  assert.deepEqual([r.respuestas['N-003'], r.respuestas[nr]], [{ radio_D: 2, gajos: 4 }, { largo_mm: 300 }]);
+  assert.equal(r.respuestas['N-005'], undefined, 'el codo con la regla no lleva respuesta');
+  const codo = r.bom.accesorios.find((a) => a.nodo_id === 'N-003' && a.tipo === 'CODO');
+  assert.deepEqual([codo.k_R, codo.gajos, codo.partida_cotizap.k_R, codo.partida_cotizap.n_gajos], [2, 4, 2, 4]);
+  const red = r.bom.accesorios.find((a) => a.nodo_id === nr && a.tipo === 'REDUCCION');
+  assert.deepEqual([red.partida_cotizap.L_mm, red.partida_cotizap.excentrica], [300, 'CARA_PLANA'], 'excéntrica, sea la cara plana abajo o arriba');
+  const res = cotiza(r.bom);
+  const fCodo = res.partidas.find((f) => f.entrada.unifilar_id === codo.id);
+  assert.deepEqual([fCodo.geometria.detalle.n_gajos, fCodo.geometria.detalle.R_mm], [4, 254], 'la partida del codo (5″ tras la reducción): 4 gajos, R 2 D');
+  // verificar ve los gajos que no cuadran
+  const mal = clonar(r.bom);
+  mal.accesorios.find((a) => a.id === codo.id).gajos = 5;
+  assert.ok(TL.verificar(t, M, mal).includes('CO-001: codo de 4 gajos en el trazo y de 5 en el despiece.'));
+  // con otro radio en las políticas del proyecto, el despiece lo usa en todos los codos
+  const t2 = TZ.cambiarPoliticas(TB.ejemplo(M), M, { radio_codo_D: 2 });
+  const r2 = despiece(t2);
+  assert.deepEqual([r2.diferencias, r2.respuestas['N-003'], r2.respuestas['N-005']], [[], { radio_D: 2 }, { radio_D: 2 }]);
+});
+
 /* ------------------------------------------------------------------ caminata al azar */
 
 test('Caminata al azar: el despiece cuadra con el trazo, cada junta es del Ø de sus piezas y las partidas se cotizan', () => {

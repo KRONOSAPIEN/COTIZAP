@@ -957,14 +957,31 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
     "nodo": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "tipo", "posicion_mm", "puerto", "accesorios", "tramos"],
+      "required": ["id", "tipo", "posicion_mm", "puerto", "accesorios", "tramos", "ajustes"],
       "properties": {
         "id": { "$ref": "#/$defs/id_nodo" },
         "tipo": { "type": "string", "enum": ["PUERTO", "TRANSICION", "VERTICE", "UNION", "DERIVACION", "EXTREMO"] },
         "posicion_mm": { "$ref": "#/$defs/vector_mm", "description": "Absoluta, al eje: el punto de intersección de los ejes de los tramos que llegan." },
         "puerto": { "$ref": "#/$defs/puerto_o_null" },
         "accesorios": { "type": "array", "items": { "$ref": "#/$defs/id_accesorio" } },
-        "tramos": { "type": "array", "items": { "$ref": "#/$defs/id_tramo" } }
+        "tramos": { "type": "array", "items": { "$ref": "#/$defs/id_tramo" } },
+        "ajustes": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["radio_D", "gajos", "forma", "largo_reduccion_mm"],
+              "properties": {
+                "radio_D": { "anyOf": [{ "type": "null" }, { "type": "number", "minimum": 1, "maximum": 5 }], "description": "El radio al eje del codo entre su diámetro; null: el de las políticas (radio_codo_D)." },
+                "gajos": { "anyOf": [{ "type": "null" }, { "type": "integer", "minimum": 2, "maximum": 12 }], "description": "Los gajos del codo; null: los de las tablas (una junta por cada alfa_max_junta_deg)." },
+                "forma": { "anyOf": [{ "type": "null" }, { "type": "string", "enum": ["CONCENTRICA", "EXCENTRICA_PLANA_ABAJO", "EXCENTRICA_PLANA_ARRIBA"] }], "description": "La de la reducción o del adaptador en un tramo horizontal; null: la de las políticas (reduccion_horizontal)." },
+                "largo_reduccion_mm": { "anyOf": [{ "type": "null" }, { "type": "number", "exclusiveMinimum": 0, "maximum": 3000 }], "description": "El largo de la reducción o del adaptador, si pasa del de la regla (con el semiángulo máximo); null: el de la regla." }
+              }
+            }
+          ],
+          "description": "Lo que se ajustó en la pieza de este nodo (§5.14); null si sigue las reglas del proyecto."
+        }
       }
     },
     "tramo": {
@@ -1482,7 +1499,8 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
       "accesorios": [],
       "tramos": [
         "TR-003"
-      ]
+      ],
+      "ajustes": null
     },
     {
       "id": "N-002",
@@ -1500,7 +1518,8 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
         "TR-002",
         "TR-003",
         "TR-006"
-      ]
+      ],
+      "ajustes": null
     },
     {
       "id": "N-003",
@@ -1517,7 +1536,8 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
       "tramos": [
         "TR-001",
         "TR-002"
-      ]
+      ],
+      "ajustes": null
     },
     {
       "id": "N-004",
@@ -1531,7 +1551,8 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
       "accesorios": [],
       "tramos": [
         "TR-001"
-      ]
+      ],
+      "ajustes": null
     },
     {
       "id": "N-005",
@@ -1548,7 +1569,8 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
       "tramos": [
         "TR-005",
         "TR-006"
-      ]
+      ],
+      "ajustes": null
     },
     {
       "id": "N-006",
@@ -1563,7 +1585,8 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
       "tramos": [
         "TR-004",
         "TR-005"
-      ]
+      ],
+      "ajustes": null
     },
     {
       "id": "N-007",
@@ -1577,7 +1600,8 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
       "accesorios": [],
       "tramos": [
         "TR-004"
-      ]
+      ],
+      "ajustes": null
     }
   ],
   "tramos": [
@@ -2384,7 +2408,7 @@ El esquema (§3.5) creció con esos campos. Lo que el trazo exporta sigue llevan
 
 1. **Presión del ventilador.** Es la succión de entrada: la de la boca más la del colector. Se toma así a propósito (es conservadora) porque no resta la pv de entrada. Si el equipo tiene ducto de descarga, se suma su presión en la brida (§5.12).
 2. **El caudal corregido** es el que la red va a jalar si se construye así. Por eso el ventilador se elige con la suma corregida, aunque el balanceo diga NINGUNA en otras confluencias.
-3. **Llegó después:** el ducto de descarga (§5.12) y elegir el modelo del ventilador en un catálogo (§5.13).
+3. **Llegó después:** el ducto de descarga (§5.12), elegir el modelo del ventilador en un catálogo (§5.13) y editar cada pieza en su ficha (§5.14).
 
    Pasar el trazo a partidas llegó con la etapa 5 (§5.6), y editar la tabla de coeficientes y las eficiencias desde la aplicación, después (§5.8).
 
@@ -2724,6 +2748,52 @@ Lo verifican:
   - en la salida, el aviso de ilustrativos, el orden, la gráfica y elegir otro modelo;
   - en las tablas, cambiar las rpm máximas, deshacer, agregar un modelo, el rechazo de un caudal que no crece, quitar los de ejemplo, el parche y la salida con el catálogo nuevo.
 - La sección 45: elegirlo, agregarlo con su motor, deshacer, capturar el precio del motor en la cotización, cambiar de modelo sin perder ese precio, «Pasar a la cotización» sin repetirlo, la propuesta y quitarlas.
+
+### 5.14 Editar cada pieza en su ficha
+
+Las piezas salen solas del trazo (§2.4), con las reglas del proyecto: el radio de los codos (`radio_codo_D`), sus gajos (los de las tablas), la reducción horizontal (`reduccion_horizontal`) y su largo (el del semiángulo máximo). Cada una se puede cambiar en su ficha, sin cambiar las reglas.
+
+- **Abrirla.** Toque la etiqueta de la pieza en el lienzo («Codo 90°», «Red. c/ injerto 45°»), o su nodo. El inspector se vuelve la ficha:
+  - su nombre y su dibujo acotado, el mismo de los planos de pedido, que se rehace con cada cambio;
+  - lo que se le cambia, con un toque;
+  - el Ø de cada lado (entra, sale, ramal), que es el de su tramo.
+
+  La opción con punto verde es la del proyecto. Una opción que no se puede se ve punteada; al tocarla, dice por qué y no cambia nada.
+- **El codo:**
+  - el ángulo (30°, 45°, 60°, 90°): gira el lado libre, como ya lo hacía;
+  - el radio, de 1 D a 3 D, con su medida en mm (el modelo acepta de 1 a 5);
+  - los gajos, con − y +, de 2 a 12.
+
+  Un radio mayor ocupa más de sus tramos: lo que queda de recto se recalcula, y la revisión avisa si ya no cabe.
+- **La reducción y el adaptador:**
+  - la forma: concéntrica, excéntrica con la cara plana abajo o arriba (en un tramo vertical o inclinado va concéntrica);
+  - el largo, en mm: más largo que el de la regla, nunca más corto («mide al menos 47 mm»).
+- **El injerto y la reducción con injerto:**
+  - el ángulo del ramal (30° o 45°; 90° si el proyecto permite la T): gira el ramal en el plano del tronco y el ramal, con lo que cuelga de él;
+  - una manguera absorbe ese giro. Si el ramal llega a una toma con brida o a un ancla, no se puede, y lo dice.
+- **El Ø de un lado** cambia su tramo, con las mismas reglas de §2.6: si la cadena lo impide, lo dice y ofrece «Cambiar en cadena».
+- **«Como en el proyecto»** quita los ajustes de la pieza. Cada toque se deshace con Ctrl+Z, y la ficha marca la pieza «ajustada».
+
+Cómo se guarda y a dónde llega:
+
+- **En el trazo**, cada nodo lleva sólo lo que difiere de la regla, en `ajustes` (`radio_D`, `gajos`, `forma`, `largo_reduccion_mm`). Elegir el valor de la regla lo quita. Si la pieza deja de existir (por ejemplo, el Ø de los dos lados queda igual y la reducción desaparece), sus ajustes se van con ella.
+- **En el contrato**, el nodo trae `ajustes`: null, o los cuatro campos, null los que no se ajustaron. Al leerlo de regreso, lo mal formado se descarta.
+- **En el cálculo**, la geometría de la pieza: lo que ocupa de cada tramo, su largo neto, la K del codo con su R/D y sus gajos, y el semiángulo de la reducción.
+- **En el despiece y las partidas**, el trazo pasa sus ajustes como respuestas de la lectura: `radio_D` y `gajos` en el codo (el radio también cuando las políticas no usan el 1.5 D de las reglas) y `largo_mm` en la reducción. La forma excéntrica ya viajaba como la nota «EXC». El despiece cuadra con el trazo, y `verificar` compara también los gajos.
+
+Lo verifican:
+
+- `tests/trazado_iso.test.js`:
+  - el radio y los gajos (lo que ocupa el codo), la regla que los quita, el contrato de ida y vuelta y lo mal formado;
+  - la forma y el largo de la reducción, el mínimo, el adaptador vertical y los ajustes que se van con su pieza;
+  - el ángulo del ramal (el tronco no se mueve) y el que no se puede.
+- `tests/trazado_lectura.test.js`: el despiece con un codo y una reducción ajustados (definitivo, sin diferencias, con sus partidas cotizadas), `verificar` con los gajos y el radio de las políticas.
+- `tests/trazado_tablero.test.js`: la ficha del codo, de la reducción con injerto y de una reducción (sus opciones, la regla, por qué no se puede un ángulo), cambiarla con su mensaje, deshacer y el dibujo.
+- La sección 46 de `tests/e2e/ui.e2e.js`:
+  - tocar la etiqueta, el ángulo que no se puede, el radio y los gajos, deshacer y «Como en el proyecto»;
+  - el ramal a 30° y el Ø de un lado (con la cadena);
+  - la forma y el largo de una reducción;
+  - el despiece definitivo con las partidas ajustadas.
 
 ---
 

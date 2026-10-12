@@ -177,6 +177,18 @@
       poner(id, 'boca_in', p.diametro_in);
       if (manguera) poner(id, 'manguera_tramos', 1);
     });
+    // las piezas ajustadas a mano (§5.14): el radio de cada codo si no es el de las reglas (el ajustado, o el de las
+    // políticas), sus gajos y el largo de una reducción, si se ajustaron
+    s.accesorios.forEach((a) => {
+      if (!pant.has(a.nodo)) return;
+      const aj = (t.nodos.find((y) => y.id === a.nodo) || {}).ajustes || {};
+      if (a.tipo === 'CODO') {
+        const rD = aj.radio_D || t.politicas.radio_codo_D;
+        if (rD !== UF.RADIO_CODO_D) poner(a.nodo, 'radio_D', rD);
+        if (aj.gajos) poner(a.nodo, 'gajos', aj.gajos);
+      }
+      if ((a.tipo === 'REDUCCION' || a.tipo === 'ADAPTADOR') && aj.largo_reduccion_mm) poner(a.nodo, 'largo_mm', a.geometria.largo_mm);
+    });
     // las decisiones del trazo sobre los tramos cortos
     rigidos.forEach((x) => {
       const tr = t.tramos.find((y) => y.id === x.id);
@@ -245,6 +257,7 @@
       if (!b) { dif.push(`${a.id} (${a.tipo.toLowerCase().replace('_', ' ')} en ${a.nodo}) no salió en el despiece${equipoEn.has(a.nodo) ? ' de su equipo' : ''}.`); return; }
       usadas.add(b.id);
       if (a.tipo === 'CODO' && b.partida_cotizap.theta_deg !== a.geometria.angulo_deg) dif.push(`${a.id}: codo de ${a.geometria.angulo_deg}° en el trazo y de ${b.partida_cotizap.theta_deg}° en el despiece.`);
+      if (a.tipo === 'CODO' && b.gajos !== a.geometria.gajos) dif.push(`${a.id}: codo de ${a.geometria.gajos} gajos en el trazo y de ${b.gajos} en el despiece.`);
       if ((a.tipo === 'INJERTO' || a.tipo === 'REDUCCION_INJERTO') && b.partida_cotizap.beta_deg !== a.geometria.angulo_deg) dif.push(`${a.id}: injerto a ${a.geometria.angulo_deg}° en el trazo y a ${b.partida_cotizap.beta_deg}° en el despiece.`);
       if ((a.tipo === 'REDUCCION' || a.tipo === 'ADAPTADOR') && /^EXCENTRICA/.test(a.geometria.forma || '') !== (b.excentrica === true)) dif.push(`${a.id}: reducción ${b.excentrica ? 'excéntrica' : 'concéntrica'} en el despiece y no en el trazo.`);
     });

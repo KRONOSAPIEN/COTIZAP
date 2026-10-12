@@ -717,7 +717,10 @@ test('Lo que viene de fuera se valida: formas raras, referencias rotas y trazos 
     () => T.moverSegmento(base, M, 'TR-002', { x: 0, y: 0, z: NaN }),
     () => T.conectar(base, M, 'N-003', { segmentos: [], objetivo: { nodo: 'N-001' } }),
     () => T.acoplarManguera(base, M, 'PU-01', { altura_mm: 500 }),
-    () => T.cambiarAngulo(base, M, 'N-002', 45),
+    () => T.cambiarAngulo(base, M, 'N-002', 60), // el injerto va a 30° o 45°
+    () => T.cambiarAngulo(base, M, 'N-006', 45), // ahí no hay codo ni derivación
+    () => T.ajustarPieza(base, M, 'N-003', { radio_D: 0.5 }),
+    () => T.ajustarPieza(base, M, 'N-003', { forma: 'CONCENTRICA' }),
   ].forEach((f, i) => assert.throws(f, T.TrazadoError, `caso ${i}`));
 });
 
@@ -1205,4 +1208,72 @@ test('El ventilador elegido (§5.13): se guarda en el colector o el ventilador, 
   const v = T.validar(viejo, M).modelo;
   assert.deepEqual(v.equipos.map((e) => e.ventilador_modelo), [null, null, null]);
   assert.equal(T.elegirVentilador(t, M, 'EQ-01', null).equipos[0].ventilador_modelo, null, 'null lo quita');
+});
+
+test('Cada pieza se ajusta (§5.14): radio y gajos del codo, forma y largo de la reducción, el ángulo del ramal; con su regla, su rechazo y su ida y vuelta', () => {
+  const t0 = T.desdeSistema(EJ, M).modelo;
+  const sis = (t) => T.aSistema(t, M, { borrador: true });
+  const acc = (t, id) => sis(t).accesorios.find((a) => a.id === id);
+  // el codo de N-003: R 2.5 D y 3 gajos; lo que ocupa de sus tramos crece con el radio
+  const t1 = T.ajustarPieza(t0, M, 'N-003', { radio_D: 2.5, gajos: 3 });
+  const s1 = sis(t1);
+  const co = s1.accesorios.find((a) => a.id === 'CO-001');
+  assert.deepEqual([co.geometria.radio_eje_mm, co.geometria.tangente_mm, co.geometria.gajos], [381, 381, 3]);
+  assert.deepEqual(s1.tramos.find((x) => x.id === 'TR-002').descuentos.find((d) => d.accesorio === 'CO-001').mm, 381);
+  assert.deepEqual(s1.nodos.find((x) => x.id === 'N-003').ajustes, { radio_D: 2.5, gajos: 3, forma: null, largo_reduccion_mm: null });
+  assert.equal(s1.nodos.find((x) => x.id === 'N-005').ajustes, null, 'el otro codo sigue la regla');
+  assert.deepEqual(validarEsquema(s1, ESQUEMA), []);
+  // la ida y vuelta por el contrato y por el guardado
+  assert.deepEqual(T.desdeSistema(s1, M).modelo.nodos.find((x) => x.id === 'N-003').ajustes, { radio_D: 2.5, gajos: 3 });
+  assert.deepEqual(T.validar(JSON.parse(JSON.stringify(t1)), M).modelo.nodos.find((x) => x.id === 'N-003').ajustes, { radio_D: 2.5, gajos: 3 });
+  // lo que viene de fuera mal formado se descarta (sólo lo sano se queda)
+  const raro = JSON.parse(JSON.stringify(t1));
+  raro.nodos.find((x) => x.id === 'N-003').ajustes = { radio_D: 'x', gajos: 3, forma: 'OVALADA', otra: 1 };
+  assert.deepEqual(T.validar(raro, M).modelo.nodos.find((x) => x.id === 'N-003').ajustes, { gajos: 3 });
+  // el valor de la regla (o null) la regresa a lo del proyecto
+  const t2 = T.ajustarPieza(t1, M, 'N-003', { radio_D: 1.5, gajos: 5 });
+  assert.equal(t2.nodos.find((x) => x.id === 'N-003').ajustes, undefined);
+  assert.deepEqual(acc(t2, 'CO-001').geometria, EJ.accesorios.find((a) => a.id === 'CO-001').geometria);
+  assert.equal(T.ajustarPieza(t1, M, 'N-003', { radio_D: null, gajos: null }).nodos.find((x) => x.id === 'N-003').ajustes, undefined);
+  // lo que no se puede
+  falla(() => T.ajustarPieza(t0, M, 'N-003', { radio_D: 0.5 }), 'DATO_INVALIDO', /de 1 a 5 veces su diámetro/);
+  falla(() => T.ajustarPieza(t0, M, 'N-003', { gajos: 13 }), 'DATO_INVALIDO', /de 2 a 12 gajos/);
+  falla(() => T.ajustarPieza(t0, M, 'N-003', { gajos: 4.5 }), 'DATO_INVALIDO');
+  falla(() => T.ajustarPieza(t0, M, 'N-003', { forma: 'CONCENTRICA' }), 'DATO_INVALIDO', /no hay una reducción/);
+  falla(() => T.ajustarPieza(t0, M, 'N-002', { radio_D: 2 }), 'DATO_INVALIDO', /no hay un codo/);
+  falla(() => T.ajustarPieza(t0, M, 'N-003', { color: 'rojo' }), 'DATO_INVALIDO', /no tiene «color»/);
+  falla(() => T.ajustarPieza(t0, M, 'N-003', {}), 'DATO_INVALIDO');
+  // una reducción horizontal (polvo: excéntrica de cara plana abajo): cara plana arriba y más larga; más corta, no
+  const t3 = T.reducir(t0, M, { tramo: 'TR-002', s_mm: 3000 }, 5);
+  const nr = t3.ultimo.nodo;
+  const r0 = sis(t3).accesorios.find((a) => a.nodo === nr && a.tipo === 'REDUCCION');
+  assert.equal(r0.geometria.forma, 'EXCENTRICA_PLANA_ABAJO');
+  const L0 = r0.geometria.largo_mm;
+  const t4 = T.ajustarPieza(t3, M, nr, { forma: 'EXCENTRICA_PLANA_ARRIBA', largo_reduccion_mm: 300 });
+  const r4 = sis(t4).accesorios.find((a) => a.nodo === nr && a.tipo === 'REDUCCION');
+  assert.deepEqual([r4.geometria.forma, r4.geometria.largo_mm], ['EXCENTRICA_PLANA_ARRIBA', 300]);
+  assert.ok(sis(t4).tramos.filter((x) => x.descuentos.some((d) => d.accesorio === r4.id)).every((x) => x.descuentos.find((d) => d.accesorio === r4.id).mm === 150), 'la mitad en cada lado');
+  falla(() => T.ajustarPieza(t3, M, nr, { largo_reduccion_mm: 20 }), 'DATO_INVALIDO', new RegExp(`mide al menos ${Math.round(L0)} mm`));
+  falla(() => T.ajustarPieza(t3, M, nr, { largo_reduccion_mm: 5000 }), 'DATO_INVALIDO', /hasta 3000 mm/);
+  // la concéntrica es la otra opción; la regla (y null) la regresan
+  assert.equal(T.ajustarPieza(t4, M, nr, { forma: 'EXCENTRICA_PLANA_ABAJO', largo_reduccion_mm: null }).nodos.find((x) => x.id === nr).ajustes, undefined);
+  // un adaptador vertical va concéntrico: la excéntrica no se acepta
+  const t5 = T.cambiarDiametro(t0, M, 'TR-001', 5);
+  const ad = T.calcular(t5, M).piezas.find((p) => p.tipo === 'ADAPTADOR');
+  assert.ok(ad && ad.horizontal === false, 'el adaptador de la boca vertical');
+  falla(() => T.ajustarPieza(t5, M, ad.nodo, { forma: 'EXCENTRICA_PLANA_ABAJO' }), 'DATO_INVALIDO', /va concéntrica/);
+  // si la pieza se va, sus ajustes se van con ella
+  const t6 = T.ajustarPieza(t5, M, ad.nodo, { largo_reduccion_mm: 200 });
+  assert.deepEqual(t6.nodos.find((x) => x.id === ad.nodo).ajustes, { largo_reduccion_mm: 200 });
+  assert.equal(T.cambiarDiametro(t6, M, 'TR-001', 6).nodos.find((x) => x.id === ad.nodo).ajustes, undefined);
+  // el ángulo del ramal: la reducción con injerto de N-002 a 30° (lo que cuelga del ramal gira; la manguera lo absorbe)
+  const t7 = T.cambiarAngulo(t0, M, 'N-002', 30);
+  assert.equal(acc(t7, 'RI-001').geometria.angulo_deg, 30);
+  assert.equal(acc(t7, 'RI-001').geometria.entrada, 'LATERAL');
+  assert.equal(T.revisar(t7, M).filter((v) => v.severidad === 'BLOQUEANTE' || v.severidad === 'ERROR').length, 0);
+  assert.deepEqual(['N-001', 'N-002', 'N-003', 'N-004'].map((id) => t7.nodos.find((x) => x.id === id).posicion_mm), ['N-001', 'N-002', 'N-003', 'N-004'].map((id) => t0.nodos.find((x) => x.id === id).posicion_mm), 'el tronco no se mueve');
+  falla(() => T.cambiarAngulo(t0, M, 'N-002', 60), 'DATO_INVALIDO', /injertos a 30° o 45°/);
+  // un ramal con un punto fijo (aquí, un ancla en su codo) no gira
+  const fijo = T.anclar(t0, M, 'N-005', true);
+  falla(() => T.cambiarAngulo(fijo, M, 'N-002', 30), 'FIJO_SE_MUEVE', /no se puede girar/);
 });

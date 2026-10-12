@@ -886,3 +886,59 @@ test('El ventilador elegido a la cotización (§5.13): el ventilador con su punt
   assert.ok(TB.hacer(s, (t) => TZ.elegirVentilador(t, M, 'EQ-01', 'YA_NO_ESTA'), ''));
   assert.match(TB.partidasVentilador(s, 'EQ-01').error, /ya no está en el catálogo/);
 });
+
+test('La ficha de cada pieza (§5.14): qué se le cambia, la regla, por qué no se puede un ángulo, cambiarla con deshacer y su dibujo', () => {
+  const C = require('../src/motor/cotizador');
+  const PL = require('../src/web/planos');
+  const s = nuevoTablero();
+  TB.reemplazar(s, TB.ejemplo(M), 'ejemplo');
+  const [codo] = TB.fichasPieza(s, 'N-003');
+  assert.equal(codo.id, 'CO-001');
+  assert.deepEqual(codo.campos.map((c) => c.clave), ['angulo', 'radio_D', 'gajos']);
+  const ang = codo.campos[0].opciones;
+  assert.deepEqual(ang.map((o) => [o.texto, o.actual]), [['30°', false], ['45°', false], ['60°', false], ['90°', true]]);
+  assert.ok(ang.filter((o) => !o.actual).every((o) => /llegan a puntos fijos: no se puede girar/.test(o.motivo)), 'los dos lados del codo llegan a tomas');
+  const radios = codo.campos[1].opciones;
+  assert.deepEqual(radios.map((o) => o.texto), ['1 D', '1.5 D', '2 D', '2.5 D', '3 D']);
+  assert.deepEqual(radios.filter((o) => o.regla || o.actual).map((o) => [o.texto, o.sub]), [['1.5 D', '229 mm']], 'la de ahora es la del proyecto');
+  assert.deepEqual([codo.campos[2].valor, codo.campos[2].regla, codo.ajustada], [5, 5, false]);
+  assert.deepEqual(codo.lados.map((l) => [l.etiqueta, l.tramo, l.diametro_in]), [['Entra', 'TR-001', 6], ['Sale', 'TR-002', 6]]);
+  // el dibujo: la partida de la pieza se cotiza y se dibuja acotada, como en los planos de pedido
+  const f = C.cotizarPartida(codo.partida, M);
+  assert.deepEqual([f.geometria.detalle.n_gajos, Math.round(f.geometria.detalle.R_mm * 10) / 10], [5, 228.6]);
+  assert.ok(PL.plano(f, M), 'se dibuja');
+  // cambiarla: con su nombre nuevo en el mensaje, ajustada, y deshacer la regresa
+  assert.ok(TB.cambiarPieza(s, 'N-003', { radio_D: 2.5 }), s.msg);
+  assert.equal(s.msg, 'CO-001: Codo de 90° de 6″ (5 gajos, R 381 mm).');
+  assert.ok(TB.cambiarPieza(s, 'N-003', { gajos: 4 }), s.msg);
+  const aj = TB.fichasPieza(s, 'N-003')[0];
+  assert.deepEqual([aj.ajustada, aj.campos[1].ajustado, aj.campos[2].ajustado, aj.campos[2].valor], [true, true, true, 4]);
+  assert.deepEqual([aj.partida.k_R, aj.partida.n_gajos], [2.5, 4]);
+  assert.ok(TB.cambiarPieza(s, 'N-003', { radio_D: null, gajos: null }), s.msg);
+  assert.match(s.msg, /R 229 mm\) \(como en el proyecto\)\.$/);
+  TB.deshacer(s);
+  assert.deepEqual(s.t.nodos.find((x) => x.id === 'N-003').ajustes, { radio_D: 2.5, gajos: 4 }, 'deshacer');
+  // lo que el modelo rechaza: no cambia nada y dice por qué
+  assert.equal(TB.cambiarPieza(s, 'N-003', { angulo: 45 }), false);
+  assert.match(s.msg, /no se puede girar/);
+  // la reducción con injerto de N-002: el ángulo del ramal (30° sí: lo que cuelga del ramal gira con él)
+  const [ri] = TB.fichasPieza(s, 'N-002');
+  assert.deepEqual(ri.campos.map((c) => [c.clave, c.opciones.map((o) => [o.texto, o.actual, o.motivo])]), [['angulo', [['30°', false, null], ['45°', true, null]]]]);
+  assert.deepEqual(ri.lados.map((l) => [l.etiqueta, l.diametro_in]), [['Entra', 6], ['Sale', 8], ['Ramal', 5]]);
+  assert.ok(C.cotizarPartida(ri.partida, M).ok);
+  assert.ok(TB.cambiarPieza(s, 'N-002', { angulo: 30 }), s.msg);
+  assert.match(s.msg, /^RI-001: Reducción con injerto a 30° de 8″ a 6″, ramal de 5″, de lado\.$/);
+  // una reducción horizontal: forma (la regla con punto) y largo, con su mínimo
+  s.D = 5;
+  assert.ok(TB.reducirEn(s, { tipo: 'TRAMO', id: 'TR-002', s_mm: 3000 }), s.msg);
+  const nr = s.t.nodos.find((x) => (s.g.piezasDe.get(x.id) || []).some((p) => p.tipo === 'REDUCCION' && p.horizontal));
+  assert.ok(nr, 'hay una reducción horizontal');
+  const [red] = TB.fichasPieza(s, nr.id);
+  assert.deepEqual(red.campos.map((c) => c.clave), ['forma', 'largo_reduccion_mm']);
+  assert.deepEqual(red.campos[0].opciones.map((o) => [o.texto, o.actual, o.regla, o.motivo]), [['Concéntrica', false, false, null], ['Excéntrica, plana abajo', true, true, null], ['Excéntrica, plana arriba', false, false, null]]);
+  assert.equal(red.campos[1].valor, red.campos[1].regla);
+  assert.ok(TB.cambiarPieza(s, nr.id, { largo_reduccion_mm: 250 }), s.msg);
+  assert.match(s.msg, /Reducción excéntrica, plana abajo de 6″ a 5″, de 250 mm\.$/);
+  assert.equal(TB.cambiarPieza(s, nr.id, { largo_reduccion_mm: 10 }), false);
+  assert.match(s.msg, /mide al menos \d+ mm/);
+});

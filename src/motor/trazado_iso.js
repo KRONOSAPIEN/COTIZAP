@@ -70,6 +70,16 @@
   const PASO_EQUIPO_MM = 100;
   /** La compuerta de guillotina con sus dos cuellos: lo que ocupa del tramo (la mitad de cada lado). */
   const LARGO_COMPUERTA_MM = 150; // los equipos se separan en la rejilla del piso
+  /**
+   * Lo que se ajusta en la pieza de un nodo (§5.14): el radio (R/D) y los gajos del codo; la forma y el largo de la
+   * reducción (o del adaptador). Lo que no se ajusta sale de las políticas del proyecto y de las tablas.
+   */
+  const CAMPOS_AJUSTE = ['radio_D', 'gajos', 'forma', 'largo_reduccion_mm'];
+  const RADIOS_CODO_D = [1, 1.5, 2, 2.5, 3]; // los que ofrece la ficha; se acepta cualquiera de 1 a 5
+  const RADIO_CODO_D = { min: 1, max: 5 };
+  const GAJOS = { min: 2, max: 12 };
+  const FORMAS_REDUCCION = ['CONCENTRICA', 'EXCENTRICA_PLANA_ABAJO', 'EXCENTRICA_PLANA_ARRIBA'];
+  const LARGO_REDUCCION_MAX_MM = 3000;
 
   class TrazadoError extends Error {
     constructor(codigo, mensaje, elementos, sugerencia) {
@@ -87,6 +97,18 @@
 
   const esObjeto = (o) => o !== null && typeof o === 'object' && !Array.isArray(o);
   const finito = (x) => typeof x === 'number' && Number.isFinite(x);
+  /** Los ajustes de una pieza que vienen de fuera (§5.14): sólo los que tienen su forma; undefined si no queda ninguno. */
+  function leerAjustes(a) {
+    if (!esObjeto(a)) return undefined;
+    const r = {};
+    if (finito(a.radio_D) && a.radio_D >= RADIO_CODO_D.min && a.radio_D <= RADIO_CODO_D.max) r.radio_D = Math.round(a.radio_D * 100) / 100;
+    if (Number.isInteger(a.gajos) && a.gajos >= GAJOS.min && a.gajos <= GAJOS.max) r.gajos = a.gajos;
+    if (FORMAS_REDUCCION.includes(a.forma)) r.forma = a.forma;
+    if (finito(a.largo_reduccion_mm) && a.largo_reduccion_mm > 0 && a.largo_reduccion_mm <= LARGO_REDUCCION_MAX_MM) r.largo_reduccion_mm = Math.round(a.largo_reduccion_mm);
+    return Object.keys(r).length ? r : undefined;
+  }
+  /** Los gajos que el motor le da a un codo de θ grados si no se le dicen: una junta por cada alfa_max de las tablas. */
+  const gajosAuto = (M, theta) => Math.max(1, Math.ceil(theta / M.proceso.alfa_max_junta_deg - 1e-9)) + 1;
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
   const redondeo = (k) => (x) => Math.round(x * k) / k + 0; // + 0: sin -0
   const r1 = redondeo(10);
@@ -709,7 +731,8 @@
       if (muestras.some((q) => q.z - (t.diametro_in * IN) / 2 < -TOL_MM)) prob('BAJO_PISO', `La manguera ${t.id} quedaría bajo el piso.`, [t.id]);
     });
 
-    // la pieza de cada nodo
+    // la pieza de cada nodo (con los ajustes de su nodo, §5.14)
+    const AJ = new Map(m.nodos.map((x) => [x.id, x.ajustes || {}]));
     const angCodo = pol.angulos_codo_deg;
     const angInj = pol.angulos_injerto_deg;
     const cerca = (x, xs) => xs.find((a) => Math.abs(a - x) < TOL_ANG);
@@ -724,15 +747,24 @@
     };
     function reduccion(nid, tipo, tMayor, tMenor, D1, D2, todoEnMenor, roles, t0) {
       const tRef = t0 || tMenor || tMayor;
-      const fm = forma(tRef);
-      const r = motor(M, baseMotor(tRef), { familia: 'REDUCCION', D1_mm: r1(D1 * IN), D2_mm: r1(D2 * IN), excentrica: fm === 'CONCENTRICA' ? 'NO' : 'CARA_PLANA' });
+      // la forma: la del nodo si se ajustó (sólo en horizontal: en vertical o inclinada va concéntrica), o la de la regla
+      const horizontal = Math.abs(g.seg.get(tRef.id).u.z) < 1e-9;
+      const fmAuto = forma(tRef);
+      const aj = AJ.get(nid);
+      const fm = horizontal && aj.forma ? aj.forma : fmAuto;
+      const pedir = (L_mm) => motor(M, baseMotor(tRef), { familia: 'REDUCCION', D1_mm: r1(D1 * IN), D2_mm: r1(D2 * IN), excentrica: fm === 'CONCENTRICA' ? 'NO' : 'CARA_PLANA', ...(L_mm ? { L_mm } : {}) });
+      const r0 = pedir(null);
+      if (!r0.ok) { prob('PIEZA_NO_FABRICABLE', `El motor no puede fabricar la reducción de ${nid}: ${r0.error}`, [nid]); return null; }
+      // el largo: el que se ajustó si pasa del de la regla (con el semiángulo máximo); más corta no se hace
+      const Lauto = r0.d.L_mm;
+      const r = aj.largo_reduccion_mm > Lauto ? pedir(aj.largo_reduccion_mm) : r0;
       if (!r.ok) { prob('PIEZA_NO_FABRICABLE', `El motor no puede fabricar la reducción de ${nid}: ${r.error}`, [nid]); return null; }
       const L = r.d.L_mm;
       const dd = (D1 - D2) * IN;
       const pz = pieza(tipo, nid, {
         conexiones: roles,
         geometria: { ...geomVacia(), forma: fm, semiangulo_deg: Math.atan(fm === 'CONCENTRICA' ? dd / (2 * L) : dd / L) / DEG, largo_mm: L },
-        familia_cotizap: 'REDUCCION', D1, D2,
+        familia_cotizap: 'REDUCCION', D1, D2, horizontal, auto: { forma: fmAuto, largo_mm: Lauto },
       });
       if (todoEnMenor) ocupar(pz, tMenor, L, nid); else { ocupar(pz, tMayor, L / 2, nid); ocupar(pz, tMenor, L / 2, nid); }
       return pz;
@@ -835,13 +867,15 @@
         }
         const Dc = Math.max(Din, Dout);
         const tc = Dc === Dout ? to : ti;
-        const r = motor(M, baseMotor(tc), { familia: 'CODO', D_mm: r1(Dc * IN), theta_deg: c, k_R: pol.radio_codo_D });
+        const aj = AJ.get(nid);
+        const r = motor(M, baseMotor(tc), { familia: 'CODO', D_mm: r1(Dc * IN), theta_deg: c, k_R: aj.radio_D || pol.radio_codo_D, ...(aj.gajos ? { n_gajos: aj.gajos } : {}) });
         if (!r.ok) { prob('PIEZA_NO_FABRICABLE', `El motor no puede fabricar el codo de ${nid}: ${r.error}`, [nid]); return; }
         const T = r.d.R_mm * Math.tan((c * DEG) / 2) + (r.d.L_tangentes_mm || 0) / 2;
         const pz = pieza('CODO', nid, {
           conexiones: [{ rol: 'ENTRADA', tramo: ti.id, diametro_in: Dc }, { rol: 'SALIDA', tramo: to.id, diametro_in: Dc }],
           geometria: { ...geomVacia(), angulo_deg: c, radio_eje_mm: r.d.R_mm, tangente_mm: T, gajos: r.d.n_gajos, normal_plano: unitario(cruz(dIn, dOut)) },
           perdida: { modelo: 'CODO_GAJOS', K_paso: null, K_ramal: null, referencia: 'Codo de gajos: K(θ, R/D, gajos)' }, familia_cotizap: 'CODO',
+          auto: { radio_D: pol.radio_codo_D, gajos: gajosAuto(M, c) },
         });
         ocupar(pz, ti, T, nid);
         ocupar(pz, to, T, nid);
@@ -1082,6 +1116,17 @@
       if (t.corto === undefined) return;
       const c = cortoDe(m, g, t);
       if (!c || !['PEGAR', 'ACEPTAR'].includes(t.corto) || (t.corto === 'PEGAR' && c.nodos.size < 2)) delete t.corto;
+    });
+    // los ajustes de una pieza que ya no está (o un largo que ya no pasa del de la regla) se van con ella
+    m.nodos.forEach((nd) => {
+      if (!nd.ajustes) return;
+      const pzs = g.piezasDe.get(nd.id) || [];
+      const red = pzs.find((p) => p.tipo === 'REDUCCION' || p.tipo === 'ADAPTADOR');
+      const a = { ...nd.ajustes };
+      if (!pzs.some((p) => p.tipo === 'CODO')) { delete a.radio_D; delete a.gajos; }
+      if (!red || !red.horizontal) delete a.forma;
+      if (!red || !(a.largo_reduccion_mm > red.auto.largo_mm)) delete a.largo_reduccion_mm;
+      if (Object.keys(a).length) nd.ajustes = a; else delete nd.ajustes;
     });
   }
   /** Cómo se unen las piezas pegadas: soldadas, o engargoladas si el material lleva costura engargolada. */
@@ -1939,12 +1984,17 @@
     return terminar(m, M);
   }
 
-  /** Cambia el ángulo de un codo (§1.3 paso 10): gira el lado libre sobre el nodo, en el plano del codo. */
+  /**
+   * Cambia el ángulo de un codo (§1.3 paso 10): gira el lado libre sobre el nodo, en el plano del codo. En una derivación
+   * (§5.14) gira el ramal en su plano, si no llega a un punto fijo (una toma, un ancla).
+   */
   function cambiarAngulo(t0, M, nodoId, grados) {
     const m = inicio(t0);
     const g = calcular(m, M);
     const pzs = g.piezasDe.get(nodoId) || [];
     const codo = pzs.find((p) => p.tipo === 'CODO');
+    const der = pzs.find((p) => p.tipo === 'INJERTO' || p.tipo === 'REDUCCION_INJERTO' || p.tipo === 'T_90');
+    if (!codo && der) return girarRamal(m, M, g, nodoId, der, grados);
     dato(!!codo, `En ${nodoId} no hay un codo.`, [nodoId]);
     dato(m.politicas.angulos_codo_deg.includes(grados), `El taller hace codos a ${lista(m.politicas.angulos_codo_deg.map((a) => `${a}°`))}.`);
     const [c1, c2] = codo.conexiones.map((c) => g.tramos.get(c.tramo));
@@ -1966,6 +2016,76 @@
       if ((nodos.has(tr.a) || nodos.has(tr.b)) && !gg.seg.get(tr.id).dir) falla('GIRO_NO_FABRICABLE', `Girar ese lado a ${grados}° saca el tramo ${tr.id} de la rejilla.`, [nodoId, tr.id]);
     });
     marcar(m, 'cambiarAngulo', { nodo: nodoId, tramos: [gira.id] });
+    return terminar(m, M);
+  }
+
+  /** El ángulo de una derivación (§5.14): gira el lado del ramal sobre el nodo, en el plano del tronco y el ramal. */
+  function girarRamal(m, M, g, nodoId, der, grados) {
+    const pol = m.politicas;
+    const angulos = [...pol.angulos_injerto_deg, ...(pol.permite_t_90 ? [90] : [])];
+    dato(angulos.includes(grados), `El taller hace injertos a ${lista(angulos.map((a) => `${a}°`))}.`, [nodoId]);
+    const tk = g.tramos.get(der.conexiones.find((c) => c.rol === 'RAMAL').tramo);
+    const tOut = g.tramos.get(der.conexiones.find((c) => c.rol === 'SALIDA').tramo);
+    const otro = tk.a === nodoId ? tk.b : tk.a;
+    if (conFijos(g, otro, tk.id)) {
+      falla('FIJO_SE_MUEVE', `El ramal ${tk.id} llega a un punto fijo (una toma o un ancla): no se puede girar. Para un injerto a ${grados}°, vuelva a trazar el ramal desde el tronco.`, [nodoId, tk.id]);
+    }
+    // girar bh (el aire que llega por el ramal) alrededor de mh × bh lo separa del tronco: β crece
+    const mh = g.fuera(tOut, nodoId);
+    const bh = por(g.fuera(tk, nodoId), -1);
+    const k = unitario(cruz(mh, bh));
+    const delta = grados - der.geometria.angulo_deg;
+    const P = g.pos.get(nodoId);
+    const nodos = lado(g, otro, tk.id);
+    m.nodos.forEach((x) => { if (nodos.has(x.id)) x.posicion_mm = r3v(suma(P, girarEje(resta(x.posicion_mm, P), k, delta))); });
+    const gg = calcular(m, M);
+    m.tramos.filter(rigido).forEach((tr) => {
+      if ((nodos.has(tr.a) || nodos.has(tr.b)) && !gg.seg.get(tr.id).dir) falla('GIRO_NO_FABRICABLE', `Girar el ramal a ${grados}° saca el tramo ${tr.id} de la rejilla.`, [nodoId, tr.id]);
+    });
+    marcar(m, 'cambiarAngulo', { nodo: nodoId, tramos: [tk.id] });
+    return terminar(m, M);
+  }
+
+  /**
+   * Ajusta la pieza de un nodo (§5.14): { radio_D, gajos } del codo; { forma, largo_reduccion_mm } de la reducción o del
+   * adaptador. null, o el valor de la regla, la regresa a lo del proyecto.
+   */
+  function ajustarPieza(t0, M, nodoId, cambios) {
+    const m = inicio(t0);
+    const nd = nodoDe(m, nodoId);
+    dato(esObjeto(cambios) && Object.keys(cambios).length > 0, 'Falta qué ajustar de la pieza.');
+    const g = calcular(m, M);
+    const pzs = g.piezasDe.get(nodoId) || [];
+    const codo = pzs.find((p) => p.tipo === 'CODO');
+    const red = pzs.find((p) => p.tipo === 'REDUCCION' || p.tipo === 'ADAPTADOR');
+    const a = { ...(nd.ajustes || {}) };
+    Object.keys(cambios).forEach((k) => {
+      dato(CAMPOS_AJUSTE.includes(k), `Una pieza no tiene «${k}» que ajustar.`);
+      const v = cambios[k];
+      const delCodo = k === 'radio_D' || k === 'gajos';
+      dato(delCodo ? !!codo : !!red, `En ${nodoId} no hay ${delCodo ? 'un codo' : 'una reducción'}.`, [nodoId]);
+      if (v === null) { delete a[k]; return; }
+      if (k === 'radio_D') {
+        dato(finito(v) && v >= RADIO_CODO_D.min && v <= RADIO_CODO_D.max, `El radio del codo va de ${RADIO_CODO_D.min} a ${RADIO_CODO_D.max} veces su diámetro.`, [nodoId]);
+        const x = Math.round(v * 100) / 100;
+        if (x === m.politicas.radio_codo_D) delete a.radio_D; else a.radio_D = x;
+      } else if (k === 'gajos') {
+        dato(Number.isInteger(v) && v >= GAJOS.min && v <= GAJOS.max, `El codo lleva de ${GAJOS.min} a ${GAJOS.max} gajos.`, [nodoId]);
+        if (v === codo.auto.gajos) delete a.gajos; else a.gajos = v;
+      } else if (k === 'forma') {
+        dato(FORMAS_REDUCCION.includes(v), 'La reducción es concéntrica o excéntrica (con la cara plana abajo o arriba).', [nodoId]);
+        dato(red.horizontal || v === 'CONCENTRICA', `La reducción de ${nodoId} no está en un tramo horizontal: va concéntrica.`, [nodoId]);
+        if (v === red.auto.forma) delete a.forma; else a.forma = v;
+      } else {
+        dato(finito(v) && v > 0 && v <= LARGO_REDUCCION_MAX_MM, `El largo de la reducción va hasta ${LARGO_REDUCCION_MAX_MM} mm.`, [nodoId]);
+        const x = Math.round(v);
+        const min = Math.round(red.auto.largo_mm); // el de la regla, como lo muestra la ficha
+        dato(x >= min, `La reducción de ${pulgadas(red.D1)} a ${pulgadas(red.D2)} mide al menos ${min} mm: más corta pasaría del semiángulo máximo (${M.proceso.semiangulo_max_deg}°).`, [nodoId]);
+        if (x <= red.auto.largo_mm + 0.5) delete a.largo_reduccion_mm; else a.largo_reduccion_mm = x;
+      }
+    });
+    if (Object.keys(a).length) nd.ajustes = a; else delete nd.ajustes;
+    marcar(m, 'ajustarPieza', { nodo: nodoId, tramos: [...new Set(pzs.flatMap((p) => p.conexiones.map((c) => c.tramo)))] });
     return terminar(m, M);
   }
 
@@ -2786,6 +2906,7 @@
       nodos: [...t.nodos].sort((a, b) => (a.id < b.id ? -1 : 1)).map((x) => ({
         id: x.id, tipo: g.tipo.get(x.id) || 'EXTREMO', posicion_mm: r3v(x.posicion_mm), puerto: x.puerto || null,
         accesorios: (g.piezasDe.get(x.id) || []).map((p) => pz.get(p)).filter(Boolean).sort(), tramos: g.ady.get(x.id).map((a) => a.tramo.id).sort(),
+        ajustes: x.ajustes ? Object.fromEntries(CAMPOS_AJUSTE.map((k) => [k, x.ajustes[k] === undefined ? null : x.ajustes[k]])) : null,
       })),
       tramos: tramosOrd.map((x) => {
         const arriba = g.arriba.get(x.id) || x.a;
@@ -2847,7 +2968,8 @@
       const conTapa = new Set(s.accesorios.filter((a) => esObjeto(a) && a.tipo === 'TAPA').map((a) => a.nodo));
       s.nodos.forEach((x) => {
         unico(x.id, reId.N, 'Un nodo');
-        m.nodos.push({ id: x.id, posicion_mm: coordenada(x.posicion_mm, `El nodo ${x.id}`), puerto: null, ancla: x.tipo === 'UNION' && Array.isArray(x.accesorios) && !x.accesorios.length, ...(conCompuerta.has(x.id) ? { compuerta: true } : {}), ...(conTapa.has(x.id) ? { tapa: true } : {}) });
+        const aj = leerAjustes(x.ajustes);
+        m.nodos.push({ id: x.id, posicion_mm: coordenada(x.posicion_mm, `El nodo ${x.id}`), puerto: null, ancla: x.tipo === 'UNION' && Array.isArray(x.accesorios) && !x.accesorios.length, ...(conCompuerta.has(x.id) ? { compuerta: true } : {}), ...(conTapa.has(x.id) ? { tapa: true } : {}), ...(aj ? { ajustes: aj } : {}) });
       });
       const nodos = new Set(m.nodos.map((x) => x.id));
       const materiales = new Map();
@@ -2953,7 +3075,8 @@
       x.nodos.forEach((nd) => {
         dato(esObjeto(nd), 'Un nodo no es válido.');
         unico(nd.id, /^N-\d{3,4}$/, 'Un nodo');
-        m.nodos.push({ id: nd.id, posicion_mm: coordenada(nd.posicion_mm, `El nodo ${nd.id}`), puerto: typeof nd.puerto === 'string' ? nd.puerto : null, ancla: nd.ancla === true, ...(nd.compuerta === true ? { compuerta: true } : {}), ...(nd.tapa === true ? { tapa: true } : {}) });
+        const aj = leerAjustes(nd.ajustes);
+        m.nodos.push({ id: nd.id, posicion_mm: coordenada(nd.posicion_mm, `El nodo ${nd.id}`), puerto: typeof nd.puerto === 'string' ? nd.puerto : null, ancla: nd.ancla === true, ...(nd.compuerta === true ? { compuerta: true } : {}), ...(nd.tapa === true ? { tapa: true } : {}), ...(aj ? { ajustes: aj } : {}) });
       });
       const nodos = new Set(m.nodos.map((y) => y.id));
       x.tramos.forEach((tr) => {
@@ -3112,7 +3235,7 @@
     ponerEquipo, editarEquipo, elegirVentilador, moverEquipo, quitarEquipo, agregarPuerto, editarPuerto, quitarPuerto,
     acoplarBrida, acoplarManguera, moverTransicion, desacoplar,
     candidatas, textoCandidatas, elegirDireccion, ajustarLargo, trazar, conectar, rutas,
-    cambiarLargo, moverSegmento, cambiarAngulo, cambiarDiametro, reducir, decidirCorto, ponerCompuerta, quitarCompuerta, ponerTapa, quitarTapa, anclar, borrarTramo, dimensionar, aplicarDimensiones,
+    cambiarLargo, moverSegmento, cambiarAngulo, ajustarPieza, CAMPOS_AJUSTE, RADIOS_CODO_D, RADIO_CODO_D, GAJOS, FORMAS_REDUCCION, LARGO_REDUCCION_MAX_MM, gajosAuto, cambiarDiametro, reducir, decidirCorto, ponerCompuerta, quitarCompuerta, ponerTapa, quitarTapa, anclar, borrarTramo, dimensionar, aplicarDimensiones,
     CORREGIBLES, correcciones, corregir,
   };
 }));

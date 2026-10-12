@@ -449,7 +449,7 @@
   /* ------------------------------------------------------------------ herramientas */
 
   const AYUDA = {
-    SELECCIONAR: 'Toque un equipo, una toma, un tramo o un nodo para ver y cambiar sus datos. Arrastre un equipo para moverlo; arrastre el fondo para mover la vista.',
+    SELECCIONAR: 'Toque un equipo, una toma, un tramo o un nodo para ver y cambiar sus datos; toque la etiqueta de una pieza (un codo, una reducción, un injerto) para su ficha. Arrastre un equipo para moverlo; arrastre el fondo para mover la vista.',
     EQUIPO: 'Toque el piso donde va el equipo (se ajusta a la rejilla de 100 mm), o arrástrelo desde la paleta.',
     TOMA: 'Toque una cara de la caja de un equipo: la toma va al centro, al medio de una arista o en la rejilla de 50 mm, y apunta hacia fuera. En un colector o ventilador es una boca; su descarga se agrega desde su ficha.',
     MANGUERA: 'Toque una toma para acoplarla con manguera; luego arrastre el rombo (altura) y el círculo (desvío) del punto de transición.',
@@ -1434,6 +1434,7 @@
       manguera: rig ? null : semaforoManguera(g.mang.get(id), s.t.politicas),
     };
   }
+  const NOMBRE_FORMA = { CONCENTRICA: 'Concéntrica', EXCENTRICA_PLANA_ABAJO: 'Excéntrica, plana abajo', EXCENTRICA_PLANA_ARRIBA: 'Excéntrica, plana arriba' };
   /** Las piezas de un nodo con su nombre largo. */
   function piezasDe(s, nid) {
     return (s.g.piezasDe.get(nid) || []).map((p) => {
@@ -1448,7 +1449,7 @@
           corto = `Codo ${ga.angulo_deg}°`;
           break;
         case 'REDUCCION':
-          nombre = `Reducción ${ga.forma === 'CONCENTRICA' ? 'concéntrica' : 'excéntrica, cara plana abajo'} de ${pulg(p.D1)} a ${pulg(p.D2)}`;
+          nombre = `Reducción ${NOMBRE_FORMA[ga.forma].toLowerCase()} de ${pulg(p.D1)} a ${pulg(p.D2)}, de ${n(ga.largo_mm)} mm`;
           corto = `Red. ${pulg(p.D1)}→${pulg(p.D2)}`;
           break;
         case 'ADAPTADOR':
@@ -1481,6 +1482,83 @@
       }
       return { id: p.id, tipo: p.tipo, nombre, corto, angulo: ga.angulo_deg };
     });
+  }
+
+  /* ------------------------------------------------------------------ la ficha de cada pieza (§5.14) */
+
+  const LADO_PIEZA = { ENTRADA: 'Entra', SALIDA: 'Sale', RAMAL: 'Ramal', RAMAL_2: 'Ramal 2' };
+  /** Por qué el modelo no deja hacer algo (su mensaje), o null si sí lo deja. No cambia nada. */
+  function porQueNo(fn) {
+    try { fn(); return null; } catch (e) { if (e instanceof TZ.TrazadoError) return e.message; throw e; }
+  }
+  /** La partida de una pieza del trazo como la arma el despiece (para dibujarla acotada en su ficha); null si no se fabrica. */
+  function partidaDePieza(s, p) {
+    const t = s.g.tramos.get(p.conexiones[0].tramo);
+    if (!t || t.tipo !== 'RIGIDO') return null;
+    const base = { material_id: t.material, calibre: String(t.calibre), ref_diametro: 'INTERIOR', tipo_union: 'BRIDADO', clase_sellado: 'C', cantidad: 1 };
+    const ga = p.geometria;
+    const c = p.conexiones;
+    const mm = (d) => Math.round(d * IN * 10) / 10;
+    switch (p.tipo) {
+      case 'CODO': return { ...base, familia: 'CODO', D_mm: mm(c[0].diametro_in), theta_deg: ga.angulo_deg, k_R: Math.round((ga.radio_eje_mm / mm(c[0].diametro_in)) * 100) / 100, n_gajos: ga.gajos };
+      case 'REDUCCION': case 'ADAPTADOR': return { ...base, familia: 'REDUCCION', D1_mm: mm(p.D1), D2_mm: mm(p.D2), excentrica: ga.forma === 'CONCENTRICA' ? 'NO' : 'CARA_PLANA', L_mm: Math.round(ga.largo_mm * 10) / 10 };
+      case 'INJERTO': return { ...base, familia: 'RAMAL', D_mm: mm(c[0].diametro_in), d_mm: mm(c[2].diametro_in), beta_deg: ga.angulo_deg, L_cuerpo_mm: ga.largo_mm, L_ramal_mm: ga.largo_ramal_mm };
+      case 'REDUCCION_INJERTO': return { ...base, familia: 'REDUCCION_INJERTO', D1_mm: mm(Math.max(c[0].diametro_in, c[1].diametro_in)), D2_mm: mm(Math.min(c[0].diametro_in, c[1].diametro_in)), d_mm: mm(c[2].diametro_in), beta_deg: ga.angulo_deg };
+      case 'TAPA': return { ...base, familia: 'TAPA', D_mm: mm(c[0].diametro_in) };
+      default: return null;
+    }
+  }
+  /**
+   * La ficha de cada pieza de un nodo: lo que se le puede cambiar (con lo de ahora, lo de la regla y, en un ángulo, por qué
+   * no se puede el que no se puede), el Ø de cada lado (el de su tramo) y la partida con la que se dibuja.
+   * Campo: { clave, tipo: OPCIONES | PASOS | NUMERO, etiqueta, opciones?: [{ valor, texto, sub?, actual, regla?, motivo }],
+   * valor?, regla?, min?, max?, unidad?, nota?, ajustado? }.
+   */
+  function fichasPieza(s, nid) {
+    const nd = s.t.nodos.find((x) => x.id === nid);
+    if (!nd) return [];
+    const aj = nd.ajustes || {};
+    const pol = s.t.politicas;
+    const nombres = piezasDe(s, nid);
+    const angulos = (lista, actual) => lista.map((a) => ({ valor: a, texto: `${a}°`, actual: a === actual, motivo: a === actual ? null : porQueNo(() => TZ.cambiarAngulo(s.t, s.M, nid, a)) }));
+    return (s.g.piezasDe.get(nid) || []).map((p, i) => {
+      const ga = p.geometria;
+      const c = p.conexiones;
+      const campos = [];
+      const lados = c.map((x) => ({ rol: x.rol, etiqueta: LADO_PIEZA[x.rol] || x.rol, tramo: x.tramo, diametro_in: x.diametro_in }));
+      if (p.tipo === 'ADAPTADOR') lados.unshift({ rol: 'EQUIPO', etiqueta: 'Equipo', tramo: null, diametro_in: p.D_puerto });
+      if (p.tipo === 'CODO') {
+        const D = Math.round(c[0].diametro_in * IN * 10) / 10;
+        const rD = aj.radio_D || pol.radio_codo_D;
+        const radios = [...new Set([...TZ.RADIOS_CODO_D, rD, pol.radio_codo_D])].sort((a, b) => a - b);
+        campos.push({ clave: 'angulo', tipo: 'OPCIONES', etiqueta: 'Ángulo', opciones: angulos(pol.angulos_codo_deg, ga.angulo_deg) });
+        campos.push({ clave: 'radio_D', tipo: 'OPCIONES', etiqueta: 'Radio', ajustado: aj.radio_D !== undefined,
+          opciones: radios.map((r) => ({ valor: r, texto: `${n(r, 2)} D`, sub: `${n(r * D)} mm`, actual: r === rD, regla: r === pol.radio_codo_D, motivo: null })) });
+        campos.push({ clave: 'gajos', tipo: 'PASOS', etiqueta: 'Gajos', valor: ga.gajos, regla: p.auto.gajos, min: TZ.GAJOS.min, max: TZ.GAJOS.max, ajustado: aj.gajos !== undefined });
+      } else if (p.tipo === 'REDUCCION' || p.tipo === 'ADAPTADOR') {
+        const vertical = 'En un tramo que no es horizontal la reducción va concéntrica.';
+        campos.push({ clave: 'forma', tipo: 'OPCIONES', etiqueta: 'Forma', ajustado: aj.forma !== undefined, nota: p.horizontal ? null : vertical,
+          opciones: TZ.FORMAS_REDUCCION.map((f) => ({ valor: f, texto: NOMBRE_FORMA[f], actual: f === ga.forma, regla: f === p.auto.forma, motivo: p.horizontal || f === 'CONCENTRICA' ? null : vertical })) });
+        campos.push({ clave: 'largo_reduccion_mm', tipo: 'NUMERO', etiqueta: 'Largo', unidad: 'mm', valor: Math.round(ga.largo_mm), regla: Math.round(p.auto.largo_mm), ajustado: aj.largo_reduccion_mm !== undefined,
+          nota: `Más corta no: ${Math.round(p.auto.largo_mm)} mm es el mínimo, con el semiángulo máximo de las tablas.` });
+      } else if (p.tipo === 'INJERTO' || p.tipo === 'REDUCCION_INJERTO' || p.tipo === 'T_90') {
+        campos.push({ clave: 'angulo', tipo: 'OPCIONES', etiqueta: 'Ángulo del ramal', opciones: angulos([...pol.angulos_injerto_deg, ...(pol.permite_t_90 ? [90] : [])], p.tipo === 'T_90' ? 90 : ga.angulo_deg),
+          nota: 'Girar el ramal mueve lo que cuelga de él (una manguera lo absorbe); si llega a una toma o a un ancla, no se puede.' });
+      }
+      return { id: p.id, tipo: p.tipo, nombre: nombres[i].nombre, corto: nombres[i].corto, campos, lados, ajustada: campos.some((x) => x.ajustado), partida: partidaDePieza(s, p) };
+    });
+  }
+  /** Cambia la pieza de un nodo desde su ficha: { angulo } (gira) o los ajustes del modelo (radio_D, gajos, forma, largo_reduccion_mm). */
+  function cambiarPieza(s, nid, cambios) {
+    const { angulo, ...resto } = cambios;
+    // lo que queda, en palabras (con el nombre nuevo de cada pieza); si se quitó un ajuste y ya no queda ninguno, lo dice
+    const decirPieza = (restablece) => () => {
+      const pz = piezasDe(s, nid);
+      const nd = s.t.nodos.find((x) => x.id === nid);
+      return `${pz.map((x) => `${x.id}: ${x.nombre}`).join('; ')}${restablece && !(nd && nd.ajustes) ? ' (como en el proyecto)' : ''}.`;
+    };
+    if (angulo !== undefined) return !!hacer(s, (t) => TZ.cambiarAngulo(t, s.M, nid, angulo), decirPieza(false));
+    return !!hacer(s, (t) => TZ.ajustarPieza(t, s.M, nid, resto), decirPieza(Object.values(resto).some((v) => v === null)));
   }
 
   /* ------------------------------------------------------------------ salida y cálculo (Fase 5) */
@@ -1719,6 +1797,6 @@
     niveles, irANivel, nombrarNivel, quitarNivel, reglaNiveles, PASO_NIVEL_MM,
     reducirEn, compuertaEn, compuertaSugerida, quitarCompuerta, tapaEn, quitarTapa, RADIAL_MS, radial, radialElegir, desplazamientoSegmento, moverSegmento, borrar, medir,
     correccionesDe, correccionesListas, corregir, cambiarDiametroTramo, cambiarDiametroEnCadena, decidirCorto,
-    infoTramo, piezasDe, velocidadSemaforo, calcularTrazo, calculo, efectoEnTrazo, informeCalculo, graficaVentilador, efectoCatalogo, partidasVentilador, filaCalculo, NOMBRE_ACCION, despiece, exportar, importar, ejemplo,
+    infoTramo, piezasDe, fichasPieza, partidaDePieza, cambiarPieza, NOMBRE_FORMA, velocidadSemaforo, calcularTrazo, calculo, efectoEnTrazo, informeCalculo, graficaVentilador, efectoCatalogo, partidasVentilador, filaCalculo, NOMBRE_ACCION, despiece, exportar, importar, ejemplo,
   };
 }));

@@ -283,7 +283,8 @@
       "accesorios": [],
       "tramos": [
         "TR-003"
-      ]
+      ],
+      "ajustes": null
     },
     {
       "id": "N-002",
@@ -301,7 +302,8 @@
         "TR-002",
         "TR-003",
         "TR-006"
-      ]
+      ],
+      "ajustes": null
     },
     {
       "id": "N-003",
@@ -318,7 +320,8 @@
       "tramos": [
         "TR-001",
         "TR-002"
-      ]
+      ],
+      "ajustes": null
     },
     {
       "id": "N-004",
@@ -332,7 +335,8 @@
       "accesorios": [],
       "tramos": [
         "TR-001"
-      ]
+      ],
+      "ajustes": null
     },
     {
       "id": "N-005",
@@ -349,7 +353,8 @@
       "tramos": [
         "TR-005",
         "TR-006"
-      ]
+      ],
+      "ajustes": null
     },
     {
       "id": "N-006",
@@ -364,7 +369,8 @@
       "tramos": [
         "TR-004",
         "TR-005"
-      ]
+      ],
+      "ajustes": null
     },
     {
       "id": "N-007",
@@ -378,7 +384,8 @@
       "accesorios": [],
       "tramos": [
         "TR-004"
-      ]
+      ],
+      "ajustes": null
     }
   ],
   "tramos": [
