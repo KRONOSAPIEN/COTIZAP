@@ -25,7 +25,7 @@
 
   const base = {
     meta: {
-      version: '1.8.0',
+      version: '1.9.0',
       moneda: 'MXN',
       aviso: 'Mano de obra, lámina y perfiles del proveedor y catálogo de compras son reales; el resto son valores ilustrativos. Revisar antes de cotizar.',
     },
@@ -603,10 +603,28 @@
         contraccion: [0.05, 0.06, 0.08, 0.1, 0.11, 0.13, 0.2, 0.3, 0.35],
       },
     },
+
+    /* ------------------------------------------------------------------ */
+    /* VENTILADORES (para elegir el del colector por su curva, §5.13)     */
+    /* ------------------------------------------------------------------ */
+    // Cada modelo con su curva a las rpm del catálogo, en aire estándar (1.2 kg/m³): renglones [caudal m³/h, presión estática
+    // Pa, potencia al freno kW], con el caudal creciente (potencia 0 = sin dato). rpm_min y rpm_max: lo que da con sus poleas
+    // (iguales si es de acople directo). LOS DOS DE ARRANQUE SON ILUSTRATIVOS: curvas inventadas para mostrar cómo se elige, no
+    // son de ningún fabricante. Capture las de su proveedor y bórrelos.
+    ventiladores: {
+      modelos: [
+        { id: 'EJEMPLO_DIRECTO', nombre: 'Ejemplo ilustrativo A · acople directo (curva inventada)', ilustrativo: true, notas: 'No es de un fabricante: capture la curva de su proveedor.', rpm: 3450, rpm_min: 3450, rpm_max: 3450,
+          curva: [[0, 2650, 0.9], [800, 2600, 1.38], [1600, 2480, 1.9], [2400, 2250, 2.42], [3200, 1900, 2.81], [4000, 1400, 2.99]] },
+        { id: 'EJEMPLO_BANDAS', nombre: 'Ejemplo ilustrativo B · con bandas (curva inventada)', ilustrativo: true, notas: 'No es de un fabricante: capture la curva de su proveedor.', rpm: 2800, rpm_min: 2200, rpm_max: 3400,
+          curva: [[0, 2300, 1], [1000, 2260, 1.4], [2000, 2150, 2.06], [3000, 1950, 2.58], [4000, 1650, 2.96], [5000, 1250, 3.21]] },
+      ],
+    },
   };
 
   /** Las rutas cuyas listas no pueden cambiar de largo (sus renglones son los ejes fijos de una tabla). */
   const LARGO_FIJO = /^calculo\.coeficientes\./;
+  /** Las listas que pueden quedar vacías (el catálogo de ventiladores, si el taller borra los de ejemplo). */
+  const PUEDE_VACIA = /^ventiladores\.modelos$/;
 
   /**
    * Un parche de maestros viene de fuera (navegador, almacén compartido, archivo importado): sólo se conserva lo que
@@ -652,7 +670,7 @@
             const sub = limpiar(v, r, [...ruta, k]);
             if (Object.keys(sub).length) salida[k] = sub;
           } else descartados.push(aqui);
-        } else if (forma(v, r) && (!LARGO_FIJO.test(aqui) || mismoLargo(v, r))) salida[k] = v;
+        } else if ((PUEDE_VACIA.test(aqui) && Array.isArray(v) && !v.length) || (forma(v, r) && (!LARGO_FIJO.test(aqui) || mismoLargo(v, r)))) salida[k] = v;
         else descartados.push(aqui);
       });
       return salida;

@@ -33,6 +33,7 @@
     ['calibres', 'Espesor por calibre', 'En pulgadas. Cada familia de calibre (MSG, GSG, USSG) tiene su propia tabla.'],
     ['servicios', 'Calibre mínimo por servicio', 'No normativo: poblar con la norma interna. Mayor número de calibre = lámina más delgada.'],
     ['calculo', 'Cálculo de la red (trazado)', 'Las eficiencias del ventilador y de las bandas y los coeficientes de pérdida (ACGIH) con que se calcula el trazado isométrico. No mueven el precio.'],
+    ['ventiladores', 'Catálogo de ventiladores', 'Las curvas de los ventiladores que vende su proveedor, para elegir el del colector en la salida del trazado. Los dos de arranque son ilustrativos (curvas inventadas). No mueven el precio.'],
   ];
 
   const { esPct, etiqueta, unidadDe } = A;
@@ -338,6 +339,8 @@
   }
   /** El cuadro del cálculo: cómo queda el ventilador del trazado de esta cotización con estas tablas. */
   function refrescarCalculo() {
+    const ve = $('#m-vent-trazo');
+    if (ve) ve.replaceChildren(h('p', { class: 'nota' }, C.trazadoTablero.efectoCatalogo(W.estadoApp.cot && W.estadoApp.cot.trazado_iso, W.estadoApp.M).txt));
     const el = $('#m-calc-trazo');
     if (!el) return;
     const t = W.estadoApp.cot && W.estadoApp.cot.trazado_iso;
@@ -350,6 +353,89 @@
       h('ul', { class: 'm-calc-vent' }, c.sistema.resultados.ventiladores.map((v) => h('li', null,
         `Ventilador de ${nombre(v.equipo)}: ${W.num(v.caudal_m3_h, 0)} m³/h a ${W.num(v.presion_estatica_Pa, 0)} Pa, ${W.num(v.potencia_freno_kW, 2)} kW al freno, motor de ${v.motor_hp === null ? 'más de 500' : v.motor_hp} HP.`))),
       h('p', { class: 'nota' }, c.cambiadas.length ? `Tabla del taller: cambiada en ${c.cambiadas.join(', ')}.` : 'Tabla de referencia (ACGIH), sin cambios.'), ir);
+  }
+
+  /* ---- Catálogo de ventiladores: un modelo por tarjeta, con su curva editable (§5.13) ---- */
+  const RUTA_VENT = ['ventiladores', 'modelos'];
+  /** Aplica un cambio a una copia del catálogo; si queda bien, lo guarda (con deshacer) y vuelve a dibujar el panel. */
+  function cambiarCatalogo(cambio, titulo) {
+    const lista = U.clonar(W.estadoApp.M.ventiladores.modelos);
+    cambio(lista);
+    const r = C.ventiladores.revisarCatalogo(lista);
+    if (!r.ok) { W.toast(`Valor no válido: ${r.errores[0]}`); refrescarVentiladores(); return false; }
+    const ok = aplicarLote([[RUTA_VENT, lista]], titulo);
+    if (!ok) refrescarVentiladores();
+    return ok;
+  }
+  // al redibujar se quita el campo enfocado: su «blur» vuelve a disparar «change»; mientras se dibuja, se ignora
+  let pintandoVent = false;
+  function refrescarVentiladores() {
+    const el = $('#m-vent');
+    if (!el || pintandoVent) return;
+    pintandoVent = true;
+    try { el.replaceChildren(nodoVentiladores(W.estadoApp.M)); } finally { pintandoVent = false; }
+    marcarCambios();
+    aplicarBloqueo();
+  }
+  function tarjetaVentilador(m, i) {
+    const nombre = m.nombre;
+    const campo = (et, valor, tipo, alCambio, extra) => {
+      const el = h('input', { type: tipo === 'num' ? 'number' : 'text', step: 'any', value: String(valor), 'aria-label': `${et} · ${nombre}`, class: 'm-vent-ctl', ...(extra || {}) });
+      el.addEventListener('change', () => {
+        if (pintandoVent) return;
+        const v = tipo === 'num' ? Number(el.value) : el.value.trim();
+        if (tipo === 'num' && (el.value === '' || !Number.isFinite(v))) { W.toast('Valor no válido: use un número'); el.value = String(valor); return; }
+        alCambio(v);
+      });
+      return h('label', { class: 'm-vent-campo' }, h('span', null, et), el);
+    };
+    const poner = (k, et) => (v) => cambiarCatalogo((l) => { l[i][k] = v; }, `${nombre}: ${et}`);
+    const ilus = h('input', { type: 'checkbox', checked: !!m.ilustrativo, 'aria-label': `Ilustrativo · ${nombre}` });
+    ilus.addEventListener('change', () => !pintandoVent && cambiarCatalogo((l) => { l[i].ilustrativo = ilus.checked; }, `${nombre}: ${ilus.checked ? 'marcado' : 'ya no'} ilustrativo`));
+    const celda = (j, c, et) => {
+      const el = h('input', { type: 'number', step: 'any', value: String(m.curva[j][c]), 'aria-label': `${et} del punto ${j + 1} · ${nombre}`, class: 'm-vent-ctl' });
+      el.addEventListener('change', () => {
+        if (pintandoVent) return;
+        const v = Number(el.value);
+        if (el.value === '' || !Number.isFinite(v)) { W.toast('Valor no válido: use un número'); el.value = String(m.curva[j][c]); return; }
+        cambiarCatalogo((l) => { l[i].curva[j][c] = v; }, `${nombre}: ${et} del punto ${j + 1}`);
+      });
+      return h('td', null, el);
+    };
+    const quitarPunto = (j) => h('td', null, h('button', { type: 'button', class: 'btn btn-sec btn-chico m-vent-quitar-punto', 'aria-label': `Quitar el punto ${j + 1} · ${nombre}`, onclick: () => cambiarCatalogo((l) => { l[i].curva.splice(j, 1); }, `${nombre}: sin el punto ${j + 1}`) }, '×'));
+    const ultimo = m.curva[m.curva.length - 1];
+    const buscar = `ventiladores modelos catálogo curva rpm ${m.id} ${m.nombre} ${m.notas || ''}`.toLowerCase();
+    return h('div', { class: 'm-tabla m-vent-modelo', dataset: { buscar, tabla: llave(RUTA_VENT), modelo: m.id } },
+      h('div', { class: 'm-tabla-tit' }, h('span', null, m.nombre), m.ilustrativo ? h('span', { class: 'm-chip m-chip-ilustrativo', title: 'Curva inventada para mostrar cómo se elige: no es de un fabricante' }, 'Ilustrativo') : null, W.ayudaUI.boton(RUTA_VENT, 'tabla')),
+      h('div', { class: 'm-vent-campos' },
+        campo('Nombre', m.nombre, 'txt', poner('nombre', 'nombre')),
+        campo('Clave', m.id, 'txt', poner('id', 'clave')),
+        campo('rpm de la curva', m.rpm, 'num', poner('rpm', 'rpm de la curva')),
+        campo('rpm mínima', m.rpm_min, 'num', poner('rpm_min', 'rpm mínima')),
+        campo('rpm máxima', m.rpm_max, 'num', poner('rpm_max', 'rpm máxima')),
+        campo('Notas', m.notas || '', 'txt', poner('notas', 'notas')),
+        h('label', { class: 'm-vent-campo m-vent-check' }, ilus, h('span', null, 'Ilustrativo (curva de ejemplo)'))),
+      h('div', { class: 'tabla-env' }, h('table', { class: 'tabla m-vent-curva' },
+        h('thead', null, h('tr', null, A.COLUMNAS_VENTILADORES.map((c) => h('th', { scope: 'col' }, c)), h('th', null, ''))),
+        h('tbody', null, m.curva.map((p, j) => h('tr', null, celda(j, 0, 'Caudal'), celda(j, 1, 'Presión estática'), celda(j, 2, 'Potencia'), m.curva.length > 3 ? quitarPunto(j) : h('td', null)))))),
+      h('div', { class: 'm-vent-acciones' },
+        h('button', { type: 'button', class: 'btn btn-sec btn-chico m-vent-punto', onclick: () => cambiarCatalogo((l) => { l[i].curva.push([Math.round(ultimo[0] * 1.2 + 100), Math.round(ultimo[1] * 0.8), ultimo[2]]); }, `${nombre}: un punto más`) }, '+ Punto'),
+        h('button', { type: 'button', class: 'btn btn-peligro btn-chico m-vent-quitar', onclick: () => cambiarCatalogo((l) => { l.splice(i, 1); }, `Se quitó ${nombre}`) }, 'Quitar el modelo')));
+  }
+  function nodoVentiladores(M) {
+    const lista = M.ventiladores.modelos;
+    const nuevo = () => {
+      let n = lista.length + 1;
+      while (lista.some((x) => x.id === `MODELO_${n}`)) n += 1;
+      // una plantilla marcada como ilustrativa hasta que se capture la curva del proveedor
+      cambiarCatalogo((l) => l.push({ id: `MODELO_${n}`, nombre: `Modelo ${n} (capture su curva)`, ilustrativo: true, notas: 'Plantilla: capture la curva del proveedor y quite la marca de ilustrativo.', rpm: 1750, rpm_min: 1750, rpm_max: 1750,
+        curva: [[0, 1000, 0], [1000, 900, 0], [2000, 600, 0]] }), `Modelo ${n} agregado`);
+    };
+    return h('div', { class: 'm-obj' },
+      h('div', { class: 'm-calc-trazo', id: 'm-vent-trazo', 'aria-live': 'polite' }, h('p', { class: 'nota' }, C.trazadoTablero.efectoCatalogo(W.estadoApp.cot && W.estadoApp.cot.trazado_iso, M).txt)),
+      lista.length ? lista.map(tarjetaVentilador) : h('p', { class: 'nota', id: 'm-vent-vacio' }, 'Sin modelos: agregue los del catálogo de su proveedor.'),
+      h('div', { class: 'm-vent-acciones' }, h('button', { type: 'button', class: 'btn btn-sec', id: 'm-vent-agregar', onclick: nuevo }, '+ Modelo')),
+      h('p', { class: 'nota' }, 'Cada curva va como la da el fabricante a sus rpm, en aire estándar (1.2 kg/m³): caudal creciente, presión estática y potencia al freno (0 si no la trae). La salida del trazado mueve la curva a otras rpm con las leyes del ventilador y elige.'));
   }
 
   /* ---- Línea de estado del guardado automático ---- */
@@ -476,8 +562,9 @@
       if (mal) { W.toast(mal); return false; }
     }
     const antes = resumenTotal();
-    // Lo del cálculo de la red no mueve el precio: su efecto es el del ventilador del trazado
+    // Lo del cálculo de la red no mueve el precio: su efecto es el del ventilador del trazado (el catálogo, los modelos que le sirven)
     const soloCalculo = cambios.every(([ruta]) => ruta[0] === 'calculo');
+    const soloCatalogo = cambios.every(([ruta]) => ruta[0] === 'ventiladores');
     const Mantes = soloCalculo ? U.clonar(estado.M) : null;
     cambios.forEach(([ruta, valor]) => {
       const previo = leer(estado.M, ruta);
@@ -491,8 +578,10 @@
     refrescarProveedor();
     marcarCambios();
     W.recalcular(); // guarda y recalcula la cotización
-    const efecto = soloCalculo ? C.trazadoTablero.efectoEnTrazo(estado.cot && estado.cot.trazado_iso, Mantes, estado.M) : W.ayudaUI.describir(antes, resumenTotal());
+    const efecto = soloCalculo ? C.trazadoTablero.efectoEnTrazo(estado.cot && estado.cot.trazado_iso, Mantes, estado.M)
+      : soloCatalogo ? C.trazadoTablero.efectoCatalogo(estado.cot && estado.cot.trazado_iso, estado.M) : W.ayudaUI.describir(antes, resumenTotal());
     refrescarCalculo();
+    if (hechos.some(([r]) => r[0] === 'ventiladores')) refrescarVentiladores();
     if (opciones && opciones.deshaciendo) historial.pop();
     else {
       const unico = hechos.length === 1 ? hechos[0] : null;
@@ -570,7 +659,7 @@
           h('span', { class: 'm-grupo-mod', hidden: true }),
           W.ayudaUI.boton([clave], 'grupo'),
           h('span', { class: 'm-grupo-nota' }, nota)),
-        h('div', { class: 'm-grupo-cuerpo' }, clave === 'proveedor' ? nodoProveedor(M) : clave === 'calculo' ? nodoCalculo(M) : nodo(M[clave], [clave])));
+        h('div', { class: 'm-grupo-cuerpo' }, clave === 'proveedor' ? nodoProveedor(M) : clave === 'calculo' ? nodoCalculo(M) : clave === 'ventiladores' ? h('div', { id: 'm-vent' }, nodoVentiladores(M)) : nodo(M[clave], [clave])));
     }));
     marcarCambios();
     refrescarCalculo();

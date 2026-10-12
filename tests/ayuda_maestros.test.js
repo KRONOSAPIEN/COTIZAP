@@ -19,8 +19,8 @@ const clave = (ruta) => ruta.join('.');
 
 test('recorrer: ve los mismos datos que dibuja el editor (grupos, secciones, datos y tablas)', () => {
   const porTipo = (t) => unidades.filter((u) => u.tipo === t).length;
-  assert.equal(porTipo('grupo'), 13);
-  assert.equal(porTipo('tabla'), 17, 'tablas: servicios 3, proveedor 2, velocidades de corte 3, rolado, engargolado, soldadura, selección de perfil, bridas por metros y las 4 de coeficientes');
+  assert.equal(porTipo('grupo'), 14);
+  assert.equal(porTipo('tabla'), 18, 'tablas: servicios 3, proveedor 2, velocidades de corte 3, rolado, engargolado, soldadura, selección de perfil, bridas por metros, las 4 de coeficientes y el catálogo de ventiladores');
   assert.deepEqual(unidades.filter((u) => u.ruta[0] === 'calculo').map((u) => `${u.tipo} ${clave(u.ruta)}`), [
     'grupo calculo', 'fila calculo.eficiencia_ventilador', 'fila calculo.eficiencia_transmision', 'tabla calculo.coeficientes.codo', 'fila calculo.coeficientes.codo.inglete_90',
     'tabla calculo.coeficientes.entrada_ramal', 'tabla calculo.coeficientes.expansion', 'tabla calculo.coeficientes.contraccion',
@@ -117,6 +117,7 @@ test('tablas: la ayuda explica exactamente las columnas que el editor dibuja', (
     if (k === 'proveedor.hojas') return ['Concepto', 'Hoja', 'Precio cotizado (con IVA)', 'Sin IVA', 'kg por hoja', '$/kg sin IVA', 'Uso'];
     if (k === 'proveedor.barras') return ['Concepto', 'Barra', 'Precio cotizado (con IVA)', 'Sin IVA', 'kg por barra', '$/kg sin IVA', 'Uso'];
     if (u.ruta[0] === 'calculo') return A.COLUMNAS_CALCULO[u.ruta[2]];
+    if (k === 'ventiladores.modelos') return A.COLUMNAS_VENTILADORES; // la curva de cada modelo (sus datos van en campos)
     const t = leer(u.ruta);
     if (Array.isArray(t[0]) && t[0].length === 2) return ['Espesor (mm)', 'Velocidad (m/min)'];
     return Object.keys(t[0]).map((c) => A.etiqueta(c));

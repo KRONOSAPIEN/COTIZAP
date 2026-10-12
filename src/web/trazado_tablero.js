@@ -15,12 +15,12 @@
  * coordenadas de pantalla) y en el navegador, donde web/trazado_iso_ui.js lo dibuja y le pasa los gestos y las teclas.
  */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('../motor/trazado_iso'), require('../motor/perdidas'), require('../motor/trazado_lectura'));
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('../motor/trazado_iso'), require('../motor/perdidas'), require('../motor/trazado_lectura'), require('../motor/ventiladores'));
   else {
     root.COTIZAP = root.COTIZAP || {};
-    root.COTIZAP.trazadoTablero = factory(root.COTIZAP.trazadoIso, root.COTIZAP.perdidas, root.COTIZAP.trazadoLectura);
+    root.COTIZAP.trazadoTablero = factory(root.COTIZAP.trazadoIso, root.COTIZAP.perdidas, root.COTIZAP.trazadoLectura, root.COTIZAP.ventiladores);
   }
-}(typeof self !== 'undefined' ? self : this, function (TZ, PD, TL) {
+}(typeof self !== 'undefined' ? self : this, function (TZ, PD, TL, VT) {
   'use strict';
 
   const IN = 25.4;
@@ -1556,8 +1556,13 @@
     const R = c.sistema.resultados;
     const equipo = (id) => s.t.equipos.find((e) => e.id === id);
     const dePuerto = (pid) => s.t.equipos.find((e) => e.puertos.some((p) => p.id === pid));
+    const catalogo = s.M.ventiladores && Array.isArray(s.M.ventiladores.modelos) ? s.M.ventiladores.modelos : [];
     return {
-      ventiladores: R.ventiladores.map((v) => ({ ...v, nombre: equipo(v.equipo) ? equipo(v.equipo).nombre : v.equipo })),
+      ventiladores: R.ventiladores.map((v) => ({
+        ...v, nombre: equipo(v.equipo) ? equipo(v.equipo).nombre : v.equipo,
+        // los modelos del catálogo de las tablas maestras para su punto (§5.13)
+        eleccion: VT.elegir(v, catalogo, { densidad_kg_m3: c.hoja.aire.densidad_kg_m3, eficiencia_transmision: v.eficiencia_transmision }),
+      })),
       tomas: R.por_toma.map((x) => ({ ...x, nombre: dePuerto(x.puerto) ? dePuerto(x.puerto).nombre : x.puerto, critica: x.puerto === c.hoja.critica })),
       balance: R.balance.map((b) => {
         const cf = c.hoja.confluencias.find((x) => x.nodo === b.nodo);
@@ -1568,6 +1573,45 @@
       aire: c.hoja.aire,
       cambiadas: c.cambiadas,
     };
+  }
+  /**
+   * Qué le sirve del catálogo de ventiladores (M) al trazo `t`, en una frase, para el editor del catálogo: { txt, clase }.
+   */
+  function efectoCatalogo(t, M) {
+    if (!t || !(t.equipos || []).length) return { txt: 'Esta cotización no tiene trazado isométrico: el catálogo se usa en la salida de un trazado, para elegir el ventilador.', clase: 'neutro' };
+    const c = calcularTrazo(t, M);
+    if (c.error) return { txt: `El trazado de esta cotización todavía no se calcula: ${c.error}`, clase: 'neutro' };
+    const lista = M.ventiladores && Array.isArray(M.ventiladores.modelos) ? M.ventiladores.modelos : [];
+    const partes = c.sistema.resultados.ventiladores.map((v) => {
+      const e = VT.elegir(v, lista, { densidad_kg_m3: c.hoja.aire.densidad_kg_m3, eficiencia_transmision: v.eficiencia_transmision });
+      const eq = t.equipos.find((x) => x.id === v.equipo);
+      const nombre = eq ? eq.nombre : v.equipo;
+      const sirven = e.candidatos.filter((x) => x.viable);
+      if (!sirven.length) return `para el ventilador de ${nombre} (${Math.round(v.caudal_m3_h)} m³/h a ${Math.round(v.presion_estatica_estandar_Pa)} Pa estándar) no sirve ningún modelo`;
+      const p = sirven[0];
+      return `para el ventilador de ${nombre} ${sirven.length > 1 ? `sirven ${sirven.length}: el de menos potencia,` : 'sirve 1:'} ${p.nombre}, a ${p.rpm} rpm${p.potencia_freno_kW === null ? '' : ` con ${kw(p.potencia_freno_kW)} kW al freno`}`;
+    });
+    return { txt: `Con este catálogo, ${partes.join('; ')}.`, clase: 'igual' };
+  }
+  /**
+   * Lo que se dibuja para elegir un ventilador (§5.13): la curva del modelo a las rpm que pide el punto (o a las más cercanas
+   * que da), la de su catálogo, la parábola del sistema y el punto de diseño, en aire estándar. `v` es un ventilador del
+   * informe; null si el modelo no está entre sus candidatos. { punto, rpm, curva, catalogo, sistema, qMax, spMax }.
+   */
+  function graficaVentilador(v, modeloId, M) {
+    const cand = v && v.eleccion && v.eleccion.candidatos.find((x) => x.id === modeloId);
+    const m = cand && M.ventiladores.modelos.find((x) => x.id === modeloId);
+    if (!m) return null;
+    const rpm = Math.min(m.rpm_max, Math.max(m.rpm_min, cand.rpm));
+    const curva = VT.curvaA(m, rpm).map(([q, sp]) => [q, sp]);
+    const catalogo = m.curva.map(([q, sp]) => [q, sp]);
+    const punto = [v.caudal_m3_h, v.presion_estatica_estandar_Pa];
+    const qMax = Math.max(punto[0] * 1.25, ...curva.map((x) => x[0]), ...catalogo.map((x) => x[0]));
+    const spMax = Math.max(punto[1] * 1.25, ...curva.map((x) => x[1]), ...catalogo.map((x) => x[1]));
+    const k = v.eleccion.k;
+    const sistema = [];
+    for (let i = 0; i <= 24; i += 1) { const q = (qMax * i) / 24; if (k * q * q <= spMax) sistema.push([q, k * q * q]); }
+    return { punto, rpm: Math.round(rpm), curva, catalogo, sistema, qMax, spMax };
   }
   const NOMBRE_LOCAL = { CODO: 'codo', RAMAL: 'entrada del ramal', CURVAS: 'curvas de la manguera', EXPANSION: 'expansión', CONTRACCION: 'contracción', ACELERACION: 'aceleración en la confluencia', COMPUERTA: 'compuerta' };
   /** El renglón del cálculo de un tramo (caudal, velocidad, succión al final…) con sus pérdidas locales en palabras, o null. */
@@ -1640,6 +1684,6 @@
     niveles, irANivel, nombrarNivel, quitarNivel, reglaNiveles, PASO_NIVEL_MM,
     reducirEn, compuertaEn, compuertaSugerida, quitarCompuerta, tapaEn, quitarTapa, RADIAL_MS, radial, radialElegir, desplazamientoSegmento, moverSegmento, borrar, medir,
     correccionesDe, correccionesListas, corregir, cambiarDiametroTramo, cambiarDiametroEnCadena, decidirCorto,
-    infoTramo, piezasDe, velocidadSemaforo, calcularTrazo, calculo, efectoEnTrazo, informeCalculo, filaCalculo, NOMBRE_ACCION, despiece, exportar, importar, ejemplo,
+    infoTramo, piezasDe, velocidadSemaforo, calcularTrazo, calculo, efectoEnTrazo, informeCalculo, graficaVentilador, efectoCatalogo, filaCalculo, NOMBRE_ACCION, despiece, exportar, importar, ejemplo,
   };
 }));

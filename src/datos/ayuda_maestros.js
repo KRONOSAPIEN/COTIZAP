@@ -334,6 +334,23 @@
         L: 'Factor sobre el aumento de la presión dinámica.',
       } });
 
+  /* ---------------------------------------- Catálogo de ventiladores ---------------------------------------- */
+  E('ventiladores', 'Catálogo de ventiladores',
+    'Los ventiladores que vende su proveedor, cada uno con su curva: con ellos la salida del trazado elige el del colector.',
+    'Capture cada modelo como lo da el fabricante. Los dos de arranque son ILUSTRATIVOS: curvas inventadas para mostrar cómo se elige, no de un fabricante. Bórrelos al capturar los suyos.',
+    'No mueve el precio: cambia los modelos que la salida del trazado propone para cada ventilador.',
+    { origen: 'ilustrativo', origenTxt: 'Los dos modelos de arranque son curvas inventadas: capture las de su proveedor.', afecta: ['calc'] });
+  E('ventiladores.modelos', 'Modelos y sus curvas',
+    'Cada modelo con su nombre, su clave, las rpm de su curva, las que puede dar (con sus poleas) y la curva: caudal, presión estática y potencia al freno.',
+    'La curva como la da el fabricante a sus rpm, en aire estándar (1.2 kg/m³), de 3 a 30 puntos con el caudal creciente. Potencia 0 = sin dato. En acople directo, rpm mínima = máxima.',
+    'La salida mueve la curva a otras rpm (caudal ∝ rpm, presión ∝ rpm², potencia ∝ rpm³) y propone los que llegan al punto dentro de sus rpm, por menos potencia.',
+    { afecta: ['calc'], ej: 'Si la curva a 2 800 rpm corta la del sistema en 2 138 m³/h y el diseño pide 2 283, hace falta 2 800 × 2 283 / 2 138 = 2 990 rpm.',
+      cols: {
+        'Caudal (m³/h)': 'El caudal de ese punto de la curva, creciente de un punto al siguiente.',
+        'Presión estática (Pa)': 'La presión estática que da a ese caudal, en aire estándar (1.2 kg/m³).',
+        'Potencia (kW)': 'La potencia al freno a ese caudal; 0 si el fabricante no la da.',
+      } });
+
   /* ---------------------------------------- Precios ---------------------------------------- */
   const P = (clave, t, que, como, efecto, extra) => E(`precios.${clave}`, t, que, como, efecto, extra);
   P('precio_kg_acero_carbon', 'Precio del acero al carbón',
@@ -1711,7 +1728,9 @@
   }
 
   /* ---------- Recorrido de las tablas tal como las dibuja el editor ---------- */
-  const GRUPOS = ['proveedor', 'precios', 'compras', 'mano_obra', 'merma', 'capas', 'rapida', 'proceso', 'herrajes', 'materiales', 'calibres', 'servicios', 'calculo'];
+  const GRUPOS = ['proveedor', 'precios', 'compras', 'mano_obra', 'merma', 'capas', 'rapida', 'proceso', 'herrajes', 'materiales', 'calibres', 'servicios', 'calculo', 'ventiladores'];
+  /** Las columnas de la curva de cada modelo del catálogo de ventiladores. */
+  const COLUMNAS_VENTILADORES = ['Caudal (m³/h)', 'Presión estática (Pa)', 'Potencia (kW)'];
   /** Las columnas que el editor dibuja en cada tabla de coeficientes del cálculo (sus ejes son fijos: los del manual). */
   const COLUMNAS_CALCULO = {
     codo: ['R/D', 'Liso o estampado', '5 gajos', '4 gajos', '3 gajos'],
@@ -1759,6 +1778,8 @@
         const t = (k) => ({ ruta: ['calculo', 'coeficientes', k], tipo: 'tabla' });
         salida.push({ ruta: ['calculo', 'eficiencia_ventilador'], tipo: 'fila' }, { ruta: ['calculo', 'eficiencia_transmision'], tipo: 'fila' },
           t('codo'), { ruta: ['calculo', 'coeficientes', 'codo', 'inglete_90'], tipo: 'fila' }, t('entrada_ramal'), t('expansion'), t('contraccion'));
+      } else if (g === 'ventiladores') {
+        salida.push({ ruta: ['ventiladores', 'modelos'], tipo: 'tabla' });
       } else visitar(M[g], [g]);
     });
     return salida;
@@ -1773,7 +1794,7 @@
   }
 
   return {
-    AFECTA, ORIGENES, UNIDADES, FAMILIAS, OPERACIONES, MATERIALES, SISTEMAS, ARTICULOS, CATALOGO: CAT, GRUPOS, COLUMNAS_CALCULO,
+    AFECTA, ORIGENES, UNIDADES, FAMILIAS, OPERACIONES, MATERIALES, SISTEMAS, ARTICULOS, CATALOGO: CAT, GRUPOS, COLUMNAS_CALCULO, COLUMNAS_VENTILADORES,
     esPct, etiqueta, unidadDe, mostrado, buscar, coincide, recorrer, fueraDeRango,
   };
 }));

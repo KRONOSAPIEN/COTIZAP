@@ -2380,7 +2380,7 @@ El esquema (§3.5) creció con esos campos. Lo que el trazo exporta sigue llevan
 
 1. **Presión del ventilador.** Es la succión de entrada: la de la boca más la del colector. Se toma así a propósito (es conservadora) porque no resta la pv de entrada. Si el equipo tiene ducto de descarga, se suma su presión en la brida (§5.12).
 2. **El caudal corregido** es el que la red va a jalar si se construye así. Por eso el ventilador se elige con la suma corregida, aunque el balanceo diga NINGUNA en otras confluencias.
-3. **Pendiente:** elegir el modelo del ventilador en un catálogo de fabricantes. El ducto de descarga llegó después (§5.12).
+3. **Llegó después:** el ducto de descarga (§5.12) y elegir el modelo del ventilador en un catálogo (§5.13).
 
    Pasar el trazo a partidas llegó con la etapa 5 (§5.6), y editar la tabla de coeficientes y las eficiencias desde la aplicación, después (§5.8).
 
@@ -2672,6 +2672,44 @@ Lo verifican:
 - `tests/unifilar.test.js` y `tests/trazado_lectura.test.js`: la descarga aparte en las reglas (orientada desde el ventilador, el codo, la reducción, la punta abierta), ramificada bloquea, y del trazo sale un despiece definitivo que cuadra.
 - `tests/trazado_tablero.test.js`: el arranque desde la brida, el teclado, el tramo sin ramales, el semáforo y el informe.
 - La sección 43 de `tests/e2e/ui.e2e.js`: agregarla, trazarla con el teclado, la revisión, la salida en el lienzo, el ventilador, la hoja y las partidas.
+
+### 5.13 Elegir el ventilador en un catálogo
+
+El cálculo da el punto de diseño de cada ventilador: el caudal y la presión estática en aire estándar (1.2 kg/m³), la de las curvas de los fabricantes. En la salida, «Elegir en el catálogo» lo cruza con las curvas de *Tablas maestras › Catálogo de ventiladores* (T13).
+
+- **El catálogo.** Cada modelo lleva:
+  - su nombre, su clave y sus notas;
+  - las rpm de su curva, y las mínimas y máximas que da con sus poleas (iguales en acople directo);
+  - su curva como la da el fabricante: de 3 a 30 puntos [caudal, presión estática, potencia al freno], con el caudal creciente. Potencia 0 = sin dato.
+
+  Se edita en una tarjeta por modelo: los campos, la curva punto por punto, «+ Punto», «Quitar el modelo» y «+ Modelo». Un dato que deja el catálogo mal (un caudal que no crece, unas rpm fuera de su rango, una clave repetida) se rechaza con el porqué. Cada cambio tiene deshacer y dice qué le sirve al trazado de la cotización.
+- **Los dos de arranque son ilustrativos.** Son curvas inventadas para mostrar cómo se elige, no de un fabricante: vienen marcados, y la salida y las tablas lo dicen. Un modelo nuevo nace como plantilla ilustrativa hasta capturar su curva. El taller captura los de su proveedor y borra los de ejemplo; el catálogo se guarda entero en el parche de las tablas, también vacío.
+- **Cómo se elige** (`src/motor/ventiladores.js`, puro):
+  - La red pide SP = k·Q², la parábola por el punto de diseño. A las rpm del catálogo, el modelo trabaja donde su curva la corta (el corte de mayor caudal).
+  - A otras rpm la curva se mueve sobre esas mismas parábolas: caudal ∝ rpm, presión ∝ rpm², potencia ∝ rpm³. Las rpm que llevan el corte al punto de diseño son las del catálogo × Q de diseño / Q del corte.
+  - **Sirve** si esas rpm caben entre su mínimo y su máximo y el corte cae donde la curva baja (estable).
+  - Si no caben, dice cuánto daría a las rpm más cercanas que puede dar. Si la parábola no cruza su curva dentro de sus puntos, se descarta con el porqué.
+  - La potencia es la de la curva en el corte × (rpm / rpm del catálogo)³ × ρ/1.2 (el aire real). El motor comercial sale de ella entre la eficiencia de las bandas.
+  - Se ordenan: los que sirven primero, luego por menos potencia. Cada uno trae sus rpm, su potencia, su motor, su eficiencia (potencia del aire entre la del freno) y sus notas: lejos de su rango, del lado inestable, cerca del final de su curva o ilustrativo.
+- **En la salida:** una tarjeta por modelo (tocarla lo dibuja) y una gráfica con su curva a las rpm que pide (llena), la de su catálogo (punteada), la del sistema y el punto de diseño. El botón «Catálogo de ventiladores» lleva a las tablas.
+- **En el ejemplo:**
+  - el B (con bandas, ilustrativo) sirve a unas 3 000 rpm, con 2 kW al freno y motor de 3 HP;
+  - el A (directo a 3 450 rpm, ilustrativo) se queda corto: a sus rpm daría unos 2 220 m³/h en vez de 2 283.
+
+Lo verifican:
+
+- `tests/ventiladores.test.js`:
+  - la curva interpolada y el corte con la parábola;
+  - las leyes del ventilador: a las rpm que pide, la curva pasa por el punto de diseño;
+  - la potencia con el aire real y el motor;
+  - fuera de rango, el lado inestable, la curva que no cruza y los datos malos;
+  - el orden y la revisión del catálogo;
+  - el catálogo de arranque ilustrativo, guardado entero en el parche y también vacío;
+  - el ejemplo y su gráfica.
+- `tests/ayuda_maestros.test.js`: la ayuda del grupo y de su tabla, con las columnas de la curva.
+- La sección 44 de `tests/e2e/ui.e2e.js`:
+  - en la salida, el aviso de ilustrativos, el orden, la gráfica y elegir otro modelo;
+  - en las tablas, cambiar las rpm máximas, deshacer, agregar un modelo, el rechazo de un caudal que no crece, quitar los de ejemplo, el parche y la salida con el catálogo nuevo.
 
 ---
 

@@ -1424,3 +1424,36 @@ dd.ti-sem-verde, dd.ti-sem-ambar { background: none; font-weight: 600; }
   .ti-fase-txt { display: none; }
   .ti-fase-activa .ti-fase-txt { display: inline; }
 }
+
+/* Elegir el ventilador en el catálogo (§5.13) */
+.ti-vent-elegir { margin-top: 8px; }
+.ti-vent-elegir > summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+.ti-vent-lista { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ti-vent-lista li { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+.ti-vent-lista li.ti-vent-sel { border-color: var(--accent); background: var(--info-soft); }
+.ti-vent-cab { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ti-vent-cab .enlace { text-align: left; font-weight: 600; }
+.ti-vent-datos { margin: 2px 0 0; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.ti-vent-no .ti-vent-datos { color: var(--fg-2); }
+/* El catálogo en Tablas maestras: una tarjeta por modelo */
+.m-vent-modelo { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
+.m-vent-campos { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 12px; margin: 6px 0 8px; }
+.m-vent-campo { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; color: var(--fg-2); }
+.m-vent-campo:first-child, .m-vent-campo:nth-child(6) { grid-column: 1 / -1; }
+.m-vent-campo input[type="text"], .m-vent-campo input[type="number"] { text-align: left; }
+.m-vent-check { flex-direction: row; align-items: center; gap: 6px; }
+.m-vent-curva input { width: 100%; min-width: 56px; }
+.m-vent-curva th { white-space: normal; font-size: 11.5px; }
+.m-vent-quitar-punto { padding: 2px 8px; }
+.m-vent-acciones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.m-chip-ilustrativo { margin-left: 6px; }
+.ti-chip.ti-chip-ok { color: var(--good); background: var(--good-soft); }
+.ti-vent-grafica { margin: 8px 0 0; }
+.ti-vg { width: 100%; max-width: 420px; height: auto; display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.ti-vg-ejes { fill: none; stroke: var(--fg-3); stroke-width: 1; }
+.ti-vg-eje { font-size: 9px; fill: var(--fg-3); }
+.ti-vg-sistema { fill: none; stroke: var(--warn); stroke-width: 1.5; }
+.ti-vg-catalogo { fill: none; stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 4 3; opacity: 0.7; }
+.ti-vg-curva { fill: none; stroke: var(--accent); stroke-width: 2.2; }
+.ti-vg-punto { fill: var(--crit); stroke: var(--surface); stroke-width: 1.5; }
+.ti-vent-descartados li { font-size: 12.5px; color: var(--fg-2); }

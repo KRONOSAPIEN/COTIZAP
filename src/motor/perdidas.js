@@ -12,8 +12,11 @@
  *                 la expansión o contracción hacia el tramo siguiente, y la aceleración en la confluencia
  *   confluencia   la corriente de menor succión se corrige: Q′ = Q·√(SP mayor / SP menor); el tronco que sigue lleva la
  *                 suma corregida. Relación ≤ 1.05: nada; ≤ 1.20: se acepta el caudal mayor; más: redimensionar o compuerta
- *   ventilador    por colector: el caudal que llega, la succión de la boca más la pérdida del colector, la misma succión
- *                 en aire estándar (1.2 kg/m³, para leer la curva del fabricante), la potencia y el motor comercial
+ *   ventilador    por colector: el caudal que llega, la succión de la boca más la pérdida del colector (más la presión de
+ *                 su descarga), la misma en aire estándar (1.2 kg/m³, para leer la curva del fabricante; ventiladores.js
+ *                 elige el modelo en el catálogo), la potencia y el motor comercial
+ *   descarga      de la brida de salida a la atmósfera (§5.12): 0 Pa en la salida y, hacia la brida, fricción y piezas
+ *                 conservando la presión total
  *
  * Las presiones estáticas se dan como succión (valor absoluto, en Pa). Los coeficientes están juntos en TABLA, con su
  * referencia; el cálculo acepta otra tabla con `opciones.tabla`. Las tablas maestras traen los del taller y las dos

@@ -3396,6 +3396,53 @@ const ok = (cond, msg) => {
     await p.close();
   }
 
+  console.log('44) Catálogo de ventiladores: elegir el del colector por su curva en la salida, y editar el catálogo en las tablas maestras');
+  {
+    const p = await nuevaPagina();
+    const R = (fn, a) => p.evaluate(fn, a);
+    await p.click('#tab-trazado');
+    await p.click('#ti-ejemplo');
+    await p.click('#ti-fase-5');
+    await p.locator('.ti-vent-elegir > summary').click();
+    const elegir = p.locator('.ti-vent-elegir');
+    ok(/1 de 2 modelos sirven/.test(await elegir.locator('summary').innerText()) && await p.locator('.ti-vent-ilustrativo').count() === 1, 'el ventilador del ejemplo: 1 de 2 modelos sirven, y avisa que el catálogo es ilustrativo');
+    const lis = await elegir.locator('.ti-vent-lista li').evaluateAll((e) => e.map((x) => [x.dataset.modelo, x.classList.contains('ti-vent-sirve')]));
+    ok(JSON.stringify(lis) === JSON.stringify([['EJEMPLO_BANDAS', true], ['EJEMPLO_DIRECTO', false]]), `primero el que sirve (${JSON.stringify(lis)})`);
+    ok(/3,0\d\d rpm · 2\.\d\d kW al freno · motor de 3 HP/.test(await elegir.locator('li[data-modelo="EJEMPLO_BANDAS"]').innerText()), 'el B: unas 3 000 rpm, su potencia y el motor');
+    ok(/con 3450 rpm daría \d+ m³\/h/.test(await elegir.locator('li[data-modelo="EJEMPLO_DIRECTO"]').innerText()), 'el A (directo) dice cuánto daría a sus rpm');
+    ok(await elegir.locator('svg.ti-vg path.ti-vg-curva').count() === 1 && await elegir.locator('svg.ti-vg circle.ti-vg-punto').count() === 1, 'la gráfica: su curva, la del sistema y el punto');
+    await elegir.locator('li[data-modelo="EJEMPLO_DIRECTO"] button').click();
+    ok(await p.locator('.ti-vent-elegir').evaluate((d) => d.open) && await p.locator('.ti-vent-lista li[data-modelo="EJEMPLO_DIRECTO"] button').getAttribute('aria-pressed') === 'true'
+      && /a 3,450 rpm/.test(await p.locator('.ti-vent-grafica figcaption').innerText()), 'tocar otro lo dibuja (a sus 3 450 rpm) y el panel sigue abierto');
+    // al catálogo
+    await p.locator('.ti-vent-catalogo').click();
+    await p.waitForSelector('#m-vent .m-vent-modelo');
+    ok(await p.locator('#m-vent .m-vent-modelo').count() === 2 && await p.locator('#m-vent .m-chip-ilustrativo').count() === 2, 'el catálogo en Tablas maestras: dos modelos, marcados ilustrativos');
+    ok(/sirve 1: Ejemplo ilustrativo B/.test(await p.locator('#m-vent-trazo').innerText()), 'dice qué le sirve al trazado de la cotización');
+    const rpmMax = p.locator('.m-vent-modelo[data-modelo="EJEMPLO_BANDAS"] input[aria-label^="rpm máxima"]');
+    await rpmMax.fill('2900');
+    await rpmMax.dispatchEvent('change');
+    ok(/no sirve ningún modelo/.test(await p.locator('#m-vent-trazo').innerText()) && /no sirve ningún modelo/.test(await p.locator('#maestros-ultimo').innerText()), 'con 2 900 rpm de máximo ya no llega: el cuadro y la barra del último cambio lo dicen');
+    await p.click('#maestros-deshacer');
+    ok(/sirve 1/.test(await p.locator('#m-vent-trazo').innerText()) && await p.locator('.m-vent-modelo[data-modelo="EJEMPLO_BANDAS"] input[aria-label^="rpm máxima"]').inputValue() === '3400', 'deshacer lo regresa');
+    // un modelo nuevo (plantilla ilustrativa) y un dato que no se acepta
+    await p.click('#m-vent-agregar');
+    ok(await p.locator('#m-vent .m-vent-modelo').count() === 3 && await p.locator('.m-vent-modelo[data-modelo="MODELO_3"] .m-chip-ilustrativo').count() === 1, '+ Modelo agrega una plantilla, marcada ilustrativa hasta capturar su curva');
+    const q2 = p.locator('.m-vent-modelo[data-modelo="MODELO_3"] input[aria-label^="Caudal del punto 2"]');
+    await q2.fill('0');
+    await q2.dispatchEvent('change');
+    ok(/el caudal crece/.test(await p.locator('.toast').last().innerText()) && await R(() => window.COTIZAP.web.estadoApp.M.ventiladores.modelos[2].curva[1][0]) === 1000, 'un caudal que no crece se rechaza y no cambia nada');
+    // quitar los dos de ejemplo: el catálogo guardado es el del taller
+    await p.locator('.m-vent-modelo[data-modelo="EJEMPLO_DIRECTO"] .m-vent-quitar').click();
+    await p.locator('.m-vent-modelo[data-modelo="EJEMPLO_BANDAS"] .m-vent-quitar').click();
+    ok(await R(() => JSON.stringify(window.COTIZAP.web.estadoApp.M.ventiladores.modelos.map((x) => x.id))) === JSON.stringify(['MODELO_3']), 'quedan sólo los del taller');
+    ok(await R(() => { const C = window.COTIZAP; return C.maestros.crearMaestros(C.util.diferencia(C.maestros.crearMaestros(), C.web.estadoApp.M)).ventiladores.modelos.length; }) === 1, 'y el parche guardado lleva el catálogo entero');
+    await p.click('#tab-trazado');
+    await p.click('#ti-fase-5');
+    ok(/0 de 1 modelos sirven/.test(await p.locator('.ti-vent-elegir summary').innerText()), 'la salida usa el catálogo nuevo');
+    await p.close();
+  }
+
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

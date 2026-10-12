@@ -92,7 +92,7 @@
   const TECLA_HERR = { s: 'SELECCIONAR', t: 'TRAMO', c: 'TRAMO', v: 'VERTICAL', r: 'REDUCCION', i: 'INJERTO', j: 'RINJ', m: 'MOVER', d: 'MEDIR', p: 'TOMA', g: 'COMPUERTA', a: 'TAPA' };
   const VISTAS_BTN = [['NE', 'Iso', '1'], ['PLANTA', 'Planta', '2'], ['ELEV_XZ', 'Elev. X-Z', '3'], ['ELEV_YZ', 'Elev. Y-Z', '4']];
 
-  const ui = { s: null, montado: false, puntero: null, gesto: null, punteros: new Map(), hover: null, cuadro: 0, espacio: false, abierto: false, dim: null, paleta: null, radial: null, tRadial: 0 };
+  const ui = { s: null, montado: false, puntero: null, gesto: null, punteros: new Map(), hover: null, cuadro: 0, espacio: false, abierto: false, dim: null, paleta: null, radial: null, tRadial: 0, ventSel: {}, ventAbierto: new Set() };
 
   /* ------------------------------------------------------------------ el tablero y la cotización */
 
@@ -1392,6 +1392,59 @@
       h('p', { class: 'ti-nota' }, 'Abajo, en «Problemas», la revisión completa: clic en uno lo selecciona y lo centra; «Corregir» aplica el arreglo (se puede deshacer).'));
   }
 
+  /**
+   * La gráfica para elegir el ventilador (§5.13), en aire estándar: la curva del modelo a las rpm que pide el punto (llena),
+   * la de su catálogo (punteada), la parábola del sistema y el punto de diseño.
+   */
+  function graficaVentilador(g) {
+    const W0 = 320;
+    const H0 = 190;
+    const iz = 46;
+    const ab = 28;
+    const X = (q) => iz + (q / g.qMax) * (W0 - iz - 10);
+    const Y = (sp) => H0 - ab - (sp / g.spMax) * (H0 - ab - 10);
+    const linea = (pts) => pts.map(([q, sp], i) => `${i ? 'L' : 'M'}${f1(X(q))} ${f1(Y(sp))}`).join('');
+    const marcas = [];
+    [0, 0.5, 1].forEach((f) => {
+      marcas.push(svg('text', { x: f1(X(g.qMax * f)), y: H0 - ab + 14, class: 'ti-vg-eje', 'text-anchor': 'middle' }, n0(g.qMax * f)));
+      marcas.push(svg('text', { x: iz - 4, y: f1(Y(g.spMax * f) + 4), class: 'ti-vg-eje', 'text-anchor': 'end' }, n0(g.spMax * f)));
+    });
+    return svg('svg', { viewBox: `0 0 ${W0} ${H0}`, class: 'ti-vg', role: 'img', 'aria-label': `Curva a ${g.rpm} rpm, curva del sistema y punto de diseño` },
+      svg('path', { d: `M${iz} 10V${H0 - ab}H${W0 - 10}`, class: 'ti-vg-ejes' }),
+      ...marcas,
+      svg('text', { x: W0 - 10, y: H0 - 2, class: 'ti-vg-eje', 'text-anchor': 'end' }, 'm³/h'),
+      svg('text', { x: 4, y: 10, class: 'ti-vg-eje' }, 'Pa'),
+      svg('path', { d: linea(g.sistema), class: 'ti-vg-sistema' }),
+      svg('path', { d: linea(g.catalogo), class: 'ti-vg-catalogo' }),
+      svg('path', { d: linea(g.curva), class: 'ti-vg-curva' }),
+      svg('circle', { cx: f1(X(g.punto[0])), cy: f1(Y(g.punto[1])), r: 4.5, class: 'ti-vg-punto' }));
+  }
+  /** Elegir el ventilador en el catálogo de las tablas maestras: los modelos para su punto, en orden, y la gráfica del elegido. */
+  function bloqueEleccion(v) {
+    const e = v.eleccion;
+    const irCatalogo = h('button', { type: 'button', class: 'btn btn-sec btn-chico ti-vent-catalogo', onclick: () => W.maestrosUI.irA(['ventiladores']) }, 'Catálogo de ventiladores');
+    if (e.error) return h('p', { class: 'ti-nota' }, e.error);
+    const todos = [...e.candidatos, ...e.descartados];
+    if (!todos.length) return h('div', { class: 'ti-vent-elegir' }, h('p', { class: 'ti-nota' }, 'El catálogo de ventiladores está vacío: capture las curvas de su proveedor en Tablas maestras › Ventiladores.'), irCatalogo);
+    const sel = e.candidatos.some((c) => c.id === ui.ventSel[v.equipo]) ? ui.ventSel[v.equipo] : (e.candidatos[0] || {}).id;
+    const g = sel ? TB().graficaVentilador(v, sel, M()) : null;
+    const ilustrativos = todos.some((c) => c.ilustrativo);
+    return h('details', { class: 'ti-vent-elegir', 'data-equipo': v.equipo, open: ui.ventAbierto.has(v.equipo), ontoggle: (ev) => { if (ev.target.open) ui.ventAbierto.add(v.equipo); else ui.ventAbierto.delete(v.equipo); } },
+      h('summary', null, `Elegir en el catálogo (${e.candidatos.filter((c) => c.viable).length} de ${todos.length} modelos sirven)`),
+      ilustrativos ? h('p', { class: 'ti-semaforo ti-sem-ambar ti-vent-ilustrativo' }, 'El catálogo trae modelos ILUSTRATIVOS: curvas inventadas para mostrar cómo se elige, no de un fabricante. Capture las de su proveedor.') : null,
+      // una tarjeta por modelo (el inspector es angosto): su nombre (tocarlo lo dibuja), sus rpm, su potencia, el motor y sus notas
+      e.candidatos.length ? h('ul', { class: 'ti-vent-lista' }, e.candidatos.map((c) => h('li', { 'data-modelo': c.id, class: `${c.viable ? 'ti-vent-sirve' : 'ti-vent-no'}${c.id === sel ? ' ti-vent-sel' : ''}` },
+        h('div', { class: 'ti-vent-cab' }, h('button', { type: 'button', class: 'enlace', 'aria-pressed': c.id === sel ? 'true' : 'false', onclick: () => { ui.ventSel[v.equipo] = c.id; pintarInspector(); } }, c.nombre),
+          h('span', { class: `ti-chip ${c.viable ? 'ti-chip-ok' : ''}` }, c.viable ? 'sirve' : 'no llega')),
+        h('p', { class: 'ti-vent-datos' }, `${n0(c.rpm)} rpm · ${c.potencia_freno_kW === null ? 'sin potencia en su curva' : `${W.num(c.potencia_freno_kW, 2)} kW al freno`}${c.motor_hp === null ? '' : ` · motor de ${c.motor_hp} HP`}${c.eficiencia === null ? '' : ` · eficiencia ${Math.round(c.eficiencia * 100)} %`}`),
+        c.notas.length ? h('p', { class: 'ti-sub' }, c.notas.join(' ')) : null))) : null,
+      g ? h('figure', { class: 'ti-vent-grafica' }, graficaVentilador(g),
+        h('figcaption', { class: 'ti-nota' }, `${e.candidatos.find((c) => c.id === sel).nombre}: su curva a ${n0(g.rpm)} rpm (llena) y la de su catálogo (punteada), la del sistema y el punto de diseño, ${n0(g.punto[0])} m³/h a ${n0(g.punto[1])} Pa en aire estándar.`)) : null,
+      e.descartados.length ? h('ul', { class: 'ti-lista ti-vent-descartados' }, e.descartados.map((d) => h('li', { 'data-modelo': d.id }, `${d.nombre}: ${d.motivo}`))) : null,
+      h('p', { class: 'ti-nota' }, 'A otras rpm la curva se mueve con las leyes del ventilador (caudal ∝ rpm, presión ∝ rpm², potencia ∝ rpm³). Sirve el que llega al punto dentro de sus rpm y donde su curva baja; se ordenan por potencia. La potencia es con el aire real.'),
+      irCatalogo);
+  }
+
   /** El cálculo de pérdidas (etapa 4): el ventilador de cada colector, las tomas, el balanceo y la hoja por tramo. */
   function seccionCalculo() {
     const s = ui.s;
@@ -1407,7 +1460,8 @@
       inf.ventiladores.map((v) => h('div', { class: 'ti-calc-vent', 'data-equipo': v.equipo },
         h('p', { class: 'ti-calc-vent-tit' }, `Ventilador de ${v.nombre}`),
         h('p', { class: 'ti-calc-vent-punto' }, `${n0(v.caudal_m3_h)} m³/h a ${n0(v.presion_estatica_Pa)} Pa`),
-        h('p', { class: 'ti-nota' }, `Succión en la boca ${n0(v.presion_estatica_boca_Pa)} Pa más ${n0(v.perdida_equipo_Pa)} Pa del equipo${!v.descarga ? '' : v.presion_descarga_Pa >= 0 ? ` más ${n0(v.presion_descarga_Pa)} Pa de su descarga ${v.descarga}` : ` menos ${n0(-v.presion_descarga_Pa)} Pa que recupera el ensanche de su descarga ${v.descarga}`}. En aire estándar (1.2 kg/m³), para la curva del fabricante: ${n0(v.presion_estatica_estandar_Pa)} Pa. ${W.num(v.potencia_freno_kW, 2)} kW al freno (ventilador al ${pct(v.eficiencia_ventilador)}, bandas al ${pct(v.eficiencia_transmision)}): motor de ${v.motor_hp === null ? 'más de 500' : String(v.motor_hp)} HP.`))),
+        h('p', { class: 'ti-nota' }, `Succión en la boca ${n0(v.presion_estatica_boca_Pa)} Pa más ${n0(v.perdida_equipo_Pa)} Pa del equipo${!v.descarga ? '' : v.presion_descarga_Pa >= 0 ? ` más ${n0(v.presion_descarga_Pa)} Pa de su descarga ${v.descarga}` : ` menos ${n0(-v.presion_descarga_Pa)} Pa que recupera el ensanche de su descarga ${v.descarga}`}. En aire estándar (1.2 kg/m³), para la curva del fabricante: ${n0(v.presion_estatica_estandar_Pa)} Pa. ${W.num(v.potencia_freno_kW, 2)} kW al freno (ventilador al ${pct(v.eficiencia_ventilador)}, bandas al ${pct(v.eficiencia_transmision)}): motor de ${v.motor_hp === null ? 'más de 500' : String(v.motor_hp)} HP.`),
+        bloqueEleccion(v))),
       h('p', { class: 'ti-nota' }, 'Por toma: el caudal que va a jalar con el balanceo, la succión de su campana y la pérdida de su camino hasta el colector.'),
       tabla('ti-calc-tomas', ['Toma', 'm³/h', 'Campana', 'Camino'], inf.tomas.map((x) => h('tr', { 'data-puerto': x.puerto, class: x.critica ? 'ti-critica' : null },
         h('td', null, h('button', { type: 'button', class: 'enlace', title: x.puerto, onclick: ir(x.puerto) }, x.nombre), x.critica ? h('span', { class: 'ti-chip', title: 'El camino de más pérdida' }, 'crítica') : null),
