@@ -661,9 +661,11 @@
     if (ev.button === 1 || ui.espacio) { ui.gesto = { ...base, modo: 'VISTA' }; return; }
     const tir = tiradorBajo(p.x, p.y);
     if (tir) { ui.gesto = { ...base, modo: tir.tipo, pid: tir.pid, h0: tir.mg.h, h: tir.mg.h, ev: tir.mg.ev, previa: false }; return; }
-    // la etiqueta de una pieza (sin trazo en curso y con la flecha): tocarla es tocar su nodo
+    // la etiqueta de una pieza (sin trazo en curso y con la flecha): tocarla es tocar su nodo, salvo que bajo el dedo haya un
+    // nodo, una toma o un punto de transición (una etiqueta puede caer encima de otro nodo)
+    const bajo = TB().tocar(s, p.x, p.y, p.tactil);
     const etq = !s.traza && s.herr === 'SELECCIONAR' && ev.target && ev.target.closest ? ev.target.closest('[data-pieza-nodo]') : null;
-    const hit = etq ? { tipo: 'NODO', id: etq.dataset.piezaNodo, nodo: etq.dataset.piezaNodo } : TB().tocar(s, p.x, p.y, p.tactil);
+    const hit = etq && !(bajo && ['NODO', 'PUERTO', 'PT'].includes(bajo.tipo)) ? { tipo: 'NODO', id: etq.dataset.piezaNodo, nodo: etq.dataset.piezaNodo } : bajo;
     // el dedo quieto 400 ms sobre un nodo o un tramo abre el menú radial (§4.5), si no se está trazando; qué piezas trae se
     // calcula hasta que se abre (probarlas contra el modelo cuesta, y la mayoría de los toques no llegan a los 400 ms)
     if (p.tactil && !s.traza && hit && CON_RADIAL.has(hit.tipo)) programarRadial(hit, p);
