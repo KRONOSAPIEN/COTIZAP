@@ -346,6 +346,19 @@
         lugar.ocupar({ x: r.x - 7, y: r.y - 7, w: 14, h: 14 });
       }
     }));
+    // el puerto elegido: sus cotas a los bordes de su cara (§5.15)
+    if (sel && sel.tipo === 'PUERTO' && g.puertos.has(sel.id)) {
+      TB().cotasPuerto(s, sel.id).forEach((c, i) => {
+        const a = P(c.desde);
+        const b = P(c.hasta);
+        if (Math.hypot(b.x - a.x, b.y - a.y) < 6) return;
+        sobre.append(svg('line', { x1: f1(a.x), y1: f1(a.y), x2: f1(b.x), y2: f1(b.y), class: 'ti-cota-toma', 'marker-start': 'url(#ti-punta)', 'marker-end': 'url(#ti-punta)', 'data-cota-toma': String(i) }));
+        const w = anchoTexto(c.texto, 11) + 8;
+        const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        const r = lugar.elegir([[m.x - w / 2, m.y - 20], [m.x + 4, m.y - 8], [m.x - w - 4, m.y - 8], [m.x - w / 2, m.y + 4]].map(([x, y]) => ({ x, y, w, h: 16 })), true);
+        etiquetas.append(svg('text', { x: f1(r.x + 4), y: f1(r.y + 12), class: 'ti-txt ti-txt-cota-toma' }, `${c.texto} mm`));
+      });
+    }
     // nodos: extremos libres y piezas
     s.t.nodos.forEach((nd) => {
       const ad = g.ady.get(nd.id) || [];
@@ -1103,21 +1116,36 @@
     const T = TZ();
     const mov = (c) => { if (TB().moverEquipo(s, e.id, c)) cambio(); else pintarEstado(); };
     const caja = (k) => entrada(`ti-e-${k}`, e.caja_mm[k], (v) => aplicar((t) => T.editarEquipo(t, M(), e.id, { caja_mm: { ...e.caja_mm, [k]: num(v) } }), `Caja de ${e.nombre}: ${k} ${v} mm.`));
-    const cara = h('select', { id: 'ti-nt-cara', 'aria-label': 'Cara de la caja' }, [['SUP', 'Cara superior'], ['PX', 'Cara +X'], ['NX', 'Cara −X'], ['PY', 'Cara +Y'], ['NY', 'Cara −Y']].map(([v, t]) => h('option', { value: v }, t)));
-    const ca = h('input', { id: 'ti-nt-a', type: 'text', inputmode: 'decimal', value: '0', 'aria-label': 'Primera coordenada sobre la cara (mm desde el centro)' });
-    const cb = h('input', { id: 'ti-nt-b', type: 'text', inputmode: 'decimal', value: '0', 'aria-label': 'Segunda coordenada sobre la cara (mm desde el centro)' });
+    // la toma nueva (§5.15): su cara, sus distancias a los bordes (vacío = al centro), su Ø y su caudal
+    const cara = h('select', { id: 'ti-nt-cara', 'aria-label': 'Cara de la caja' }, Object.keys(TZ().CARAS_PUERTO).map((v) => h('option', { value: v }, TB().NOMBRE_CARA[v])));
+    const ca = h('input', { id: 'ti-nt-a', type: 'text', inputmode: 'decimal', value: '', placeholder: 'centro' });
+    const cb = h('input', { id: 'ti-nt-b', type: 'text', inputmode: 'decimal', value: '', placeholder: 'centro' });
+    const etqA = h('span', null);
+    const etqB = h('span', null);
+    const rotular = () => {
+      const ej = cara.value === 'SUP' ? ['Desde el lado −X (mm)', 'Desde el lado −Y (mm)'] : ['Desde la izquierda (mm)', 'Altura desde la base (mm)'];
+      etqA.textContent = ej[0];
+      etqB.textContent = ej[1];
+      ca.setAttribute('aria-label', `${ej[0]} de la toma nueva; vacío, al centro`);
+      cb.setAttribute('aria-label', `${ej[1]} de la toma nueva; vacío, al centro`);
+    };
+    cara.addEventListener('change', rotular);
+    rotular();
+    const dNueva = selector('ti-nt-d', diametros(), s.D, () => {}, 'Ø de la toma nueva');
     const deAire = e.tipo === 'COLECTOR' || e.tipo === 'VENTILADOR';
+    const qNueva = deAire ? null : h('input', { id: 'ti-nt-q', type: 'text', inputmode: 'decimal', value: '', placeholder: 'm³/h', 'aria-label': 'Caudal de diseño de la toma nueva (m³/h)' });
     const conDescarga = e.puertos.some((p) => p.rol === 'SALIDA');
     const nuevaToma = (salida) => {
-      const a = num(ca.value) || 0;
-      const b = num(cb.value) || 0;
-      const L = e.caja_mm.largo / 2;
-      const A = e.caja_mm.ancho / 2;
-      const H = e.caja_mm.alto;
-      const q = { SUP: { x: a, y: b, z: H }, PX: { x: L, y: a, z: H / 2 + b }, NX: { x: -L, y: a, z: H / 2 + b }, PY: { x: a, y: A, z: H / 2 + b }, NY: { x: a, y: -A, z: H / 2 + b } }[cara.value];
+      const { ancho, alto } = TZ().medidasCara(e.caja_mm, cara.value);
+      const a = ca.value.trim() === '' ? ancho / 2 : num(ca.value);
+      const b = cb.value.trim() === '' ? alto / 2 : num(cb.value);
+      const Q = qNueva && qNueva.value.trim() !== '' ? num(qNueva.value) : undefined;
+      if (!Number.isFinite(a) || !Number.isFinite(b) || (Q !== undefined && !Number.isFinite(Q))) { TB().decir(s, 'Escriba las distancias y el caudal con números (o déjelos vacíos).', true); pintarEstado(); return; }
       const rol = salida ? 'SALIDA' : deAire ? 'ENTRADA' : 'TOMA';
-      const m = TB().hacer(s, (t) => T.agregarPuerto(t, M(), e.id, { rol, posicion_local_mm: q, diametro_in: s.D }), `Se agregó ${{ ENTRADA: 'la boca', SALIDA: 'la descarga' }[rol] || 'la toma'} a ${e.nombre}.`);
-      if (m) { s.sel = { tipo: 'PUERTO', id: m.equipos.find((x) => x.id === e.id).puertos.slice(-1)[0].id }; cambio(); } else pintarEstado();
+      const D = Number(dNueva.value);
+      const m = TB().hacer(s, (t) => T.agregarPuerto(t, M(), e.id, { rol, cara: cara.value, a_mm: a, b_mm: b, diametro_in: D, ...(Q !== undefined ? { caudal_m3_h: Q } : {}) }),
+        (mm) => `Se agregó ${{ ENTRADA: 'la boca', SALIDA: 'la descarga' }[rol] || 'la toma'} a ${e.nombre}. ${TB().textoUbicacion(ui.s, mm.ultimo.puerto)}`);
+      if (m) { s.sel = { tipo: 'PUERTO', id: m.ultimo.puerto }; cambio(); } else pintarEstado();
     };
     return h('section', { class: 'ti-ins' },
       titulo(e.nombre, `${{ COLECTOR: 'Colector', MAQUINA: 'Máquina', CAMPANA: 'Campana', VENTILADOR: 'Ventilador' }[e.tipo]} ${e.id}`),
@@ -1131,13 +1159,84 @@
         e.tipo === 'COLECTOR' || e.tipo === 'VENTILADOR' ? campo('Pérdida propia (Pa)', entrada('ti-e-perdida', e.perdida_Pa, (v) => aplicar((t) => T.editarEquipo(t, M(), e.id, { perdida_Pa: v === '' ? null : num(v) }), 'Pérdida del equipo.'))) : null),
       h('p', { class: 'ti-nota' }, 'Flechas: 100 mm (Mayús 10, Alt 1) · RePág/AvPág sube o baja · R gira 15° (Mayús+R 90°). Arrástrelo con «Seleccionar».'),
       h('h4', null, deAire ? 'Bocas y descarga' : 'Tomas'),
-      e.puertos.length ? h('ul', { class: 'ti-lista' }, e.puertos.map((p) => h('li', null, h('button', { type: 'button', class: 'enlace', onclick: () => { s.sel = { tipo: 'PUERTO', id: p.id }; pintar(); } },
-        `${p.id} · ${p.nombre} · ${pulg(p.diametro_in)}${p.caudal_m3_h ? ` · ${n0(p.caudal_m3_h)} m³/h` : ''}${p.acople ? ` · ${p.acople.tipo === 'BRIDA' ? 'brida' : 'manguera'}` : ' · sin acople'}`)))) : h('p', { class: 'ti-nota' }, 'Sin tomas: use «Toma» (P) y toque una cara de la caja, o agréguela aquí.'),
-      h('div', { class: 'ti-nueva-toma' }, cara, h('label', { class: 'ti-mini' }, 'a ', ca), h('label', { class: 'ti-mini' }, 'b ', cb),
-        h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-agregar-toma', onclick: () => nuevaToma(false) }, `+ ${deAire ? 'Boca' : 'Toma'} de ${pulg(s.D)}`),
-        deAire && !conDescarga ? h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-agregar-descarga', onclick: () => nuevaToma(true) }, `+ Descarga de ${pulg(s.D)}`) : null),
-      h('p', { class: 'ti-nota' }, `a y b en mm desde el centro de la cara (en la cara superior, X e Y locales; en una lateral, a lo largo y en altura).${deAire ? ' La descarga es la brida por donde sale el aire del ventilador: su ducto va a un extremo libre, a la atmósfera.' : ''}`),
+      e.puertos.length ? h('ul', { class: 'ti-lista' }, e.puertos.map((p) => {
+        const u = TZ().ubicacionEnCara(e.caja_mm, p);
+        return h('li', null, h('button', { type: 'button', class: 'enlace', 'data-puerto': p.id, onclick: () => { s.sel = { tipo: 'PUERTO', id: p.id }; pintar(); } },
+          `${p.id} · ${p.nombre} · ${pulg(p.diametro_in)}${p.caudal_m3_h ? ` · ${n0(p.caudal_m3_h)} m³/h` : ''}${u ? ` · ${TB().NOMBRE_CARA[u.cara].replace('Lado', 'lado').replace('Arriba', 'arriba')} a ${n0(u.a_mm)} × ${n0(u.b_mm)} mm` : ''}${p.acople ? ` · ${p.acople.tipo === 'BRIDA' ? 'brida' : 'manguera'}` : ' · sin acople'}`));
+      })) : h('p', { class: 'ti-nota' }, 'Sin tomas: use «Toma» (P) y toque una cara de la caja, o agréguela aquí.'),
+      h('h4', null, deAire ? 'Agregar una boca' : 'Agregar una toma'),
+      h('div', { class: 'ti-rejilla-campos ti-nueva-toma' },
+        campo('Cara', cara), h('div', { class: 'campo ti-campo' }, h('label', { for: 'ti-nt-a' }, etqA), ca), h('div', { class: 'campo ti-campo' }, h('label', { for: 'ti-nt-b' }, etqB), cb),
+        campo('Ø', dNueva), qNueva ? campo('Caudal (m³/h)', qNueva) : null),
+      h('div', { class: 'ti-acciones' },
+        h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-agregar-toma', onclick: () => nuevaToma(false) }, `+ ${deAire ? 'Boca' : 'Toma'}`),
+        deAire && !conDescarga ? h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-agregar-descarga', onclick: () => nuevaToma(true) }, '+ Descarga') : null),
+      h('p', { class: 'ti-nota' }, `Las distancias van al centro de la toma, desde los bordes de la cara (vacías: al centro). Después se mueve y se acota en su ficha.${deAire ? ' La descarga es la brida por donde sale el aire del ventilador: su ducto va a un extremo libre, a la atmósfera.' : ''}`),
       h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-peligro', onclick: () => { if (TB().borrar(s, { tipo: 'EQUIPO', id: e.id })) cambio(); else pintarEstado(); } }, 'Quitar el equipo')));
+  }
+
+  /** Dimensionar una toma (§5.15): el Ø para su caudal y el caudal que pide su Ø, con un toque. */
+  function bloqueDimension(pid) {
+    const s = ui.s;
+    const p = s.g.puertos.get(pid).puerto;
+    const d = TB().dimensionPuerto(s, pid);
+    const usar = (c, msg) => aplicar((t) => TZ().editarPuerto(t, M(), pid, c), msg);
+    const botones = [];
+    if (d.caudal && d.diametro_sugerido !== p.diametro_in) {
+      botones.push(h('button', { type: 'button', class: 'btn btn-sec btn-chico', id: 'ti-p-usar-d', onclick: () => usar({ diametro_in: d.diametro_sugerido }, `Ø de ${pid}: ${pulg(d.diametro_sugerido)}, para ${n0(d.caudal)} m³/h.`) },
+        `Ø para ${n0(d.caudal)} m³/h: ${pulg(d.diametro_sugerido)} (${W.num(d.velocidad_sugerida, 1)} m/s)`));
+    }
+    if (!d.caudal || d.velocidad < d.vmin - 1e-9) {
+      botones.push(h('button', { type: 'button', class: 'btn btn-sec btn-chico', id: 'ti-p-usar-q', onclick: () => usar({ caudal_m3_h: d.caudal_min }, `Caudal de ${pid}: ${n0(d.caudal_min)} m³/h (${d.vmin} m/s con ${pulg(p.diametro_in)}).`) },
+        `Caudal con ${pulg(p.diametro_in)} a ${d.vmin} m/s: ${n0(d.caudal_min)} m³/h`));
+    }
+    return h('div', { class: 'ti-dimension', id: 'ti-p-dimension' },
+      botones.length ? h('div', { class: 'ti-acciones' }, ...botones) : null,
+      h('p', { class: 'ti-nota' }, `Con ${pulg(p.diametro_in)} la toma jala de ${n0(d.caudal_min)} a ${n0(d.caudal_max)} m³/h entre ${d.vmin} y ${d.vmax} m/s. Si el fabricante da el caudal, escríbalo; si no, use el de la velocidad mínima.`));
+  }
+  /** Dónde va el puerto en su equipo (§5.15): su cara y sus distancias a los bordes, con lo que queda del otro lado. */
+  function bloqueUbicacion(pid) {
+    const s = ui.s;
+    const u = TB().ubicacionPuerto(s, pid);
+    if (!u) return null;
+    const pu = s.g.puertos.get(pid);
+    const mover = (c) => { if (TB().moverPuertoA(s, pid, c)) cambio(); else { pintarEstado(); pintarInspector(); } };
+    const dist = (k, etq, valor, resto, txt) => campo(etq, entrada(`ti-p-${k}`, n0(valor), (v) => {
+      const x = num(v);
+      if (!Number.isFinite(x)) { TB().decir(s, 'Escriba la distancia en mm.', true); pintarEstado(); return; }
+      mover({ [k]: x });
+    }), `${n0(resto)} mm ${txt}`);
+    return h('div', { class: 'ti-ubicacion', id: 'ti-p-ubicacion' },
+      h('h4', null, `Dónde va en ${pu.equipo.nombre}`),
+      h('div', { class: 'ti-ops', role: 'group', 'aria-label': `Cara de ${pid}` }, u.caras.map((c) => h('button', {
+        type: 'button', class: `ti-op${c.actual ? ' ti-op-activa' : ''}`, 'data-cara': c.cara, 'aria-pressed': c.actual ? 'true' : 'false', 'aria-disabled': c.motivo ? 'true' : null, title: c.motivo || '',
+        onclick: () => {
+          if (c.actual) return;
+          if (c.motivo) { TB().decir(s, c.motivo, true); pintarEstado(); return; }
+          mover({ cara: c.cara });
+        },
+      }, c.nombre))),
+      h('div', { class: 'ti-rejilla-campos' }, dist('a', `${u.ejes.a} (mm)`, u.a, u.ancho - u.a, u.ejes.restoA), dist('b', `${u.ejes.b} (mm)`, u.b, u.alto - u.b, u.ejes.restoB)),
+      h('div', { class: 'ti-acciones' },
+        h('button', { type: 'button', class: 'btn btn-sec btn-chico', id: 'ti-p-centrar-a', onclick: () => mover({ a: u.ancho / 2 }) }, u.cara === 'SUP' ? 'Centrar en X' : 'Centrar a lo ancho'),
+        h('button', { type: 'button', class: 'btn btn-sec btn-chico', id: 'ti-p-centrar-b', onclick: () => mover({ b: u.alto / 2 }) }, u.cara === 'SUP' ? 'Centrar en Y' : 'Centrar a lo alto')),
+      h('p', { class: 'ti-nota' }, `Al centro de la toma, en mm; la cara mide ${n0(u.ancho)} × ${n0(u.alto)} mm y las cotas se ven en el lienzo.${u.conDucto ? ' Con ducto se mueve sobre su cara y el ducto la sigue.' : ''}`));
+  }
+  /** Otra toma igual a esta, a mm controlados en su misma cara. */
+  function bloqueCopia(pid) {
+    const s = ui.s;
+    const u = TB().ubicacionPuerto(s, pid);
+    if (!u) return null;
+    const mm = h('input', { id: 'ti-p-copia-mm', type: 'text', inputmode: 'decimal', value: '300', class: 'ti-ficha-num', 'aria-label': 'A cuántos mm de esta va la otra toma' });
+    const hacia = TB().HACIA[u.cara === 'SUP' ? 'SUP' : 'LADO'];
+    const flecha = { IZQUIERDA: '←', DERECHA: '→', ARRIBA: '↑', ABAJO: '↓' };
+    return h('div', { class: 'ti-copia', id: 'ti-p-copia' },
+      h('h4', null, 'Otra igual'),
+      h('div', { class: 'ti-ficha-ctl' }, h('span', { class: 'ti-sub' }, 'a'), mm, h('span', { class: 'ti-sub' }, 'mm'),
+        ...['IZQUIERDA', 'DERECHA', 'ARRIBA', 'ABAJO'].map((d) => h('button', { type: 'button', class: 'ti-op', 'data-hacia': d, title: hacia[d], 'aria-label': `Otra toma igual ${hacia[d]}`, onclick: () => {
+          if (TB().copiarPuerto(s, pid, d, num(mm.value))) cambio(); else pintarEstado();
+        } }, `${flecha[d]} ${hacia[d].replace(/^(a la |hacia )/, '')}`))),
+      h('p', { class: 'ti-nota' }, 'Con su Ø, su caudal y su K, en la misma cara; queda sin acople.'));
   }
 
   function inspectorPuerto(pid) {
@@ -1156,6 +1255,8 @@
         toma ? campo('Caudal de diseño (m³/h)', entrada('ti-p-q', p.caudal_m3_h, (v) => aplicar((t) => T.editarPuerto(t, M(), pid, { caudal_m3_h: v === '' ? null : num(v) }), `Caudal de ${pid}: ${v} m³/h.`))) : null,
         toma ? campo('Coeficiente de entrada K', entrada('ti-p-k', p.coef_entrada_K, (v) => aplicar((t) => T.editarPuerto(t, M(), pid, { coef_entrada_K: num(v) }), `K de ${pid}: ${v}.`))) : null),
       toma && p.caudal_m3_h ? semaforoV(p.caudal_m3_h, p.diametro_in) : toma ? h('p', { class: 'ti-semaforo ti-sem-ambar' }, 'Escriba el caudal de diseño: sin él no se puede dimensionar.') : null,
+      toma ? bloqueDimension(pid) : null,
+      bloqueUbicacion(pid),
     ];
     if (toma) {
       hijos.push(h('h4', null, 'Acople'), h('div', { class: 'ti-seg', role: 'group', 'aria-label': 'Acople de la toma' },
@@ -1194,6 +1295,7 @@
         h('div', { class: 'ti-rejilla-campos' }, bar('numero', 'Barrenos'), bar('circulo_mm', 'Círculo (mm)'), bar('diametro_mm', 'Ø barreno (mm)')),
         h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-trazar-desde', onclick: () => trazarDesde({ tipo: 'PUERTO', id: pid }) }, toma ? 'Trazar desde la toma' : p.rol === 'SALIDA' ? 'Trazar desde la descarga' : 'Trazar desde la boca')));
     } else if (toma) hijos.push(h('p', { class: 'ti-semaforo ti-sem-ambar' }, 'Sin acople: elija manguera o brida para poder trazar desde aquí.'));
+    if (toma) hijos.push(bloqueCopia(pid));
     hijos.push(h('div', { class: 'ti-acciones' },
       h('button', { type: 'button', class: 'btn btn-sec', onclick: () => { s.sel = { tipo: 'EQUIPO', id: pu.equipo.id }; pintar(); } }, `Ver ${pu.equipo.nombre}`),
       mg && !mg.conDucto ? h('button', { type: 'button', class: 'btn btn-sec', onclick: () => aplicar((t) => T.desacoplar(t, M(), pid), `Se quitó la manguera de ${pid}.`) }, 'Quitar la manguera') : null,

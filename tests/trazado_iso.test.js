@@ -1301,3 +1301,43 @@ test('Cada pieza se ajusta (§5.14): radio y gajos del codo, forma y largo de la
   assert.equal(T.ajustarPieza(t10, M, ext, { cuello_mm: M.proceso.tapa_cuello_mm }).nodos.find((x) => x.id === ext).ajustes, undefined);
   assert.equal(T.quitarTapa(t10, M, ext).nodos.find((x) => x.id === ext).ajustes, undefined, 'sin la tapa, su cuello se va');
 });
+
+test('Las tomas en su cara (§5.15): dónde están, agregarlas y moverlas a distancias de los bordes, con manguera o con ducto', () => {
+  const t0 = T.desdeSistema(EJ, M).modelo;
+  const eq = (t, id) => t.equipos.find((e) => e.id === id);
+  const pu = (t, id) => t.equipos.flatMap((e) => e.puertos).find((p) => p.id === id);
+  const errores = (t) => T.revisar(t, M).filter((v) => v.severidad === 'BLOQUEANTE' || v.severidad === 'ERROR').map((v) => v.codigo);
+  // dónde están las del ejemplo
+  assert.deepEqual(T.ubicacionEnCara(eq(t0, 'EQ-01').caja_mm, pu(t0, 'PU-01')), { cara: 'PX', a_mm: 750, b_mm: 3000, ancho_mm: 1500, alto_mm: 4000 });
+  assert.deepEqual(T.ubicacionEnCara(eq(t0, 'EQ-03').caja_mm, pu(t0, 'PU-03')), { cara: 'SUP', a_mm: 500, b_mm: 300, ancho_mm: 1000, alto_mm: 600 });
+  // en cada cara, a y b de ida y vuelta; en una lateral a es desde la izquierda mirándola de frente
+  const caja = { largo: 1200, ancho: 800, alto: 1000 };
+  Object.keys(T.CARAS_PUERTO).forEach((c) => {
+    const x = T.enCara(caja, c, 200, 350);
+    const u = T.ubicacionEnCara(caja, { posicion_local_mm: x.posicion_local_mm, direccion_local: x.direccion_local });
+    assert.deepEqual([u.cara, u.a_mm, u.b_mm], [c, 200, 350], c);
+  });
+  assert.deepEqual(T.enCara(caja, 'PX', 100, 500).posicion_local_mm, { x: 600, y: -300, z: 500 }, '+X: la izquierda es −Y');
+  assert.deepEqual(T.enCara(caja, 'PY', 100, 500).posicion_local_mm, { x: 500, y: 400, z: 500 }, '+Y: la izquierda es +X');
+  // agregar en una cara a distancias de sus bordes; que no quepa se dice con su rango
+  const t1 = T.agregarPuerto(t0, M, 'EQ-02', { cara: 'PY', a_mm: 300, b_mm: 600, diametro_in: 4, caudal_m3_h: 400 });
+  assert.deepEqual(T.ubicacionEnCara(eq(t1, 'EQ-02').caja_mm, pu(t1, t1.ultimo.puerto)), { cara: 'PY', a_mm: 300, b_mm: 600, ancho_mm: 1200, alto_mm: 1200 });
+  falla(() => T.agregarPuerto(t0, M, 'EQ-02', { cara: 'PY', a_mm: 20, b_mm: 600, diametro_in: 4 }), 'DATO_INVALIDO', /La toma de 4″ no cabe ahí: .*desde la izquierda va de 51 a 1149 mm/);
+  falla(() => T.agregarPuerto(t0, M, 'EQ-03', { cara: 'SUP', a_mm: 500, b_mm: 300, diametro_in: 24 }), 'DATO_INVALIDO', /La toma de 24″ no cabe en esa cara \(1000 × 600 mm\)/);
+  // con manguera: la toma se mueve y la manguera se acomoda (el punto de transición se queda)
+  const t2 = T.moverPuerto(t0, M, 'PU-03', { cara: 'SUP', a_mm: 200, b_mm: 300 });
+  assert.deepEqual(T.ubicacionEnCara(eq(t2, 'EQ-03').caja_mm, pu(t2, 'PU-03')).a_mm, 200);
+  assert.deepEqual(t2.nodos.find((x) => x.id === 'N-006').posicion_mm, t0.nodos.find((x) => x.id === 'N-006').posicion_mm);
+  assert.deepEqual(errores(t2), []);
+  falla(() => T.moverPuerto(t0, M, 'PU-03', { cara: 'PX', a_mm: 300, b_mm: 700 }), 'MANGUERA_IMPOSIBLE', /radio/);
+  // con ducto (brida): sobre su misma cara, y el ducto la sigue; a otra cara, no
+  const t3 = T.moverPuerto(t0, M, 'PU-02', { cara: 'SUP', a_mm: 400, b_mm: 400 });
+  assert.deepEqual(['N-004', 'N-003'].map((id) => t3.nodos.find((x) => x.id === id).posicion_mm.x), [10550, 10550]);
+  assert.deepEqual(errores(t3), []);
+  falla(() => T.moverPuerto(t0, M, 'PU-02', { cara: 'PX', a_mm: 400, b_mm: 600 }), 'DATO_INVALIDO', /tiene ducto: se mueve sobre su misma cara/);
+  falla(() => T.moverPuerto(t0, M, 'PU-02', { cara: 'SUP', a_mm: 30, b_mm: 400 }), 'DATO_INVALIDO', /no cabe ahí/);
+  falla(() => T.moverPuerto(t0, M, 'PU-02', { cara: 'ABAJO', a_mm: 30, b_mm: 400 }), 'DATO_INVALIDO', /SUP, PX, NX, PY o NY/);
+  // girar el equipo no cambia dónde va la toma en su caja
+  const t4 = T.moverEquipo(t1, M, 'EQ-02', { rotacion_z_deg: 90 });
+  assert.deepEqual(T.ubicacionEnCara(eq(t4, 'EQ-02').caja_mm, pu(t4, t1.ultimo.puerto)), { cara: 'PY', a_mm: 300, b_mm: 600, ancho_mm: 1200, alto_mm: 1200 });
+});

@@ -1360,6 +1360,9 @@ dd.ti-sem-verde, dd.ti-sem-ambar { background: none; font-weight: 600; }
 .ti-pieza:hover, .ti-pieza-hover { stroke: var(--accent); stroke-width: 1.5; }
 .ti-pieza-sel { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
 .ti-pieza-err { stroke: var(--crit); }
+/* las cotas de la toma elegida a los bordes de su cara (§5.15) */
+.ti-cota-toma { stroke: var(--accent); stroke-width: 1.4; fill: none; }
+.ti-txt-cota-toma { fill: var(--accent); font-weight: 700; }
 .ti-pieza-txt { font: 600 11px var(--font-ui); fill: var(--fg); pointer-events: none; }
 .ti-txt { font: 600 12px var(--font-ui); fill: var(--fg); paint-order: stroke; stroke: var(--surface-2); stroke-width: 3.5px; stroke-linejoin: round; pointer-events: none; }
 .ti-txt-err { fill: var(--crit); }
@@ -1489,6 +1492,9 @@ dd.ti-sem-verde, dd.ti-sem-ambar { background: none; font-weight: 600; }
 .ti-ficha-lado > span { display: flex; flex-direction: column; line-height: 1.1; font-weight: 600; }
 .ti-ficha-lado > span small { font-size: 11px; font-weight: 500; }
 .ti-ficha-lado select { min-height: 32px; padding: 3px 6px; width: 100%; }
+.ti-ubicacion, .ti-copia, .ti-dimension { display: flex; flex-direction: column; gap: 8px; }
+.ti-ubicacion .ti-op, .ti-copia .ti-op { min-width: 0; }
+.ti-nueva-toma select, .ti-nueva-toma input { width: 100%; }
 .ti-vent-cab .ti-vent-elegir-este { margin-left: auto; padding: 2px 10px; }
 .ti-vent-cot { margin-top: 8px; }
 .chip-trazado { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0; }

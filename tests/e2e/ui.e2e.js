@@ -3365,7 +3365,7 @@ const ok = (cond, msg) => {
     await p.mouse.click(q.x, q.y);
     ok(/Bocas y descarga/i.test(await p.locator('#ti-inspector').innerText()) && await p.locator('#ti-agregar-descarga').count() === 1, 'la ficha del colector ofrece agregar su descarga');
     await p.click('#ti-agregar-descarga');
-    ok(await msg() === 'Se agregó la descarga a Colector de polvo.' && /^Descarga PU-04/.test(await p.locator('.ti-ins-tit').first().innerText()), 'la descarga PU-04 en la cara superior, con su ficha');
+    ok(await msg() === 'Se agregó la descarga a Colector de polvo. La descarga PU-04: arriba, a 750 mm del lado −X y 750 mm del lado −Y.' && /^Descarga PU-04/.test(await p.locator('.ti-ins-tit').first().innerText()), `la descarga PU-04 al centro de la cara superior, con su ficha (${await msg()})`);
     await p.selectOption('#ti-p-d', '10');
     ok(/va con brida y es un punto fijo/.test(await p.locator('#ti-inspector').innerText()) && await p.locator('#ti-trazar-desde').innerText() === 'Trazar desde la descarga', 'la ficha explica la descarga y ofrece trazar desde ella');
     await p.click('#ti-trazar-desde');
@@ -3613,6 +3613,72 @@ const ok = (cond, msg) => {
     await cuello.fill('0');
     await cuello.press('Enter');
     ok(/Tapa de 5″ plana \(con su brida\)\.$/.test(await msg()) && JSON.stringify(await ajustes(extremo)) === JSON.stringify({ cuello_mm: 0 }), `con 0, la tapa es plana (${await msg()})`);
+    await p.close();
+  }
+
+  console.log('47) Las tomas de las máquinas: agregarlas con su cara, sus distancias a los bordes, su Ø y su caudal; moverlas (con manguera o con ducto), acotarlas, dimensionarlas y otra igual a N mm');
+  {
+    const p = await nuevaPagina();
+    const R = (fn, a) => p.evaluate(fn, a);
+    const ins = p.locator('#ti-inspector');
+    const msg = () => p.locator('#ti-msg').innerText();
+    const elegir = (sel) => R((x) => { const W = window.COTIZAP.web; W.trazadoUI.estado().sel = x; W.trazadoUI.render(); }, sel);
+    const ubic = (pid) => R((id) => { const u = window.COTIZAP.trazadoTablero.ubicacionPuerto(window.COTIZAP.web.trazadoUI.estado(), id); return u && [u.cara, u.a, u.b]; }, pid);
+    await p.click('#tab-trazado');
+    await p.click('#ti-ejemplo');
+    // agregar en la ficha de la máquina: cara +Y, a 300 mm de la izquierda y 500 de altura, de 4″ y 450 m³/h
+    await elegir({ tipo: 'EQUIPO', id: 'EQ-02' });
+    ok(/^Desde la izquierda/.test(await ins.locator('label[for="ti-nt-a"]').innerText()) === false && /Desde el lado −X/.test(await ins.locator('label[for="ti-nt-a"]').innerText()), 'arriba, las distancias son desde los lados −X y −Y');
+    await p.selectOption('#ti-nt-cara', 'PY');
+    ok(/Desde la izquierda/.test(await ins.locator('label[for="ti-nt-a"]').innerText()) && /Altura desde la base/.test(await ins.locator('label[for="ti-nt-b"]').innerText()), 'en una lateral, desde la izquierda y la altura');
+    await p.fill('#ti-nt-a', '300');
+    await p.fill('#ti-nt-b', '500');
+    await p.selectOption('#ti-nt-d', '4');
+    await p.fill('#ti-nt-q', '450');
+    await p.click('#ti-agregar-toma');
+    ok(await msg() === 'Se agregó la toma a Sierra de banco. La toma PU-04: en el lado +Y, a 300 mm de la izquierda y 500 mm de altura.', `la toma nueva y dónde quedó (${await msg()})`);
+    ok(/^Toma PU-04/.test(await ins.locator('.ti-ins-tit').first().innerText()) && await p.inputValue('#ti-p-d') === '4' && await p.inputValue('#ti-p-q') === '450', 'queda elegida, con su Ø y su caudal');
+    // sus cotas en el lienzo
+    ok(await p.locator('#ti-lienzo .ti-cota-toma').count() === 2 && JSON.stringify(await p.locator('#ti-lienzo .ti-txt-cota-toma').allTextContents()) === JSON.stringify(['300 mm', '500 mm']), 'las dos cotas a los bordes de su cara');
+    ok(/900 mm a la derecha/.test(await ins.locator('#ti-p-ubicacion').innerText()) && /700 mm arriba/.test(await ins.locator('#ti-p-ubicacion').innerText()), 'y lo que queda hacia el otro lado');
+    // moverla: la distancia, centrarla y otra cara
+    await p.fill('#ti-p-a', '450');
+    await p.press('#ti-p-a', 'Enter');
+    ok(JSON.stringify(await ubic('PU-04')) === JSON.stringify(['PY', 450, 500]), 'a 450 mm de la izquierda');
+    await p.click('#ti-p-centrar-b');
+    ok(JSON.stringify(await ubic('PU-04')) === JSON.stringify(['PY', 450, 600]) && /600 mm de altura/.test(await msg()), 'centrada a lo alto');
+    await ins.locator('#ti-p-ubicacion [data-cara="NX"]').click();
+    ok(JSON.stringify(await ubic('PU-04')) === JSON.stringify(['NX', 400, 600]), 'en el lado −X, al centro');
+    await p.fill('#ti-p-b', '1180');
+    await p.press('#ti-p-b', 'Enter');
+    ok(/no cabe ahí: su centro va a medio Ø o más de cada borde \(la altura va de 51 a 1149 mm\)/.test(await msg()) && JSON.stringify(await ubic('PU-04')) === JSON.stringify(['NX', 400, 600]), 'fuera de la cara no: dice su rango y no cambia');
+    // dimensionarla: con 4″ y 450 m³/h va lenta; el caudal a la velocidad mínima, o el Ø para su caudal
+    ok(/Caudal con 4″ a 18 m\/s: 526 m³\/h/.test(await ins.locator('#ti-p-dimension').innerText()) && /Ø para 450 m³\/h: 3″/.test(await ins.locator('#ti-p-dimension').innerText()), 'ofrece el caudal mínimo de su Ø y el Ø para su caudal');
+    await p.click('#ti-p-usar-q');
+    ok(await p.inputValue('#ti-p-q') === '526' && /^18(\.0)? m\/s ✓$/.test(await ins.locator('.ti-semaforo').first().innerText()), `el caudal a la velocidad mínima: 526 m³/h (${await ins.locator('.ti-semaforo').first().innerText()})`);
+    // otra igual a 300 mm a la derecha
+    await p.fill('#ti-p-copia-mm', '250');
+    await ins.locator('#ti-p-copia [data-hacia="DERECHA"]').click();
+    ok(await msg() === 'La toma PU-05 de Sierra de banco: igual a PU-04, a 250 mm a la derecha.' && JSON.stringify(await ubic('PU-05')) === JSON.stringify(['NX', 650, 600]), 'otra igual, a 250 mm a la derecha');
+    ok(await R(() => { const p5 = window.COTIZAP.web.estadoApp.cot.trazado_iso.equipos.find((e) => e.id === 'EQ-02').puertos.find((x) => x.id === 'PU-05'); return p5.diametro_in === 4 && p5.caudal_m3_h === 526; }), 'con su Ø y su caudal');
+    // la lista de la máquina dice dónde va cada toma
+    await elegir({ tipo: 'EQUIPO', id: 'EQ-02' });
+    ok(/PU-05 · Toma · 4″ · 526 m³\/h · lado −X a 650 × 600 mm · sin acople/.test(await ins.locator('.ti-lista').innerText()), 'la lista de tomas con su lugar');
+    // la toma del cepillo, con manguera: se mueve y la manguera se acomoda
+    await elegir({ tipo: 'PUERTO', id: 'PU-03' });
+    await p.fill('#ti-p-a', '250');
+    await p.press('#ti-p-a', 'Enter');
+    ok(await msg() === 'La toma PU-03: arriba, a 250 mm del lado −X y 300 mm del lado −Y.' && /Manguera/.test(await ins.locator('#ti-manguera-sem').innerText()), 'con manguera, la toma se mueve y la manguera se acomoda');
+    // la de la sierra, con ducto: sobre su cara, y el ducto la sigue; a otra cara, no
+    await elegir({ tipo: 'PUERTO', id: 'PU-02' });
+    ok(await ins.locator('#ti-p-ubicacion [data-cara="PX"]').getAttribute('aria-disabled') === 'true', 'con ducto, las otras caras no');
+    await ins.locator('#ti-p-ubicacion [data-cara="PX"]').click({ force: true });
+    ok(/tiene ducto: se mueve sobre su misma cara/.test(await msg()), 'y dice por qué');
+    await p.fill('#ti-p-a', '400');
+    await p.press('#ti-p-a', 'Enter');
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.trazado_iso.nodos.find((x) => x.id === 'N-003').posicion_mm.x) === 10550, 'el ducto la sigue: su codo se recorre 200 mm');
+    const prob = await R(() => window.COTIZAP.web.trazadoUI.estado().problemas.filter((v) => (v.severidad === 'BLOQUEANTE' || v.severidad === 'ERROR') && v.codigo !== 'TOMA_SIN_CONEXION').map((v) => v.mensaje));
+    ok(prob.length === 0, `sin problemas, fuera de las dos tomas nuevas que no tienen acople (${prob.join(' ')})`);
     await p.close();
   }
 

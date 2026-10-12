@@ -964,3 +964,39 @@ test('La ficha de cada pieza (§5.14): qué se le cambia, la regla, por qué no 
   assert.match(s.msg, /Tapa de 5″ plana \(con su brida\)\.$/);
   assert.equal(C.cotizarPartida(TB.fichasPieza(s, nt)[0].partida, M).geometria.detalle.L_cuello_mm, 0);
 });
+
+test('Las tomas en el tablero (§5.15): su ubicación con sus caras, moverla, otra igual a N mm, dimensionarla y sus cotas', () => {
+  const s = nuevoTablero();
+  TB.reemplazar(s, TB.ejemplo(M), 'ejemplo');
+  const u = TB.ubicacionPuerto(s, 'PU-02');
+  assert.deepEqual([u.cara, u.a, u.b, u.ancho, u.alto, u.conDucto, u.ejes.a], ['SUP', 600, 400, 1200, 800, true, 'Desde el lado −X']);
+  assert.ok(u.caras.filter((c) => !c.actual).every((c) => /tiene ducto: se mueve sobre su misma cara/.test(c.motivo)), 'con ducto, sólo su cara');
+  const u3 = TB.ubicacionPuerto(s, 'PU-03');
+  assert.deepEqual(u3.caras.map((c) => [c.cara, c.motivo]), [['SUP', null], ['PX', null], ['NX', null], ['PY', null], ['NY', null]]);
+  // moverla: lo que no se da se queda
+  assert.ok(TB.moverPuertoA(s, 'PU-02', { a: 400 }), s.msg);
+  assert.equal(s.msg, 'La toma PU-02: arriba, a 400 mm del lado −X y 400 mm del lado −Y.');
+  assert.equal(TB.moverPuertoA(s, 'PU-02', { cara: 'PX' }), false);
+  assert.match(s.msg, /tiene ducto/);
+  // otra cara empieza centrada; en una lateral, desde la izquierda y la altura
+  assert.equal(TB.moverPuertoA(s, 'PU-03', { cara: 'NY' }), false, 'la manguera no llega a la cara −Y');
+  // otra igual a 300 mm hacia +X: su Ø, su caudal y su K, sin acople, y queda elegida
+  assert.ok(TB.copiarPuerto(s, 'PU-03', 'DERECHA', 300), s.msg);
+  assert.equal(s.msg, 'La toma PU-04 de Cepillo: igual a PU-03, a 300 mm hacia +X.');
+  const p4 = s.t.equipos.find((e) => e.id === 'EQ-03').puertos.find((p) => p.id === 'PU-04');
+  assert.deepEqual([p4.diametro_in, p4.caudal_m3_h, p4.coef_entrada_K, p4.acople, s.sel.id], [5, 900, 0.5, null, 'PU-04']);
+  assert.deepEqual([TB.ubicacionPuerto(s, 'PU-04').a, TB.ubicacionPuerto(s, 'PU-04').b], [800, 300]);
+  assert.equal(TB.copiarPuerto(s, 'PU-04', 'DERECHA', 300), false);
+  assert.match(s.msg, /no cabe ahí/);
+  assert.equal(TB.copiarPuerto(s, 'PU-04', 'DERECHA', -5), false);
+  // dimensionar: el Ø para su caudal y el caudal que pide su Ø
+  const d = TB.dimensionPuerto(s, 'PU-02');
+  assert.deepEqual([d.caudal, d.diametro_sugerido, d.caudal_min, d.caudal_max, d.vmin, d.vmax], [1300, 6, 1183, 1510, 18, 23]);
+  assert.ok(Math.abs(d.velocidad - 19.796) < 0.01);
+  assert.ok(TB.hacer(s, (t) => TZ.editarPuerto(t, M, 'PU-02', { caudal_m3_h: 800 }), ''));
+  assert.deepEqual([TB.dimensionPuerto(s, 'PU-02').diametro_sugerido, Math.round(TB.dimensionPuerto(s, 'PU-02').velocidad_sugerida * 10) / 10], [4, 27.4]);
+  // las cotas: del borde al centro de la toma, del largo que dicen
+  const cotas = TB.cotasPuerto(s, 'PU-02');
+  assert.deepEqual(cotas.map((c) => c.texto), ['400', '400']);
+  cotas.forEach((c) => assert.ok(Math.abs(Math.hypot(c.hasta.x - c.desde.x, c.hasta.y - c.desde.y, c.hasta.z - c.desde.z) - Number(c.texto)) < 0.01));
+});

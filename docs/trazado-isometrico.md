@@ -2411,7 +2411,7 @@ El esquema (§3.5) creció con esos campos. Lo que el trazo exporta sigue llevan
 
 1. **Presión del ventilador.** Es la succión de entrada: la de la boca más la del colector. Se toma así a propósito (es conservadora) porque no resta la pv de entrada. Si el equipo tiene ducto de descarga, se suma su presión en la brida (§5.12).
 2. **El caudal corregido** es el que la red va a jalar si se construye así. Por eso el ventilador se elige con la suma corregida, aunque el balanceo diga NINGUNA en otras confluencias.
-3. **Llegó después:** el ducto de descarga (§5.12), elegir el modelo del ventilador en un catálogo (§5.13) y editar cada pieza en su ficha (§5.14).
+3. **Llegó después:** el ducto de descarga (§5.12), elegir el modelo del ventilador en un catálogo (§5.13), editar cada pieza en su ficha (§5.14) y ubicar y dimensionar las tomas a distancias controladas (§5.15).
 
    Pasar el trazo a partidas llegó con la etapa 5 (§5.6), y editar la tabla de coeficientes y las eficiencias desde la aplicación, después (§5.8).
 
@@ -2814,6 +2814,56 @@ Lo verifican:
   - la forma y el largo de una reducción;
   - el despiece definitivo con las partidas ajustadas;
   - la tapa plana.
+
+### 5.15 Las tomas: dónde van y de qué tamaño
+
+Una toma (y la boca de un colector o su descarga) va sobre una cara de la caja de su equipo. Su lugar se dice con dos distancias, al centro de la toma:
+
+- en una cara lateral, **desde la izquierda** (mirándola de frente, desde fuera) y **la altura desde la base**;
+- arriba, **desde el lado −X** y **desde el lado −Y** del equipo.
+
+Las cinco caras son Arriba, Lado +X, Lado −X, Lado +Y y Lado −Y, en los ejes del equipo; girar el equipo no cambia dónde va la toma en su caja. Una toma cabe si su centro queda a medio Ø o más de cada borde; si no, se dice el rango («la altura va de 51 a 1149 mm»).
+
+- **Agregarla:** en la ficha del equipo, la cara, las dos distancias (vacías: al centro), el Ø y el caudal. O, como antes, con «Toma» (P) y un toque en la cara.
+- **Su ficha** dice dónde va:
+  - la cara, como botones;
+  - las dos distancias, con lo que queda hacia el otro lado («900 mm a la derecha»);
+  - «Centrar a lo ancho» y «Centrar a lo alto».
+
+  En el lienzo, la toma elegida muestra sus dos cotas a los bordes de su cara.
+- **Moverla** es escribir otra distancia o tocar otra cara (que empieza centrada):
+  - sin acople, se mueve libre;
+  - con manguera, el punto de transición se queda y la manguera se acomoda; si ya no puede doblarse hasta ahí, se dice con el radio que haría falta;
+  - con brida y ducto, sólo sobre su misma cara: el ducto la sigue, como al mover el equipo, y se compensa en sus tramos. Si nada puede compensarlo, se dice.
+- **Dimensionarla:** la ficha dice qué caudal jala su Ø entre la velocidad mínima y la máxima del proyecto. Con un toque:
+  - el Ø para su caudal (el comercial mayor que no baja de la velocidad mínima);
+  - el caudal de su Ø a la velocidad mínima, para cuando el fabricante no lo da.
+
+  Los dos se redondean hacia dentro del rango.
+- **Otra igual:** a tantos mm de esta, hacia la izquierda, la derecha, arriba o abajo (en la cara de arriba, hacia ±X o ±Y). Lleva su Ø, su caudal y su K, y queda sin acople.
+
+En el modelo (`src/motor/trazado_iso.js`):
+
+- `enCara` y `ubicacionEnCara` pasan de cara y distancias a la posición local del puerto, y de regreso;
+- `noCabeEnCara` revisa que quepa;
+- `agregarPuerto` acepta `{ cara, a_mm, b_mm }`;
+- `moverPuerto` mueve un puerto con su manguera o con su ducto.
+
+El contrato no cambia: el puerto sigue llevando su posición local y su dirección.
+
+Lo verifican:
+
+- `tests/trazado_iso.test.js`:
+  - dónde están las del ejemplo, y cara y distancias de ida y vuelta en las cinco caras;
+  - agregar en una cara y lo que no cabe;
+  - mover con manguera (el punto de transición se queda), con ducto (sobre su cara, el ducto la sigue) y lo que no se puede;
+  - girar el equipo no la mueve en su caja.
+- `tests/trazado_tablero.test.js`: la ubicación con sus caras, moverla, otra igual, dimensionar (los dos sentidos) y sus cotas.
+- La sección 47 de `tests/e2e/ui.e2e.js`:
+  - agregar una toma lateral con sus distancias, su Ø y su caudal;
+  - sus cotas, moverla, centrarla, otra cara y lo que no cabe;
+  - el caudal de su Ø y otra igual a 250 mm;
+  - la toma con manguera y la de ducto, que lo arrastra.
 
 ---
 
