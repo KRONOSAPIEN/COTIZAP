@@ -1274,7 +1274,7 @@
         cambiar({ [cp.clave]: Math.round(x) });
       }, { class: 'ti-ficha-num', 'aria-label': `${cp.etiqueta} de ${f.id} (${cp.unidad})` });
       return fila(cp, h('div', { class: 'ti-ficha-ctl' }, inp, h('span', { class: 'ti-sub' }, cp.unidad),
-        cp.ajustado ? h('button', { type: 'button', class: 'btn-texto ti-ficha-regla', onclick: () => cambiar({ [cp.clave]: null }) }, `El mínimo (${cp.regla} ${cp.unidad})`) : h('small', { class: 'ti-sub' }, 'el mínimo')));
+        cp.ajustado ? h('button', { type: 'button', class: 'btn-texto ti-ficha-regla', onclick: () => cambiar({ [cp.clave]: null }) }, `${cp.textoRegla[0].toUpperCase()}${cp.textoRegla.slice(1)} (${cp.regla} ${cp.unidad})`) : h('small', { class: 'ti-sub' }, cp.textoRegla)));
     };
     const lados = h('div', { class: 'ti-ficha-lados' }, f.lados.map((l) => (l.tramo
       ? h('label', { class: 'ti-ficha-lado', 'data-lado': l.rol }, h('span', null, l.etiqueta, h('small', null, l.tramo)), selector(null, diametros(), l.diametro_in, (v) => cambiarDiametroDe(l.tramo, Number(v)), `Ø del lado que ${l.etiqueta.toLowerCase()} de ${f.id} (${l.tramo})`))

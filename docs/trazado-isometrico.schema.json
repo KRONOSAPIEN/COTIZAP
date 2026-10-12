@@ -246,12 +246,15 @@
             {
               "type": "object",
               "additionalProperties": false,
-              "required": ["radio_D", "gajos", "forma", "largo_reduccion_mm"],
+              "required": ["radio_D", "gajos", "forma", "largo_reduccion_mm", "largo_cuerpo_mm", "largo_ramal_mm", "cuello_mm"],
               "properties": {
                 "radio_D": { "anyOf": [{ "type": "null" }, { "type": "number", "minimum": 1, "maximum": 5 }], "description": "El radio al eje del codo entre su diámetro; null: el de las políticas (radio_codo_D)." },
                 "gajos": { "anyOf": [{ "type": "null" }, { "type": "integer", "minimum": 2, "maximum": 12 }], "description": "Los gajos del codo; null: los de las tablas (una junta por cada alfa_max_junta_deg)." },
                 "forma": { "anyOf": [{ "type": "null" }, { "type": "string", "enum": ["CONCENTRICA", "EXCENTRICA_PLANA_ABAJO", "EXCENTRICA_PLANA_ARRIBA"] }], "description": "La de la reducción o del adaptador en un tramo horizontal; null: la de las políticas (reduccion_horizontal)." },
-                "largo_reduccion_mm": { "anyOf": [{ "type": "null" }, { "type": "number", "exclusiveMinimum": 0, "maximum": 3000 }], "description": "El largo de la reducción o del adaptador, si pasa del de la regla (con el semiángulo máximo); null: el de la regla." }
+                "largo_reduccion_mm": { "anyOf": [{ "type": "null" }, { "type": "number", "exclusiveMinimum": 0, "maximum": 3000 }], "description": "El largo de la reducción o del adaptador, si pasa del de la regla (con el semiángulo máximo); null: el de la regla." },
+                "largo_cuerpo_mm": { "anyOf": [{ "type": "null" }, { "type": "number", "exclusiveMinimum": 0, "maximum": 3000 }], "description": "El largo del cuerpo del injerto (o del cono de la reducción con injerto), si pasa del de la regla; null: el de la regla." },
+                "largo_ramal_mm": { "anyOf": [{ "type": "null" }, { "type": "number", "exclusiveMinimum": 0, "maximum": 3000 }], "description": "El largo del ramal del injerto, desde el eje del tronco, si pasa del de la regla; null: el de la regla." },
+                "cuello_mm": { "anyOf": [{ "type": "null" }, { "type": "number", "minimum": 0, "maximum": 500 }], "description": "El cuello de la tapa (0: tapa plana, sin cuello); null: el de las tablas (proceso.tapa_cuello_mm)." }
               }
             }
           ],

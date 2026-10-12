@@ -72,9 +72,13 @@
   const LARGO_COMPUERTA_MM = 150; // los equipos se separan en la rejilla del piso
   /**
    * Lo que se ajusta en la pieza de un nodo (§5.14): el radio (R/D) y los gajos del codo; la forma y el largo de la
-   * reducción (o del adaptador). Lo que no se ajusta sale de las políticas del proyecto y de las tablas.
+   * reducción (o del adaptador); el largo del cuerpo (o del cono) y del ramal de un injerto; el cuello de la tapa. Lo que
+   * no se ajusta sale de las políticas del proyecto y de las tablas.
    */
-  const CAMPOS_AJUSTE = ['radio_D', 'gajos', 'forma', 'largo_reduccion_mm'];
+  const CAMPOS_AJUSTE = ['radio_D', 'gajos', 'forma', 'largo_reduccion_mm', 'largo_cuerpo_mm', 'largo_ramal_mm', 'cuello_mm'];
+  /** De qué pieza es cada ajuste. */
+  const PIEZA_AJUSTE = { radio_D: 'CODO', gajos: 'CODO', forma: 'REDUCCION', largo_reduccion_mm: 'REDUCCION', largo_cuerpo_mm: 'INJERTO', largo_ramal_mm: 'INJERTO', cuello_mm: 'TAPA' };
+  const CUELLO_TAPA_MAX_MM = 500;
   const RADIOS_CODO_D = [1, 1.5, 2, 2.5, 3]; // los que ofrece la ficha; se acepta cualquiera de 1 a 5
   const RADIO_CODO_D = { min: 1, max: 5 };
   const GAJOS = { min: 2, max: 12 };
@@ -104,7 +108,8 @@
     if (finito(a.radio_D) && a.radio_D >= RADIO_CODO_D.min && a.radio_D <= RADIO_CODO_D.max) r.radio_D = Math.round(a.radio_D * 100) / 100;
     if (Number.isInteger(a.gajos) && a.gajos >= GAJOS.min && a.gajos <= GAJOS.max) r.gajos = a.gajos;
     if (FORMAS_REDUCCION.includes(a.forma)) r.forma = a.forma;
-    if (finito(a.largo_reduccion_mm) && a.largo_reduccion_mm > 0 && a.largo_reduccion_mm <= LARGO_REDUCCION_MAX_MM) r.largo_reduccion_mm = Math.round(a.largo_reduccion_mm);
+    ['largo_reduccion_mm', 'largo_cuerpo_mm', 'largo_ramal_mm'].forEach((k) => { if (finito(a[k]) && a[k] > 0 && a[k] <= LARGO_REDUCCION_MAX_MM) r[k] = Math.round(a[k]); });
+    if (finito(a.cuello_mm) && a.cuello_mm >= 0 && a.cuello_mm <= CUELLO_TAPA_MAX_MM) r.cuello_mm = Math.round(a.cuello_mm);
     return Object.keys(r).length ? r : undefined;
   }
   /** Los gajos que el motor le da a un codo de θ grados si no se le dicen: una junta por cada alfa_max de las tablas. */
@@ -814,10 +819,14 @@
         // la tapa: cierra el extremo; su cuello (el de las tablas) ocupa el final del tramo
         if (nd.tapa && ad.length === 1) {
           const t = rig[0];
-          const r = motor(M, baseMotor(t), { familia: 'TAPA', D_mm: r1(t.diametro_in * IN) });
+          // el cuello: el ajustado (0 = tapa plana) o el de las tablas
+          const aj = AJ.get(nid);
+          const r0 = motor(M, baseMotor(t), { familia: 'TAPA', D_mm: r1(t.diametro_in * IN) });
+          const r = aj.cuello_mm !== undefined && r0.ok ? motor(M, baseMotor(t), { familia: 'TAPA', D_mm: r1(t.diametro_in * IN), L_cuello_mm: aj.cuello_mm }) : r0;
           if (!r.ok) { prob('PIEZA_NO_FABRICABLE', `El motor no puede fabricar la tapa de ${nid}: ${r.error}`, [nid]); return; }
           const L = r.d.L_cuello_mm;
           const pz = pieza('TAPA', nid, {
+            auto: { cuello_mm: r0.d.L_cuello_mm },
             conexiones: [{ rol: g.abajo.get(t.id) === nid ? 'ENTRADA' : 'SALIDA', tramo: t.id, diametro_in: t.diametro_in }],
             geometria: { ...geomVacia(), largo_mm: L },
             perdida: { modelo: 'TAPA', K_paso: null, K_ramal: null, referencia: 'Tapa: cierra el ducto; el tramo hasta ella no lleva aire' }, familia_cotizap: 'TAPA',
@@ -947,8 +956,12 @@
         const Rm = (Din * IN + e) / 2;
         const rb = (d * IN + e) / 2;
         const tMax = (Rm + rb * Math.cos(b * DEG)) / sen;
-        const Lr = Math.ceil((tMax + 100) / 50) * 50;
-        const Lc = Math.ceil(((d * IN) / sen + 150) / 50) * 50;
+        const LrAuto = Math.ceil((tMax + 100) / 50) * 50;
+        const LcAuto = Math.ceil(((d * IN) / sen + 150) / 50) * 50;
+        // los largos del cuerpo y del ramal: los ajustados si pasan de los de la regla (más cortos no caben)
+        const aj = T90 ? {} : AJ.get(nid);
+        const Lr = aj.largo_ramal_mm > LrAuto ? aj.largo_ramal_mm : LrAuto;
+        const Lc = aj.largo_cuerpo_mm > LcAuto ? aj.largo_cuerpo_mm : LcAuto;
         // la T a 90° no es una familia del taller (sus injertos van a 30° o 45°): sus medidas salen de las mismas fórmulas
         const r = T90 ? { ok: true } : motor(M, baseMotor(tOut), { familia: 'RAMAL', D_mm: r1(Din * IN), d_mm: r1(d * IN), beta_deg: b, L_cuerpo_mm: Lc, L_ramal_mm: Lr });
         if (!r.ok) { prob('PIEZA_NO_FABRICABLE', `El motor no puede fabricar el injerto de ${nid}: ${r.error}`, [nid]); return; }
@@ -956,16 +969,23 @@
           conexiones: conx, geometria: { ...geo, largo_mm: Lc, largo_ramal_mm: Lr },
           perdida: T90 ? { modelo: 'CONFLUENCIA_T', K_paso: null, K_ramal: null, referencia: 'T a 90°: K(Q_ramal/Q_salida, A_ramal/A_salida)' }
             : { modelo: 'CONFLUENCIA_RAMAL', K_paso: null, K_ramal: null, referencia: `Confluencia a ${b}°: K(β, Q_ramal/Q_salida, A_ramal/A_salida)` },
-          familia_cotizap: T90 ? null : 'RAMAL',
+          familia_cotizap: T90 ? null : 'RAMAL', auto: { largo_cuerpo_mm: LcAuto, largo_ramal_mm: LrAuto },
         });
         ocupar(pz, tIn, Lc / 2, nid); ocupar(pz, tOut, Lc / 2, nid); ocupar(pz, tk, Lr, nid);
       } else {
-        const r = motor(M, baseMotor(tOut), { familia: 'REDUCCION_INJERTO', D1_mm: r1(Math.max(Din, Dout) * IN), D2_mm: r1(Math.min(Din, Dout) * IN), d_mm: r1(d * IN), beta_deg: b });
+        const pRI = { familia: 'REDUCCION_INJERTO', D1_mm: r1(Math.max(Din, Dout) * IN), D2_mm: r1(Math.min(Din, Dout) * IN), d_mm: r1(d * IN), beta_deg: b };
+        const r0 = motor(M, baseMotor(tOut), pRI);
+        if (!r0.ok) { prob('PIEZA_NO_FABRICABLE', `El motor no puede fabricar la reducción con injerto de ${nid}: ${r0.error}`, [nid]); return; }
+        // el largo del cono y del ramal: los ajustados si pasan de los de la regla
+        const aj = AJ.get(nid);
+        const Lred = aj.largo_cuerpo_mm > r0.d.L_reduccion_mm ? aj.largo_cuerpo_mm : 0;
+        const Lram = aj.largo_ramal_mm > r0.d.L_ramal_mm ? aj.largo_ramal_mm : 0;
+        const r = Lred || Lram ? motor(M, baseMotor(tOut), { ...pRI, ...(Lred ? { L_reduccion_mm: Lred } : {}), ...(Lram ? { L_ramal_mm: Lram } : {}) }) : r0;
         if (!r.ok) { prob('PIEZA_NO_FABRICABLE', `El motor no puede fabricar la reducción con injerto de ${nid}: ${r.error}`, [nid]); return; }
         const pz = pieza('REDUCCION_INJERTO', nid, {
           conexiones: conx, geometria: { ...geo, forma: 'CONCENTRICA', semiangulo_deg: r.d.semiangulo_deg, largo_mm: r.d.L_reduccion_mm, largo_ramal_mm: r.d.L_ramal_mm },
           perdida: { modelo: 'CONFLUENCIA_RAMAL', K_paso: null, K_ramal: null, referencia: `Confluencia a ${b}° con cono: K(β, Q_ramal/Q_salida, A_ramal/A_salida, A_entrada/A_salida)` },
-          familia_cotizap: 'REDUCCION_INJERTO',
+          familia_cotizap: 'REDUCCION_INJERTO', auto: { largo_cuerpo_mm: r0.d.L_reduccion_mm, largo_ramal_mm: r0.d.L_ramal_mm },
         });
         ocupar(pz, tIn, r.d.L_reduccion_mm / 2, nid); ocupar(pz, tOut, r.d.L_reduccion_mm / 2, nid); ocupar(pz, tk, r.d.L_ramal_mm, nid);
       }
@@ -1126,6 +1146,10 @@
       if (!pzs.some((p) => p.tipo === 'CODO')) { delete a.radio_D; delete a.gajos; }
       if (!red || !red.horizontal) delete a.forma;
       if (!red || !(a.largo_reduccion_mm > red.auto.largo_mm)) delete a.largo_reduccion_mm;
+      const inj = pzs.find((p) => p.tipo === 'INJERTO' || p.tipo === 'REDUCCION_INJERTO');
+      if (!inj || !(a.largo_cuerpo_mm > inj.auto.largo_cuerpo_mm)) delete a.largo_cuerpo_mm;
+      if (!inj || !(a.largo_ramal_mm > inj.auto.largo_ramal_mm)) delete a.largo_ramal_mm;
+      if (!pzs.some((p) => p.tipo === 'TAPA')) delete a.cuello_mm;
       if (Object.keys(a).length) nd.ajustes = a; else delete nd.ajustes;
     });
   }
@@ -2058,12 +2082,22 @@
     const pzs = g.piezasDe.get(nodoId) || [];
     const codo = pzs.find((p) => p.tipo === 'CODO');
     const red = pzs.find((p) => p.tipo === 'REDUCCION' || p.tipo === 'ADAPTADOR');
+    const inj = pzs.find((p) => p.tipo === 'INJERTO' || p.tipo === 'REDUCCION_INJERTO');
+    const tapa = pzs.find((p) => p.tipo === 'TAPA');
+    const de = { CODO: [codo, 'un codo'], REDUCCION: [red, 'una reducción'], INJERTO: [inj, 'un injerto'], TAPA: [tapa, 'una tapa'] };
     const a = { ...(nd.ajustes || {}) };
+    // un largo que no puede ser menor que el de la regla: el mínimo es el de la regla, redondeado como lo muestra la ficha
+    const largo = (k, v, auto, que) => {
+      dato(finito(v) && v > 0 && v <= LARGO_REDUCCION_MAX_MM, `El largo va hasta ${LARGO_REDUCCION_MAX_MM} mm.`, [nodoId]);
+      const x = Math.round(v);
+      dato(x >= Math.round(auto), `${que} mide al menos ${Math.round(auto)} mm: más corto no se fabrica.`, [nodoId]);
+      if (x <= auto + 0.5) delete a[k]; else a[k] = x;
+    };
     Object.keys(cambios).forEach((k) => {
       dato(CAMPOS_AJUSTE.includes(k), `Una pieza no tiene «${k}» que ajustar.`);
       const v = cambios[k];
-      const delCodo = k === 'radio_D' || k === 'gajos';
-      dato(delCodo ? !!codo : !!red, `En ${nodoId} no hay ${delCodo ? 'un codo' : 'una reducción'}.`, [nodoId]);
+      const [pz, nombre] = de[PIEZA_AJUSTE[k]];
+      dato(!!pz, `En ${nodoId} no hay ${nombre}.`, [nodoId]);
       if (v === null) { delete a[k]; return; }
       if (k === 'radio_D') {
         dato(finito(v) && v >= RADIO_CODO_D.min && v <= RADIO_CODO_D.max, `El radio del codo va de ${RADIO_CODO_D.min} a ${RADIO_CODO_D.max} veces su diámetro.`, [nodoId]);
@@ -2076,6 +2110,14 @@
         dato(FORMAS_REDUCCION.includes(v), 'La reducción es concéntrica o excéntrica (con la cara plana abajo o arriba).', [nodoId]);
         dato(red.horizontal || v === 'CONCENTRICA', `La reducción de ${nodoId} no está en un tramo horizontal: va concéntrica.`, [nodoId]);
         if (v === red.auto.forma) delete a.forma; else a.forma = v;
+      } else if (k === 'largo_cuerpo_mm') {
+        largo(k, v, inj.auto.largo_cuerpo_mm, inj.tipo === 'INJERTO' ? `El cuerpo del injerto de ${nodoId}` : `El cono de la reducción con injerto de ${nodoId}`);
+      } else if (k === 'largo_ramal_mm') {
+        largo(k, v, inj.auto.largo_ramal_mm, `El ramal del injerto de ${nodoId}`);
+      } else if (k === 'cuello_mm') {
+        dato(finito(v) && v >= 0 && v <= CUELLO_TAPA_MAX_MM, `El cuello de la tapa va de 0 (tapa plana) a ${CUELLO_TAPA_MAX_MM} mm.`, [nodoId]);
+        const x = Math.round(v);
+        if (x === Math.round(tapa.auto.cuello_mm)) delete a.cuello_mm; else a.cuello_mm = x;
       } else {
         dato(finito(v) && v > 0 && v <= LARGO_REDUCCION_MAX_MM, `El largo de la reducción va hasta ${LARGO_REDUCCION_MAX_MM} mm.`, [nodoId]);
         const x = Math.round(v);
@@ -3235,7 +3277,7 @@
     ponerEquipo, editarEquipo, elegirVentilador, moverEquipo, quitarEquipo, agregarPuerto, editarPuerto, quitarPuerto,
     acoplarBrida, acoplarManguera, moverTransicion, desacoplar,
     candidatas, textoCandidatas, elegirDireccion, ajustarLargo, trazar, conectar, rutas,
-    cambiarLargo, moverSegmento, cambiarAngulo, ajustarPieza, CAMPOS_AJUSTE, RADIOS_CODO_D, RADIO_CODO_D, GAJOS, FORMAS_REDUCCION, LARGO_REDUCCION_MAX_MM, gajosAuto, cambiarDiametro, reducir, decidirCorto, ponerCompuerta, quitarCompuerta, ponerTapa, quitarTapa, anclar, borrarTramo, dimensionar, aplicarDimensiones,
+    cambiarLargo, moverSegmento, cambiarAngulo, ajustarPieza, CAMPOS_AJUSTE, PIEZA_AJUSTE, CUELLO_TAPA_MAX_MM, RADIOS_CODO_D, RADIO_CODO_D, GAJOS, FORMAS_REDUCCION, LARGO_REDUCCION_MAX_MM, gajosAuto, cambiarDiametro, reducir, decidirCorto, ponerCompuerta, quitarCompuerta, ponerTapa, quitarTapa, anclar, borrarTramo, dimensionar, aplicarDimensiones,
     CORREGIBLES, correcciones, corregir,
   };
 }));

@@ -1220,7 +1220,7 @@ test('Cada pieza se ajusta (§5.14): radio y gajos del codo, forma y largo de la
   const co = s1.accesorios.find((a) => a.id === 'CO-001');
   assert.deepEqual([co.geometria.radio_eje_mm, co.geometria.tangente_mm, co.geometria.gajos], [381, 381, 3]);
   assert.deepEqual(s1.tramos.find((x) => x.id === 'TR-002').descuentos.find((d) => d.accesorio === 'CO-001').mm, 381);
-  assert.deepEqual(s1.nodos.find((x) => x.id === 'N-003').ajustes, { radio_D: 2.5, gajos: 3, forma: null, largo_reduccion_mm: null });
+  assert.deepEqual(s1.nodos.find((x) => x.id === 'N-003').ajustes, { radio_D: 2.5, gajos: 3, forma: null, largo_reduccion_mm: null, largo_cuerpo_mm: null, largo_ramal_mm: null, cuello_mm: null });
   assert.equal(s1.nodos.find((x) => x.id === 'N-005').ajustes, null, 'el otro codo sigue la regla');
   assert.deepEqual(validarEsquema(s1, ESQUEMA), []);
   // la ida y vuelta por el contrato y por el guardado
@@ -1276,4 +1276,28 @@ test('Cada pieza se ajusta (§5.14): radio y gajos del codo, forma y largo de la
   // un ramal con un punto fijo (aquí, un ancla en su codo) no gira
   const fijo = T.anclar(t0, M, 'N-005', true);
   falla(() => T.cambiarAngulo(fijo, M, 'N-002', 30), 'FIJO_SE_MUEVE', /no se puede girar/);
+  // los largos de la reducción con injerto: el cono y el ramal más largos ocupan más de sus tramos; más cortos, no
+  const ri0 = acc(t0, 'RI-001').geometria;
+  const t8 = T.ajustarPieza(t0, M, 'N-002', { largo_cuerpo_mm: 300, largo_ramal_mm: 450 });
+  const s8 = sis(t8);
+  const ri8 = s8.accesorios.find((a) => a.id === 'RI-001').geometria;
+  assert.deepEqual([ri8.largo_mm, ri8.largo_ramal_mm], [300, 450]);
+  assert.deepEqual(['TR-002', 'TR-003', 'TR-006'].map((id) => s8.tramos.find((x) => x.id === id).descuentos.find((d) => d.accesorio === 'RI-001').mm), [150, 150, 450]);
+  falla(() => T.ajustarPieza(t0, M, 'N-002', { largo_ramal_mm: 100 }), 'DATO_INVALIDO', new RegExp(`El ramal del injerto de N-002 mide al menos ${Math.round(ri0.largo_ramal_mm)} mm`));
+  falla(() => T.ajustarPieza(t0, M, 'N-003', { largo_ramal_mm: 500 }), 'DATO_INVALIDO', /no hay un injerto/);
+  assert.equal(T.ajustarPieza(t8, M, 'N-002', { largo_cuerpo_mm: Math.round(ri0.largo_mm), largo_ramal_mm: null }).nodos.find((x) => x.id === 'N-002').ajustes, undefined, 'el de la regla los quita');
+  // la tapa: plana (0) o con otro cuello; el de las tablas la regresa
+  const op = T.candidatas(t0, M, { tramo: 'TR-003', s_mm: 1500 }).find((o) => o.direccion.elevacion_deg === 0);
+  let t9 = T.trazar(t0, M, { tramo: 'TR-003', s_mm: 1500 }, { direccion: op.direccion, largo_mm: 1500, diametro_in: 5 });
+  const ext = t9.ultimo.nodo;
+  t9 = T.ponerTapa(t9, M, ext);
+  const tapa = (t) => sis(t).accesorios.find((a) => a.tipo === 'TAPA');
+  assert.equal(tapa(t9).geometria.largo_mm, M.proceso.tapa_cuello_mm);
+  const t10 = T.ajustarPieza(t9, M, ext, { cuello_mm: 0 });
+  assert.equal(tapa(t10).geometria.largo_mm, 0);
+  assert.equal(sis(t10).tramos.find((x) => x.descuentos.length === 0 && x.diametro_in === 5) !== undefined, true, 'plana no ocupa el tramo');
+  assert.deepEqual(sis(t10).nodos.find((x) => x.id === ext).ajustes.cuello_mm, 0);
+  falla(() => T.ajustarPieza(t9, M, ext, { cuello_mm: 900 }), 'DATO_INVALIDO', /de 0 \(tapa plana\) a 500 mm/);
+  assert.equal(T.ajustarPieza(t10, M, ext, { cuello_mm: M.proceso.tapa_cuello_mm }).nodos.find((x) => x.id === ext).ajustes, undefined);
+  assert.equal(T.quitarTapa(t10, M, ext).nodos.find((x) => x.id === ext).ajustes, undefined, 'sin la tapa, su cuello se va');
 });

@@ -43,10 +43,13 @@
   const ALERTAS_DE_LECTURA = ['ASOCIACION_AMBIGUA', 'TRAZO_SIN_CONECTAR', 'CRUCE_SIN_NODO', 'VERIFICACION_VISUAL'];
   // Lo que una regla puso en un despiece anterior: al volver a leerlo se descarta y se vuelve a calcular
   const ORIGENES_DE_REGLA = ['INFERIDO', 'ESCALA', 'DEFECTO_TALLER'];
-  /** Lo que el ingeniero puede contestar: respuestas[elemento][campo]. */
-  // radio_D, gajos y largo_mm: los que trae cada pieza de un trazo isométrico ajustada a mano (trazado_lectura, §5.14)
   const RADIO_CODO_D = 1.5; // el radio de los codos del croquis (R/D), si la pieza no trae otro
-  const CAMPOS = ['longitud_m', 'diametro_in', 'angulo_deg', 'posicion', 'boca_in', 'manguera_tramos', 'calibre', 'material', 'aceptado', 'encimado', 'radio_D', 'gajos', 'largo_mm'];
+  /**
+   * Lo que el ingeniero puede contestar: respuestas[elemento][campo]. radio_D, gajos, largo_mm (de la reducción, o del
+   * cuerpo o el cono de un injerto), largo_ramal_mm y cuello_mm los trae cada pieza de un trazo isométrico ajustada a mano
+   * (trazado_lectura, §5.14).
+   */
+  const CAMPOS = ['longitud_m', 'diametro_in', 'angulo_deg', 'posicion', 'boca_in', 'manguera_tramos', 'calibre', 'material', 'aceptado', 'encimado', 'radio_D', 'gajos', 'largo_mm', 'largo_ramal_mm', 'cuello_mm'];
   // Una nota junto a un tramo que dice que es vertical
   const NOTA_VERTICAL = /\b(SUBE|BAJA|BAJADA|SUBIDA)\b/i;
   // Una nota en un nodo: compuerta de regulación en un tramo recto; reducción excéntrica (cara plana)
@@ -538,7 +541,9 @@
     /** La tapa (nota «TAPA» en un extremo): un disco con su cuello (de las tablas) y su brida; el cuello ocupa el final del tramo. */
     function agregarTapa(nid, ap, Dt) {
       const id = nuevoId('TAPA');
-      const partida = { ...base, familia: 'TAPA', D_mm: r1(Dt * IN) };
+      // el cuello: el del trazo si lo trae (0 = tapa plana); si no, el de las tablas
+      const Lc = resp(nid, 'cuello_mm');
+      const partida = { ...base, familia: 'TAPA', D_mm: r1(Dt * IN), ...(finito(Lc) && Lc >= 0 && Lc <= 500 ? { L_cuello_mm: Lc } : {}) };
       try {
         const L = cotizarAcc(partida).geometria.detalle.L_cuello_mm;
         if (L > 0) ocupar(ap, id, L);
@@ -744,8 +749,10 @@
           const Rm = (D2 * IN + espesor) / 2;
           const rb = (d * IN + espesor) / 2;
           const tMax = (Rm + rb * Math.cos((beta * Math.PI) / 180)) / sen; // el mínimo del motor (geometria.ramal)
-          const L_ramal = Math.ceil((tMax + 100) / 50) * 50;
-          const L_cuerpo = Math.ceil(((d * IN) / sen + 150) / 50) * 50;
+          // los largos: los del trazo si los trae y pasan de los de la regla (más cortos no caben)
+          const mas = (campo, auto) => { const v = resp(nid, campo); return finito(v) && v > auto && v <= 3000 ? v : auto; };
+          const L_ramal = mas('largo_ramal_mm', Math.ceil((tMax + 100) / 50) * 50);
+          const L_cuerpo = mas('largo_mm', Math.ceil(((d * IN) / sen + 150) / 50) * 50);
           const partida = { ...base, familia: 'RAMAL', D_mm: r1(D2 * IN), d_mm: r1(d * IN), beta_deg: beta, L_cuerpo_mm: L_cuerpo, L_ramal_mm: L_ramal };
           try { cotizarAcc(partida); } catch (err) { errorMotor([nid], err); return; }
           ocupar(p, id, L_cuerpo / 2); ocupar(troncoHijo, id, L_cuerpo / 2); ocupar(ramal, id, L_ramal);
@@ -753,7 +760,12 @@
           n.accesorio_id = id;
         } else {
           const id = nuevoId('RINJ');
-          const partida = { ...base, familia: 'REDUCCION_INJERTO', D1_mm: r1(Math.max(D1, D2) * IN), D2_mm: r1(Math.min(D1, D2) * IN), d_mm: r1(d * IN), beta_deg: beta };
+          const Lred = resp(nid, 'largo_mm');
+          const Lram = resp(nid, 'largo_ramal_mm');
+          const partida = {
+            ...base, familia: 'REDUCCION_INJERTO', D1_mm: r1(Math.max(D1, D2) * IN), D2_mm: r1(Math.min(D1, D2) * IN), d_mm: r1(d * IN), beta_deg: beta,
+            ...(finito(Lred) && Lred > 0 && Lred <= 3000 ? { L_reduccion_mm: Lred } : {}), ...(finito(Lram) && Lram > 0 && Lram <= 3000 ? { L_ramal_mm: Lram } : {}),
+          };
           try {
             const g = cotizarAcc(partida).geometria.detalle;
             ocupar(p, id, g.L_reduccion_mm / 2); ocupar(troncoHijo, id, g.L_reduccion_mm / 2); ocupar(ramal, id, g.L_ramal_mm);

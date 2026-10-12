@@ -3554,6 +3554,10 @@ const ok = (cond, msg) => {
     await ri.locator('[data-campo="angulo"] .ti-op[data-valor="30"]').click();
     ok(await msg() === 'RI-001: Reducción con injerto a 30° de 8″ a 6″, ramal de 5″, de lado.', `el ramal a 30° (${await msg()})`);
     ok((await p.locator('#ti-lienzo .ti-pieza-txt').allTextContents()).includes('Red. c/ injerto 30°'), 'el lienzo lo dibuja');
+    const ramalL = ins.locator('.ti-ficha[data-pieza="RI-001"] [data-campo="largo_ramal_mm"] input');
+    await ramalL.fill('450');
+    await ramalL.press('Enter');
+    ok(/; cono de \d+ mm y ramal de 450 mm\.$/.test(await msg()) && /El mínimo \(\d+ mm\)/.test(await ins.locator('.ti-ficha[data-pieza="RI-001"] [data-campo="largo_ramal_mm"]').innerText()), `el ramal del injerto más largo, con el botón al mínimo (${await msg()})`);
     await ins.locator('.ti-ficha[data-pieza="RI-001"] [data-lado="RAMAL"] select').selectOption('4');
     ok(/en N-005 el tramo anterior \(TR-005\) es de 5″/.test(await msg()) && /Cambiar en cadena: TR-006 y TR-005 a 4″/.test(await p.locator('#ti-alternativa-btn').innerText()), 'un ramal de 4″ tras uno de 5″ no: lo dice y ofrece la cadena');
     await ins.locator('.ti-ficha[data-pieza="RI-001"] [data-lado="RAMAL"] select').selectOption('6');
@@ -3584,7 +3588,31 @@ const ok = (cond, msg) => {
     await p.waitForSelector('#dlg-unifilar[open]', { timeout: 3000 });
     const part = await R(() => window.COTIZAP.web.estadoApp.cot.partidas.filter((x) => x.unifilar_id && (x.familia === 'CODO' || x.familia === 'REDUCCION')).map((x) => [x.familia, x.k_R || null, x.L_mm || null, x.excentrica || null]));
     ok(part.some(([fam, kR]) => fam === 'CODO' && kR === 2) && part.some(([fam, , L, exc]) => fam === 'REDUCCION' && L === 250 && exc === 'CARA_PLANA'), `las partidas llevan el radio y el largo (${JSON.stringify(part)})`);
+    const rinj = await R(() => window.COTIZAP.web.estadoApp.cot.partidas.filter((x) => x.unifilar_id && x.familia === 'REDUCCION_INJERTO').map((x) => x.L_ramal_mm));
+    ok(JSON.stringify(rinj) === '[450]', `y la reducción con injerto del trazo, su ramal de 450 mm (${rinj})`);
     await p.click('#uf-listo');
+    // la tapa de un ramal ciego: plana
+    const extremo = await R(() => {
+      const C = window.COTIZAP;
+      const s = C.web.trazadoUI.estado();
+      const M = C.web.estadoApp.M;
+      const op = C.trazadoIso.candidatas(s.t, M, { tramo: 'TR-003', s_mm: 1200 }).find((o) => o.direccion.elevacion_deg === 0);
+      C.trazadoTablero.hacer(s, (t) => C.trazadoIso.trazar(t, M, { tramo: 'TR-003', s_mm: 1200 }, { direccion: op.direccion, largo_mm: 1500, diametro_in: 5 }), '');
+      const nid = s.t.ultimo.nodo;
+      C.trazadoTablero.tapaEn(s, { tipo: 'NODO', id: nid });
+      C.web.estadoApp.cot.trazado_iso = s.t;
+      C.web.trazadoUI.render();
+      return nid;
+    });
+    ok(typeof extremo === 'string', 'un ramal ciego con su tapa');
+    await p.locator(`#ti-lienzo rect.ti-pieza[data-pieza-nodo="${extremo}"]`).click();
+    const ft = ins.locator('.ti-ficha').first();
+    const cabT = await ft.locator('.ti-ficha-cab').innerText();
+    ok(/Tapa de 5″ con cuello de \d+ mm/.test(cabT) && /el de las tablas/.test(await ft.locator('[data-campo="cuello_mm"]').innerText()), `la ficha de la tapa: su cuello es el de las tablas (${cabT.replace(/\s+/g, ' ')})`);
+    const cuello = ft.locator('[data-campo="cuello_mm"] input');
+    await cuello.fill('0');
+    await cuello.press('Enter');
+    ok(/Tapa de 5″ plana \(con su brida\)\.$/.test(await msg()) && JSON.stringify(await ajustes(extremo)) === JSON.stringify({ cuello_mm: 0 }), `con 0, la tapa es plana (${await msg()})`);
     await p.close();
   }
 

@@ -221,7 +221,7 @@ test('verificar dice dónde no cuadra el despiece con el trazo', () => {
   ]);
 });
 
-test('Las piezas ajustadas a mano (§5.14) llegan al despiece: el radio y los gajos del codo, el largo y la forma de la reducción', () => {
+test('Las piezas ajustadas a mano (§5.14) llegan al despiece: el radio y los gajos del codo, el largo y la forma de la reducción, los largos del injerto y el cuello de la tapa', () => {
   let t = TZ.ajustarPieza(TB.ejemplo(M), M, 'N-003', { radio_D: 2, gajos: 4 });
   t = TZ.reducir(t, M, { tramo: 'TR-002', s_mm: 3000 }, 5);
   const nr = t.ultimo.nodo;
@@ -241,6 +241,19 @@ test('Las piezas ajustadas a mano (§5.14) llegan al despiece: el radio y los ga
   const mal = clonar(r.bom);
   mal.accesorios.find((a) => a.id === codo.id).gajos = 5;
   assert.ok(TL.verificar(t, M, mal).includes('CO-001: codo de 4 gajos en el trazo y de 5 en el despiece.'));
+  // los largos del injerto y el cuello de la tapa también llegan
+  let t3 = TZ.ajustarPieza(TB.ejemplo(M), M, 'N-002', { largo_cuerpo_mm: 300, largo_ramal_mm: 450 });
+  const op = TZ.candidatas(t3, M, { tramo: 'TR-003', s_mm: 1500 }).find((o) => o.direccion.elevacion_deg === 0);
+  t3 = TZ.trazar(t3, M, { tramo: 'TR-003', s_mm: 1500 }, { direccion: op.direccion, largo_mm: 1500, diametro_in: 5 });
+  const ext = t3.ultimo.nodo;
+  t3 = TZ.ajustarPieza(TZ.ponerTapa(t3, M, ext), M, ext, { cuello_mm: 0 });
+  const nInj = TZ.calcular(t3, M).piezas.find((q) => q.tipo === 'INJERTO').nodo;
+  t3 = TZ.ajustarPieza(t3, M, nInj, { largo_ramal_mm: 400 });
+  const r3 = despiece(t3);
+  assert.deepEqual([r3.bom.resumen.estado, r3.diferencias], ['DEFINITIVA', []], 'cuadra con el trazo');
+  const pc = (tipo) => r3.bom.accesorios.find((a) => a.tipo === tipo).partida_cotizap;
+  assert.deepEqual([pc('REDUCCION_INJERTO').L_reduccion_mm, pc('REDUCCION_INJERTO').L_ramal_mm, pc('INJERTO').L_ramal_mm, pc('TAPA').L_cuello_mm], [300, 450, 400, 0]);
+  cotiza(r3.bom);
   // con otro radio en las políticas del proyecto, el despiece lo usa en todos los codos
   const t2 = TZ.cambiarPoliticas(TB.ejemplo(M), M, { radio_codo_D: 2 });
   const r2 = despiece(t2);

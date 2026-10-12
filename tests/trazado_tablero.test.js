@@ -923,7 +923,14 @@ test('La ficha de cada pieza (§5.14): qué se le cambia, la regla, por qué no 
   assert.match(s.msg, /no se puede girar/);
   // la reducción con injerto de N-002: el ángulo del ramal (30° sí: lo que cuelga del ramal gira con él)
   const [ri] = TB.fichasPieza(s, 'N-002');
-  assert.deepEqual(ri.campos.map((c) => [c.clave, c.opciones.map((o) => [o.texto, o.actual, o.motivo])]), [['angulo', [['30°', false, null], ['45°', true, null]]]]);
+  assert.deepEqual(ri.campos[0].opciones.map((o) => [o.texto, o.actual, o.motivo]), [['30°', false, null], ['45°', true, null]]);
+  assert.deepEqual(ri.campos.slice(1).map((c) => [c.clave, c.etiqueta, c.valor, c.regla, c.textoRegla]), [['largo_cuerpo_mm', 'Largo del cono', 211, 211, 'el mínimo'], ['largo_ramal_mm', 'Largo del ramal', 327, 327, 'el mínimo']]);
+  assert.ok(TB.cambiarPieza(s, 'N-002', { largo_ramal_mm: 450 }), s.msg);
+  assert.match(s.msg, /; cono de 211 mm y ramal de 450 mm\.$/);
+  assert.equal(TB.cambiarPieza(s, 'N-002', { largo_cuerpo_mm: 100 }), false);
+  assert.match(s.msg, /El cono de la reducción con injerto de N-002 mide al menos 211 mm/);
+  assert.deepEqual([TB.fichasPieza(s, 'N-002')[0].partida.L_ramal_mm, C.cotizarPartida(TB.fichasPieza(s, 'N-002')[0].partida, M).geometria.detalle.L_ramal_mm], [450, 450]);
+  assert.ok(TB.cambiarPieza(s, 'N-002', { largo_ramal_mm: null }), s.msg);
   assert.deepEqual(ri.lados.map((l) => [l.etiqueta, l.diametro_in]), [['Entra', 6], ['Sale', 8], ['Ramal', 5]]);
   assert.ok(C.cotizarPartida(ri.partida, M).ok);
   assert.ok(TB.cambiarPieza(s, 'N-002', { angulo: 30 }), s.msg);
@@ -941,4 +948,19 @@ test('La ficha de cada pieza (§5.14): qué se le cambia, la regla, por qué no 
   assert.match(s.msg, /Reducción excéntrica, plana abajo de 6″ a 5″, de 250 mm\.$/);
   assert.equal(TB.cambiarPieza(s, nr.id, { largo_reduccion_mm: 10 }), false);
   assert.match(s.msg, /mide al menos \d+ mm/);
+  // la tapa de un ramal ciego: su cuello (el de las tablas) o plana
+  const ext = s.t.nodos.find((x) => (s.g.ady.get(x.id) || []).length === 1 && !s.g.puertoDeNodo.get(x.id) && !s.g.pt.has(x.id));
+  if (ext) {
+    assert.ok(TB.tapaEn(s, { tipo: 'NODO', id: ext.id }), s.msg);
+  } else {
+    const op = TZ.candidatas(s.t, M, { tramo: 'TR-003', s_mm: 1500 }).find((o) => o.direccion.elevacion_deg === 0);
+    assert.ok(TB.hacer(s, (t) => TZ.trazar(t, M, { tramo: 'TR-003', s_mm: 1500 }, { direccion: op.direccion, largo_mm: 1500, diametro_in: 5 }), ''));
+    assert.ok(TB.tapaEn(s, { tipo: 'NODO', id: s.t.ultimo.nodo }), s.msg);
+  }
+  const nt = s.t.nodos.find((x) => (s.g.piezasDe.get(x.id) || []).some((q) => q.tipo === 'TAPA')).id;
+  const [tapa] = TB.fichasPieza(s, nt);
+  assert.deepEqual(tapa.campos.map((c) => [c.clave, c.valor, c.regla, c.textoRegla]), [['cuello_mm', M.proceso.tapa_cuello_mm, M.proceso.tapa_cuello_mm, 'el de las tablas']]);
+  assert.ok(TB.cambiarPieza(s, nt, { cuello_mm: 0 }), s.msg);
+  assert.match(s.msg, /Tapa de 5″ plana \(con su brida\)\.$/);
+  assert.equal(C.cotizarPartida(TB.fichasPieza(s, nt)[0].partida, M).geometria.detalle.L_cuello_mm, 0);
 });

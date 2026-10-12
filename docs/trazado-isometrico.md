@@ -971,12 +971,15 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
             {
               "type": "object",
               "additionalProperties": false,
-              "required": ["radio_D", "gajos", "forma", "largo_reduccion_mm"],
+              "required": ["radio_D", "gajos", "forma", "largo_reduccion_mm", "largo_cuerpo_mm", "largo_ramal_mm", "cuello_mm"],
               "properties": {
                 "radio_D": { "anyOf": [{ "type": "null" }, { "type": "number", "minimum": 1, "maximum": 5 }], "description": "El radio al eje del codo entre su diámetro; null: el de las políticas (radio_codo_D)." },
                 "gajos": { "anyOf": [{ "type": "null" }, { "type": "integer", "minimum": 2, "maximum": 12 }], "description": "Los gajos del codo; null: los de las tablas (una junta por cada alfa_max_junta_deg)." },
                 "forma": { "anyOf": [{ "type": "null" }, { "type": "string", "enum": ["CONCENTRICA", "EXCENTRICA_PLANA_ABAJO", "EXCENTRICA_PLANA_ARRIBA"] }], "description": "La de la reducción o del adaptador en un tramo horizontal; null: la de las políticas (reduccion_horizontal)." },
-                "largo_reduccion_mm": { "anyOf": [{ "type": "null" }, { "type": "number", "exclusiveMinimum": 0, "maximum": 3000 }], "description": "El largo de la reducción o del adaptador, si pasa del de la regla (con el semiángulo máximo); null: el de la regla." }
+                "largo_reduccion_mm": { "anyOf": [{ "type": "null" }, { "type": "number", "exclusiveMinimum": 0, "maximum": 3000 }], "description": "El largo de la reducción o del adaptador, si pasa del de la regla (con el semiángulo máximo); null: el de la regla." },
+                "largo_cuerpo_mm": { "anyOf": [{ "type": "null" }, { "type": "number", "exclusiveMinimum": 0, "maximum": 3000 }], "description": "El largo del cuerpo del injerto (o del cono de la reducción con injerto), si pasa del de la regla; null: el de la regla." },
+                "largo_ramal_mm": { "anyOf": [{ "type": "null" }, { "type": "number", "exclusiveMinimum": 0, "maximum": 3000 }], "description": "El largo del ramal del injerto, desde el eje del tronco, si pasa del de la regla; null: el de la regla." },
+                "cuello_mm": { "anyOf": [{ "type": "null" }, { "type": "number", "minimum": 0, "maximum": 500 }], "description": "El cuello de la tapa (0: tapa plana, sin cuello); null: el de las tablas (proceso.tapa_cuello_mm)." }
               }
             }
           ],
@@ -2751,7 +2754,14 @@ Lo verifican:
 
 ### 5.14 Editar cada pieza en su ficha
 
-Las piezas salen solas del trazo (§2.4), con las reglas del proyecto: el radio de los codos (`radio_codo_D`), sus gajos (los de las tablas), la reducción horizontal (`reduccion_horizontal`) y su largo (el del semiángulo máximo). Cada una se puede cambiar en su ficha, sin cambiar las reglas.
+Las piezas salen solas del trazo (§2.4), con las reglas del proyecto y las tablas:
+
+- el radio de los codos (`radio_codo_D`) y sus gajos;
+- la forma de la reducción horizontal (`reduccion_horizontal`) y su largo, el del semiángulo máximo;
+- los largos del injerto, los mínimos de su silleta;
+- el cuello de la tapa (`proceso.tapa_cuello_mm`).
+
+Cada una se puede cambiar en su ficha, sin cambiar las reglas.
 
 - **Abrirla.** Toque la etiqueta de la pieza en el lienzo («Codo 90°», «Red. c/ injerto 45°»), o su nodo. El inspector se vuelve la ficha:
   - su nombre y su dibujo acotado, el mismo de los planos de pedido, que se rehace con cada cambio;
@@ -2770,30 +2780,40 @@ Las piezas salen solas del trazo (§2.4), con las reglas del proyecto: el radio 
   - el largo, en mm: más largo que el de la regla, nunca más corto («mide al menos 47 mm»).
 - **El injerto y la reducción con injerto:**
   - el ángulo del ramal (30° o 45°; 90° si el proyecto permite la T): gira el ramal en el plano del tronco y el ramal, con lo que cuelga de él;
-  - una manguera absorbe ese giro. Si el ramal llega a una toma con brida o a un ancla, no se puede, y lo dice.
+  - una manguera absorbe ese giro. Si el ramal llega a una toma con brida o a un ancla, no se puede, y lo dice;
+  - el largo del cuerpo (en la reducción con injerto, el del cono) y el del ramal, en mm. Más largos que los de la regla sí; más cortos no caben en la silleta.
+- **La tapa:** el cuello, en mm. 0 es una tapa plana, sin cuello, con la brida en el disco.
 - **El Ø de un lado** cambia su tramo, con las mismas reglas de §2.6: si la cadena lo impide, lo dice y ofrece «Cambiar en cadena».
 - **«Como en el proyecto»** quita los ajustes de la pieza. Cada toque se deshace con Ctrl+Z, y la ficha marca la pieza «ajustada».
 
 Cómo se guarda y a dónde llega:
 
-- **En el trazo**, cada nodo lleva sólo lo que difiere de la regla, en `ajustes` (`radio_D`, `gajos`, `forma`, `largo_reduccion_mm`). Elegir el valor de la regla lo quita. Si la pieza deja de existir (por ejemplo, el Ø de los dos lados queda igual y la reducción desaparece), sus ajustes se van con ella.
-- **En el contrato**, el nodo trae `ajustes`: null, o los cuatro campos, null los que no se ajustaron. Al leerlo de regreso, lo mal formado se descarta.
+- **En el trazo**, cada nodo lleva sólo lo que difiere de la regla, en `ajustes`: `radio_D`, `gajos`, `forma`, `largo_reduccion_mm`, `largo_cuerpo_mm`, `largo_ramal_mm` y `cuello_mm`. Elegir el valor de la regla lo quita. Si la pieza deja de existir (por ejemplo, el Ø de los dos lados queda igual y la reducción desaparece), sus ajustes se van con ella.
+- **En el contrato**, el nodo trae `ajustes`: null, o los siete campos, null los que no se ajustaron. Al leerlo de regreso, lo mal formado se descarta.
 - **En el cálculo**, la geometría de la pieza: lo que ocupa de cada tramo, su largo neto, la K del codo con su R/D y sus gajos, y el semiángulo de la reducción.
-- **En el despiece y las partidas**, el trazo pasa sus ajustes como respuestas de la lectura: `radio_D` y `gajos` en el codo (el radio también cuando las políticas no usan el 1.5 D de las reglas) y `largo_mm` en la reducción. La forma excéntrica ya viajaba como la nota «EXC». El despiece cuadra con el trazo, y `verificar` compara también los gajos.
+- **En el despiece y las partidas**, el trazo pasa sus ajustes como respuestas de la lectura:
+  - `radio_D` y `gajos` en el codo (el radio también cuando las políticas no usan el 1.5 D de las reglas);
+  - `largo_mm` en la reducción, o en el cuerpo o el cono del injerto, y `largo_ramal_mm` en su ramal;
+  - `cuello_mm` en la tapa.
+
+  La forma excéntrica ya viajaba como la nota «EXC». El despiece cuadra con el trazo, y `verificar` compara también los gajos.
 
 Lo verifican:
 
 - `tests/trazado_iso.test.js`:
   - el radio y los gajos (lo que ocupa el codo), la regla que los quita, el contrato de ida y vuelta y lo mal formado;
   - la forma y el largo de la reducción, el mínimo, el adaptador vertical y los ajustes que se van con su pieza;
-  - el ángulo del ramal (el tronco no se mueve) y el que no se puede.
-- `tests/trazado_lectura.test.js`: el despiece con un codo y una reducción ajustados (definitivo, sin diferencias, con sus partidas cotizadas), `verificar` con los gajos y el radio de las políticas.
-- `tests/trazado_tablero.test.js`: la ficha del codo, de la reducción con injerto y de una reducción (sus opciones, la regla, por qué no se puede un ángulo), cambiarla con su mensaje, deshacer y el dibujo.
+  - el ángulo del ramal (el tronco no se mueve) y el que no se puede;
+  - los largos de la reducción con injerto (lo que ocupa de sus tres tramos) y su mínimo;
+  - la tapa plana, su máximo y su cuello que se va con ella.
+- `tests/trazado_lectura.test.js`: el despiece con un codo, una reducción, una reducción con injerto, un injerto y una tapa ajustados (definitivo, sin diferencias, con sus partidas cotizadas), `verificar` con los gajos y el radio de las políticas.
+- `tests/trazado_tablero.test.js`: la ficha del codo, de la reducción con injerto (con sus largos), de una reducción y de una tapa (sus opciones, la regla, por qué no se puede un ángulo), cambiarla con su mensaje, deshacer y el dibujo.
 - La sección 46 de `tests/e2e/ui.e2e.js`:
   - tocar la etiqueta, el ángulo que no se puede, el radio y los gajos, deshacer y «Como en el proyecto»;
-  - el ramal a 30° y el Ø de un lado (con la cadena);
+  - el ramal a 30°, más largo, y el Ø de un lado (con la cadena);
   - la forma y el largo de una reducción;
-  - el despiece definitivo con las partidas ajustadas.
+  - el despiece definitivo con las partidas ajustadas;
+  - la tapa plana.
 
 ---
 

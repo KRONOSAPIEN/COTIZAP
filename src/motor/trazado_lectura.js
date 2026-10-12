@@ -178,7 +178,7 @@
       if (manguera) poner(id, 'manguera_tramos', 1);
     });
     // las piezas ajustadas a mano (§5.14): el radio de cada codo si no es el de las reglas (el ajustado, o el de las
-    // políticas), sus gajos y el largo de una reducción, si se ajustaron
+    // políticas), sus gajos, el largo de una reducción, los del injerto y el cuello de la tapa, si se ajustaron
     s.accesorios.forEach((a) => {
       if (!pant.has(a.nodo)) return;
       const aj = (t.nodos.find((y) => y.id === a.nodo) || {}).ajustes || {};
@@ -188,6 +188,11 @@
         if (aj.gajos) poner(a.nodo, 'gajos', aj.gajos);
       }
       if ((a.tipo === 'REDUCCION' || a.tipo === 'ADAPTADOR') && aj.largo_reduccion_mm) poner(a.nodo, 'largo_mm', a.geometria.largo_mm);
+      if (a.tipo === 'INJERTO' || a.tipo === 'REDUCCION_INJERTO') {
+        if (aj.largo_cuerpo_mm) poner(a.nodo, 'largo_mm', a.geometria.largo_mm);
+        if (aj.largo_ramal_mm) poner(a.nodo, 'largo_ramal_mm', a.geometria.largo_ramal_mm);
+      }
+      if (a.tipo === 'TAPA' && aj.cuello_mm !== undefined) poner(a.nodo, 'cuello_mm', aj.cuello_mm);
     });
     // las decisiones del trazo sobre los tramos cortos
     rigidos.forEach((x) => {

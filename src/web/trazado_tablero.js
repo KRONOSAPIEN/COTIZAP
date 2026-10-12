@@ -1437,10 +1437,13 @@
   const NOMBRE_FORMA = { CONCENTRICA: 'Concéntrica', EXCENTRICA_PLANA_ABAJO: 'Excéntrica, plana abajo', EXCENTRICA_PLANA_ARRIBA: 'Excéntrica, plana arriba' };
   /** Las piezas de un nodo con su nombre largo. */
   function piezasDe(s, nid) {
+    const aj = ((s.t.nodos.find((x) => x.id === nid) || {}).ajustes) || {};
     return (s.g.piezasDe.get(nid) || []).map((p) => {
       const ga = p.geometria;
       const c = p.conexiones;
       const entrada = ga.entrada ? `, ${ga.entrada === 'SUPERIOR' ? 'por arriba' : 'de lado'}` : '';
+      // los largos de un injerto, si se ajustaron (§5.14)
+      const largos = aj.largo_cuerpo_mm || aj.largo_ramal_mm ? `; ${p.tipo === 'INJERTO' ? 'cuerpo' : 'cono'} de ${n(ga.largo_mm)} mm y ramal de ${n(ga.largo_ramal_mm)} mm` : '';
       let nombre;
       let corto;
       switch (p.tipo) {
@@ -1457,11 +1460,11 @@
           corto = `Adapt. ${pulg(p.D_puerto)}→${pulg(c[0].diametro_in)}`;
           break;
         case 'INJERTO':
-          nombre = `Injerto simple a ${ga.angulo_deg}° de ${pulg(c[0].diametro_in)} con ramal de ${pulg(c[2].diametro_in)}${entrada}`;
+          nombre = `Injerto simple a ${ga.angulo_deg}° de ${pulg(c[0].diametro_in)} con ramal de ${pulg(c[2].diametro_in)}${entrada}${largos}`;
           corto = `Injerto ${ga.angulo_deg}°`;
           break;
         case 'REDUCCION_INJERTO':
-          nombre = `Reducción con injerto a ${ga.angulo_deg}° de ${pulg(Math.max(c[0].diametro_in, c[1].diametro_in))} a ${pulg(Math.min(c[0].diametro_in, c[1].diametro_in))}, ramal de ${pulg(c[2].diametro_in)}${entrada}`;
+          nombre = `Reducción con injerto a ${ga.angulo_deg}° de ${pulg(Math.max(c[0].diametro_in, c[1].diametro_in))} a ${pulg(Math.min(c[0].diametro_in, c[1].diametro_in))}, ramal de ${pulg(c[2].diametro_in)}${entrada}${largos}`;
           corto = `Red. c/ injerto ${ga.angulo_deg}°`;
           break;
         case 'T_90':
@@ -1503,8 +1506,8 @@
       case 'CODO': return { ...base, familia: 'CODO', D_mm: mm(c[0].diametro_in), theta_deg: ga.angulo_deg, k_R: Math.round((ga.radio_eje_mm / mm(c[0].diametro_in)) * 100) / 100, n_gajos: ga.gajos };
       case 'REDUCCION': case 'ADAPTADOR': return { ...base, familia: 'REDUCCION', D1_mm: mm(p.D1), D2_mm: mm(p.D2), excentrica: ga.forma === 'CONCENTRICA' ? 'NO' : 'CARA_PLANA', L_mm: Math.round(ga.largo_mm * 10) / 10 };
       case 'INJERTO': return { ...base, familia: 'RAMAL', D_mm: mm(c[0].diametro_in), d_mm: mm(c[2].diametro_in), beta_deg: ga.angulo_deg, L_cuerpo_mm: ga.largo_mm, L_ramal_mm: ga.largo_ramal_mm };
-      case 'REDUCCION_INJERTO': return { ...base, familia: 'REDUCCION_INJERTO', D1_mm: mm(Math.max(c[0].diametro_in, c[1].diametro_in)), D2_mm: mm(Math.min(c[0].diametro_in, c[1].diametro_in)), d_mm: mm(c[2].diametro_in), beta_deg: ga.angulo_deg };
-      case 'TAPA': return { ...base, familia: 'TAPA', D_mm: mm(c[0].diametro_in) };
+      case 'REDUCCION_INJERTO': return { ...base, familia: 'REDUCCION_INJERTO', D1_mm: mm(Math.max(c[0].diametro_in, c[1].diametro_in)), D2_mm: mm(Math.min(c[0].diametro_in, c[1].diametro_in)), d_mm: mm(c[2].diametro_in), beta_deg: ga.angulo_deg, L_reduccion_mm: ga.largo_mm, L_ramal_mm: ga.largo_ramal_mm };
+      case 'TAPA': return { ...base, familia: 'TAPA', D_mm: mm(c[0].diametro_in), L_cuello_mm: ga.largo_mm };
       default: return null;
     }
   }
@@ -1512,7 +1515,7 @@
    * La ficha de cada pieza de un nodo: lo que se le puede cambiar (con lo de ahora, lo de la regla y, en un ángulo, por qué
    * no se puede el que no se puede), el Ø de cada lado (el de su tramo) y la partida con la que se dibuja.
    * Campo: { clave, tipo: OPCIONES | PASOS | NUMERO, etiqueta, opciones?: [{ valor, texto, sub?, actual, regla?, motivo }],
-   * valor?, regla?, min?, max?, unidad?, nota?, ajustado? }.
+   * valor?, regla?, textoRegla? (cómo se llama la regla: «el mínimo», «el de las tablas»), min?, max?, unidad?, nota?, ajustado? }.
    */
   function fichasPieza(s, nid) {
     const nd = s.t.nodos.find((x) => x.id === nid);
@@ -1539,11 +1542,19 @@
         const vertical = 'En un tramo que no es horizontal la reducción va concéntrica.';
         campos.push({ clave: 'forma', tipo: 'OPCIONES', etiqueta: 'Forma', ajustado: aj.forma !== undefined, nota: p.horizontal ? null : vertical,
           opciones: TZ.FORMAS_REDUCCION.map((f) => ({ valor: f, texto: NOMBRE_FORMA[f], actual: f === ga.forma, regla: f === p.auto.forma, motivo: p.horizontal || f === 'CONCENTRICA' ? null : vertical })) });
-        campos.push({ clave: 'largo_reduccion_mm', tipo: 'NUMERO', etiqueta: 'Largo', unidad: 'mm', valor: Math.round(ga.largo_mm), regla: Math.round(p.auto.largo_mm), ajustado: aj.largo_reduccion_mm !== undefined,
+        campos.push({ clave: 'largo_reduccion_mm', tipo: 'NUMERO', etiqueta: 'Largo', unidad: 'mm', valor: Math.round(ga.largo_mm), regla: Math.round(p.auto.largo_mm), textoRegla: 'el mínimo', ajustado: aj.largo_reduccion_mm !== undefined,
           nota: `Más corta no: ${Math.round(p.auto.largo_mm)} mm es el mínimo, con el semiángulo máximo de las tablas.` });
       } else if (p.tipo === 'INJERTO' || p.tipo === 'REDUCCION_INJERTO' || p.tipo === 'T_90') {
         campos.push({ clave: 'angulo', tipo: 'OPCIONES', etiqueta: 'Ángulo del ramal', opciones: angulos([...pol.angulos_injerto_deg, ...(pol.permite_t_90 ? [90] : [])], p.tipo === 'T_90' ? 90 : ga.angulo_deg),
           nota: 'Girar el ramal mueve lo que cuelga de él (una manguera lo absorbe); si llega a una toma o a un ancla, no se puede.' });
+        if (p.tipo !== 'T_90') {
+          const largo = (clave, etiqueta, v, auto) => ({ clave, tipo: 'NUMERO', etiqueta, unidad: 'mm', valor: Math.round(v), regla: Math.round(auto), textoRegla: 'el mínimo', ajustado: aj[clave] !== undefined });
+          campos.push(largo('largo_cuerpo_mm', p.tipo === 'INJERTO' ? 'Largo del cuerpo' : 'Largo del cono', ga.largo_mm, p.auto.largo_cuerpo_mm));
+          campos.push({ ...largo('largo_ramal_mm', 'Largo del ramal', ga.largo_ramal_mm, p.auto.largo_ramal_mm), nota: 'Más cortos no caben: los mínimos salen de la silleta del injerto, con su holgura.' });
+        }
+      } else if (p.tipo === 'TAPA') {
+        campos.push({ clave: 'cuello_mm', tipo: 'NUMERO', etiqueta: 'Cuello', unidad: 'mm', valor: Math.round(ga.largo_mm), regla: Math.round(p.auto.cuello_mm), textoRegla: 'el de las tablas', ajustado: aj.cuello_mm !== undefined,
+          nota: '0: tapa plana, sin cuello (la brida va en el disco).' });
       }
       return { id: p.id, tipo: p.tipo, nombre: nombres[i].nombre, corto: nombres[i].corto, campos, lados, ajustada: campos.some((x) => x.ajustado), partida: partidaDePieza(s, p) };
     });
