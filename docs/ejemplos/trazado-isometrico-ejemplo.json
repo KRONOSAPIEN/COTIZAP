@@ -727,6 +727,7 @@
     "por_tramo": [
       {
         "tramo": "TR-001",
+        "lado": "SUCCION",
         "caudal_m3_h": 1300,
         "velocidad_m_s": 19.796,
         "presion_dinamica_Pa": 179.66,
@@ -738,6 +739,7 @@
       },
       {
         "tramo": "TR-002",
+        "lado": "SUCCION",
         "caudal_m3_h": 1300,
         "velocidad_m_s": 19.796,
         "presion_dinamica_Pa": 179.66,
@@ -749,6 +751,7 @@
       },
       {
         "tramo": "TR-003",
+        "lado": "SUCCION",
         "caudal_m3_h": 2283.4,
         "velocidad_m_s": 19.559,
         "presion_dinamica_Pa": 175.38,
@@ -760,6 +763,7 @@
       },
       {
         "tramo": "TR-004",
+        "lado": "SUCCION",
         "caudal_m3_h": 900,
         "velocidad_m_s": 19.735,
         "presion_dinamica_Pa": 178.56,
@@ -771,6 +775,7 @@
       },
       {
         "tramo": "TR-005",
+        "lado": "SUCCION",
         "caudal_m3_h": 900,
         "velocidad_m_s": 19.735,
         "presion_dinamica_Pa": 178.56,
@@ -782,6 +787,7 @@
       },
       {
         "tramo": "TR-006",
+        "lado": "SUCCION",
         "caudal_m3_h": 900,
         "velocidad_m_s": 19.735,
         "presion_dinamica_Pa": 178.56,
@@ -845,6 +851,8 @@
         "caudal_m3_h": 2283.4,
         "presion_estatica_boca_Pa": 613.78,
         "perdida_equipo_Pa": 1250,
+        "descarga": null,
+        "presion_descarga_Pa": 0,
         "presion_estatica_Pa": 1863.78,
         "presion_estatica_estandar_Pa": 2439.23,
         "potencia_aire_kW": 1.182,

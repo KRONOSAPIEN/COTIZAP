@@ -812,3 +812,41 @@ test('Niveles con nombre en el tablero (§2.7): RePág y AvPág se detienen en e
   TB.deshacer(s);
   assert.equal(TB.niveles(s).length, 3);
 });
+
+test('Descarga del ventilador en el tablero (§5.12): se traza desde su brida, sin ramales, sin mínimo de velocidad y con su presión en la salida', () => {
+  const s = nuevoTablero();
+  TB.reemplazar(s, TB.ejemplo(M), 'ejemplo');
+  assert.ok(TB.hacer(s, (t) => TZ.agregarPuerto(t, M, 'EQ-01', { rol: 'SALIDA', posicion_local_mm: V3(0, 0, 4000), diametro_in: 10 }), ''));
+  const a = TB.arranqueDe(s, { tipo: 'PUERTO', id: 'PU-04' });
+  assert.deepEqual([a.desde, a.D, a.nombre], [s.t.equipos[0].puertos.find((p) => p.id === 'PU-04').nodo, 10, 'la descarga PU-04']);
+  assert.ok(TB.empezar(s, { tipo: 'PUERTO', id: 'PU-04' }), s.msg);
+  assert.deepEqual(s.traza.ops.map((o) => o.direccion), [{ azimut_deg: 0, elevacion_deg: 90 }], 'sale en la dirección de su cuello');
+  // con el teclado, en cadena: «^90 2» (2 m hacia arriba, de 12″); luego «@180 3»: un rumbo después de una vertical va en horizontal
+  TB.cambiarDiametroActivo(s, 2);
+  assert.equal(s.D, 12);
+  teclas(s, '^90 2');
+  assert.ok(TB.confirmar(s), s.msg);
+  const [sube] = s.t.ultimo.tramos;
+  teclas(s, '@180 3');
+  assert.ok(TB.confirmar(s), s.msg);
+  const [sigue] = s.t.ultimo.tramos;
+  TB.cancelar(s);
+  assert.deepEqual([s.g.seg.get(sube).L, s.g.seg.get(sigue).L, s.g.seg.get(sigue).dir], [2000, 3000, { azimut_deg: 180, elevacion_deg: 0 }]);
+  assert.match(TB.arranqueDe(s, { tipo: 'TRAMO', id: sigue, s_mm: 1500 }).error, /es de la descarga del ventilador: lleva un solo ducto hasta afuera, sin ramales/);
+  // a 8.4 m/s, lenta para la succión pero no para la descarga: verde
+  const info = TB.infoTramo(s, sube);
+  assert.ok(info.velocidad < s.t.politicas.velocidad_min_m_s);
+  assert.deepEqual([info.descarga, info.semaforo, TB.velocidadSemaforo(s, info.velocidad), TB.infoTramo(s, 'TR-003').descarga], [true, 'VERDE', 'AMBAR', false]);
+  // el cálculo: la presión de la descarga se suma al ventilador; sus renglones son de la descarga
+  const inf = TB.informeCalculo(s);
+  const v = inf.ventiladores[0];
+  assert.equal(v.descarga, 'PU-04');
+  cerca(v.presion_estatica_Pa, 1863.78 + v.presion_descarga_Pa, 0.011);
+  assert.deepEqual(inf.tramos.filter((x) => x.lado === 'DESCARGA').map((x) => [x.tramo, x.diametro_in]), [[sube, 12], [sigue, 12]]);
+  const fc = TB.filaCalculo(s, sigue);
+  assert.deepEqual([fc.lado, fc.presion_estatica_Pa], ['DESCARGA', 0]);
+  assert.deepEqual(TB.filaCalculo(s, sube).locales.map((l) => l.texto), ['expansión AD-001 (K 0.088)', 'codo CO-003 (K 0.24)']);
+  // y pasa a partidas, definitivo y cuadrado con el trazo
+  const d = TB.despiece(s);
+  assert.deepEqual([d.bom.resumen.estado, d.diferencias], ['DEFINITIVA', []]);
+});

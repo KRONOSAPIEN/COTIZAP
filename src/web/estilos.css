@@ -1284,6 +1284,7 @@ dd.ti-sem-verde, dd.ti-sem-ambar { background: none; font-weight: 600; }
 .ti-calc-tabla th { color: var(--fg-2); font-weight: 600; }
 .ti-calc-tabla .enlace { font-size: 12.5px; padding: 1px 2px; }
 .ti-critica td { font-weight: 600; }
+.ti-calc-tabla td.ti-calc-desc { color: var(--accent); }
 .ti-chip { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 9px; font-size: 11px; font-weight: 600; color: var(--warn); background: var(--warn-soft); }
 .ti-calc-balance li { line-height: 1.45; }
 .ti-problemas { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
@@ -1341,7 +1342,7 @@ dd.ti-sem-verde, dd.ti-sem-ambar { background: none; font-weight: 600; }
 .ti-manguera-eje { stroke: var(--s6); stroke-width: 1.2; stroke-dasharray: 3 3; fill: none; pointer-events: none; }
 .ti-puerto-marca { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5; }
 .ti-puerto-libre .ti-puerto-marca { fill: var(--surface); stroke: var(--warn); stroke-width: 2.5; }
-.ti-puerto-entrada .ti-puerto-marca { fill: var(--good); }
+.ti-puerto-entrada .ti-puerto-marca, .ti-puerto-salida .ti-puerto-marca { fill: var(--good); }
 .ti-puerto.ti-sel .ti-puerto-marca { stroke: var(--ti-sel); stroke-width: 3; }
 .ti-puerto.ti-err .ti-puerto-marca { stroke: var(--crit); stroke-width: 2.5; }
 .ti-puerto-flecha { stroke: var(--accent); stroke-width: 2; }
@@ -1350,6 +1351,7 @@ dd.ti-sem-verde, dd.ti-sem-ambar { background: none; font-weight: 600; }
 .ti-pt.ti-sel { stroke: var(--ti-sel); }
 .ti-nodo { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
 .ti-nodo-libre { fill: var(--accent); stroke: var(--surface); }
+.ti-nodo-salida { fill: var(--surface); stroke: var(--accent); stroke-width: 3; stroke-dasharray: 3 2; }
 .ti-nodo-ancla { stroke: var(--fg); stroke-width: 3; }
 .ti-nodo.ti-aviso { stroke: var(--warn); stroke-width: 3; }
 .ti-nodo.ti-err { stroke: var(--crit); stroke-width: 3; }

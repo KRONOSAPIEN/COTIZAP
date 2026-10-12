@@ -10,7 +10,8 @@
  *   ángulos           cada codo y cada derivación llevan su ángulo anotado (el del trazo, no el de la hoja)
  *   notas             «COMPUERTA» en el nodo de cada compuerta, «EXC» en el de cada reducción excéntrica, «TAPA» en el
  *                     extremo de cada tapa
- *   equipos           el colector y cada toma con la boca del Ø de su puerto (respondida): con brida, en su nodo; con
+ *   equipos           el colector, la descarga (un VENTILADOR: las reglas la recorren aparte, de su brida a la punta
+ *                     abierta) y cada toma, con la boca del Ø de su puerto (respondida): con brida, en su nodo; con
  *                     manguera, en el punto de transición, con un tramo del catálogo (respondido) y su adaptador si la
  *                     manguera no es del Ø del ducto
  *   respuestas        las decisiones del trazo: tramos cortos pegados o aceptados
@@ -155,7 +156,7 @@
     });
     // los tramos cortos que el trazo no ha decidido: el despiece los pregunta
     revision.filter((a) => a.codigo === 'TRAMO_CORTO').forEach((a) => avisos.push(`${a.mensaje} El trazo no dice si se pegan las piezas o se fabrica el tramo corto: el despiece lo pregunta (decídalo en el trazo para que no).`));
-    // los equipos: el colector y cada toma con su ducto (con brida, en su nodo; con manguera, en el punto de transición)
+    // los equipos: el colector, su descarga y cada toma con su ducto (con brida, en su nodo; con manguera, en el punto de transición)
     const respuestas = {};
     const poner = (id, campo, valor) => { respuestas[id] = { ...(respuestas[id] || {}), [campo]: valor }; };
     const tipoLectura = { COLECTOR: 'COLECTOR', MAQUINA: 'MAQUINA', CAMPANA: 'CAMPANA', VENTILADOR: 'VENTILADOR' };
@@ -169,7 +170,7 @@
       const nombre = varias(p.equipo) ? `${p.equipo.nombre} · ${p.nombre}` : p.equipo.nombre;
       const colector = p.rol === 'ENTRADA';
       equipos.push({
-        id, tipo: colector ? 'COLECTOR' : tipoLectura[p.equipo.tipo] || 'OTRO', nombre, nodo_id: nodo, conexion: manguera ? 'MANGUERA' : 'BRIDA_EQUIPO', texto_id: null, confianza: 1,
+        id, tipo: colector ? 'COLECTOR' : p.rol === 'SALIDA' ? 'VENTILADOR' : tipoLectura[p.equipo.tipo] || 'OTRO', nombre, nodo_id: nodo, conexion: manguera ? 'MANGUERA' : 'BRIDA_EQUIPO', texto_id: null, confianza: 1,
         boca_diametro: usuario(p.diametro_in, 'in'),
       });
       // la boca: la del puerto (con manguera, el Ø de la manguera: si no es el del ducto, el despiece pone el adaptador)

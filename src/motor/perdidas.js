@@ -342,31 +342,50 @@
     // Ramales ciegos: los tramos a los que no les llega ninguna toma, sólo extremos con tapa. No llevan aire: el cálculo los
     // deja fuera (con la succión del punto donde se unen) y su confluencia no se balancea.
     const tapado = (n) => (piezasEn.get(n) || []).some((a) => a.tipo === 'TAPA');
+    // La descarga del ventilador (§5.12): de su brida, un solo ducto hasta un extremo libre; se calcula aparte de la succión.
+    const descargas = [];
+    const enDescarga = new Set();
+    puertos.forEach((p) => {
+      if (p.rol !== 'SALIDA' || !p.nodo || !saleTodo.has(p.nodo)) return;
+      dato(['COLECTOR', 'VENTILADOR'].includes(p.equipo.tipo), `La descarga ${p.id} no es de un colector ni de un ventilador.`, [p.id]);
+      dato(!descargas.some((d) => d.puerto.equipo === p.equipo), `${p.equipo.nombre} tiene dos descargas con ducto: el cálculo no sabe cómo se reparte el aire.`, [p.id]);
+      dato(!entranTodo.has(p.nodo), `A la descarga ${p.id} le llega un ducto: el aire sale de ella.`, [p.id]);
+      const tramos = [];
+      for (let t = saleTodo.get(p.nodo); t; t = saleTodo.get(t.nodo_aguas_abajo)) {
+        dato(!enDescarga.has(t.id) && (!tramos.length || (entranTodo.get(t.nodo_aguas_arriba).length === 1 && !puertoEn.has(t.nodo_aguas_arriba))), `La descarga ${p.id} va sola hasta afuera: en ${t.nodo_aguas_arriba} se le junta otro ducto.`, [p.id, t.nodo_aguas_arriba]);
+        tramos.push(t);
+        enDescarga.add(t.id);
+      }
+      const fin = tramos[tramos.length - 1].nodo_aguas_abajo;
+      dato(!puertoEn.has(fin) && entranTodo.get(fin).length === 1 && !tapado(fin), `La descarga ${p.id} termina en ${fin}: sale libre a la atmósfera, sin tapa ni equipo.`, [p.id, fin]);
+      descargas.push({ puerto: p, tramos, fin });
+    });
+    const succion = s.tramos.filter((t) => !enDescarga.has(t.id));
     const vivo = new Set();
     for (let cambio = true; cambio;) {
       cambio = false;
-      s.tramos.forEach((t) => {
+      succion.forEach((t) => {
         if (vivo.has(t.id)) return;
         const inc = entranTodo.get(t.nodo_aguas_arriba) || [];
         const p = puertoEn.get(t.nodo_aguas_arriba);
         if ((!inc.length && p && p.rol === 'TOMA') || inc.some((x) => vivo.has(x.id))) { vivo.add(t.id); cambio = true; }
       });
     }
-    const ciegos = new Set(s.tramos.filter((t) => !vivo.has(t.id)).map((t) => t.id));
-    s.tramos.filter((t) => ciegos.has(t.id) && !entranTodo.has(t.nodo_aguas_arriba)).forEach((t) => {
+    const ciegos = new Set(succion.filter((t) => !vivo.has(t.id)).map((t) => t.id));
+    succion.filter((t) => ciegos.has(t.id) && !entranTodo.has(t.nodo_aguas_arriba)).forEach((t) => {
       const up = t.nodo_aguas_arriba;
       dato(tapado(up), `El tramo ${t.id} empieza en ${up}, que no es una toma: la red está abierta (llévelo a una toma o póngale tapa).`, [t.id, up]);
     });
-    dato(ciegos.size < s.tramos.length, 'Ningún tramo lleva aire: no hay tomas con ducto.');
+    dato(ciegos.size < succion.length, 'Ningún tramo lleva aire: no hay tomas con ducto.');
     const entran = new Map();
     const sale = new Map();
-    s.tramos.filter((t) => !ciegos.has(t.id)).forEach((t) => {
+    succion.filter((t) => !ciegos.has(t.id)).forEach((t) => {
       if (!entran.has(t.nodo_aguas_abajo)) entran.set(t.nodo_aguas_abajo, []);
       entran.get(t.nodo_aguas_abajo).push(t);
       sale.set(t.nodo_aguas_arriba, t);
     });
     // Arranques: las tomas con caudal; llegadas: la boca de un colector o de un ventilador.
-    s.tramos.filter((t) => !ciegos.has(t.id)).forEach((t) => {
+    succion.filter((t) => !ciegos.has(t.id)).forEach((t) => {
       const up = t.nodo_aguas_arriba;
       if (!entran.has(up)) {
         const p = puertoEn.get(up);
@@ -383,14 +402,16 @@
     // Orden de las tomas al colector (cada tramo después de los que le llegan).
     const orden = [];
     const listo = new Set();
-    let pend = s.tramos.filter((t) => !ciegos.has(t.id));
+    let pend = succion.filter((t) => !ciegos.has(t.id));
     while (pend.length) {
       const resto = pend.filter((t) => !(entran.get(t.nodo_aguas_arriba) || []).every((x) => listo.has(x.id)));
       if (resto.length === pend.length) falla('NO_ES_ARBOL', 'La red tiene un ciclo: el aire no tiene un sentido.', resto.map((t) => t.id));
       pend.filter((t) => !resto.includes(t)).sort((a, b) => (a.id < b.id ? -1 : 1)).forEach((t) => { orden.push(t); listo.add(t.id); });
       pend = resto;
     }
-    return { T, puertos, puertoEn, entran, sale, piezasEn, orden, ciegos, saleTodo };
+    // La descarga lleva el aire que llega a las bocas de su equipo.
+    descargas.forEach((d) => dato((d.puerto.equipo.puertos || []).some((p) => p.rol === 'ENTRADA' && p.nodo && entran.has(p.nodo)), `La descarga ${d.puerto.id} no lleva aire: a las bocas de ${d.puerto.equipo.nombre} no llega ducto.`, [d.puerto.id]));
+    return { T, puertos, puertoEn, entran, sale, piezasEn, orden, ciegos, saleTodo, descargas };
   }
 
   /** El camino de una toma a la boca: los tramos en el sentido del aire. */
@@ -562,6 +583,73 @@
     return { fila, conf, factor };
   }
 
+  /**
+   * La descarga de un ventilador (§5.12): el aire que llega a las bocas de su equipo sale por la brida de descarga y un ducto
+   * hasta un extremo libre. Ahí la presión estática es la de la atmósfera (0); hacia el ventilador, cada tramo suma su
+   * fricción y cada pieza su pérdida, con el cambio de presión dinámica (se conserva la presión total), y en la brida queda la
+   * presión positiva que el ventilador da además de la succión. Pone en la hoja los renglones de sus tramos.
+   */
+  function descargaDe(s, R, air, op, h, d) {
+    const tabla = op.tabla;
+    const rho = air.densidad_kg_m3;
+    const alfaDe = (a) => (a && finito(a.geometria && a.geometria.semiangulo_deg) ? a.geometria.semiangulo_deg : s.politicas.semiangulo_reduccion_deg || 15);
+    const bocas = d.puerto.equipo.puertos.filter((p) => p.rol === 'ENTRADA' && p.nodo && R.entran.has(p.nodo));
+    const Q = bocas.reduce((x, p) => x + R.entran.get(p.nodo).reduce((y, t) => y + h.fila.get(t.id).Q, 0), 0);
+    const filas = d.tramos.map((t) => {
+      const f = { tramo: t.id, tipo: t.tipo, D_mm: t.diametro_interior_mm, Q, locales: [], lado: 'DESCARGA', enTramo: 0, enNodo: 0 };
+      const dm = f.D_mm / 1000;
+      f.v = velocidad(Q, f.D_mm);
+      f.pv = (rho * f.v * f.v) / 2;
+      f.Re = (rho * f.v * dm) / air.viscosidad_Pa_s;
+      f.f = friccion(f.Re, t.rugosidad_mm, f.D_mm);
+      f.friccion = ((f.f * t.longitud_neta_mm) / 1000 / dm) * f.pv;
+      f.enTramo = f.friccion;
+      if (t.tipo === 'FLEXIBLE' && t.flexible && finito(t.flexible.angulo_curva_deg) && t.flexible.curvas > 0 && finito(t.flexible.radio_mm)) {
+        const K = kCodo(t.flexible.angulo_curva_deg, t.flexible.radio_mm / f.D_mm, null, tabla) * t.flexible.curvas;
+        f.locales.push({ que: 'CURVAS', id: null, K, Pa: K * f.pv });
+        f.enTramo += K * f.pv;
+      }
+      return f;
+    });
+    // En la brida: el adaptador si el ducto no es del Ø de la descarga.
+    const dP = d.puerto.diametro_in * IN;
+    const pvP = pvDe(Q, dP, rho);
+    const ad = (R.piezasEn.get(d.puerto.nodo) || []).find(esTransicion);
+    const trP = transicion(dP, filas[0].D_mm, alfaDe(ad), pvP, filas[0].pv, tabla);
+    if (trP.modelo) filas[0].locales.push({ que: trP.modelo, id: ad ? ad.id : null, K: trP.K, Pa: trP.perdida, d1: d.puerto.diametro_in, d2: redondo(filas[0].D_mm / IN, 3), alfa: alfaDe(ad) });
+    // En cada unión: el codo, la compuerta o la reducción entre un tramo y el siguiente.
+    filas.forEach((f, i) => {
+      const sig = filas[i + 1];
+      if (!sig) return;
+      (R.piezasEn.get(d.tramos[i].nodo_aguas_abajo) || []).forEach((a) => {
+        let l = null;
+        if (a.tipo === 'CODO') {
+          const dNom = a.conexiones[0] && finito(a.conexiones[0].diametro_in) ? a.conexiones[0].diametro_in * IN : f.D_mm;
+          const K = kCodo(a.geometria.angulo_deg, a.geometria.radio_eje_mm / dNom, a.geometria.gajos, tabla);
+          l = { que: 'CODO', id: a.id, K, Pa: K * f.pv };
+        } else if (a.tipo === 'COMPUERTA') l = { que: 'COMPUERTA', id: a.id, K: tabla.compuerta.K, Pa: tabla.compuerta.K * f.pv };
+        else if (esTransicion(a)) {
+          const tr = transicion(f.D_mm, sig.D_mm, alfaDe(a), f.pv, sig.pv, tabla);
+          if (tr.modelo) l = { que: tr.modelo, id: a.id, K: tr.K, Pa: tr.perdida, d1: redondo(f.D_mm / IN, 3), d2: redondo(sig.D_mm / IN, 3), alfa: alfaDe(a) };
+        }
+        if (!l) return;
+        f.locales.push(l);
+        f.enNodo += l.Pa;
+      });
+    });
+    // De la salida (0 Pa) hacia la brida.
+    for (let i = filas.length - 1; i >= 0; i -= 1) {
+      const f = filas[i];
+      const sig = filas[i + 1];
+      f.sp_final = sig ? sig.sp_inicio + sig.pv + f.enNodo - f.pv : 0;
+      f.sp_inicio = f.sp_final + f.enTramo;
+      f.local = f.locales.reduce((x, l) => x + l.Pa, 0);
+      h.fila.set(f.tramo, f);
+    }
+    const sp = filas[0].sp_inicio + filas[0].pv + trP.perdida - pvP;
+    return { puerto: d.puerto.id, equipo: d.puerto.equipo.id, tramos: d.tramos.map((t) => t.id), fin: d.fin, Q, pv_puerto: pvP, sp_puerto: sp, salida_pv: filas[filas.length - 1].pv };
+  }
+
   /* ------------------------------------------------------------------ el cálculo */
 
   /**
@@ -578,6 +666,7 @@
     const R = red(s);
     const air = aireDe(s.proyecto.aire);
     const h = hojaDe(s, R, air, op, null);
+    h.descargas = R.descargas.map((d) => descargaDe(s, R, air, op, h, d));
     const pol = s.politicas;
     const comerciales = Array.isArray(pol.diametros_comerciales_in) ? [...pol.diametros_comerciales_in].sort((a, b) => a - b) : [];
 
@@ -656,29 +745,30 @@
       const llegan = bocas.map((p) => ({ p, f: R.entran.get(p.nodo).map((t) => h.fila.get(t.id)) }));
       const Q = llegan.reduce((x, b) => x + b.f.reduce((y, f) => y + f.Q, 0), 0);
       const spBoca = Math.max(...llegan.flatMap((b) => b.f.map((f) => f.sp_final)));
-      const sp = spBoca + (finito(e.perdida_Pa) ? e.perdida_Pa : 0);
+      const desc = h.descargas.find((d) => d.equipo === e.id) || null;
+      const sp = spBoca + (finito(e.perdida_Pa) ? e.perdida_Pa : 0) + (desc ? desc.sp_puerto : 0);
       const aire = (Q / 3600) * sp / 1000;
       const freno = aire / op.eficiencia_ventilador;
       const motorHp = freno / op.eficiencia_transmision / KW_POR_HP;
       ventiladores.push({
         equipo: e.id, bocas: bocas.map((p) => p.id), caudal_m3_h: redondo(Q, 1), presion_estatica_boca_Pa: redondo(spBoca, 2), perdida_equipo_Pa: finito(e.perdida_Pa) ? e.perdida_Pa : 0,
-        presion_estatica_Pa: redondo(sp, 2), presion_estatica_estandar_Pa: redondo((sp * RHO_ESTANDAR) / air.densidad_kg_m3, 2),
+        descarga: desc ? desc.puerto : null, presion_descarga_Pa: desc ? redondo(desc.sp_puerto, 2) : 0, presion_estatica_Pa: redondo(sp, 2), presion_estatica_estandar_Pa: redondo((sp * RHO_ESTANDAR) / air.densidad_kg_m3, 2),
         potencia_aire_kW: redondo(aire, 3), potencia_freno_kW: redondo(freno, 3), eficiencia_ventilador: op.eficiencia_ventilador, eficiencia_transmision: op.eficiencia_transmision,
         motor_hp: MOTORES_HP.find((m) => m >= motorHp - 1e-9) || null,
       });
     });
 
     s.resultados = {
-      metodo: `ACGIH, Industrial Ventilation: método de presión dinámica con balanceo por diseño. Fricción de Darcy-Weisbach (Swamee-Jain) sobre la longitud neta; codos, entradas de ramal, curvas de manguera, expansiones y contracciones con la tabla de coeficientes${cambiadas(op.tabla).length ? ` del taller (cambiada en ${cambiadas(op.tabla).map((k) => SECCIONES[k]).join(', ')})` : ''}; succión de la campana (1 + K)·pv. Presiones estáticas como succión, en valor absoluto.`,
+      metodo: `ACGIH, Industrial Ventilation: método de presión dinámica con balanceo por diseño. Fricción de Darcy-Weisbach (Swamee-Jain) sobre la longitud neta; codos, entradas de ramal, curvas de manguera, expansiones y contracciones con la tabla de coeficientes${cambiadas(op.tabla).length ? ` del taller (cambiada en ${cambiadas(op.tabla).map((k) => SECCIONES[k]).join(', ')})` : ''}; succión de la campana (1 + K)·pv. Presiones estáticas como succión, en valor absoluto${h.descargas.length ? '; en la descarga, presión positiva: 0 Pa en la salida a la atmósfera y, hacia el ventilador, fricción y piezas conservando la presión total' : ''}.`,
       por_tramo: [...h.fila.values()].sort((a, b) => (a.tramo < b.tramo ? -1 : 1)).map((f) => ({
-        tramo: f.tramo, caudal_m3_h: redondo(f.Q, 1), velocidad_m_s: redondo(f.v, 3), presion_dinamica_Pa: redondo(f.pv, 2), reynolds: Math.round(f.Re), factor_friccion: redondo(f.f, 4),
+        tramo: f.tramo, lado: f.lado || 'SUCCION', caudal_m3_h: redondo(f.Q, 1), velocidad_m_s: redondo(f.v, 3), presion_dinamica_Pa: redondo(f.pv, 2), reynolds: Math.round(f.Re), factor_friccion: redondo(f.f, 4),
         perdida_friccion_Pa: redondo(f.friccion, 2), perdida_local_Pa: redondo(f.local, 2), presion_estatica_Pa: redondo(f.sp_final, 2),
       })),
       por_toma: porToma.map(({ _tot, ...x }) => x),
       balance,
       ventiladores,
     };
-    return { sistema: s, hoja: { filas: h.fila, confluencias: h.conf, critica: critica ? critica.puerto : null, aire: air } };
+    return { sistema: s, hoja: { filas: h.fila, confluencias: h.conf, critica: critica ? critica.puerto : null, aire: air, descargas: h.descargas } };
   }
 
   /**

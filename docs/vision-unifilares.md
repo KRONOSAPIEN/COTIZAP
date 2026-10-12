@@ -146,8 +146,9 @@ Si los dos mejores candidatos de un texto quedan a menos de 15 % uno del otro, s
 - **Un colector**: el equipo de tipo `COLECTOR` es la raíz (`metadatos.flujo_hacia`); si no hay, `SIN_COLECTOR` (bloqueante: sin él no se sabe qué lado de cada pieza es el mayor).
 - **Árbol conexo**: aristas = nodos − 1 y todo nodo alcanzable desde la raíz.
 - **Dirección**: un recorrido desde el colector orienta cada arista; su `nodo_a` es el lado del colector (aguas abajo del aire).
-- **Monotonía del Ø**: alejándose del colector el diámetro no crece. Una violación casi siempre es un error de lectura (`DIAMETRO_INCONSISTENTE`): se revisan primero las confusiones de la §4.2.
-- **Extremos**: todo nodo de grado 1 termina en un equipo, en una manguera o en una tapa (nota «TAPA»); si no, `TRAZO_SIN_CONECTAR`.
+- **La descarga de un ventilador**: un equipo `VENTILADOR` que no está en la red del colector es la raíz de su propio ducto, de su brida hacia fuera (aguas abajo, la atmósfera); el recorrido desde él orienta esas aristas (`nodo_a`, el lado del ventilador). Lleva un solo ducto: si se ramifica, `DESCARGA_RAMIFICADA` (bloqueante). Su punta queda abierta, sin brida (`TRAZO_SIN_CONECTAR` como INFO), y su Ø puede crecer hacia fuera.
+- **Monotonía del Ø**: alejándose del colector el diámetro no crece (en la descarga no se revisa). Una violación casi siempre es un error de lectura (`DIAMETRO_INCONSISTENTE`): se revisan primero las confusiones de la §4.2.
+- **Extremos**: todo nodo de grado 1 termina en un equipo, en una manguera o en una tapa (nota «TAPA»), o es la punta de una descarga; si no, `TRAZO_SIN_CONECTAR`.
 
 ## 5. Clasificación de nodos: de la topología a las piezas
 
@@ -314,7 +315,8 @@ Con la regla del taller (`proceso.soportes.espaciado`, documento de arquitectura
 | `CALIBRE_FALTANTE` / `MATERIAL_FALTANTE` | Sin anotación | El del taller | CONFIRMAR |
 | `TEXTO_SIN_ASOCIAR` | Un texto lejos de todo | Se descarta | INFO |
 | `ASOCIACION_AMBIGUA` | Dos candidatos casi iguales | Re-lectura dirigida | CONFIRMAR si persiste |
-| `TRAZO_SIN_CONECTAR` | Extremo sin equipo ni tapa (reglas) o arista sin tinta (lectura) | El extremo queda abierto, sin brida; la arista sin tinta la descarta la lectura | CONFIRMAR (BLOQUEANTE si una parte no llega al colector) |
+| `TRAZO_SIN_CONECTAR` | Extremo sin equipo ni tapa (reglas) o arista sin tinta (lectura) | El extremo queda abierto, sin brida; la arista sin tinta la descarta la lectura | CONFIRMAR (BLOQUEANTE si una parte no llega al colector ni a un ventilador; INFO en la punta de una descarga) |
+| `DESCARGA_RAMIFICADA` | La descarga de un ventilador se ramifica | Ninguna | BLOQUEANTE |
 | `CRUCE_SIN_NODO` | Dos aristas se cruzan sin unión dibujada | Pasan por encima (no se unen) | CONFIRMAR |
 | `CICLO_EN_RED` | La red tiene un ciclo | Ninguna | BLOQUEANTE |
 | `PANTALON_RETIRADO` | Y simétrica | Injerto sobre el hijo de mayor Ø | CONFIRMAR |
@@ -672,7 +674,7 @@ Es el archivo [`docs/unifilar-bom.schema.json`](unifilar-bom.schema.json) (JSON 
             "ANGULO_DERIVACION_NO_PERMITIDO", "DERIVACION_CONTRA_FLUJO", "ORIENTACION_AMBIGUA", "TRANSICION_INSERTADA", "ACCESORIOS_ENCIMADOS", "CONEXION_EQUIPO",
             "MANGUERA_SIN_LARGO", "CALIBRE_BAJO_TABLA", "CALIBRE_FALTANTE", "MATERIAL_FALTANTE", "TEXTO_SIN_ASOCIAR", "ASOCIACION_AMBIGUA", "TRAZO_SIN_CONECTAR",
             "CRUCE_SIN_NODO", "CICLO_EN_RED", "PANTALON_RETIRADO", "SIN_COLECTOR", "LECTURA_DUDOSA", "COTAS_NO_CUADRAN", "REDUCCION_GRANDE", "VERIFICACION_VISUAL",
-            "COMPUERTA_NO_VA", "COMPUERTA_SIN_CATALOGO"
+            "COMPUERTA_NO_VA", "COMPUERTA_SIN_CATALOGO", "DESCARGA_RAMIFICADA"
           ]
         },
         "referencias": { "type": "array", "items": { "type": "string" } },

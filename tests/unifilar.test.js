@@ -1,6 +1,7 @@
 /**
  * Reglas del croquis unifilar (src/motor/unifilar.js): revisión de la lectura, despiece del caso de prueba, respuestas del
- * ingeniero, casos que bloquean, geometría en planta y las partidas que salen hacia la cotización.
+ * ingeniero, casos que bloquean, geometría en planta, la descarga de un ventilador y las partidas que salen hacia la
+ * cotización.
  */
 'use strict';
 
@@ -420,4 +421,32 @@ test('respuestasValidas: sólo { elemento: { campo: valor } } con campos conocid
   }), { 'A-005': { longitud_m: 1.6 }, 'N-005': { angulo_deg: '30' }, metadatos: { aceptado: true } });
   assert.deepEqual(UF.respuestasValidas(null), {});
   assert.deepEqual(UF.respuestasValidas([1]), {});
+});
+
+test('La descarga de un ventilador: su propio ducto, de su brida a la punta abierta (el Ø puede crecer); ramificada bloquea; sin ventilador no llega', () => {
+  // colector — 2 m — máquina; aparte, el ventilador (brida de 10″) — 2 m de 12″ — codo — 3 m de 12″ — punta
+  const red = (extra) => planta([['N-1', 0, 0], ['N-2', 400, 0], ['V-1', 0, 300], ['V-2', 0, 500], ['V-3', 300, 500], ...((extra && extra.nodos) || [])],
+    [['A-1', 'N-1', 'N-2', 6, 2], ['D-1', 'V-1', 'V-2', 12, 2], ['D-2', 'V-3', 'V-2', 12, 3], ...((extra && extra.aristas) || [])],
+    [['COL', 'COLECTOR', 'N-1', 'BRIDA_EQUIPO', 6], ['M1', 'MAQUINA', 'N-2', 'BRIDA_TALLER'], ...((extra && extra.equipos) || [['VEN', 'VENTILADOR', 'V-1', 'BRIDA_EQUIPO', 10]])]);
+  const b = despiezar(UF.leer(red()).lectura);
+  assert.deepEqual(codigos(b, 'BLOQUEANTE'), []);
+  assert.ok(!codigos(b, 'CONFIRMAR').includes('TRAZO_SIN_CONECTAR') && !codigos(b).includes('DIAMETRO_INCONSISTENTE'), codigos(b).join(' '));
+  const punta = b.alertas_ambiguedad.find((a) => a.codigo === 'TRAZO_SIN_CONECTAR');
+  assert.deepEqual([punta.severidad, punta.referencias, punta.mensaje], ['INFO', ['V-3'], 'La descarga del ventilador sale libre en V-3.']);
+  // orientadas desde el ventilador; el codo en V-2, la reducción de la brida de 10″ al ducto de 12″ en V-1, la punta abierta
+  assert.deepEqual(['D-1', 'D-2'].map((id) => { const a = b.red.aristas.find((x) => x.id === id); return [a.nodo_a, a.nodo_b]; }), [['V-1', 'V-2'], ['V-2', 'V-3']]);
+  assert.deepEqual(b.accesorios.map((a) => `${a.tipo} ${a.nodo_id}`).sort(), ['CODO V-2', 'REDUCCION V-1']);
+  assert.deepEqual([ducto(b, 'D-2').extremo_fin, ducto(b, 'D-2').diametro_in], ['ABIERTO', 12]);
+  const r = C.cotizar({ yarda_mm: 914.4, partidas: UF.aPartidas(b) }, M);
+  assert.ok(r.partidas.every((f) => f.ok), r.partidas.filter((f) => !f.ok).map((f) => f.errores).join(' '));
+  // ramificada: bloquea, con la pregunta de su camino
+  const ram = despiezar(UF.leer(red({ nodos: [['V-4', 0, 700]], aristas: [['D-3', 'V-2', 'V-4', 12, 2]] })).lectura);
+  assert.deepEqual([ram.resumen.estado, codigos(ram, 'BLOQUEANTE')], ['NO_COTIZABLE', ['DESCARGA_RAMIFICADA']]);
+  assert.deepEqual(ram.alertas_ambiguedad.find((a) => a.codigo === 'DESCARGA_RAMIFICADA').referencias, ['V-2']);
+  // sin el ventilador, esa parte no llega a nada
+  assert.deepEqual(codigos(despiezar(UF.leer(red({ equipos: [['OTRO', 'MAQUINA', 'V-1', 'BRIDA_TALLER']] })).lectura), 'BLOQUEANTE'), ['TRAZO_SIN_CONECTAR']);
+  // un ventilador dentro de la red del colector no es una descarga: sus extremos se preguntan como siempre
+  const dentro = despiezar(UF.leer(planta([['N-1', 0, 0], ['N-2', 400, 0], ['N-3', 400, 300]], [['A-1', 'N-1', 'N-2', 6, 2], ['A-2', 'N-2', 'N-3', 6, 2]],
+    [['COL', 'COLECTOR', 'N-1', 'BRIDA_EQUIPO', 6], ['VEN', 'VENTILADOR', 'N-2', 'BRIDA_EQUIPO', 6]])).lectura);
+  assert.ok(codigos(dentro, 'CONFIRMAR').includes('TRAZO_SIN_CONECTAR'));
 });

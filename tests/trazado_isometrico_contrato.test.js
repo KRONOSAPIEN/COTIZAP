@@ -363,7 +363,10 @@ test('Con lo que trae se calcula la red: aire, fricción por tramo, pérdidas lo
   assert.deepEqual([v.equipo, v.bocas], ['EQ-01', ['PU-01']]);
   cerca(v.caudal_m3_h, fila('TR-003').caudal_m3_h, 1e-9);
   cerca(v.presion_estatica_boca_Pa, sp('TR-003'), 1e-9);
-  cerca(v.presion_estatica_Pa, sp('TR-003') + EJ.equipos[0].perdida_Pa, 0.011);
+  // sin ducto de descarga (§5.12): el colector descarga directo a la atmósfera y toda la red es succión
+  assert.deepEqual([v.descarga, v.presion_descarga_Pa], [null, 0]);
+  assert.ok(R.por_tramo.every((x) => x.lado === 'SUCCION'));
+  cerca(v.presion_estatica_Pa, sp('TR-003') + EJ.equipos[0].perdida_Pa + v.presion_descarga_Pa, 0.011);
   cerca(v.presion_estatica_estandar_Pa, (v.presion_estatica_Pa * 1.2) / rho, 0.02);
   cerca(v.potencia_aire_kW, (v.caudal_m3_h / 3600) * v.presion_estatica_Pa / 1000, 0.001);
   cerca(v.potencia_freno_kW, v.potencia_aire_kW / v.eficiencia_ventilador, 0.002);

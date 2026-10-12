@@ -1,8 +1,8 @@
 /**
  * El cálculo de la red trazada (src/motor/perdidas.js; etapa 4 de docs/trazado-isometrico.md §5): la tabla de coeficientes
  * y su interpolación (y la expansión brusca contra Borda-Carnot), el aire, la hoja del ejemplo, los tres umbrales del
- * balanceo, el pantalón, el adaptador y la reducción, la T a 90° con su aceleración, el ventilador y su motor, los datos
- * que faltan, la pureza, y los sistemas que salen del modelo al trazar.
+ * balanceo, el pantalón, el adaptador y la reducción, la T a 90° con su aceleración, el ventilador y su motor, la descarga
+ * del ventilador (§5.12), los datos que faltan, la pureza, y los sistemas que salen del modelo al trazar.
  */
 'use strict';
 
@@ -289,7 +289,7 @@ test('Los sistemas que exporta el modelo al trazar se calculan, o dicen qué les
     calculados += 1;
     assert.deepEqual(validarEsquema(r.sistema, ESQUEMA), [], `paso ${i}`);
     const R = r.sistema.resultados;
-    R.por_tramo.forEach((x) => Object.entries(x).forEach(([k, v]) => assert.ok(k === 'tramo' || (Number.isFinite(v) && v >= 0), `${x.tramo} ${k} = ${v}`)));
+    R.por_tramo.forEach((x) => Object.entries(x).forEach(([k, v]) => assert.ok(k === 'tramo' || (k === 'lado' ? v === 'SUCCION' : Number.isFinite(v) && v >= 0), `${x.tramo} ${k} = ${v}`)));
     R.balance.forEach((b) => { assert.ok(b.relacion >= 1); assert.ok(P.ACCIONES.includes(b.accion)); });
     assert.ok(R.ventiladores[0].presion_estatica_Pa > 1250 && R.ventiladores[0].motor_hp > 0);
   }
@@ -313,7 +313,10 @@ function invariantes(r, msg) {
   const entran = (n) => S.tramos.filter((t) => t.nodo_aguas_abajo === n);
   const puertos = new Map(S.equipos.flatMap((e) => e.puertos.map((p) => [p.id, { ...p, equipo: e }])));
   assert.deepEqual(validarEsquema(S, ESQUEMA), [], msg);
-  R.por_tramo.forEach((x) => Object.entries(x).forEach(([k, v]) => assert.ok(k === 'tramo' || (Number.isFinite(v) && v >= 0), `${msg}: ${x.tramo} ${k} = ${v}`)));
+  // (en la descarga la presión es positiva y puede quedar bajo cero donde el ducto se ensancha)
+  R.por_tramo.forEach((x) => Object.entries(x).forEach(([k, v]) => assert.ok(k === 'tramo' || (k === 'lado' ? ['SUCCION', 'DESCARGA'].includes(v) : Number.isFinite(v) && (v >= 0 || (x.lado === 'DESCARGA' && k === 'presion_estatica_Pa'))), `${msg}: ${x.tramo} ${k} = ${v}`)));
+  const desc = new Set(r.hoja.descargas.flatMap((d) => d.tramos));
+  R.por_tramo.forEach((x) => assert.equal(x.lado, desc.has(x.tramo) ? 'DESCARGA' : 'SUCCION', `${msg}: lado de ${x.tramo}`));
   // 1) caudal: cada tramo lleva la suma de lo que le llega (con la corrección de cada confluencia)
   const kDe = new Map(); // nodo|tramo → factor de la corriente que llega por ese tramo
   r.hoja.confluencias.forEach((c) => c.corrientes.forEach((x) => kDe.set(`${c.nodo}|${x.t.id}`, x.k)));
@@ -321,6 +324,7 @@ function invariantes(r, msg) {
   const tapados = new Set(S.accesorios.filter((a) => a.tipo === 'TAPA').map((a) => a.nodo));
   S.tramos.forEach((t) => {
     const inc = entran(t.nodo_aguas_arriba);
+    if (desc.has(t.id)) return; // la descarga, en 3b)
     if (hoja.get(t.id).ciego) {
       assert.equal(hoja.get(t.id).Q, 0, `${msg}: ${t.id} ciego`);
       assert.ok(inc.length ? inc.every((x) => hoja.get(x.id).ciego) : tapados.has(t.nodo_aguas_arriba), `${msg}: ${t.id} es ciego porque sólo le llegan tapas`);
@@ -359,9 +363,26 @@ function invariantes(r, msg) {
   S.tramos.forEach((t) => {
     const inc = entran(t.nodo_aguas_arriba);
     const f = hoja.get(t.id);
+    cerca(fila.get(t.id).presion_estatica_Pa, f.sp_final, 0.006);
+    if (desc.has(t.id)) return;
     if (inc.length === 1) cerca(f.sp_inicio, hoja.get(inc[0].id).sp_final, 1e-6, `${msg}: succión de ${t.id}`);
     if (inc.length > 1) cerca(f.sp_inicio, Math.max(...inc.map((x) => hoja.get(x.id).sp_final)), 1e-6, `${msg}: confluencia antes de ${t.id}`);
-    cerca(fila.get(t.id).presion_estatica_Pa, f.sp_final, 0.006);
+  });
+  // 3b) la descarga: lleva el aire del ventilador, sale a 0 Pa y la presión total en su brida es lo que pierde más la pv
+  // con que el aire sale a la atmósfera; en cada tramo, la presión baja con su fricción y sus curvas
+  r.hoja.descargas.forEach((d) => {
+    const v = R.ventiladores.find((x) => x.equipo === d.equipo);
+    assert.equal(v.descarga, d.puerto, msg);
+    cerca(v.presion_descarga_Pa, d.sp_puerto, 0.006, `${msg}: presión de la descarga ${d.puerto}`);
+    const filas = d.tramos.map((id) => hoja.get(id));
+    filas.forEach((f) => {
+      cerca(f.Q, d.Q, 1e-9, `${msg}: Q de ${f.tramo}`);
+      cerca(fila.get(f.tramo).caudal_m3_h, v.caudal_m3_h, 0.06, `${msg}: Q de ${f.tramo} = ventilador`);
+      cerca(f.sp_inicio - f.sp_final, f.friccion + f.locales.filter((l) => l.que === 'CURVAS').reduce((a, l) => a + l.Pa, 0), 1e-9, `${msg}: ${f.tramo}`);
+    });
+    assert.equal(filas[filas.length - 1].sp_final, 0, `${msg}: sale a la atmósfera`);
+    cerca(d.sp_puerto + d.pv_puerto, filas[filas.length - 1].pv + filas.reduce((a, f) => a + f.friccion + f.local, 0), 1e-9, `${msg}: presión total de ${d.puerto}`);
+    for (let i = 0; i + 1 < filas.length; i += 1) assert.equal(T.get(filas[i].tramo).nodo_aguas_abajo, T.get(filas[i + 1].tramo).nodo_aguas_arriba, `${msg}: la descarga va en un solo ducto`);
   });
   // 4) por toma: la entrada más la fricción y los locales de su camino
   R.por_toma.forEach((x) => {
@@ -377,9 +398,12 @@ function invariantes(r, msg) {
     const bocas = e.puertos.filter((p) => p.rol === 'ENTRADA').map((p) => p.nodo);
     const sb = Math.max(...S.tramos.filter((t) => bocas.includes(t.nodo_aguas_abajo)).map((t) => hoja.get(t.id).sp_final));
     cerca(v.presion_estatica_boca_Pa, sb, 0.006, `${msg}: boca`);
-    cerca(v.presion_estatica_Pa, sb + (e.perdida_Pa || 0), 0.011);
-    cerca(v.potencia_aire_kW, (v.caudal_m3_h / 3600) * v.presion_estatica_Pa / 1000, 0.001);
-    assert.ok(v.motor_hp * 0.7457 >= v.potencia_freno_kW / v.eficiencia_transmision - 1e-6, `${msg}: el motor alcanza`);
+    cerca(v.presion_estatica_Pa, sb + (e.perdida_Pa || 0) + v.presion_descarga_Pa, 0.016);
+    if (!v.descarga) assert.equal(v.presion_descarga_Pa, 0);
+    // (con el redondeo de Q y de la presión: una descarga angosta al azar puede llevar la presión a decenas de kPa)
+    cerca(v.potencia_aire_kW, (v.caudal_m3_h / 3600) * v.presion_estatica_Pa / 1000, 0.001 + 1e-5 * v.potencia_aire_kW);
+    if (v.motor_hp === null) assert.ok(v.potencia_freno_kW / v.eficiencia_transmision / 0.7457 > P.MOTORES_HP[P.MOTORES_HP.length - 1], `${msg}: no hay motor comercial que alcance`);
+    else assert.ok(v.motor_hp * 0.7457 >= v.potencia_freno_kW / v.eficiencia_transmision - 1e-6, `${msg}: el motor alcanza`);
   });
   // 6) los K de los accesorios son los de la hoja
   S.accesorios.forEach((a) => {
@@ -395,11 +419,12 @@ function invariantes(r, msg) {
   assert.deepEqual(P.calcular(S).sistema, S, `${msg}: idempotente`);
 }
 
-test('Invariantes del cálculo en redes al azar: caudal, balance, compuerta, succión, caminos, ventilador y K', () => {
+test('Invariantes del cálculo en redes al azar: caudal, balance, compuerta, succión, caminos, descarga, ventilador y K', () => {
   const ESTABLES = ['POLVO', 'VENTILACION'];
   let total = 0;
   const conCompuerta = { cerrada: 0, abierta: 0 };
   let conTapa = 0;
+  const conDescarga = new Set();
   const acciones = new Set();
   [11, 2026, 77, 31337, 909, 5].forEach((semilla0) => {
     let semilla = semilla0;
@@ -439,6 +464,19 @@ test('Invariantes del cálculo en redes al azar: caudal, balance, compuerta, suc
         return TZ.ponerTapa(m, M, m.ultimo.nodo);
       },
       () => { const n = uno(t.nodos.filter((x) => x.tapa)); return n ? TZ.quitarTapa(t, M, n.id) : t; },
+      () => { // la descarga del colector (§5.12): una chimenea de uno a tres tramos, a veces de otro Ø que su brida
+        const col = t.equipos.find((e) => e.tipo === 'COLECTOR');
+        if (col.puertos.some((p) => p.rol === 'SALIDA')) return t;
+        let m = TZ.agregarPuerto(t, M, col.id, { rol: 'SALIDA', posicion_local_mm: { x: 0, y: 0, z: col.caja_mm.alto }, diametro_in: uno([8, 10, 12]) });
+        const pu = m.equipos.find((e) => e.id === col.id).puertos.find((p) => p.rol === 'SALIDA');
+        m = TZ.trazar(m, M, pu.nodo, { direccion: { azimut_deg: 0, elevacion_deg: 90 }, largo_mm: uno([1000, 1500, 2500]), diametro_in: uno([8, 10, 12, 14]) });
+        for (let k = Math.floor(azar() * 3); k > 0; k -= 1) {
+          const c = TZ.candidatas(m, M, m.ultimo.nodo);
+          if (!c.length) break;
+          m = TZ.trazar(m, M, m.ultimo.nodo, { direccion: uno(c).direccion, largo_mm: uno([800, 1500, 3000]), ...(azar() < 0.5 ? { diametro_in: uno([10, 12, 14]) } : {}) });
+        }
+        return m;
+      },
     ];
     for (let i = 0; i < 45; i += 1) {
       const antes = t; // un paso que deja el trazo sin calcular (con problemas o abierto) se deshace
@@ -452,12 +490,14 @@ test('Invariantes del cálculo en redes al azar: caudal, balance, compuerta, suc
       r.sistema.resultados.balance.forEach((b) => acciones.add(b.accion));
       r.sistema.accesorios.filter((a) => a.tipo === 'COMPUERTA').forEach((a) => { conCompuerta[a.perdida.K_paso > 0 ? 'cerrada' : 'abierta'] += 1; });
       if ([...r.hoja.filas.values()].some((f) => f.ciego)) conTapa += 1;
+      if (r.hoja.descargas.length) conDescarga.add(r.hoja.descargas[0].tramos.length);
     }
   });
   assert.ok(total > 60, `se revisaron ${total} cálculos`);
   ['NINGUNA', 'AJUSTAR_CAUDAL', 'COMPUERTA'].forEach((a) => assert.ok(acciones.has(a), `salió ${a} (${[...acciones].join(', ')})`));
   assert.ok(conCompuerta.cerrada > 0 && conCompuerta.abierta > 0, JSON.stringify(conCompuerta));
   assert.ok(conTapa > 0, `salieron ramales ciegos (${conTapa})`);
+  assert.ok(conDescarga.size > 1, `salieron descargas de varios tramos (${[...conDescarga].join(', ')})`);
 });
 
 test('Ramal ciego hasta una tapa: no lleva aire, su succión es la de su unión, no se balancea; abierto, el cálculo pide tapa', () => {
@@ -479,4 +519,73 @@ test('Ramal ciego hasta una tapa: no lleva aire, su succión es la de su unión,
   assert.deepEqual(R.balance.map((b) => [b.nodo, b.accion]), [['N-002', 'AJUSTAR_CAUDAL']], 'la del ejemplo sigue igual');
   assert.equal(R.ventiladores[0].caudal_m3_h, 2283.4, 'al ventilador llega lo mismo');
   assert.equal(r.sistema.accesorios.find((a) => a.tipo === 'TAPA').perdida.modelo, 'TAPA');
+});
+
+test('Descarga del ventilador (§5.12): sale a 0 Pa, la presión total se conserva hasta la brida y se suma al ventilador', () => {
+  const chimenea = (Dp, Dd) => {
+    let t = TB.ejemplo(M);
+    t = TZ.agregarPuerto(t, M, 'EQ-01', { rol: 'SALIDA', posicion_local_mm: { x: 0, y: 0, z: 4000 }, diametro_in: Dp });
+    const pu = t.equipos[0].puertos.find((p) => p.rol === 'SALIDA');
+    t = TZ.trazar(t, M, pu.nodo, { direccion: { azimut_deg: 0, elevacion_deg: 90 }, largo_mm: 2000, diametro_in: Dd });
+    t = TZ.trazar(t, M, t.ultimo.nodo, { direccion: { azimut_deg: 0, elevacion_deg: 0 }, largo_mm: 3000 });
+    return { t, pu: pu.id, s: TZ.aSistema(t, M) };
+  };
+  const base = P.calcular(crudo()).sistema.resultados;
+  // la chimenea de 12″ sobre una brida de 10″: adaptador que ensancha, codo de 90° y salida libre
+  const { s, pu } = chimenea(10, 12);
+  const r = P.calcular(s);
+  const R = r.sistema.resultados;
+  const [d] = r.hoja.descargas;
+  assert.deepEqual([d.puerto, d.tramos], [pu, ['TR-007', 'TR-008']]);
+  assert.deepEqual(R.por_tramo.map((x) => x.lado), ['SUCCION', 'SUCCION', 'SUCCION', 'SUCCION', 'SUCCION', 'SUCCION', 'DESCARGA', 'DESCARGA']);
+  // la succión no cambia; la descarga lleva todo lo que llega a la boca
+  assert.deepEqual(R.por_tramo.slice(0, 6).map(({ lado, ...x }) => x), base.por_tramo.map(({ lado, ...x }) => x));
+  const v = R.ventiladores[0];
+  [fila(r, 'TR-007'), fila(r, 'TR-008')].forEach((x) => assert.equal(x.caudal_m3_h, v.caudal_m3_h));
+  const h7 = r.hoja.filas.get('TR-007');
+  const h8 = r.hoja.filas.get('TR-008');
+  assert.equal(h8.sp_final, 0, 'sale a la atmósfera');
+  cerca(h8.sp_inicio, h8.friccion, 1e-12);
+  const codo = h7.locales.find((l) => l.que === 'CODO');
+  cerca(codo.Pa, 0.24 * h7.pv, 1e-9, 'el codo de 5 gajos con la pv de su tramo');
+  cerca(h7.sp_final, h8.sp_inicio + codo.Pa, 1e-9, 'mismo Ø: la presión sube lo que pierde el codo');
+  // el adaptador de 10″ a 12″ es una expansión con su recuperación: la brida puede quedar bajo la atmósfera
+  const ad = h7.locales.find((l) => l.que === 'EXPANSION');
+  const tr = P.transicion(10 * 25.4, h7.D_mm, 15, d.pv_puerto, h7.pv);
+  cerca(ad.Pa, tr.perdida, 1e-9);
+  cerca(d.sp_puerto, h7.sp_inicio + h7.pv + ad.Pa - d.pv_puerto, 1e-9);
+  cerca(d.sp_puerto + d.pv_puerto, h8.pv + h7.friccion + h7.local + h8.friccion + h8.local, 1e-9, 'presión total en la brida');
+  assert.ok(d.sp_puerto < 0, `el ensanche recupera más de lo que pierde la chimenea (${d.sp_puerto})`);
+  assert.equal(r.sistema.accesorios.find((a) => a.id === ad.id).perdida.modelo, 'EXPANSION');
+  assert.deepEqual([v.descarga, v.presion_descarga_Pa], [pu, Math.round(d.sp_puerto * 100) / 100]);
+  cerca(v.presion_estatica_Pa, base.ventiladores[0].presion_estatica_Pa + v.presion_descarga_Pa, 0.011);
+  assert.match(R.metodo, /en la descarga, presión positiva: 0 Pa en la salida/);
+  // del mismo Ø que la brida: sin adaptador, la presión en la brida es la fricción más el codo
+  const igual = P.calcular(chimenea(10, 10).s);
+  const [d2] = igual.hoja.descargas;
+  const f2 = d2.tramos.map((id) => igual.hoja.filas.get(id));
+  assert.ok(!f2[0].locales.some((l) => l.que === 'EXPANSION' || l.que === 'CONTRACCION'));
+  cerca(d2.sp_puerto, f2[0].friccion + f2[0].local + f2[1].friccion, 1e-9);
+  assert.ok(igual.sistema.resultados.ventiladores[0].presion_estatica_Pa > base.ventiladores[0].presion_estatica_Pa);
+  // más angosta que la brida: la contracción cuesta
+  const angosta = P.calcular(chimenea(12, 8).s).hoja.descargas[0];
+  assert.ok(angosta.sp_puerto > d2.sp_puerto);
+  // la brida sin ducto: descarga directo, nada cambia
+  const sola = P.calcular(TZ.aSistema(TZ.agregarPuerto(TB.ejemplo(M), M, 'EQ-01', { rol: 'SALIDA', posicion_local_mm: { x: 0, y: 0, z: 4000 }, diametro_in: 10 }), M)).sistema.resultados;
+  assert.deepEqual(sola, base);
+  // lo que el cálculo no acepta, aunque venga de un JSON editado a mano
+  const conCambioDe = (fn) => { const x = clonar(s); x.resultados = null; fn(x); return () => P.calcular(x); };
+  falla(conCambioDe((x) => { x.accesorios.push({ id: 'TA-009', tipo: 'TAPA', nodo: 'N-010', conexiones: [{ rol: 'ENTRADA', tramo: 'TR-008', diametro_in: 12 }], geometria: {}, perdida: {}, familia_cotizap: 'TAPA' }); }), 'SIN_DATOS', /sale libre a la atmósfera, sin tapa/);
+  falla(conCambioDe((x) => { x.tramos.find((y) => y.id === 'TR-001').nodo_aguas_abajo = 'N-009'; }), 'SIN_DATOS', /se le junta otro ducto/);
+  falla(conCambioDe((x) => { // la descarga en un ventilador al que no le llega la succión
+    const p = x.equipos[0].puertos.find((y) => y.id === pu);
+    x.equipos[0].puertos = x.equipos[0].puertos.filter((y) => y !== p);
+    x.equipos.push({ ...clonar(x.equipos[0]), id: 'EQ-09', tipo: 'VENTILADOR', nombre: 'Ventilador aparte', puertos: [p] });
+  }), 'SIN_DATOS', /La descarga PU-04 no lleva aire: a las bocas de Ventilador aparte no llega ducto/);
+  falla(conCambioDe((x) => { // otra descarga con ducto en el mismo colector
+    x.nodos.push({ ...clonar(x.nodos.find((y) => y.id === 'N-010')), id: 'N-020' }, { ...clonar(x.nodos.find((y) => y.id === 'N-010')), id: 'N-021' });
+    x.tramos.push({ ...clonar(x.tramos.find((y) => y.id === 'TR-008')), id: 'TR-020', nodo_aguas_arriba: 'N-020', nodo_aguas_abajo: 'N-021' });
+    x.equipos[0].puertos.push({ ...clonar(x.equipos[0].puertos.find((y) => y.id === pu)), id: 'PU-09', nodo: 'N-020' });
+  }), 'SIN_DATOS', /Colector de polvo tiene dos descargas con ducto/);
+  falla(conCambioDe((x) => { x.tramos.find((y) => y.id === 'TR-001').nodo_aguas_abajo = x.equipos[0].puertos.find((y) => y.id === pu).nodo; }), 'SIN_DATOS', /A la descarga PU-04 le llega un ducto/);
 });

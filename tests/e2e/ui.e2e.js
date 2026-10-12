@@ -3346,6 +3346,56 @@ const ok = (cond, msg) => {
     await p.close();
   }
 
+  console.log('43) Descarga del ventilador: agregarla en el colector, trazarla con el teclado, su salida libre, el cálculo y las partidas');
+  {
+    const p = await nuevaPagina();
+    const R = (fn, a) => p.evaluate(fn, a);
+    const msg = () => p.locator('#ti-msg').innerText();
+    const enPantalla = (P) => R((P) => {
+      const s = window.COTIZAP.web.trazadoUI.estado();
+      const q = window.COTIZAP.trazadoTablero.pantalla(s, P);
+      const r = document.querySelector('#ti-lienzo').getBoundingClientRect();
+      return { x: r.left + (q.x * r.width) / s.ancho, y: r.top + (q.y * r.height) / s.alto };
+    }, P);
+    await p.click('#tab-trazado');
+    await p.click('#ti-ejemplo');
+    await p.click('#ti-fase-0');
+    await p.locator('#ti-lienzo').scrollIntoViewIfNeeded();
+    const q = await enPantalla({ x: 0, y: 0, z: 2000 });
+    await p.mouse.click(q.x, q.y);
+    ok(/Bocas y descarga/i.test(await p.locator('#ti-inspector').innerText()) && await p.locator('#ti-agregar-descarga').count() === 1, 'la ficha del colector ofrece agregar su descarga');
+    await p.click('#ti-agregar-descarga');
+    ok(await msg() === 'Se agregó la descarga a Colector de polvo.' && /^Descarga PU-04/.test(await p.locator('.ti-ins-tit').first().innerText()), 'la descarga PU-04 en la cara superior, con su ficha');
+    await p.selectOption('#ti-p-d', '10');
+    ok(/va con brida y es un punto fijo/.test(await p.locator('#ti-inspector').innerText()) && await p.locator('#ti-trazar-desde').innerText() === 'Trazar desde la descarga', 'la ficha explica la descarga y ofrece trazar desde ella');
+    await p.click('#ti-trazar-desde');
+    ok(/^Desde la descarga PU-04 el ducto puede salir en \+Z\./.test(await msg()), `trazar desde la brida: sólo hacia arriba (${await msg()})`);
+    await p.keyboard.press('ArrowUp');
+    await p.keyboard.type('2');
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('@180 3');
+    await p.keyboard.press('Enter');
+    await p.keyboard.press('Escape');
+    const t = await R(() => { const s = window.COTIZAP.web.trazadoUI.estado(); return { tramos: s.t.tramos.length, desc: [...s.g.descarga].sort(), fin: [...s.g.salidaLibre][0] }; });
+    ok(t.tramos === 8 && JSON.stringify(t.desc) === JSON.stringify(['TR-007', 'TR-008']), `dos tramos de descarga (${JSON.stringify(t)})`);
+    await p.click('#ti-fase-4');
+    await p.locator('#ti-problemas details').evaluate((d) => { d.open = true; });
+    ok(await p.locator('.ti-prob[data-codigo="DESCARGA_LIBRE"]').count() === 1 && /La descarga PU-04 de Colector de polvo sale libre en N-\d+, a 6 m de altura/.test(await p.locator('.ti-prob[data-codigo="DESCARGA_LIBRE"]').innerText()), 'la revisión anota que sale libre, a 6 m');
+    ok(await p.locator('.ti-prob[data-codigo="VELOCIDAD_BAJA"], .ti-prob[data-codigo="EXTREMO_ABIERTO"]').count() === 0, 'ni velocidad baja ni extremo abierto: es aire limpio que sale a la atmósfera');
+    ok(await p.locator(`.ti-nodo-salida[data-nodo="${t.fin}"]`).count() === 1, 'la punta se marca como salida en el lienzo');
+    await R((id) => { const s = window.COTIZAP.web.trazadoUI.estado(); s.sel = { tipo: 'NODO', id }; window.COTIZAP.web.trazadoUI.render(); }, t.fin);
+    ok(await p.locator('#ti-n-salida').count() === 1 && await p.locator('#ti-n-tapa').count() === 0, 'su ficha dice que ahí sale el aire, sin botón de tapa');
+    await p.click('#ti-fase-5');
+    const vent = (await p.locator('.ti-calc-vent').innerText()).replace(/\s+/g, ' ');
+    ok(/más \d+ Pa de su descarga PU-04/.test(vent), `el ventilador suma la presión de su descarga (${vent})`);
+    await p.locator('#ti-calc-hoja').evaluate((d) => { d.open = true; });
+    const filas = await p.locator('#ti-calc-hoja tr[data-lado="DESCARGA"] td:last-child').allInnerTexts();
+    ok(filas.length === 2 && /^\+\d+$/.test(filas[0]) && filas[1] === '0' && /Presión/.test(await p.locator('#ti-calc-hoja th:last-child').innerText()), `la hoja: presión positiva en la descarga y 0 a la salida (${filas.join(', ')})`);
+    ok(/^Despiece definitivo:/.test(await p.locator('#ti-part-estado').innerText()), 'y pasa a partidas, definitivo');
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.trazado_iso.equipos[0].puertos.some((x) => x.rol === 'SALIDA' && x.diametro_in === 10)), 'se guarda con la cotización');
+    await p.close();
+  }
+
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

@@ -618,8 +618,7 @@
       const ad = g.ady.get(nd);
       const rig = ad.filter((x) => rigido(x.tramo));
       const flex = ad.filter((x) => flexible(x.tramo));
-      const nombre = `${p.rol === 'ENTRADA' ? 'La boca' : 'La toma'} ${pid} (${pu.equipo.nombre})`;
-      if (p.rol === 'SALIDA' && ad.length) prob('PUERTO_OCUPADO', `La descarga ${pid} todavía no se traza: conecte el ducto a una toma o a una boca de colector.`, [pid]);
+      const nombre = `${p.rol === 'ENTRADA' ? 'La boca' : p.rol === 'SALIDA' ? 'La descarga' : 'La toma'} ${pid} (${pu.equipo.nombre})`;
       if (ad.length > 1) prob('PUERTO_OCUPADO', `${nombre} ya está conectada.`, [pid, nd]);
       const ac = p.acople;
       if (rig.length && !(ac && ac.tipo === 'BRIDA')) prob('PUERTO_OCUPADO', `${nombre} ${ac ? 'tiene manguera: el ducto empieza en su punto de transición' : 'no tiene acople: elija manguera o brida'}.`, [pid, nd]);
@@ -628,7 +627,7 @@
         g.fijos.add(nd);
         const t = rig[0].tramo;
         if (g.seg.get(t.id).dir && anguloEntre(fuera(t, nd), vectorDe(pu.direccion)) > TOL_ANG) {
-          prob('BRIDA_DESALINEADA', `La brida va alineada con el cuello ${p.rol === 'ENTRADA' ? 'de la boca' : 'de la toma'} ${pid} de ${pu.equipo.nombre} (${textoDireccion(pu.direccion)}).`, [pid, t.id], `El primer tramo sale en ${textoDireccion(pu.direccion)}.`);
+          prob('BRIDA_DESALINEADA', `La brida va alineada con el cuello ${p.rol === 'ENTRADA' ? 'de la boca' : p.rol === 'SALIDA' ? 'de la descarga' : 'de la toma'} ${pid} de ${pu.equipo.nombre} (${textoDireccion(pu.direccion)}).`, [pid, t.id], `El primer tramo sale en ${textoDireccion(pu.direccion)}.`);
         }
       }
     });
@@ -638,7 +637,7 @@
     const visto = new Set();
     m.nodos.forEach((n0) => {
       if (visto.has(n0.id)) return;
-      const comp = { indice: g.comps.length, nodos: [], tramos: [], sumideros: [], extremos: [], tomas: [], flujo: null, sumidero: null, ciclo: false };
+      const comp = { indice: g.comps.length, nodos: [], tramos: [], sumideros: [], extremos: [], tomas: [], salidas: [], flujo: null, sumidero: null, ciclo: false };
       const cola = [n0.id];
       visto.add(n0.id);
       const ts = new Set();
@@ -655,11 +654,19 @@
         const pu = pid && g.puertos.get(pid);
         if (pu && pu.puerto.rol === 'ENTRADA') comp.sumideros.push(u);
         else if (pu && pu.puerto.rol === 'TOMA') comp.tomas.push(u);
+        else if (pu && pu.puerto.rol === 'SALIDA') comp.salidas.push(u);
         else if (!pu && !g.pt.has(u) && g.ady.get(u).length === 1) comp.extremos.push(u);
       });
       if (comp.ciclo) prob('CIRCUITO', 'Esta unión cerraría un circuito: una red de extracción es un árbol.', comp.tramos.slice(0, 6));
       if (comp.sumideros.length > 1 && comp.tramos.length) prob('DOS_COLECTORES', 'Esta red llegaría a dos bocas de colector: cada red llega a una sola boca.', comp.sumideros.map((u) => g.puertoDeNodo.get(u)));
-      if (comp.sumideros.length === 1) { comp.flujo = 'COLECTOR'; comp.sumidero = comp.sumideros[0]; } else if (!comp.sumideros.length && comp.extremos.length === 1 && comp.tomas.length) { comp.flujo = 'PROVISIONAL'; comp.sumidero = comp.extremos[0]; }
+      // la descarga del ventilador (§5.12): de su brida a un extremo libre, la salida a la atmósfera; un solo ducto, aparte de la succión
+      const descarga = comp.salidas.length && comp.tramos.length;
+      if (descarga && (comp.sumideros.length || comp.tomas.length || comp.salidas.length > 1)) {
+        prob('DESCARGA_MEZCLADA', `La descarga ${g.puertoDeNodo.get(comp.salidas[0])} va sola hasta afuera: no se junta con ${comp.salidas.length > 1 ? 'otra descarga' : 'la succión'}.`, comp.salidas.map((u) => g.puertoDeNodo.get(u)), 'Llévela por su propio ducto a un extremo libre.');
+      } else if (descarga && (comp.extremos.length > 1 || comp.nodos.some((u) => g.ady.get(u).length > 2))) {
+        prob('DESCARGA_RAMIFICADA', `La descarga ${g.puertoDeNodo.get(comp.salidas[0])} no se ramifica: lleva un solo ducto hasta afuera.`, [g.puertoDeNodo.get(comp.salidas[0])], 'Quite el ramal.');
+      } else if (descarga && comp.extremos.length === 1) { comp.flujo = 'DESCARGA'; comp.sumidero = comp.extremos[0]; }
+      if (comp.flujo === 'DESCARGA') { /* ya está */ } else if (comp.sumideros.length === 1) { comp.flujo = 'COLECTOR'; comp.sumidero = comp.sumideros[0]; } else if (!comp.sumideros.length && comp.extremos.length === 1 && comp.tomas.length) { comp.flujo = 'PROVISIONAL'; comp.sumidero = comp.extremos[0]; }
       if (comp.sumidero && !comp.ciclo) {
         const cola2 = [comp.sumidero];
         const v2 = new Set(cola2);
@@ -680,6 +687,9 @@
       g.comps.push(comp);
     });
     g.conocido = (tid) => g.abajo.has(tid);
+    /** Los tramos de las descargas, y el extremo libre de cada una (su salida a la atmósfera). */
+    g.descarga = new Set(g.comps.filter((c) => c.flujo === 'DESCARGA').flatMap((c) => c.tramos));
+    g.salidaLibre = new Set(g.comps.filter((c) => c.flujo === 'DESCARGA').map((c) => c.sumidero));
     /** El aire de un tramo rígido: de aguas arriba hacia aguas abajo (o de a hacia b si no se sabe). */
     g.aire = (t) => (g.arriba.has(t.id) ? fuera(t, g.arriba.get(t.id)) : g.seg.get(t.id).u);
     g.entran = (nid) => g.ady.get(nid).filter(({ tramo }) => g.abajo.get(tramo.id) === nid).map(({ tramo }) => tramo);
@@ -740,6 +750,7 @@
       else if (rig.length !== 2 || rig.length !== ad.length) sinCompuerta(rig.length > 2 ? 'ahí hay una derivación' : 'ahí termina el ducto');
       if (pid || g.pt.has(nid)) sinTapa(pid ? 'ahí está la brida del equipo' : 'ahí empieza la manguera');
       else if (rig.length !== 1 || ad.length !== 1) sinTapa(rig.length ? 'ahí sigue el ducto' : 'ahí no hay ducto');
+      else if (g.salidaLibre.has(nid)) sinTapa('ahí sale la descarga del ventilador');
       if (pid || g.pt.has(nid)) {
         g.tipo.set(nid, pid ? 'PUERTO' : 'TRANSICION');
         if (!pid) {
@@ -793,7 +804,7 @@
         const th = anguloEntre(dIn, dOut);
         const Din = ti.diametro_in;
         const Dout = to.diametro_in;
-        if (conocido && Dout < Din) prob('DIAMETRO_DECRECE', `Hacia el colector el diámetro no baja: en ${nid} el tramo anterior (${ti.id}) es de ${pulgadas(Din)} y el siguiente (${to.id}) de ${pulgadas(Dout)}.`, [nid, ti.id, to.id], `Suba ${to.id} a ${pulgadas(Din)} o más.`);
+        if (conocido && Dout < Din && !g.descarga.has(to.id)) prob('DIAMETRO_DECRECE', `Hacia el colector el diámetro no baja: en ${nid} el tramo anterior (${ti.id}) es de ${pulgadas(Din)} y el siguiente (${to.id}) de ${pulgadas(Dout)}.`, [nid, ti.id, to.id], `Suba ${to.id} a ${pulgadas(Din)} o más.`);
         if (th < TOL_ANG) {
           g.tipo.set(nid, 'UNION');
           if (nd.compuerta && Din !== Dout) sinCompuerta(`ahí cambia de ${pulgadas(Din)} a ${pulgadas(Dout)}`);
@@ -953,6 +964,18 @@
         g.entran(u).forEach((t) => { Q = Q === null || g.Q.get(t.id) === null ? null : Q + g.Q.get(t.id); });
         g.Q.set(tid, Q);
       }
+    });
+    // la descarga lleva el aire que llega a las bocas de su equipo (null si alguna boca no lo sabe, o no hay)
+    g.comps.filter((c) => c.flujo === 'DESCARGA').forEach((c) => {
+      const e = g.puertos.get(g.puertoDeNodo.get(c.salidas[0])).equipo;
+      const bocas = e.puertos.filter((p) => p.rol === 'ENTRADA');
+      let Q = bocas.length ? 0 : null;
+      bocas.forEach((p) => {
+        const llegan = g.ady.get(p.nodo).map((x) => x.tramo);
+        if (!llegan.length) return;
+        llegan.forEach((t) => { Q = Q === null || !g.Q.has(t.id) || g.Q.get(t.id) === null ? null : Q + g.Q.get(t.id); });
+      });
+      c.tramos.forEach((tid) => g.Q.set(tid, Q === 0 ? null : Q));
     });
     m.tramos.forEach((t) => { if (!g.Q.has(t.id)) g.Q.set(t.id, null); g.v.set(t.id, velocidad(g.Q.get(t.id), t.diametro_in)); });
 
@@ -1135,8 +1158,8 @@
 
   /**
    * Agrega un puerto a un equipo (§1.1 paso 3): TOMA en una máquina o campana, ENTRADA (boca) en un colector o ventilador, o
-   * SALIDA. Va sobre una cara de la caja; su dirección por omisión es la normal de esa cara hacia fuera. La boca de colector
-   * queda con brida; la toma, sin acople hasta la Fase 2.
+   * SALIDA (la descarga del ventilador). Va sobre una cara de la caja; su dirección por omisión es la normal de esa cara
+   * hacia fuera. La boca de colector y la descarga quedan con brida; la toma, sin acople hasta la Fase 2.
    */
   function agregarPuerto(t0, M, equipoId, x) {
     const m = inicio(t0);
@@ -1148,6 +1171,7 @@
     dato(rol !== 'TOMA' || e.tipo === 'MAQUINA' || e.tipo === 'CAMPANA', 'Las tomas van en máquinas y campanas.');
     dato(rol !== 'ENTRADA' || e.tipo === 'COLECTOR' || e.tipo === 'VENTILADOR', 'Las bocas (ENTRADA) van en colectores y ventiladores.');
     dato(rol !== 'SALIDA' || e.tipo === 'VENTILADOR' || e.tipo === 'COLECTOR', 'La descarga (SALIDA) va en un ventilador o colector.');
+    dato(rol !== 'SALIDA' || !e.puertos.some((p) => p.rol === 'SALIDA'), `${e.nombre} ya tiene su descarga: el ventilador descarga por una sola brida.`);
     const local = coordenada(x.posicion_local_mm, 'La posición del puerto en el equipo');
     const caras = carasEn(e.caja_mm, local);
     dato(caras.length > 0, 'El puerto va sobre una cara de la caja del equipo.');
@@ -1163,7 +1187,7 @@
     }
     const p = {
       id: nuevoId(m, 'PU'), rol, nombre: texto(x.nombre, rol === 'TOMA' ? 'Toma' : rol === 'ENTRADA' ? 'Boca' : 'Descarga', 60), posicion_local_mm: local, direccion_local: dl,
-      diametro_in: D, caudal_m3_h: Q, coef_entrada_K: K, nodo: null, acople: rol === 'ENTRADA' ? { tipo: 'BRIDA', barrenos: null } : null,
+      diametro_in: D, caudal_m3_h: Q, coef_entrada_K: K, nodo: null, acople: rol === 'ENTRADA' || rol === 'SALIDA' ? { tipo: 'BRIDA', barrenos: null } : null,
     };
     e.puertos.push(p);
     const nd = crearNodo(m, ubicarPuerto(e, p).posicion_mm);
@@ -1406,7 +1430,7 @@
     const pid = g.puertoDeNodo.get(nid);
     if (pid) {
       const pu = g.puertos.get(pid);
-      return pu.puerto.acople && pu.puerto.acople.tipo === 'BRIDA' && pu.puerto.rol !== 'SALIDA' && !ad.length ? [op(pu.direccion, 0, 'RECTO')] : [];
+      return pu.puerto.acople && pu.puerto.acople.tipo === 'BRIDA' && !ad.length ? [op(pu.direccion, 0, 'RECTO')] : [];
     }
     if (g.pt.has(nid)) return rig.length ? [] : [op(g.puertos.get(g.pt.get(nid)).puerto.acople.direccion_pt, 0, 'RECTO')];
     if (!rig.length) return D.map((d) => op(d, 0, 'RECTO'));
@@ -1419,7 +1443,7 @@
         return c === undefined ? null : op(d, c, 'CODO');
       }).filter(Boolean);
     }
-    if (rig.length === 2 && rig.every((x) => g.conocido(x.tramo.id))) {
+    if (rig.length === 2 && rig.every((x) => g.conocido(x.tramo.id) && !g.descarga.has(x.tramo.id))) {
       // desde un codo de 30° o 45° se puede seguir recto el tronco: el codo queda como injerto (§2.5.2)
       const tOut = rig.find((x) => g.arriba.get(x.tramo.id) === nid);
       const tIn = rig.find((x) => g.abajo.get(x.tramo.id) === nid);
@@ -1436,7 +1460,7 @@
   }
   /** Las direcciones con las que se dibuja un ramal desde el tronco t (hacia fuera): −b̂ para cada β y entrada permitidos. */
   function candidatasDerivacion(t, g, tr) {
-    if (!tr || !rigido(tr) || !g.conocido(tr.id)) return [];
+    if (!tr || !rigido(tr) || !g.conocido(tr.id) || g.descarga.has(tr.id)) return []; // la descarga no se ramifica
     return candidatasDerivacionEn(t, g, tr);
   }
   function candidatasDerivacionEn(t, g, tr) {
@@ -1518,7 +1542,6 @@
       const pid = g.puertoDeNodo.get(nd.id);
       if (pid) {
         const p = g.puertos.get(pid).puerto;
-        dato(p.rol !== 'SALIDA', 'La descarga todavía no se traza.', [pid]);
         if (p.rol === 'TOMA' && !p.acople) falla('TOMA_SIN_CONEXION', `Elija primero el acople de la toma ${pid}: manguera o brida.`, [pid]);
         if (p.acople.tipo === 'MANGUERA') falla('PUERTO_OCUPADO', `La toma ${pid} tiene manguera: el ducto empieza en su punto de transición (${p.acople.nodo_transicion}).`, [pid]);
       }
@@ -2352,7 +2375,7 @@
       }
     }
     g.comps.forEach((c) => {
-      if (!c.tramos.length || c.flujo === 'COLECTOR' || c.ciclo || c.sumideros.length > 1) return;
+      if (!c.tramos.length || c.flujo === 'COLECTOR' || c.flujo === 'DESCARGA' || c.ciclo || c.sumideros.length > 1 || c.salidas.length) return;
       add('SUBRED_SIN_COLECTOR', 'ERROR', c.tramos.slice(0, 8), `Una parte de la red (${c.tramos.slice(0, 4).join(', ')}${c.tramos.length > 4 ? '…' : ''}) no llega a un colector.`, 'Conéctela a la boca de un colector o al tronco.');
     });
     g.puertos.forEach((pu, pid) => {
@@ -2371,8 +2394,10 @@
     t.tramos.forEach((x) => {
       const v = g.v.get(x.id);
       if (v === null || g.Q.get(x.id) === 0) return; // sin tomas aguas arriba no hay aire: lo dice EXTREMO_ABIERTO
-      if (v < pol.velocidad_min_m_s - 1e-9 || v > pol.velocidad_max_m_s + 1e-9) {
-        const baja = v < pol.velocidad_min_m_s;
+      // la descarga lleva aire limpio: no se le pide velocidad mínima (no hay material que se asiente), sí la máxima
+      const minima = g.descarga.has(x.id) ? 0 : pol.velocidad_min_m_s;
+      if (v < minima - 1e-9 || v > pol.velocidad_max_m_s + 1e-9) {
+        const baja = v < minima;
         const com = pol.diametros_comerciales_in.filter((d) => velocidad(g.Q.get(x.id), d) >= pol.velocidad_min_m_s - 1e-9);
         const mejor = com.length ? com[com.length - 1] : pol.diametros_comerciales_in[0];
         add(baja ? 'VELOCIDAD_BAJA' : 'VELOCIDAD_ALTA', 'AVISO', [x.id], `${x.id} va a ${n(v, 1)} m/s (${baja ? 'mínimo' : 'máximo'} ${n(baja ? pol.velocidad_min_m_s : pol.velocidad_max_m_s, 1)})${mejor !== x.diametro_in && rigido(x) ? `: con ${pulgadas(mejor)}, ${n(velocidad(g.Q.get(x.id), mejor), 1)} m/s` : ''}.`,
@@ -2434,6 +2459,12 @@
     });
     t.nodos.forEach((x) => {
       if (g.tipo.get(x.id) !== 'EXTREMO' || g.ady.get(x.id).length !== 1) return;
+      if (g.salidaLibre.has(x.id)) {
+        const c = g.comps[g.compDe.get(x.id)];
+        const pid = g.puertoDeNodo.get(c.salidas[0]);
+        add('DESCARGA_LIBRE', 'INFO', [x.id, pid], `La descarga ${pid} de ${g.puertos.get(pid).equipo.nombre} sale libre en ${x.id}, a ${metros(g.pos.get(x.id).z)} de altura.`);
+        return;
+      }
       if (!x.tapa) { add('EXTREMO_ABIERTO', 'AVISO', [x.id], `El extremo ${x.id} queda abierto.`, 'Llévelo a un equipo o tápelo.'); return; }
       // el ramal ciego: del extremo tapado hasta donde ya lleva aire
       const ciegos = [];
@@ -2842,6 +2873,7 @@
             acople = { tipo: 'MANGUERA', nodo_transicion: c.nodo_transicion, tramo_flexible: c.tramo_flexible, direccion_pt: dpt || direccionValida(p.direccion_local, null, `El puerto ${p.id}`) };
           }
           if (p.rol === 'ENTRADA') dato(acople && acople.tipo === 'BRIDA', `La boca ${p.id} va con brida.`);
+          if (p.rol === 'SALIDA') { dato(!acople || acople.tipo === 'BRIDA', `La descarga ${p.id} va con brida.`); acople = acople || { tipo: 'BRIDA', barrenos: null }; }
           const pp = { id: p.id, rol: p.rol, nombre: texto(p.nombre, 'Puerto', 60), posicion_local_mm: local, direccion_local: direccionValida(p.direccion_local, null, `El puerto ${p.id}`), diametro_in: diametroValido(m, p.diametro_in, `El puerto ${p.id}`),
             caudal_m3_h: p.rol === 'TOMA' && finito(p.caudal_m3_h) && p.caudal_m3_h > 0 ? p.caudal_m3_h : null, coef_entrada_K: p.rol === 'TOMA' && finito(p.coef_entrada_K) && p.coef_entrada_K >= 0 ? p.coef_entrada_K : null, nodo: p.nodo, acople };
           eq.puertos.push(pp);
@@ -2853,6 +2885,7 @@
             if (!m.tramos.some((x) => rigido(x) && (x.a === acople.nodo_transicion || x.b === acople.nodo_transicion))) acople.direccion_pt = ub.direccion;
           }
         });
+        dato(eq.puertos.filter((p) => p.rol === 'SALIDA').length <= 1, `${eq.nombre} tiene dos descargas: el ventilador descarga por una sola brida.`);
         m.equipos.push(eq);
       });
       s.accesorios.forEach((a) => {
@@ -2938,12 +2971,15 @@
             ac = { tipo: 'MANGUERA', nodo_transicion: p.acople.nodo_transicion, tramo_flexible: p.acople.tramo_flexible, direccion_pt: direccionValida(p.acople.direccion_pt, null, `El punto de transición de ${p.id}`) };
           } else dato(p.acople === null || p.acople === undefined, `El acople del puerto ${p.id} no es válido.`);
           if (p.rol === 'ENTRADA') dato(ac && ac.tipo === 'BRIDA', `La boca ${p.id} va con brida.`);
+          // la descarga va con brida (los trazos de antes de §5.12 la guardaban sin acople)
+          if (p.rol === 'SALIDA') { dato(!ac || ac.tipo === 'BRIDA', `La descarga ${p.id} va con brida.`); ac = ac || { tipo: 'BRIDA', barrenos: null }; }
           const Q = p.caudal_m3_h;
           const K = p.coef_entrada_K;
           eq.puertos.push({ id: p.id, rol: p.rol, nombre: texto(p.nombre, 'Puerto', 60), posicion_local_mm: local, direccion_local: dl, diametro_in: diametroValido(m, p.diametro_in, `El puerto ${p.id}`),
             caudal_m3_h: p.rol === 'TOMA' && finito(Q) && Q > 0 && Q <= 1e6 ? Q : null, coef_entrada_K: p.rol === 'TOMA' ? (finito(K) && K >= 0 && K <= 10 ? K : 0.5) : null, nodo: p.nodo, acople: ac });
           puertosDe.set(p.id, p.nodo);
         });
+        dato(eq.puertos.filter((p) => p.rol === 'SALIDA').length <= 1, `${eq.nombre} tiene dos descargas: el ventilador descarga por una sola brida.`);
         m.equipos.push(eq);
       });
       m.nodos.forEach((nd) => { if (nd.puerto) dato(puertosDe.get(nd.puerto) === nd.id, `El nodo ${nd.id} dice ser del puerto ${nd.puerto}, que no está ahí.`); });

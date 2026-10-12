@@ -186,7 +186,7 @@ Al seleccionar una toma, el inspector muestra **Acople** con dos opciones: [Mang
    | --- | --- |
    | `3.25` o `3250mm` | Largo de 3.25 m |
    | `<45` | El codo de 45° más cercano al puntero |
-   | `@135` | Azimut de 135° |
+   | `@135` | Azimut de 135° (después de una vertical, en horizontal) |
    | `^45` | Elevación de 45° |
 
 5. **Cambiar de plano o fijar el eje:**
@@ -446,6 +446,7 @@ En el ejemplo, desde lo alto de la subida del cepillo:
 
 - **Caudal:** Q(tramo) = la suma de los caudales de las tomas aguas arriba. Se calcula al orientar.
 - **Velocidad:** v = Q / A, con A = π·D²/4 (D interior). Debe quedar entre `velocidad_min_m_s` y `velocidad_max_m_s`; fuera es AVISO (VELOCIDAD_BAJA asienta material; VELOCIDAD_ALTA desgasta y hace ruido).
+- **La descarga del ventilador** (§5.12) lleva el caudal que llega a las bocas de su equipo. Va con aire limpio: sólo se le revisa la velocidad máxima, y su Ø puede crecer o bajar hacia la salida.
 - **Dimensionamiento automático,** por tramo y sin tocar los que tienen candado:
   1. D* = el **mayor** Ø comercial con v ≥ v mín. Es el de menor pérdida que todavía transporta.
   2. Si ningún Ø comercial cae en el rango, se toma ese y se avisa.
@@ -491,7 +492,7 @@ En el ejemplo, desde lo alto de la subida del cepillo:
 
 ### 2.9 Topología
 
-- **Bosque de árboles:** la red es un conjunto de árboles, cada uno con raíz en la boca de un colector.
+- **Bosque de árboles:** la red es un conjunto de árboles, cada uno con raíz en la boca de un colector. Aparte, la descarga de cada ventilador: un solo ducto de su brida a un extremo libre (§5.12).
   - De cada nodo sale a lo más un tramo (aguas abajo).
   - Las tomas son hojas.
   - Un nodo es PUERTO, TRANSICION (PT), VERTICE (codo), UNION (recto: sin pieza si el Ø es igual, reducción si no), DERIVACION (dos que entran y uno que sale) o EXTREMO (abierto).
@@ -535,6 +536,8 @@ En el ejemplo, desde lo alto de la subida del cepillo:
 | FIJO_SE_MUEVE | BLOQUEANTE | Una edición movería un punto fijo sin con qué compensar | «La sierra (brida) quedaría a 250 mm de su ducto: ningún tramo paralelo puede compensarlo.» | Mover segmento |
 | DIRECCION_FUERA_DE_REJILLA | BLOQUEANTE | Un tramo que no va en una dirección de la rejilla del proyecto (un trazo de fuera, o una rejilla más gruesa) | «El tramo TR-006 no va en una dirección de la rejilla.» | — |
 | DOS_COLECTORES | BLOQUEANTE | Una red que llegaría a dos bocas de colector | «Esta red llegaría a dos bocas de colector: cada red llega a una sola boca.» | — |
+| DESCARGA_MEZCLADA | BLOQUEANTE | La descarga de un ventilador se junta con la succión o con otra descarga (§5.12) | «La descarga PU-04 va sola hasta afuera: no se junta con la succión.» | Llevarla por su propio ducto a un extremo libre |
+| DESCARGA_RAMIFICADA | BLOQUEANTE | Un ramal en la descarga, o un injerto desde ella | «La descarga PU-04 no se ramifica: lleva un solo ducto hasta afuera.» | Quitar el ramal |
 | PT_DESALINEADO | BLOQUEANTE | El rígido no sale del PT en la dirección de la manguera | «El ducto sale del punto de transición N-006 en la dirección de la manguera (+Z).» | — |
 | PIEZA_NO_FABRICABLE | BLOQUEANTE | El motor de COTIZAP no puede fabricar la pieza de un nodo | «El motor no puede fabricar el codo de N-005: …» | — |
 | FLUJO_DESCONOCIDO | BLOQUEANTE (operación) | Una derivación sobre un tramo sin sentido conocido (§2.5.7) | «Conecte primero el tramo TR-001 al colector para saber hacia dónde va el aire.» | — |
@@ -555,9 +558,10 @@ En el ejemplo, desde lo alto de la subida del cepillo:
 | MANGUERA_LARGA · MANGUERA_TORCIDA | AVISO | §2.8.2 | — | — |
 | EXTREMO_ABIERTO | AVISO | Un extremo libre sin equipo ni tapa | — | Equipo o tapa |
 | RAMAL_CIEGO | AVISO en polvo y abrasivos; INFO en los demás | Los tramos de un extremo con tapa hasta donde ya llega aire (§5.7) | «TR-008 queda ciego hasta la tapa de N-009: no lleva aire, y ahí se junta el material.» | Mantenerlo corto o ponerle una compuerta cerrada junto al tronco |
-| TAPA_NO_VA | ERROR | Una tapa fuera de un extremo libre del ducto: donde sigue el ducto, en una brida de equipo o en un punto de transición | «La tapa de N-002 va en un extremo libre del ducto: ahí sigue el ducto.» | Quitarla |
+| TAPA_NO_VA | ERROR | Una tapa fuera de un extremo libre del ducto: donde sigue el ducto, en una brida de equipo, en un punto de transición o en la salida de una descarga | «La tapa de N-002 va en un extremo libre del ducto: ahí sigue el ducto.» | Quitarla |
 | CHOQUE_MANGUERA | AVISO | §2.10 | «La manguera TR-004 pasa a 40 mm de Sierra de banco.» | — |
 | EQUIPO_SIN_PUERTOS | AVISO | Un equipo sin tomas ni bocas | — | Agregar sus tomas o quitarlo |
+| DESCARGA_LIBRE | INFO | La punta de una descarga: ahí sale el aire (§5.12) | «La descarga PU-04 de Colector de polvo sale libre en N-010, a 6 m de altura.» | — |
 | TRONCO_MENOR_QUE_RAMAL | AVISO | §2.6 | — | — |
 | PIEZAS_PEGADAS · TRAMO_CORTO_ACEPTADO | INFO | Lo que se decidió de un tramo corto (§5.3) | «CO-001 y CO-002 se arman pegadas (unión engargolada, sin bridas en esas caras) con 43 mm de recto en TR-002.» | — |
 | REDUCCION_INSERTADA · ADAPTADOR_INSERTADO · CODO_INSERTADO · DERIVACION_INSERTADA · DIAMETRO_AUTOMATICO · MANGUERA_RESUELTA | INFO | Lo que la herramienta puso sola | «Manguera en S de dos curvas de 39.31°: radio 552.5 mm, 958 mm.» | — |
@@ -1091,7 +1095,7 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
       "type": "object",
       "additionalProperties": false,
       "required": ["metodo", "por_tramo", "por_toma", "balance", "ventiladores"],
-      "description": "Lo que llena la etapa de cálculo (src/motor/perdidas.js); el trazo lo deja en null. Las presiones estáticas son succión, en valor absoluto.",
+      "description": "Lo que llena la etapa de cálculo (src/motor/perdidas.js); el trazo lo deja en null. Las presiones estáticas de la succión van en valor absoluto; las de la descarga del ventilador, como presión positiva.",
       "properties": {
         "metodo": { "type": "string" },
         "por_tramo": {
@@ -1100,9 +1104,10 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["tramo", "caudal_m3_h", "velocidad_m_s", "presion_dinamica_Pa", "reynolds", "factor_friccion", "perdida_friccion_Pa", "perdida_local_Pa", "presion_estatica_Pa"],
+            "required": ["tramo", "lado", "caudal_m3_h", "velocidad_m_s", "presion_dinamica_Pa", "reynolds", "factor_friccion", "perdida_friccion_Pa", "perdida_local_Pa", "presion_estatica_Pa"],
             "properties": {
               "tramo": { "$ref": "#/$defs/id_tramo" },
+              "lado": { "type": "string", "enum": ["SUCCION", "DESCARGA"], "description": "SUCCION: de las tomas a la boca del colector. DESCARGA: de la brida de descarga del ventilador a la salida libre (§5.12)." },
               "caudal_m3_h": { "type": "number" },
               "velocidad_m_s": { "type": "number" },
               "presion_dinamica_Pa": { "type": "number" },
@@ -1110,7 +1115,7 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
               "factor_friccion": { "type": "number" },
               "perdida_friccion_Pa": { "type": "number" },
               "perdida_local_Pa": { "$ref": "#/$defs/numero_o_null", "description": "Codo al que entra, entrada de ramal, curvas de la manguera, cambio de sección y aceleración en la confluencia." },
-              "presion_estatica_Pa": { "type": "number", "description": "Succión al final del tramo, con sus pérdidas locales." }
+              "presion_estatica_Pa": { "type": "number", "description": "Al final del tramo, en el sentido del aire: en la succión, la succión con sus pérdidas locales; en la descarga, la presión positiva (0 en la salida a la atmósfera)." }
             }
           }
         },
@@ -1158,14 +1163,16 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["equipo", "bocas", "caudal_m3_h", "presion_estatica_boca_Pa", "perdida_equipo_Pa", "presion_estatica_Pa", "presion_estatica_estandar_Pa", "potencia_aire_kW", "potencia_freno_kW", "eficiencia_ventilador", "eficiencia_transmision", "motor_hp"],
+            "required": ["equipo", "bocas", "caudal_m3_h", "presion_estatica_boca_Pa", "perdida_equipo_Pa", "descarga", "presion_descarga_Pa", "presion_estatica_Pa", "presion_estatica_estandar_Pa", "potencia_aire_kW", "potencia_freno_kW", "eficiencia_ventilador", "eficiencia_transmision", "motor_hp"],
             "properties": {
               "equipo": { "$ref": "#/$defs/id_equipo" },
               "bocas": { "type": "array", "items": { "$ref": "#/$defs/id_puerto" } },
               "caudal_m3_h": { "type": "number" },
               "presion_estatica_boca_Pa": { "type": "number" },
               "perdida_equipo_Pa": { "type": "number" },
-              "presion_estatica_Pa": { "type": "number", "description": "Succión de la boca más la pérdida del colector." },
+              "descarga": { "$ref": "#/$defs/puerto_o_null", "description": "La brida de descarga del equipo si tiene ducto (§5.12); null si descarga directo a la atmósfera." },
+              "presion_descarga_Pa": { "type": "number", "description": "La presión en la brida de descarga para vencer su ducto; 0 sin ducto. Negativa si el ducto se ensancha y recupera presión." },
+              "presion_estatica_Pa": { "type": "number", "description": "Succión de la boca más la pérdida del colector más la presión de la descarga." },
               "presion_estatica_estandar_Pa": { "type": "number", "description": "La misma en aire estándar (1.2 kg/m³), para leer la curva del fabricante." },
               "potencia_aire_kW": { "type": "number" },
               "potencia_freno_kW": { "type": "number" },
@@ -1918,6 +1925,7 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
     "por_tramo": [
       {
         "tramo": "TR-001",
+        "lado": "SUCCION",
         "caudal_m3_h": 1300,
         "velocidad_m_s": 19.796,
         "presion_dinamica_Pa": 179.66,
@@ -1929,6 +1937,7 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
       },
       {
         "tramo": "TR-002",
+        "lado": "SUCCION",
         "caudal_m3_h": 1300,
         "velocidad_m_s": 19.796,
         "presion_dinamica_Pa": 179.66,
@@ -1940,6 +1949,7 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
       },
       {
         "tramo": "TR-003",
+        "lado": "SUCCION",
         "caudal_m3_h": 2283.4,
         "velocidad_m_s": 19.559,
         "presion_dinamica_Pa": 175.38,
@@ -1951,6 +1961,7 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
       },
       {
         "tramo": "TR-004",
+        "lado": "SUCCION",
         "caudal_m3_h": 900,
         "velocidad_m_s": 19.735,
         "presion_dinamica_Pa": 178.56,
@@ -1962,6 +1973,7 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
       },
       {
         "tramo": "TR-005",
+        "lado": "SUCCION",
         "caudal_m3_h": 900,
         "velocidad_m_s": 19.735,
         "presion_dinamica_Pa": 178.56,
@@ -1973,6 +1985,7 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
       },
       {
         "tramo": "TR-006",
+        "lado": "SUCCION",
         "caudal_m3_h": 900,
         "velocidad_m_s": 19.735,
         "presion_dinamica_Pa": 178.56,
@@ -2036,6 +2049,8 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
         "caudal_m3_h": 2283.4,
         "presion_estatica_boca_Pa": 613.78,
         "perdida_equipo_Pa": 1250,
+        "descarga": null,
+        "presion_descarga_Pa": 0,
         "presion_estatica_Pa": 1863.78,
         "presion_estatica_estandar_Pa": 2439.23,
         "potencia_aire_kW": 1.182,
@@ -2243,7 +2258,7 @@ El trazo se guarda tal cual (posiciones de los nodos, tramos con su Ø y su mate
    - el tablero (etapa 2, hecho: §5.2);
    - pasar el trazo a partidas (hecho: §5.6);
    - el pantalón: el taller lo retiró, y el modelo lo rechaza aunque la política lo permita;
-   - la descarga del ventilador (SALIDA);
+   - la descarga del ventilador (SALIDA): hecha (§5.12);
    - el cálculo de pérdidas (etapa 4).
 
 **Por confirmar con el taller** antes de fijar las políticas:
@@ -2363,11 +2378,9 @@ El esquema (§3.5) creció con esos campos. Lo que el trazo exporta sigue llevan
 
 **Precisiones:**
 
-1. **Presión del ventilador.** Es la succión de entrada: la de la boca más la del colector. Se toma así a propósito (es conservadora) porque no resta la pv de entrada y la descarga se supone libre. Si hay chimenea o ducto de descarga, súmelo.
+1. **Presión del ventilador.** Es la succión de entrada: la de la boca más la del colector. Se toma así a propósito (es conservadora) porque no resta la pv de entrada. Si el equipo tiene ducto de descarga, se suma su presión en la brida (§5.12).
 2. **El caudal corregido** es el que la red va a jalar si se construye así. Por eso el ventilador se elige con la suma corregida, aunque el balanceo diga NINGUNA en otras confluencias.
-3. **Pendiente:**
-   - el ducto de descarga del ventilador;
-   - elegir el modelo del ventilador en un catálogo de fabricantes.
+3. **Pendiente:** elegir el modelo del ventilador en un catálogo de fabricantes. El ducto de descarga llegó después (§5.12).
 
    Pasar el trazo a partidas llegó con la etapa 5 (§5.6), y editar la tabla de coeficientes y las eficiencias desde la aplicación, después (§5.8).
 
@@ -2621,6 +2634,44 @@ Lo verifica `tests/trazado_iso.test.js`:
 - la rejilla con 400 cajas al azar (chicas, largas en diagonal, negativas, que apenas se tocan en el borde de una celda) no pierde ningún par que se toque;
 - una caminata al azar con equipos girados, tramos de hasta 30 m y mangueras da exactamente la misma revisión con la fase gruesa que todo contra todo, y ve choques de cada tipo;
 - el caso de esquina de dos equipos, uno girado 45°, que sólo se tocan en la esquina de la caja crecida. Si la caja se creciera ya alineada, esta prueba falla.
+
+### 5.12 La descarga del ventilador
+
+Un colector (o un ventilador) puede llevar su **descarga**: la brida por donde sale el aire, con un ducto hasta la atmósfera (una chimenea sobre el techo, o un ducto que sale por un muro).
+
+- **Ponerla.** En la ficha del colector o del ventilador, «+ Descarga» la agrega en la cara elegida, con el Ø activo; se cambia en su ficha. Va con brida y es un punto fijo, como la boca. Un equipo tiene una sola descarga.
+- **Trazarla.** Desde su brida (arrastrando, o «Trazar desde la descarga» y el teclado) el ducto sale en la dirección de su cuello. Desde ahí se traza como cualquier ducto: codos, reducciones, compuertas. Con el teclado, un rumbo después de una vertical («@180 3» tras subir) sigue en horizontal.
+- **Sus reglas** (modelo, `src/motor/trazado_iso.js`):
+  - El sentido del aire va de la brida hacia el extremo libre (§2.9), y cada tramo lleva el caudal que llega a las bocas de su equipo.
+  - Es un solo ducto: un ramal o un injerto desde ella es DESCARGA_RAMIFICADA, y juntarla con la succión o con otra descarga es DESCARGA_MEZCLADA. Las dos son bloqueantes.
+  - Va con aire limpio: no se le pide la velocidad mínima (no hay material que se asiente) y su Ø puede crecer hacia la salida (no hay DIAMETRO_DECRECE). La velocidad máxima sí cuenta.
+  - Su punta no es un extremo abierto: es la salida (DESCARGA_LIBRE, una nota con su altura) y no lleva tapa. En el lienzo se marca con un círculo punteado.
+  - Un trazo guardado antes, con la descarga sin acople, abre con su brida.
+- **El cálculo** (`src/motor/perdidas.js`): la descarga se aparta de la succión y se calcula por su cuenta.
+  - En la salida la presión estática es la de la atmósfera: 0.
+  - Hacia el ventilador, cada tramo suma su fricción (y sus curvas, si es manguera). En cada unión, el codo, la compuerta o la reducción suman su pérdida, con el cambio de presión dinámica: se conserva la presión total. En la brida, el adaptador si el ducto no es de su Ø.
+  - La presión que queda en la brida (`presion_descarga_Pa`) se suma a la del ventilador: succión de la boca + pérdida del equipo + descarga. Es la presión estática que da el ventilador con su descarga a la atmósfera. Si el ducto se ensancha, la expansión recupera presión y la de la brida puede quedar negativa: el ensanche ayuda al ventilador.
+  - En la hoja, sus renglones llevan `lado: DESCARGA` y su presión es la positiva al final de cada tramo (0 en la salida). El ventilador dice qué descarga tiene (`descarga`).
+  - Comprobación: la presión total en la brida, `presion_descarga_Pa` + pv de la brida, es igual a la pv con que el aire sale más todo lo que se pierde en el camino.
+- **Las partidas.** El trazo pasa la descarga como un VENTILADOR en su brida. Las reglas del unifilar la recorren aparte, desde él hacia fuera (§4.4 de `docs/vision-unifilares.md`). Sale el despiece de su ducto, sus codos y la reducción de la brida; la punta queda abierta, sin brida. Lo mismo vale para una foto o un dibujo unifilar con la descarga dibujada aparte; ramificada es DESCARGA_RAMIFICADA y bloquea.
+- **En la pantalla:**
+  - la ficha del equipo con «Bocas y descarga»;
+  - la de la descarga con «Trazar desde la descarga»;
+  - la del nodo de salida, que dice que ahí sale el aire;
+  - en la salida, el ventilador dice cuánto suma su descarga; la hoja cambia «Succión» por «Presión» y marca la de la descarga con «+».
+
+Lo verifican:
+
+- `tests/trazado_iso.test.js`: una descarga en el ejemplo; el sentido y el caudal; la velocidad sin mínimo; el ensanche sin DIAMETRO_DECRECE; DESCARGA_LIBRE; la tapa que no va; el ramal y la toma que se le juntan; el JSON del trazo y del sistema, y un trazo viejo.
+- `tests/perdidas.test.js`:
+  - la chimenea de 12″ sobre la brida de 10″: 0 Pa en la salida, el codo, la expansión, la presión total en la brida y la suma al ventilador;
+  - del mismo Ø, y más angosta;
+  - la brida sin ducto no cambia nada;
+  - cuatro sistemas editados a mano que el cálculo rechaza;
+  - en la caminata al azar, una chimenea de uno a tres tramos con las invariantes de la descarga.
+- `tests/unifilar.test.js` y `tests/trazado_lectura.test.js`: la descarga aparte en las reglas (orientada desde el ventilador, el codo, la reducción, la punta abierta), ramificada bloquea, y del trazo sale un despiece definitivo que cuadra.
+- `tests/trazado_tablero.test.js`: el arranque desde la brida, el teclado, el tramo sin ramales, el semáforo y el informe.
+- La sección 43 de `tests/e2e/ui.e2e.js`: agregarla, trazarla con el teclado, la revisión, la salida en el lienzo, el ventilador, la hoja y las partidas.
 
 ---
 

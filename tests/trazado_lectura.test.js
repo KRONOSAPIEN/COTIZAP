@@ -2,9 +2,9 @@
  * Del trazado isométrico a las partidas (src/motor/trazado_lectura.js; docs/trazado-isometrico.md §1.5, §5.6): el trazo
  * pasa por las reglas del unifilar como una lectura de origen USUARIO. El ejemplo de §1.6 da un despiece definitivo que
  * cuadra con el trazo; la compuerta, la reducción excéntrica, los adaptadores de brida y de manguera, el tramo corto (sin
- * decidir, pegado y aceptado) y la T a 90° salen como deben; la proyección esquiva las alineaciones falsas; `verificar`
- * encuentra las diferencias; y en una caminata al azar el despiece cuadra con el trazo, cada junta es del Ø de sus piezas y
- * las partidas se cotizan.
+ * decidir, pegado y aceptado), la T a 90° y la descarga del ventilador salen como deben; la proyección esquiva las
+ * alineaciones falsas; `verificar` encuentra las diferencias; y en una caminata al azar el despiece cuadra con el trazo, cada
+ * junta es del Ø de sus piezas y las partidas se cotizan.
  */
 'use strict';
 
@@ -285,4 +285,32 @@ test('Caminata al azar: el despiece cuadra con el trazo, cada junta es del Ø de
   });
   assert.ok(total >= 140, `se revisaron ${total} trazos`);
   ['CODO', 'REDUCCION', 'INJERTO', 'REDUCCION_INJERTO', 'COMPUERTA', 'TAPA'].forEach((x) => assert.ok(vistos.has(x), `salió ${x} (${[...vistos].join(', ')})`));
+});
+
+test('La descarga del ventilador (§5.12) pasa a partidas: su ducto, su codo y el adaptador de la brida, con la punta abierta', () => {
+  const base = despiece(TB.ejemplo(M));
+  let t = TZ.agregarPuerto(TB.ejemplo(M), M, 'EQ-01', { rol: 'SALIDA', posicion_local_mm: { x: 0, y: 0, z: 4000 }, diametro_in: 10 });
+  const pu = t.equipos[0].puertos.find((p) => p.rol === 'SALIDA');
+  t = TZ.trazar(t, M, pu.nodo, { direccion: { azimut_deg: 0, elevacion_deg: 90 }, largo_mm: 2000, diametro_in: 12 });
+  const [sube] = t.ultimo.tramos;
+  t = TZ.trazar(t, M, t.ultimo.nodo, { direccion: { azimut_deg: 180, elevacion_deg: 0 }, largo_mm: 3000 });
+  const [sigue] = t.ultimo.tramos;
+  const fin = t.ultimo.nodo;
+  const r = despiece(t);
+  assert.deepEqual(validarEsquema(r.bom, ESQUEMA), []);
+  assert.equal(r.bom.resumen.estado, 'DEFINITIVA');
+  assert.deepEqual(r.diferencias, [], 'cuadra con el trazo');
+  const v = r.lectura.equipos.find((e) => e.id === `EQ-01-${pu.id}`);
+  assert.deepEqual([v.tipo, v.nombre, v.nodo_id], ['VENTILADOR', 'Colector de polvo · Descarga', pu.nodo]);
+  assert.equal(r.lectura.metadatos.flujo_hacia, 'EQ-01-PU-01', 'la red sigue llegando al colector');
+  // lo de la succión no cambia; se agregan los dos tramos de la descarga, su codo y la reducción de 10″ a 12″ en la brida
+  const s = TZ.aSistema(t, M);
+  const neta = (id) => Math.round(s.tramos.find((x) => x.id === id).longitud_neta_mm * 10) / 10;
+  assert.deepEqual(netas(r.bom), { ...netas(base.bom), [sube]: neta(sube), [sigue]: neta(sigue) });
+  assert.deepEqual(piezas(r.bom), [...piezas(base.bom), `CODO ${t.tramos.find((x) => x.id === sigue).a}`, `REDUCCION ${pu.nodo}`].sort());
+  const d = r.bom.ductos_rectos.find((x) => x.arista_id === sigue);
+  assert.deepEqual([d.diametro_in, d.nodo_fin, d.extremo_fin], [12, fin, 'ABIERTO']);
+  const punta = r.bom.alertas_ambiguedad.find((a) => a.codigo === 'TRAZO_SIN_CONECTAR');
+  assert.deepEqual([punta.severidad, punta.referencias], ['INFO', [fin]]);
+  assert.ok(cotiza(r.bom).partidas.length > UF.aPartidas(base.bom).length);
 });

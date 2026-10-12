@@ -451,10 +451,10 @@
   const AYUDA = {
     SELECCIONAR: 'Toque un equipo, una toma, un tramo o un nodo para ver y cambiar sus datos. Arrastre un equipo para moverlo; arrastre el fondo para mover la vista.',
     EQUIPO: 'Toque el piso donde va el equipo (se ajusta a la rejilla de 100 mm), o arrástrelo desde la paleta.',
-    TOMA: 'Toque una cara de la caja de un equipo: la toma va al centro, al medio de una arista o en la rejilla de 50 mm, y apunta hacia fuera.',
+    TOMA: 'Toque una cara de la caja de un equipo: la toma va al centro, al medio de una arista o en la rejilla de 50 mm, y apunta hacia fuera. En un colector o ventilador es una boca; su descarga se agrega desde su ficha.',
     MANGUERA: 'Toque una toma para acoplarla con manguera; luego arrastre el rombo (altura) y el círculo (desvío) del punto de transición.',
     BRIDA: 'Toque una toma para acoplarla con brida: el ducto sale alineado con su cuello.',
-    TRAMO: 'Arrastre (o haga clic) desde una toma con brida, un punto de transición, la boca del colector, un extremo libre o un tramo. ↑ → ← fijan un eje, H y V el plano; teclee el largo y Entrar.',
+    TRAMO: 'Arrastre (o haga clic) desde una toma con brida, un punto de transición, la boca o la descarga del colector, un extremo libre o un tramo. ↑ → ← fijan un eje, H y V el plano; teclee el largo y Entrar.',
     VERTICAL: 'Arrastre hacia arriba o hacia abajo desde un punto: el ducto sube o baja.',
     REDUCCION: 'Toque un tramo (o el codo) donde baja el Ø: de ahí hacia las tomas queda del Ø activo.',
     INJERTO: 'Arrastre desde un tramo que ya llega al colector: el injerto sale a 30° o 45°, a favor del aire, por arriba o de lado.',
@@ -630,19 +630,19 @@
       if (!P) return { error: 'En esta vista el plano de trabajo se ve de canto: gire la vista (Q o E) o use la planta (2).' };
       return { desde: { posicion_mm: P }, P0: P, D: s.D, nombre: `X ${n(P.x)}, Y ${n(P.y)}, Z ${n(P.z)}` };
     }
-    if (hit.tipo === 'EQUIPO') return { error: 'Trace desde una toma, un punto de transición, la boca del colector, un extremo libre o un tramo.' };
+    if (hit.tipo === 'EQUIPO') return { error: 'Trace desde una toma, un punto de transición, la boca o la descarga del colector, un extremo libre o un tramo.' };
     if (hit.tipo === 'PUERTO' || hit.tipo === 'PT') {
       const pu = g.puertos.get(hit.id);
       const p = pu.puerto;
-      if (p.rol === 'SALIDA') return { error: 'La descarga todavía no se traza.' };
       if (!p.acople) return { error: `Elija primero el acople de la toma ${p.id}: manguera (F) o brida.` };
       const nid = p.acople.tipo === 'MANGUERA' ? p.acople.nodo_transicion : p.nodo;
-      return { desde: nid, P0: g.pos.get(nid), D: diametroDeArranque(s, nid), nombre: p.acople.tipo === 'MANGUERA' ? `el punto de transición de ${p.id}` : `${p.rol === 'ENTRADA' ? 'la boca' : 'la toma'} ${p.id}` };
+      return { desde: nid, P0: g.pos.get(nid), D: diametroDeArranque(s, nid), nombre: p.acople.tipo === 'MANGUERA' ? `el punto de transición de ${p.id}` : `${{ ENTRADA: 'la boca', SALIDA: 'la descarga' }[p.rol] || 'la toma'} ${p.id}` };
     }
     if (hit.tipo === 'NODO') return { desde: hit.id, P0: g.pos.get(hit.id), D: diametroDeArranque(s, hit.id), nombre: hit.id };
     const t = g.tramos.get(hit.id);
     if (t.tipo !== 'RIGIDO') return { error: 'Una manguera no se parte: el ducto empieza en su punto de transición.' };
     if (!g.conocido(t.id)) return { error: `Conecte primero ${t.id} al colector: sin saber hacia dónde va el aire no se le puede injertar nada.` };
+    if (g.descarga.has(t.id)) return { error: `${t.id} es de la descarga del ventilador: lleva un solo ducto hasta afuera, sin ramales.` };
     const L = g.seg.get(t.id).L;
     const lim = s.t.politicas.largo_min_tramo_mm;
     if (L < 2 * lim) return { error: `${t.id} es demasiado corto para injertarle un ramal.` };
@@ -865,7 +865,8 @@
         if (!lista.length) return { ok: false, estado: 'ERROR', P0, texto: `Desde aquí no sale un codo de ${n(caja.codo)}°. ${TZ.textoCandidatas(tr.nombre, tr.ops)}` };
         op = ordenar(s, lista, P0, v, x, y)[0].o;
       } else {
-        const el = caja.elevacion !== undefined ? caja.elevacion : base.elevacion_deg;
+        // un rumbo tecleado después de una vertical (sin elevación) va en horizontal: en la vertical el rumbo no cuenta
+        const el = caja.elevacion !== undefined ? caja.elevacion : caja.azimut !== undefined && Math.abs(base.elevacion_deg) === 90 ? 0 : base.elevacion_deg;
         const az = Math.abs(el) === 90 ? 0 : caja.azimut !== undefined ? caja.azimut : base.azimut_deg;
         op = tr.ops.find((o) => igualDir(o.direccion, { azimut_deg: az, elevacion_deg: el }));
         if (!op) return { ok: false, estado: 'ERROR', P0, texto: `Desde aquí el ducto no puede ir en ${TZ.textoDireccion({ azimut_deg: az, elevacion_deg: el })}. ${TZ.textoCandidatas(tr.nombre, tr.ops)}` };
@@ -1403,7 +1404,12 @@
 
   /* ------------------------------------------------------------------ lo que se muestra en el inspector */
 
-  const velocidadSemaforo = (s, v) => (v === null ? null : v < s.t.politicas.velocidad_min_m_s - 1e-9 || v > s.t.politicas.velocidad_max_m_s + 1e-9 ? 'AMBAR' : 'VERDE');
+  /** VERDE dentro del rango de velocidad, AMBAR fuera; en la descarga (tramo de g.descarga) sólo cuenta el máximo: el aire va limpio. */
+  const velocidadSemaforo = (s, v, tid) => {
+    if (v === null) return null;
+    const min = tid && s.g.descarga.has(tid) ? 0 : s.t.politicas.velocidad_min_m_s;
+    return v < min - 1e-9 || v > s.t.politicas.velocidad_max_m_s + 1e-9 ? 'AMBAR' : 'VERDE';
+  };
   /** Un tramo: Ø, largo a ejes y neto con lo que ocupa cada pieza, dirección, caudal, velocidad y uniones. */
   function infoTramo(s, id) {
     const g = s.g;
@@ -1424,7 +1430,7 @@
       corto,
       id, tipo: t.tipo, diametro_in: t.diametro_in, bloqueado: t.diametro_bloqueado, material: t.material, calibre: t.calibre, largo_mm: L, neta_mm: g.neta.get(id),
       descuentos: g.ocupa.get(id).map((o) => ({ pieza: o.pieza.id || o.pieza.tipo, tipo: o.pieza.tipo, mm: o.mm })),
-      direccion: dir ? TZ.textoDireccion(dir) : null, sentido: arriba ? `de ${arriba} a ${g.abajo.get(id)}` : null, caudal: Q, velocidad: v, semaforo: velocidadSemaforo(s, v),
+      direccion: dir ? TZ.textoDireccion(dir) : null, sentido: arriba ? `de ${arriba} a ${g.abajo.get(id)}` : null, caudal: Q, velocidad: v, semaforo: velocidadSemaforo(s, v, id), descarga: g.descarga.has(id),
       manguera: rig ? null : semaforoManguera(g.mang.get(id), s.t.politicas),
     };
   }

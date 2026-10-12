@@ -2,7 +2,8 @@
  * El modelo del trazado isométrico (src/motor/trazado_iso.js; etapa 1 de docs/trazado-isometrico.md §5): la proyección y su
  * inversa, la rejilla, la manguera, el recorrido del ejemplo clic por clic (que da exactamente el JSON resuelto), el sentido
  * del aire sin importar por dónde se trazó, el imán, las reglas que rechazan lo que el taller no fabrica, los puntos fijos y
- * su compensación, la revisión, la exportación y la lectura de regreso, la pureza y una caminata aleatoria de operaciones.
+ * su compensación, la revisión, la exportación y la lectura de regreso, la descarga del ventilador, la pureza y una caminata
+ * aleatoria de operaciones.
  */
 'use strict';
 
@@ -1125,4 +1126,60 @@ test('Choques con la fase gruesa (§2.10): la rejilla de 2 m nunca pierde un par
   const r2 = T.revisar(e2, M);
   assert.ok(r2.some((v) => v.codigo === 'EQUIPOS_ENCIMADOS'), 'la esquina girada sí se encima');
   assert.deepEqual(r2, T.revisar(e2, M, null, { fuerza_bruta: true }));
+});
+
+test('Descarga del ventilador (§5.12): de su brida a un extremo libre, aparte de la succión; ni se ramifica, ni se junta, ni se tapa', () => {
+  let t = ejemploDesdeLasTomas();
+  t = T.agregarPuerto(t, M, 'EQ-01', { rol: 'SALIDA', posicion_local_mm: { x: 0, y: 0, z: 4000 }, diametro_in: 10 });
+  const pu = t.equipos[0].puertos.find((p) => p.rol === 'SALIDA');
+  assert.deepEqual([pu.id, pu.nombre, pu.acople, pu.caudal_m3_h], ['PU-04', 'Descarga', { tipo: 'BRIDA', barrenos: null }, null]);
+  falla(() => T.agregarPuerto(t, M, 'EQ-01', { rol: 'SALIDA', posicion_local_mm: { x: 0, y: 500, z: 4000 }, diametro_in: 10 }), 'DATO_INVALIDO', /ya tiene su descarga/);
+  falla(() => T.agregarPuerto(t, M, 'EQ-02', { rol: 'SALIDA', posicion_local_mm: { x: 0, y: 400, z: 600 } }), 'DATO_INVALIDO', /va en un ventilador o colector/);
+  // sin ducto, la brida no cambia nada; el trazo sale de ella en la dirección de su cuello
+  assert.deepEqual(T.revisar(t, M).map((v) => v.codigo), T.revisar(ejemploDesdeLasTomas(), M).map((v) => v.codigo));
+  assert.deepEqual(T.candidatas(t, M, pu.nodo).map((o) => o.direccion), [dir(0, 90)]);
+  t = T.trazar(t, M, pu.nodo, { direccion: dir(0, 90), largo_mm: 2000, diametro_in: 12 });
+  const sube = t.ultimo.tramos[0];
+  t = T.trazar(t, M, t.ultimo.nodo, { direccion: dir(180, 0), largo_mm: 3000 });
+  const [sigue] = t.ultimo.tramos;
+  const fin = t.ultimo.nodo;
+  // el aire va de la brida hacia fuera, con todo lo que llega a la boca
+  const g = T.calcular(t, M);
+  assert.deepEqual([g.arriba.get(sube), g.abajo.get(sube), g.abajo.get(sigue)], [pu.nodo, g.arriba.get(sigue), fin]);
+  assert.deepEqual([g.Q.get(sube), g.Q.get(sigue)], [2200, 2200]);
+  // va lenta (aire limpio: sin mínimo), crece de 10″ a 12″ con su adaptador y sale libre: ni tapa ni extremo abierto
+  const vals = T.revisar(t, M);
+  const graves = (x) => T.revisar(x, M).filter((v) => v.severidad !== 'INFO').map((v) => `${v.codigo} ${v.elementos.join(' ')}`);
+  const antes = graves(ejemploDesdeLasTomas());
+  assert.deepEqual(graves(t), antes, 'la descarga no agrega avisos');
+  assert.ok(g.v.get(sube) < t.politicas.velocidad_min_m_s);
+  assert.deepEqual(vals.find((v) => v.codigo === 'DESCARGA_LIBRE'), { codigo: 'DESCARGA_LIBRE', severidad: 'INFO', elementos: [fin, 'PU-04'], mensaje: `La descarga PU-04 de Colector de polvo sale libre en ${fin}, a 6 m de altura.`, sugerencia: null });
+  assert.ok(vals.some((v) => v.codigo === 'ADAPTADOR_INSERTADO' && v.mensaje === `Adaptador de 10″ a 12″ en ${pu.nodo}.`));
+  falla(() => T.ponerTapa(t, M, fin), 'TAPA_NO_VA', /ahí sale la descarga del ventilador/);
+  // más angosta aguas abajo no es DIAMETRO_DECRECE: hacia afuera el Ø es libre
+  assert.deepEqual(graves(T.trazar(t, M, fin, { direccion: dir(180, 0), largo_mm: 500, diametro_in: 8 })), antes);
+  // ni un ramal (desde un punto del tramo o siguiendo recto desde el codo) ni una toma que se le junte
+  assert.deepEqual(T.candidatas(t, M, { tramo: sigue, s_mm: 1500 }), []);
+  falla(() => T.trazar(t, M, { tramo: sigue, s_mm: 1500 }, { direccion: dir(135, 0), largo_mm: 1000 }), 'DESCARGA_RAMIFICADA', /no se ramifica/);
+  falla(() => T.trazar(t, M, g.abajo.get(sube), { direccion: dir(0, 90), largo_mm: 1000 }), 'DESCARGA_RAMIFICADA');
+  let m = T.ponerEquipo(t, M, { tipo: 'MAQUINA', nombre: 'Lijadora', posicion_mm: { x: -3000, y: 0, z: 0 }, caja_mm: { largo: 600, ancho: 600, alto: 900 } });
+  m = T.agregarPuerto(m, M, 'EQ-04', { posicion_local_mm: { x: 0, y: 0, z: 900 }, diametro_in: 6, caudal_m3_h: 500 });
+  m = T.acoplarBrida(m, M, 'PU-05');
+  falla(() => T.trazar(m, M, m.equipos[3].puertos[0].nodo, { direccion: dir(0, 90), largo_mm: 5100 }), 'DESCARGA_MEZCLADA', /no se junta con la succión/);
+  // va y vuelve por el JSON y por el sistema; un trazo de antes, con la descarga sin acople, abre con su brida
+  const s = T.aSistema(t, M);
+  assert.deepEqual(validarEsquema(s, ESQUEMA), []);
+  assert.deepEqual(s.tramos.filter((x) => [sube, sigue].includes(x.id)).map((x) => [x.nodo_aguas_arriba, x.uniones.aguas_arriba, x.uniones.aguas_abajo, x.caudal_m3_h]), [[pu.nodo, 'BRIDA_EQUIPO', 'BRIDA', 2200], [g.abajo.get(sube), 'BRIDA', 'ABIERTA', 2200]]);
+  assert.deepEqual(s.equipos[0].puertos.find((p) => p.rol === 'SALIDA').conexion, { tipo: 'BRIDA', nodo_transicion: null, tramo_flexible: null, adaptador: s.accesorios.find((a) => a.tipo === 'ADAPTADOR' && a.nodo === pu.nodo).id, barrenos: null });
+  const back = T.desdeSistema(s, M);
+  assert.deepEqual(back.errores, []);
+  assert.deepEqual(T.aSistema(back.modelo, M), s);
+  assert.deepEqual(T.validar(JSON.parse(JSON.stringify(t)), M).errores, []);
+  const viejo = JSON.parse(JSON.stringify(t));
+  viejo.equipos[0].puertos.find((p) => p.rol === 'SALIDA').acople = null;
+  assert.deepEqual(T.validar(viejo, M).modelo.equipos[0].puertos.find((p) => p.rol === 'SALIDA').acople, { tipo: 'BRIDA', barrenos: null });
+  const doble = JSON.parse(JSON.stringify(t));
+  doble.equipos[0].puertos.push({ ...doble.equipos[0].puertos.find((p) => p.rol === 'SALIDA'), id: 'PU-09', nodo: fin });
+  doble.nodos.find((x) => x.id === fin).puerto = 'PU-09';
+  assert.match(T.validar(doble, M).errores.join(' '), /dos descargas/);
 });

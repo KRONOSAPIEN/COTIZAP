@@ -4,7 +4,8 @@
  * La etapa de visión entrega la LECTURA: metadatos, la red (nodos, aristas y textos con su confianza) y los equipos. Este
  * módulo aplica las reglas deterministas (la IA lee; las reglas cuentan):
  *
- *   1. árbol dirigido hacia el colector (un solo colector, conexo, sin ciclos);
+ *   1. árbol dirigido hacia el colector (un solo colector, conexo, sin ciclos); la descarga de un ventilador, aparte: un solo
+ *      ducto de su brida a una punta abierta;
  *   2. diámetros: el leído (confianza ≥ 0.5), llevado a la medida comercial; el que falta se hereda por continuidad (unión
  *      colineal, codo, tronco de un injerto simple); el de un ramal no se hereda;
  *   3. cotas: la leída; la ilegible se estima con la mediana de px/m de las aristas acotadas paralelas a los ejes (en
@@ -246,26 +247,41 @@
     }
     const colector = colectores[0];
     md.flujo_hacia = colector.id;
-    const padre = new Map(); // nodo → arista hacia el colector
-    const orden = [colector.nodo_id];
-    const visto = new Set(orden);
+    const padre = new Map(); // nodo → arista hacia el colector (en una descarga, hacia su ventilador)
+    const orden = [];
+    const visto = new Set();
     let ciclo = null;
-    for (let i = 0; i < orden.length; i += 1) {
-      const n = N.get(orden[i]);
-      n.aristas.forEach((aid) => {
-        if (padre.get(n.id) === aid) return;
-        const a = A.get(aid);
-        const otro = a.nodo_a === n.id ? a.nodo_b : a.nodo_a;
-        if (visto.has(otro)) { ciclo = aid; return; }
-        visto.add(otro);
-        padre.set(otro, aid);
-        orden.push(otro);
-        // nodo_a = el lado del colector
-        if (a.nodo_a !== n.id) { a.nodo_b = a.nodo_a; a.nodo_a = n.id; }
-      });
-    }
+    /** A lo ancho desde una raíz (el colector, o la brida de descarga de un ventilador): nodo_a de cada arista, el lado de la raíz. */
+    const recorrer = (raiz) => {
+      const desde = orden.length;
+      orden.push(raiz);
+      visto.add(raiz);
+      for (let i = desde; i < orden.length; i += 1) {
+        const n = N.get(orden[i]);
+        n.aristas.forEach((aid) => {
+          if (padre.get(n.id) === aid) return;
+          const a = A.get(aid);
+          const otro = a.nodo_a === n.id ? a.nodo_b : a.nodo_a;
+          if (visto.has(otro)) { ciclo = aid; return; }
+          visto.add(otro);
+          padre.set(otro, aid);
+          orden.push(otro);
+          if (a.nodo_a !== n.id) { a.nodo_b = a.nodo_a; a.nodo_a = n.id; }
+        });
+      }
+      return orden.slice(desde);
+    };
+    recorrer(colector.nodo_id);
+    // la descarga de un ventilador que no está en la red del colector: su propio ducto, de la brida hacia fuera (a la atmósfera)
+    const descarga = new Set();
+    L.equipos.filter((e) => e.tipo === 'VENTILADOR').forEach((e) => { if (!visto.has(e.nodo_id)) recorrer(e.nodo_id).forEach((nid) => descarga.add(nid)); });
     if (ciclo) {
       alerta('BLOQUEANTE', 'CICLO_EN_RED', [ciclo], 'La red tiene un ciclo: una red de colección es un árbol.', 'Suele ser un cruce leído como unión.', '¿Qué línea pasa por encima de la otra sin unirse?');
+      return salida('NO_COTIZABLE');
+    }
+    const ramificada = [...descarga].filter((nid) => N.get(nid).aristas.filter((aid) => aid !== padre.get(nid)).length > 1);
+    if (ramificada.length) {
+      alerta('BLOQUEANTE', 'DESCARGA_RAMIFICADA', ramificada.slice(0, 10), `La descarga del ventilador se ramifica en ${ramificada.join(', ')}.`, null, 'La descarga lleva un solo ducto hasta afuera: ¿cuál es su camino?');
       return salida('NO_COTIZABLE');
     }
     if (visto.size < nodos.length) {
@@ -386,7 +402,7 @@
     // monotonía: alejándose del colector el diámetro no crece
     aristas.forEach((a) => {
       const pa = padre.get(a.nodo_a);
-      if (pa && D.has(a.id) && D.has(pa) && D.get(a.id) > D.get(pa) && a.diametro.origen !== 'USUARIO') {
+      if (pa && !descarga.has(a.nodo_a) && D.has(a.id) && D.has(pa) && D.get(a.id) > D.get(pa) && a.diametro.origen !== 'USUARIO') {
         alerta('CONFIRMAR', 'DIAMETRO_INCONSISTENTE', [a.id, pa], `El ${T(a.id)} es mayor que el tramo anterior hacia el colector (${pulgadas(D.get(pa))}).`, 'Suele ser una mala lectura (1↔7, 0↔8, ″ leído como 11). Se cotiza como está.', `¿Cuál es el diámetro del ${T(a.id, false)}?`,
           pregunta('NUMERO', a.id, 'diametro_in', 'in', [], D.get(pa)));
       }
@@ -556,6 +572,8 @@
         // «TAPA» en el extremo: lo cierra (el tramo llega con brida a la tapa)
         if (notaEn(nid, NOTA_TAPA)) { n.accesorio_id = agregarTapa(nid, p, D.get(p)); return; }
         piezas.abiertos.push(nid);
+        // la punta de la descarga de un ventilador: sale a la atmósfera, abierta
+        if (descarga.has(nid)) { alerta('INFO', 'TRAZO_SIN_CONECTAR', [nid], `La descarga del ventilador sale libre en ${nid}.`, 'Queda abierta (sin brida): es la salida a la atmósfera.'); return; }
         if (resp(nid, 'aceptado')) resuelta('TRAZO_SIN_CONECTAR', [nid], `El extremo ${nid} queda abierto (sin brida).`, pregunta('ACEPTAR', nid, 'aceptado', null, [], true));
         else alerta('CONFIRMAR', 'TRAZO_SIN_CONECTAR', [nid], `El extremo ${nid} no llega a ningún equipo.`, 'Se deja abierto (sin brida).', '¿Se deja abierto?', pregunta('ACEPTAR', nid, 'aceptado', null, [], true));
         return;
