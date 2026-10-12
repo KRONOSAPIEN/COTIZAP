@@ -119,6 +119,7 @@
         "alto": 4000
       },
       "perdida_Pa": 1250,
+      "ventilador_modelo": null,
       "puertos": [
         {
           "id": "PU-01",
@@ -172,6 +173,7 @@
         "alto": 1200
       },
       "perdida_Pa": null,
+      "ventilador_modelo": null,
       "puertos": [
         {
           "id": "PU-02",
@@ -229,6 +231,7 @@
         "alto": 1000
       },
       "perdida_Pa": null,
+      "ventilador_modelo": null,
       "puertos": [
         {
           "id": "PU-03",

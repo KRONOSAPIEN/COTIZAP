@@ -1133,7 +1133,7 @@
     dato(TIPOS_EQUIPO.includes(x.tipo), `El equipo es ${TIPOS_EQUIPO.join(', ')}.`);
     const e = {
       id: nuevoId(m, 'EQ'), tipo: x.tipo, nombre: texto(x.nombre, NOMBRE_EQUIPO[x.tipo], 60), posicion_mm: coordenada(x.posicion_mm, 'La posición del equipo'),
-      rotacion_z_deg: giroValido(x.rotacion_z_deg === undefined ? 0 : x.rotacion_z_deg), caja_mm: cajaValida(x.caja_mm), perdida_Pa: null, puertos: [],
+      rotacion_z_deg: giroValido(x.rotacion_z_deg === undefined ? 0 : x.rotacion_z_deg), caja_mm: cajaValida(x.caja_mm), perdida_Pa: null, ventilador_modelo: null, puertos: [],
     };
     dato(e.posicion_mm.z >= 0, 'El equipo se apoya en el piso o en un nivel: Z ≥ 0.');
     if (x.perdida_Pa !== undefined && x.perdida_Pa !== null) { dato(finito(x.perdida_Pa) && x.perdida_Pa >= 0 && x.perdida_Pa <= 100000, 'La pérdida propia va de 0 a 100 000 Pa.'); e.perdida_Pa = x.perdida_Pa; }
@@ -1153,6 +1153,21 @@
     }
     if (c.perdida_Pa !== undefined) { dato(c.perdida_Pa === null || (finito(c.perdida_Pa) && c.perdida_Pa >= 0 && c.perdida_Pa <= 100000), 'La pérdida propia va de 0 a 100 000 Pa.'); e.perdida_Pa = c.perdida_Pa; }
     marcar(m, 'editarEquipo', { equipo: e.id });
+    return terminar(m, M);
+  }
+  /** La clave de un modelo del catálogo de ventiladores (§5.13) que se guarda en un colector o un ventilador; null en otro equipo o si no es una clave. */
+  const modeloVentilador = (tipo, v) => ((tipo === 'COLECTOR' || tipo === 'VENTILADOR') && typeof v === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(v) ? v : null);
+  /**
+   * Elige el ventilador de un colector o de un ventilador: la clave de un modelo del catálogo de las tablas maestras (§5.13),
+   * o null para quitarlo. No revisa que el modelo exista: el catálogo puede cambiar; la salida avisa si ya no está.
+   */
+  function elegirVentilador(t0, M, equipoId, modelo) {
+    const m = inicio(t0);
+    const e = equipoDe(m, equipoId);
+    dato(e.tipo === 'COLECTOR' || e.tipo === 'VENTILADOR', 'El ventilador se elige en un colector o en un ventilador.', [e.id]);
+    dato(modelo === null || modeloVentilador(e.tipo, modelo) !== null, 'La clave del modelo va con letras, números, guion o guion bajo (hasta 40).');
+    e.ventilador_modelo = modelo;
+    marcar(m, 'elegirVentilador', { equipo: e.id });
     return terminar(m, M);
   }
 
@@ -2755,6 +2770,7 @@
       politicas: clonar(t.politicas),
       equipos: t.equipos.map((e) => ({
         id: e.id, tipo: e.tipo, nombre: e.nombre, posicion_mm: r3v(e.posicion_mm), rotacion_z_deg: e.rotacion_z_deg, caja_mm: { ...e.caja_mm }, perdida_Pa: e.perdida_Pa,
+        ventilador_modelo: e.ventilador_modelo === undefined ? null : e.ventilador_modelo,
         puertos: e.puertos.map((p) => {
           const ub = ubicarPuerto(e, p);
           const ac = p.acople;
@@ -2856,7 +2872,7 @@
         unico(e.id, reId.EQ, 'Un equipo');
         dato(TIPOS_EQUIPO.includes(e.tipo) && Array.isArray(e.puertos) && e.puertos.length <= MAX_PUERTOS, `El equipo ${e.id} no es válido.`);
         const eq = { id: e.id, tipo: e.tipo, nombre: texto(e.nombre, NOMBRE_EQUIPO[e.tipo], 60), posicion_mm: coordenada(e.posicion_mm, `El equipo ${e.id}`), rotacion_z_deg: giroValido(e.rotacion_z_deg), caja_mm: cajaValida(e.caja_mm),
-          perdida_Pa: finito(e.perdida_Pa) && e.perdida_Pa >= 0 ? e.perdida_Pa : null, puertos: [] };
+          perdida_Pa: finito(e.perdida_Pa) && e.perdida_Pa >= 0 ? e.perdida_Pa : null, ventilador_modelo: modeloVentilador(e.tipo, e.ventilador_modelo), puertos: [] };
         e.puertos.forEach((p) => {
           unico(p.id, reId.PU, 'Un puerto');
           dato(['TOMA', 'ENTRADA', 'SALIDA'].includes(p.rol) && nodos.has(p.nodo), `El puerto ${p.id} no es válido.`);
@@ -2955,7 +2971,7 @@
         dato(esObjeto(e) && TIPOS_EQUIPO.includes(e.tipo) && Array.isArray(e.puertos) && e.puertos.length <= MAX_PUERTOS, 'Un equipo no es válido.');
         unico(e.id, /^EQ-\d{2,3}$/, 'Un equipo');
         const eq = { id: e.id, tipo: e.tipo, nombre: texto(e.nombre, NOMBRE_EQUIPO[e.tipo], 60), posicion_mm: coordenada(e.posicion_mm, `El equipo ${e.id}`), rotacion_z_deg: giroValido(e.rotacion_z_deg), caja_mm: cajaValida(e.caja_mm),
-          perdida_Pa: finito(e.perdida_Pa) && e.perdida_Pa >= 0 && e.perdida_Pa <= 100000 ? e.perdida_Pa : null, puertos: [] };
+          perdida_Pa: finito(e.perdida_Pa) && e.perdida_Pa >= 0 && e.perdida_Pa <= 100000 ? e.perdida_Pa : null, ventilador_modelo: modeloVentilador(e.tipo, e.ventilador_modelo), puertos: [] };
         dato(eq.posicion_mm.z >= 0, `El equipo ${e.id} está bajo el piso.`);
         e.puertos.forEach((p) => {
           dato(esObjeto(p) && ['TOMA', 'ENTRADA', 'SALIDA'].includes(p.rol) && nodos.has(p.nodo), 'Un puerto no es válido.');
@@ -3093,7 +3109,7 @@
     // modelo
     nuevo, validar, calcular, revisar, resumen, aSistema, desdeSistema, renumerar, rejillaDeCajas, CELDA_CHOQUES_MM,
     cambiarProyecto, cambiarPoliticas, cambiarMaterial,
-    ponerEquipo, editarEquipo, moverEquipo, quitarEquipo, agregarPuerto, editarPuerto, quitarPuerto,
+    ponerEquipo, editarEquipo, elegirVentilador, moverEquipo, quitarEquipo, agregarPuerto, editarPuerto, quitarPuerto,
     acoplarBrida, acoplarManguera, moverTransicion, desacoplar,
     candidatas, textoCandidatas, elegirDireccion, ajustarLargo, trazar, conectar, rutas,
     cambiarLargo, moverSegmento, cambiarAngulo, cambiarDiametro, reducir, decidirCorto, ponerCompuerta, quitarCompuerta, ponerTapa, quitarTapa, anclar, borrarTramo, dimensionar, aplicarDimensiones,

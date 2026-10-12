@@ -1575,6 +1575,41 @@
     };
   }
   /**
+   * Las partidas compradas del ventilador elegido de un equipo (§5.13), para la cotización: el ventilador (con su punto de
+   * operación en la descripción) y su motor. El precio, el del artículo del catálogo de compras si el modelo lo liga (o el
+   * MOTOR_<hp>HP del catálogo para el motor); si no, $0 por capturar. Cada partida lleva `trazado_ventilador` (el equipo) y
+   * `trazado_pieza` (VENTILADOR:<modelo> o MOTOR:<hp>): así se reemplazan al volver a agregarlas, conservando el precio
+   * capturado de la misma pieza. { partidas, avisos, modelo } o { error }.
+   */
+  function partidasVentilador(s, equipoId) {
+    const inf = informeCalculo(s);
+    if (inf.error) return { error: inf.error };
+    const e = s.t.equipos.find((x) => x.id === equipoId);
+    const v = inf.ventiladores.find((x) => x.equipo === equipoId);
+    if (!e || !v) return { error: 'Ese equipo no tiene ventilador en el cálculo.' };
+    if (!e.ventilador_modelo) return { error: `Elija primero el ventilador de ${e.nombre} en el catálogo.` };
+    const c = v.eleccion.candidatos.find((x) => x.id === e.ventilador_modelo);
+    if (!c) return { error: `El ventilador elegido para ${e.nombre} (${e.ventilador_modelo}) ya no está en el catálogo o su curva ya no cruza la del sistema: elija otro.` };
+    const m = s.M.ventiladores.modelos.find((x) => x.id === c.id);
+    const arts = s.M.compras.articulos;
+    const hayArt = (art) => typeof art === 'string' && art !== '' && Object.prototype.hasOwnProperty.call(arts, art);
+    const precio = (art) => (hayArt(art) ? { articulo_id: art } : { precio_compra_unitario: 0 });
+    const capturar = (art) => (hayArt(art) ? '' : ' (capture su precio)');
+    const n0 = (x) => String(Math.round(x));
+    const punto = `${n0(v.caudal_m3_h)} m³/h a ${n0(v.presion_estatica_Pa)} Pa (${n0(v.presion_estatica_estandar_Pa)} Pa en aire estándar), ${c.rpm} rpm`;
+    // trazado_pieza: qué pieza es (el modelo, o los HP del motor): si no cambia, se conserva el precio que se capturó
+    const partidas = [{ familia: 'COMPRADO', descripcion: `Ventilador ${c.nombre} para ${e.nombre}: ${punto}${capturar(m.articulo)}`, cantidad: 1, trazado_ventilador: e.id, trazado_pieza: `VENTILADOR:${c.id}`, ...precio(m.articulo) }];
+    if (c.motor_hp !== null) {
+      const artMotor = `MOTOR_${String(c.motor_hp).replace('.', '_')}HP`;
+      partidas.push({ familia: 'COMPRADO', descripcion: `Motor de ${c.motor_hp} HP para el ventilador de ${e.nombre} (si el ventilador no lo trae${hayArt(artMotor) ? '' : '; capture su precio'})`, cantidad: 1, trazado_ventilador: e.id, trazado_pieza: `MOTOR:${c.motor_hp}`, ...precio(artMotor) });
+    }
+    const avisos = [];
+    if (!c.viable) avisos.push(`${c.nombre} no llega al punto de diseño: ${c.notas[0]}`);
+    if (c.ilustrativo) avisos.push(`${c.nombre} es una curva ilustrativa, no de un fabricante.`);
+    if (c.motor_hp === null) avisos.push('Ningún motor comercial alcanza: no se agrega el motor.');
+    return { partidas, avisos, modelo: c };
+  }
+  /**
    * Qué le sirve del catálogo de ventiladores (M) al trazo `t`, en una frase, para el editor del catálogo: { txt, clase }.
    */
   function efectoCatalogo(t, M) {
@@ -1684,6 +1719,6 @@
     niveles, irANivel, nombrarNivel, quitarNivel, reglaNiveles, PASO_NIVEL_MM,
     reducirEn, compuertaEn, compuertaSugerida, quitarCompuerta, tapaEn, quitarTapa, RADIAL_MS, radial, radialElegir, desplazamientoSegmento, moverSegmento, borrar, medir,
     correccionesDe, correccionesListas, corregir, cambiarDiametroTramo, cambiarDiametroEnCadena, decidirCorto,
-    infoTramo, piezasDe, velocidadSemaforo, calcularTrazo, calculo, efectoEnTrazo, informeCalculo, graficaVentilador, efectoCatalogo, filaCalculo, NOMBRE_ACCION, despiece, exportar, importar, ejemplo,
+    infoTramo, piezasDe, velocidadSemaforo, calcularTrazo, calculo, efectoEnTrazo, informeCalculo, graficaVentilador, efectoCatalogo, partidasVentilador, filaCalculo, NOMBRE_ACCION, despiece, exportar, importar, ejemplo,
   };
 }));

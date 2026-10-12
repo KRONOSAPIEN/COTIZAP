@@ -1183,3 +1183,26 @@ test('Descarga del ventilador (§5.12): de su brida a un extremo libre, aparte d
   doble.nodos.find((x) => x.id === fin).puerto = 'PU-09';
   assert.match(T.validar(doble, M).errores.join(' '), /dos descargas/);
 });
+
+test('El ventilador elegido (§5.13): se guarda en el colector o el ventilador, va y vuelve por el JSON y por el sistema, y un trazo viejo abre sin él', () => {
+  let t = ejemploDesdeLasTomas();
+  assert.equal(t.equipos[0].ventilador_modelo, null);
+  t = T.elegirVentilador(t, M, 'EQ-01', 'EJEMPLO_BANDAS');
+  assert.equal(t.equipos[0].ventilador_modelo, 'EJEMPLO_BANDAS');
+  falla(() => T.elegirVentilador(t, M, 'EQ-02', 'EJEMPLO_BANDAS'), 'DATO_INVALIDO', /en un colector o en un ventilador/);
+  falla(() => T.elegirVentilador(t, M, 'EQ-01', 'mal clave'), 'DATO_INVALIDO', /La clave del modelo/);
+  // no revisa que exista en el catálogo (el catálogo cambia): la salida avisa
+  assert.equal(T.elegirVentilador(t, M, 'EQ-01', 'OTRO_MODELO').equipos[0].ventilador_modelo, 'OTRO_MODELO');
+  const s = T.aSistema(t, M);
+  assert.deepEqual(validarEsquema(s, ESQUEMA), []);
+  assert.deepEqual(s.equipos.map((e) => e.ventilador_modelo), ['EJEMPLO_BANDAS', null, null]);
+  assert.equal(T.desdeSistema(s, M).modelo.equipos[0].ventilador_modelo, 'EJEMPLO_BANDAS');
+  assert.equal(T.validar(JSON.parse(JSON.stringify(t)), M).modelo.equipos[0].ventilador_modelo, 'EJEMPLO_BANDAS');
+  // un trazo de antes, sin el campo, o con basura: null; en una máquina, nunca
+  const viejo = JSON.parse(JSON.stringify(t));
+  delete viejo.equipos[0].ventilador_modelo;
+  viejo.equipos[1].ventilador_modelo = 'EJEMPLO_BANDAS';
+  const v = T.validar(viejo, M).modelo;
+  assert.deepEqual(v.equipos.map((e) => e.ventilador_modelo), [null, null, null]);
+  assert.equal(T.elegirVentilador(t, M, 'EQ-01', null).equipos[0].ventilador_modelo, null, 'null lo quita');
+});

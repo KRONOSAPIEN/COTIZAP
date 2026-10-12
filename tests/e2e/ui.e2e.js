@@ -3411,8 +3411,8 @@ const ok = (cond, msg) => {
     ok(/3,0\d\d rpm · 2\.\d\d kW al freno · motor de 3 HP/.test(await elegir.locator('li[data-modelo="EJEMPLO_BANDAS"]').innerText()), 'el B: unas 3 000 rpm, su potencia y el motor');
     ok(/con 3450 rpm daría \d+ m³\/h/.test(await elegir.locator('li[data-modelo="EJEMPLO_DIRECTO"]').innerText()), 'el A (directo) dice cuánto daría a sus rpm');
     ok(await elegir.locator('svg.ti-vg path.ti-vg-curva').count() === 1 && await elegir.locator('svg.ti-vg circle.ti-vg-punto').count() === 1, 'la gráfica: su curva, la del sistema y el punto');
-    await elegir.locator('li[data-modelo="EJEMPLO_DIRECTO"] button').click();
-    ok(await p.locator('.ti-vent-elegir').evaluate((d) => d.open) && await p.locator('.ti-vent-lista li[data-modelo="EJEMPLO_DIRECTO"] button').getAttribute('aria-pressed') === 'true'
+    await elegir.locator('li[data-modelo="EJEMPLO_DIRECTO"] button.enlace').click();
+    ok(await p.locator('.ti-vent-elegir').evaluate((d) => d.open) && await p.locator('.ti-vent-lista li[data-modelo="EJEMPLO_DIRECTO"] button.enlace').getAttribute('aria-pressed') === 'true'
       && /a 3,450 rpm/.test(await p.locator('.ti-vent-grafica figcaption').innerText()), 'tocar otro lo dibuja (a sus 3 450 rpm) y el panel sigue abierto');
     // al catálogo
     await p.locator('.ti-vent-catalogo').click();
@@ -3440,6 +3440,73 @@ const ok = (cond, msg) => {
     await p.click('#tab-trazado');
     await p.click('#ti-fase-5');
     ok(/0 de 1 modelos sirven/.test(await p.locator('.ti-vent-elegir summary').innerText()), 'la salida usa el catálogo nuevo');
+    await p.close();
+  }
+
+  console.log('45) El ventilador elegido a la cotización: elegirlo en la salida, su motor, el precio capturado que se conserva, «Pasar a la cotización» y la propuesta');
+  {
+    const p = await nuevaPagina();
+    const R = (fn, a) => p.evaluate(fn, a);
+    const vent = () => R(() => window.COTIZAP.web.estadoApp.cot.partidas.filter((x) => x.trazado_ventilador)
+      .map((x) => ({ id: x.id, pieza: x.trazado_pieza, eq: x.trazado_ventilador, fam: x.familia, precio: x.precio_compra_unitario, desc: x.descripcion })));
+    await p.click('#tab-trazado');
+    await p.click('#ti-ejemplo');
+    await p.click('#ti-fase-5');
+    await p.locator('.ti-vent-elegir > summary').click();
+    const elegir = p.locator('.ti-vent-elegir');
+    ok(/Elija un modelo para guardarlo con el trazo/.test(await elegir.innerText()) && !(await p.locator('.ti-vent-a-cot').count()) && !(await p.locator('#ti-part-vent').count()), 'sin elegir no hay qué pasar a la cotización');
+    // «Elegir» lo guarda con el trazo
+    await elegir.locator('li[data-modelo="EJEMPLO_BANDAS"] .ti-vent-elegir-este').click();
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.trazado_iso.equipos.find((e) => e.id === 'EQ-01').ventilador_modelo) === 'EJEMPLO_BANDAS'
+      && await p.locator('li[data-modelo="EJEMPLO_BANDAS"] .ti-chip-elegido').count() === 1 && await p.locator('.ti-vent-elegir').evaluate((d) => d.open), '«Elegir» lo guarda con el trazo y lo marca elegido');
+    ok(/^Ventilador de Colector de polvo: Ejemplo ilustrativo B/.test(await p.locator('#ti-msg').innerText()) && /^Con el ventilador elegido y su motor, como partidas compradas\.$/.test(await p.locator('#ti-part-vent').innerText()), 'lo dice, y la salida avisa que el ventilador va con las partidas');
+    // «Agregar a la cotización»: el ventilador y su motor, comprados, con el precio por capturar y el punto de operación
+    await p.locator('.ti-vent-a-cot').click();
+    const v1 = await vent();
+    ok(v1.length === 2 && v1[0].pieza === 'VENTILADOR:EJEMPLO_BANDAS' && v1[1].pieza === 'MOTOR:3' && v1.every((x) => x.fam === 'COMPRADO' && x.precio === 0 && x.eq === 'EQ-01'), `dos partidas compradas por capturar (${JSON.stringify(v1.map((x) => x.pieza))})`);
+    ok(/^Ventilador Ejemplo ilustrativo B · con bandas \(curva inventada\) para Colector de polvo: \d+ m³\/h a \d+ Pa \(\d+ Pa en aire estándar\), \d+ rpm \(capture su precio\)$/.test(v1[0].desc), `con su punto de operación (${v1[0].desc})`);
+    ok(/^Motor de 3 HP para el ventilador de Colector de polvo \(si el ventilador no lo trae; capture su precio\)$/.test(v1[1].desc), 'y el motor de 3 HP');
+    ok(/^2 partidas del ventilador en la cotización: .*ilustrativa/.test(await p.locator('.toast').last().innerText()), 'el aviso dice que la curva es ilustrativa');
+    ok(await p.locator('.ti-vent-a-cot').innerText() === 'Actualizar en la cotización' && /En la cotización: 2 partidas de este ventilador/.test(await p.locator('.ti-vent-en-cot').innerText()), 'el botón pasa a «Actualizar»');
+    // «Deshacer» del aviso y otra vez
+    await p.locator('.toast').last().locator('button', { hasText: 'Deshacer' }).click();
+    ok((await vent()).length === 0 && await p.locator('.ti-vent-a-cot').innerText() === 'Agregar a la cotización', '«Deshacer» las quita');
+    await p.locator('.ti-vent-a-cot').click();
+    const v2 = await vent();
+    // capturar el precio del motor en la cotización (en el diálogo de la partida)
+    await p.click('#tab-cotizacion');
+    ok(await p.locator('#lista-partidas .chip-trazado').count() === 2 && /^Trazado · EQ-01$/.test(await p.locator('#lista-partidas .chip-trazado').first().innerText()), 'en la cotización llevan su marca del trazado');
+    await p.locator(`#lista-partidas .partida:has(.chip-trazado) button[title="Editar"]`).nth(1).click();
+    await p.waitForSelector('#dlg-partida[open]');
+    await p.fill('#f_precio_compra_unitario', '4200');
+    await p.click('#dlg-guardar');
+    await p.waitForTimeout(100);
+    const motor = (await vent()).find((x) => x.pieza === 'MOTOR:3');
+    ok(motor && motor.precio === 4200 && motor.id === v2[1].id && /^Motor de 3 HP para el ventilador de Colector de polvo \(si el ventilador no lo trae\)$/.test(motor.desc), `editada sigue siendo la del trazo, con su precio y sin pedirlo (${motor && motor.desc})`);
+    // otro modelo: el ventilador cambia en su lugar, el motor de los mismos HP conserva su precio
+    await p.click('#tab-trazado');
+    await p.locator('li[data-modelo="EJEMPLO_DIRECTO"] .ti-vent-elegir-este').click();
+    await p.locator('.ti-vent-a-cot').click();
+    const v3 = await vent();
+    ok(v3.length === 2 && v3[0].pieza === 'VENTILADOR:EJEMPLO_DIRECTO' && v3[0].precio === 0 && v3[1].precio === 4200 && v3[1].id === v2[1].id, `al cambiar de modelo el motor conserva su precio (${JSON.stringify(v3.map((x) => [x.pieza, x.precio]))})`);
+    ok(/no llega al punto de diseño/.test(await p.locator('.toast').last().innerText()), 'y avisa que el A no llega al punto');
+    await p.locator('li[data-modelo="EJEMPLO_BANDAS"] .ti-vent-elegir-este').click();
+    // «Pasar a la cotización»: las del despiece y el ventilador elegido, sin repetirlo
+    await p.click('#ti-pasar');
+    await p.waitForSelector('#dlg-unifilar[open]', { timeout: 3000 });
+    ok(/Se agregaron 14 partidas a la cotización y 2 del ventilador elegido\./.test(await p.locator('#uf-cuerpo').innerText()), 'el diálogo dice que también entró el ventilador');
+    const v4 = await vent();
+    ok(v4.length === 2 && v4[0].pieza === 'VENTILADOR:EJEMPLO_BANDAS' && v4[1].precio === 4200 && await R(() => window.COTIZAP.web.estadoApp.cot.partidas.filter((x) => x.unifilar_id).length) === 14, 'el ventilador elegido se pone al día, sin repetirse, junto a las 14 del despiece');
+    await p.click('#uf-listo');
+    ok(await R(() => window.COTIZAP.web.estadoApp.res.totales.n_partidas_error === 0), 'todo se cotiza sin errores');
+    ok(/Ventilador Ejemplo ilustrativo B · con bandas \(curva inventada\) para Colector de polvo: \d+ m³\/h a \d+ Pa/.test(await p.locator('#propuesta').evaluate((e) => e.textContent)), 'la propuesta lleva el ventilador con su punto de operación');
+    // quitar la elección no borra las partidas; «Quitarlas de la cotización» sí (con deshacer)
+    await p.click('#tab-trazado');
+    await p.locator('.ti-vent-quitar-eleccion').click();
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.trazado_iso.equipos.find((e) => e.id === 'EQ-01').ventilador_modelo) === null && (await vent()).length === 2
+      && /Ya no corresponden a un modelo elegido/.test(await p.locator('.ti-vent-en-cot').innerText()), 'sin elección, las partidas siguen y la salida lo dice');
+    await p.locator('.ti-vent-quitar-cot').click();
+    ok((await vent()).length === 0 && /^Se quitaron 2 partidas del ventilador de la cotización/.test(await p.locator('.toast').last().innerText()) && !(await p.locator('.ti-vent-en-cot').count()), '«Quitarlas de la cotización»');
     await p.close();
   }
 

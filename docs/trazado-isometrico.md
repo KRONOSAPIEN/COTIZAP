@@ -893,7 +893,7 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
     "equipo": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "tipo", "nombre", "posicion_mm", "rotacion_z_deg", "caja_mm", "perdida_Pa", "puertos"],
+      "required": ["id", "tipo", "nombre", "posicion_mm", "rotacion_z_deg", "caja_mm", "perdida_Pa", "ventilador_modelo", "puertos"],
       "properties": {
         "id": { "$ref": "#/$defs/id_equipo" },
         "tipo": { "type": "string", "enum": ["COLECTOR", "MAQUINA", "CAMPANA", "VENTILADOR"] },
@@ -908,6 +908,7 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
           "properties": { "largo": { "type": "number", "minimum": 0 }, "ancho": { "type": "number", "minimum": 0 }, "alto": { "type": "number", "minimum": 0 } }
         },
         "perdida_Pa": { "$ref": "#/$defs/numero_o_null", "description": "Caída de presión propia (el filtro del colector); null en una máquina." },
+        "ventilador_modelo": { "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,40}$" }], "description": "En un colector o un ventilador: la clave del modelo elegido en el catálogo de ventiladores de las tablas maestras (§5.13); null si no se ha elegido." },
         "puertos": { "type": "array", "items": { "$ref": "#/$defs/puerto" }, "description": "Un equipo sin puertos se avisa (EQUIPO_SIN_PUERTOS)." }
       }
     },
@@ -1317,6 +1318,7 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
         "alto": 4000
       },
       "perdida_Pa": 1250,
+      "ventilador_modelo": null,
       "puertos": [
         {
           "id": "PU-01",
@@ -1370,6 +1372,7 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
         "alto": 1200
       },
       "perdida_Pa": null,
+      "ventilador_modelo": null,
       "puertos": [
         {
           "id": "PU-02",
@@ -1427,6 +1430,7 @@ La fila brusca de la expansión es la de Borda-Carnot: (1 − R)·(1 − a²) �
         "alto": 1000
       },
       "perdida_Pa": null,
+      "ventilador_modelo": null,
       "puertos": [
         {
           "id": "PU-03",
@@ -2692,6 +2696,13 @@ El cálculo da el punto de diseño de cada ventilador: el caudal y la presión e
   - La potencia es la de la curva en el corte × (rpm / rpm del catálogo)³ × ρ/1.2 (el aire real). El motor comercial sale de ella entre la eficiencia de las bandas.
   - Se ordenan: los que sirven primero, luego por menos potencia. Cada uno trae sus rpm, su potencia, su motor, su eficiencia (potencia del aire entre la del freno) y sus notas: lejos de su rango, del lado inestable, cerca del final de su curva o ilustrativo.
 - **En la salida:** una tarjeta por modelo (tocarla lo dibuja) y una gráfica con su curva a las rpm que pide (llena), la de su catálogo (punteada), la del sistema y el punto de diseño. El botón «Catálogo de ventiladores» lleva a las tablas.
+- **El elegido se guarda con el trazo.** «Elegir» en una tarjeta pone su clave en `ventilador_modelo` del colector o del ventilador (null si no hay; con deshacer). Un trazo guardado antes de esto, o una clave mal escrita, se lee como null. Si después el modelo sale del catálogo o su curva ya no cruza la del sistema, la salida lo avisa y pide elegir otro.
+- **A la cotización, como partidas compradas** («Agregar a la cotización» en la salida, y también «Pasar a la cotización»):
+  - el ventilador, con su punto de operación en la descripción, que es la que va en la propuesta: «Ventilador ‹modelo› para ‹equipo›: Q m³/h a SP Pa (SP en aire estándar), rpm»;
+  - su motor de los HP que salieron, por si el ventilador no lo trae.
+  - **Los precios no se inventan.** El modelo puede ligarse a un artículo del catálogo de compras (el campo «Artículo de compras» de su tarjeta en las tablas) y el motor a uno con la clave `MOTOR_<hp>HP` (`MOTOR_7_5HP` para 7.5 HP): entonces llevan su precio. Si no, entran con precio en $0 y la descripción dice «capture su precio».
+  - Cada partida lleva `trazado_ventilador` (el equipo) y `trazado_pieza` (`VENTILADOR:<clave>` o `MOTOR:<hp>`), y en la cotización la marca «Trazado · EQ-xx». Al volver a pasarlas se ponen al día en su lugar, sin repetirse; la misma pieza (el mismo modelo, o un motor de los mismos HP) conserva su cantidad y el precio que se le capturó, y deja de pedirlo. Editarlas a mano no les quita la marca; copiarlas, sí.
+  - Avisan cuando el modelo no llega al punto, cuando su curva es ilustrativa y cuando no se sabe el motor. «Quitar la elección» deja las partidas; «Quitarlas de la cotización» las quita (con deshacer).
 - **En el ejemplo:**
   - el B (con bandas, ilustrativo) sirve a unas 3 000 rpm, con 2 kW al freno y motor de 3 HP;
   - el A (directo a 3 450 rpm, ilustrativo) se queda corto: a sus rpm daría unos 2 220 m³/h en vez de 2 283.
@@ -2707,9 +2718,12 @@ Lo verifican:
   - el catálogo de arranque ilustrativo, guardado entero en el parche y también vacío;
   - el ejemplo y su gráfica.
 - `tests/ayuda_maestros.test.js`: la ayuda del grupo y de su tabla, con las columnas de la curva.
+- `tests/trazado_iso.test.js`: elegir el modelo, lo que se rechaza, el esquema, la ida y vuelta con el contrato y el trazo viejo sin elección.
+- `tests/trazado_tablero.test.js`: las partidas del ventilador y su motor, sus marcas, sus precios (por capturar o del artículo ligado, también el del motor), la descripción con el punto, que se cotizan, y los avisos y errores.
 - La sección 44 de `tests/e2e/ui.e2e.js`:
   - en la salida, el aviso de ilustrativos, el orden, la gráfica y elegir otro modelo;
   - en las tablas, cambiar las rpm máximas, deshacer, agregar un modelo, el rechazo de un caudal que no crece, quitar los de ejemplo, el parche y la salida con el catálogo nuevo.
+- La sección 45: elegirlo, agregarlo con su motor, deshacer, capturar el precio del motor en la cotización, cambiar de modelo sin perder ese precio, «Pasar a la cotización» sin repetirlo, la propuesta y quitarlas.
 
 ---
 

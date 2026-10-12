@@ -168,7 +168,7 @@
     "equipo": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "tipo", "nombre", "posicion_mm", "rotacion_z_deg", "caja_mm", "perdida_Pa", "puertos"],
+      "required": ["id", "tipo", "nombre", "posicion_mm", "rotacion_z_deg", "caja_mm", "perdida_Pa", "ventilador_modelo", "puertos"],
       "properties": {
         "id": { "$ref": "#/$defs/id_equipo" },
         "tipo": { "type": "string", "enum": ["COLECTOR", "MAQUINA", "CAMPANA", "VENTILADOR"] },
@@ -183,6 +183,7 @@
           "properties": { "largo": { "type": "number", "minimum": 0 }, "ancho": { "type": "number", "minimum": 0 }, "alto": { "type": "number", "minimum": 0 } }
         },
         "perdida_Pa": { "$ref": "#/$defs/numero_o_null", "description": "Caída de presión propia (el filtro del colector); null en una máquina." },
+        "ventilador_modelo": { "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,40}$" }], "description": "En un colector o un ventilador: la clave del modelo elegido en el catálogo de ventiladores de las tablas maestras (§5.13); null si no se ha elegido." },
         "puertos": { "type": "array", "items": { "$ref": "#/$defs/puerto" }, "description": "Un equipo sin puertos se avisa (EQUIPO_SIN_PUERTOS)." }
       }
     },

@@ -68,7 +68,7 @@ test('Fuera de sus rpm, del lado inestable o sin cruzar la parábola: se dice po
   const directo = modelo({ id: 'DIR', nombre: 'Directo', rpm_min: 1800, rpm_max: 1800 });
   const d = V.elegir(p, [directo]).candidatos[0];
   assert.ok(!d.dentro && !d.viable);
-  assert.match(d.notas[0], /^Pide \d+ rpm y da de 1800 a 1800: con 1800 rpm daría \d+ m³\/h\.$/);
+  assert.match(d.notas[0], /^Pide \d+ rpm y gira fijo a 1800: con 1800 rpm daría \d+ m³\/h\.$/);
   // una curva con joroba: el punto cae donde todavía sube
   const joroba = modelo({ id: 'JOR', nombre: 'Joroba', curva: [[0, 800, 1], [1000, 1700, 1.5], [2000, 2000, 2], [2500, 1000, 2.1]] });
   const j = V.elegir({ caudal_m3_h: 800, presion_estatica_estandar_Pa: 2500 }, [joroba]);
@@ -116,11 +116,12 @@ test('El catálogo de arranque es ILUSTRATIVO; se guarda como parche entero (tam
   assert.ok(lista.length === 2 && lista.every((m) => m.ilustrativo && /ilustrativo/i.test(m.nombre) && /inventada/.test(m.nombre)), 'marcados como ilustrativos');
   assert.deepEqual(V.revisarCatalogo(lista), { ok: true, errores: [] });
   // el taller captura uno suyo y borra los de ejemplo: el parche lleva la lista entera
-  const suyo = modelo({ id: 'TALLER_1', nombre: 'Del proveedor' });
+  const suyo = modelo({ id: 'TALLER_1', nombre: 'Del proveedor', articulo: 'VENT_TALLER_1' });
   const Mt = U.clonar(M);
   Mt.ventiladores.modelos = [suyo];
   const parche = U.diferencia(MA.crearMaestros(), Mt);
-  assert.deepEqual(MA.crearMaestros(parche).ventiladores.modelos, [suyo]);
+  assert.deepEqual(MA.crearMaestros(parche).ventiladores.modelos, [suyo], 'con su artículo de compras');
+  assert.match(V.revisarModelo({ ...suyo, articulo: { x: 1 } })[0], /artículo de compras es una clave/);
   // vacío también se conserva
   assert.deepEqual(MA.crearMaestros({ ventiladores: { modelos: [] } }).ventiladores.modelos, []);
   // un modelo sin su forma (sin curva) descarta la lista y quedan los de arranque, con aviso

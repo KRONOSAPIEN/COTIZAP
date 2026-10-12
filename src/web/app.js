@@ -190,6 +190,9 @@
       if (q.descripcion !== undefined && typeof q.descripcion !== 'string') q.descripcion = typeof q.descripcion === 'number' ? String(q.descripcion) : '';
       // la pieza del croquis de la que salió la partida (sólo mientras la cotización tenga su lectura)
       if (!cot.unifilar || typeof q.unifilar_id !== 'string' || !/^[A-Za-z0-9_-]{1,60}$/.test(q.unifilar_id)) { delete q.unifilar_id; delete q.unifilar_editada; } else if (q.unifilar_editada !== true) delete q.unifilar_editada;
+      // el equipo del trazo cuyo ventilador elegido es esta partida (§5.13): se reemplaza al volver a pasarlo
+      if (typeof q.trazado_ventilador !== 'string' || !/^EQ-\d{2,3}$/.test(q.trazado_ventilador)) { delete q.trazado_ventilador; delete q.trazado_pieza; }
+      if (typeof q.trazado_pieza !== 'string' || !/^(VENTILADOR:[A-Za-z0-9_-]{1,40}|MOTOR:[0-9.]{1,6})$/.test(q.trazado_pieza)) delete q.trazado_pieza;
       while (typeof q.id !== 'string' || !q.id || vistos.has(q.id)) q.id = idNuevo();
       vistos.add(q.id);
       return q;
@@ -542,6 +545,7 @@
     if (f && !f.ok) chips.push(h('span', { class: 'chip chip-err', title: f.errores.join('\n') }, W.icono('error'), 'Revisar datos'));
     if (adv) chips.push(h('span', { class: 'chip chip-adv', title: f.advertencias.join('\n') }, W.icono('aviso'), `${adv} ${adv === 1 ? 'aviso' : 'avisos'}`));
     if (p.unifilar_id) chips.push(h('span', { class: 'chip chip-auto chip-unifilar', title: p.unifilar_editada ? 'Pieza del croquis unifilar, editada a mano' : 'Pieza del croquis unifilar' }, p.unifilar_id, p.unifilar_editada ? ' · editada' : ''));
+    if (p.trazado_ventilador) chips.push(h('span', { class: 'chip chip-auto chip-trazado', title: 'El ventilador elegido en el trazado isométrico (o su motor): se pone al día al volver a pasarlo' }, `Trazado · ${p.trazado_ventilador}`));
     const activar = () => seleccionar(p.id);
     const li = h('li', { class: `partida${sel ? ' sel' : ''}${f && !f.ok ? ' err' : ''}`, dataset: { id: p.id } },
       h('div', {
@@ -605,6 +609,8 @@
     copia.descripcion = `${tituloPartida(copia)} (copia)`;
     delete copia.unifilar_id; // la copia ya no es la pieza del croquis
     delete copia.unifilar_editada;
+    delete copia.trazado_ventilador; // ni el ventilador del trazo
+    delete copia.trazado_pieza;
     estado.cot.partidas.splice(i + 1, 0, copia);
     estado.sel = copia.id;
     persistir();
@@ -1628,6 +1634,12 @@
         const original = estado.cot.partidas[i];
         // una pieza del croquis editada a mano sigue siendo esa pieza: al actualizar el unifilar se avisa antes de reemplazarla
         if (original && original.unifilar_id) Object.assign(p, { unifilar_id: original.unifilar_id, unifilar_editada: true });
+        // y el ventilador del trazo sigue siendo ese: al volver a pasarlo se pone al día (con el precio que se le capturó)
+        if (original && original.trazado_ventilador) {
+          Object.assign(p, { trazado_ventilador: original.trazado_ventilador, ...(original.trazado_pieza ? { trazado_pieza: original.trazado_pieza } : {}) });
+          // con su precio ya capturado, la descripción (que va en la propuesta) deja de pedirlo
+          if (p.precio_compra_unitario > 0 && typeof p.descripcion === 'string') p.descripcion = p.descripcion.replace(' (capture su precio)', '').replace('; capture su precio)', ')');
+        }
         estado.cot.partidas[i] = p;
         estado.sel = p.id;
       } else {

@@ -43,6 +43,8 @@
     const nombre = typeof m.nombre === 'string' && m.nombre.trim() ? m.nombre.trim() : String(m.id);
     if (typeof m.id !== 'string' || !/^[A-Za-z0-9_-]{1,40}$/.test(m.id)) e.push(`${nombre}: la clave va con letras, números, guion o guion bajo (hasta 40).`);
     if (typeof m.nombre !== 'string' || !m.nombre.trim() || m.nombre.length > 120) e.push(`${nombre}: le falta el nombre (hasta 120 letras).`);
+    // opcional: el artículo del catálogo de compras con su precio ('' o sin él: el precio se captura en la partida)
+    if (m.articulo !== undefined && !(typeof m.articulo === 'string' && /^[A-Za-z0-9_-]{0,60}$/.test(m.articulo))) e.push(`${nombre}: el artículo de compras es una clave del catálogo de compras (o vacío).`);
     if (!(finito(m.rpm) && m.rpm > 0 && m.rpm <= 20000)) e.push(`${nombre}: las rpm de su curva van de más de 0 a 20 000.`);
     if (!(finito(m.rpm_min) && finito(m.rpm_max) && m.rpm_min > 0 && m.rpm_min <= m.rpm_max && m.rpm_max <= 20000)) e.push(`${nombre}: las rpm mínima y máxima van de más de 0 a 20 000, la mínima no mayor que la máxima.`);
     else if (finito(m.rpm) && (m.rpm < m.rpm_min || m.rpm > m.rpm_max)) e.push(`${nombre}: las rpm de su curva (${m.rpm}) quedan fuera de su mínimo y su máximo.`);
@@ -171,7 +173,7 @@
       const rpmPosible = Math.min(m.rpm_max, Math.max(m.rpm_min, rpm));
       const rp = rpmPosible / m.rpm;
       const notas = [];
-      if (!dentro) notas.push(`Pide ${Math.round(rpm)} rpm y da de ${Math.round(m.rpm_min)} a ${Math.round(m.rpm_max)}: con ${Math.round(rpmPosible)} rpm daría ${Math.round(c.Q * rp)} m³/h.`);
+      if (!dentro) notas.push(`Pide ${Math.round(rpm)} rpm y ${m.rpm_min === m.rpm_max ? `gira fijo a ${Math.round(m.rpm_max)}` : `da de ${Math.round(m.rpm_min)} a ${Math.round(m.rpm_max)}`}: con ${Math.round(rpmPosible)} rpm daría ${Math.round(c.Q * rp)} m³/h.`);
       if (!estable) notas.push('El punto cae donde la curva todavía sube (a la izquierda del pico): puede oscilar.');
       else if (enCurva > 0.9) notas.push('El punto cae cerca del final de su curva: poca reserva de presión.');
       if (freno === null) notas.push('Su curva no trae la potencia en ese tramo.');

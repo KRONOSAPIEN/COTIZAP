@@ -302,8 +302,9 @@
         const primera = E().cot.partidas.find((p) => p.unifilar_id);
         if (primera) E().sel = primera.id;
         const pend = UF().pendientes(bom).length;
-        nota = `Se agregaron ${n} partidas a la cotización.${pend ? ` Responda ${pend === 1 ? 'la pregunta' : `las ${pend} preguntas`} para afinarlas: al contestar, las partidas se actualizan solas.` : ''}`;
-        W.toast(`${n} ${n === 1 ? 'partida agregada' : 'partidas agregadas'} desde ${deTrazado(lect) ? 'el trazado' : 'el dibujo'}`);
+        const v = conVentilador();
+        nota = `Se agregaron ${n} partidas a la cotización${v.nota}.${v.error}${pend ? ` Responda ${pend === 1 ? 'la pregunta' : `las ${pend} preguntas`} para afinarlas: al contestar, las partidas se actualizan solas.` : ''}`;
+        W.toast(`${n} ${n === 1 ? 'partida agregada' : 'partidas agregadas'} desde ${deTrazado(lect) ? 'el trazado' : 'el dibujo'}${v.nota}`);
       } else if (agregarYa) nota = 'Responda lo que bloquea para poder agregar las partidas.';
       W.recalcular();
     }
@@ -734,7 +735,21 @@
    * anterior y el trazo no dice (el ángulo de un injerto, un tramo corto sin decidir) se conserva en los elementos que siguen;
    * lo que dice el trazo manda. avisos: lo que hay que saber del paso (se muestra arriba del despiece).
    */
-  function desdeTrazado(lect, respuestas, avisos) {
+  // lo que el trazo agrega además del despiece cuando se agrega a la cotización (el ventilador elegido, §5.13)
+  let alAgregarTrazado = null;
+  /** Del trazado: al agregar sus partidas entra también el ventilador elegido (§5.13); el texto que lo dice en la nota y el aviso. */
+  function conVentilador() {
+    const f = alAgregarTrazado;
+    alAgregarTrazado = null;
+    const r = f && deTrazado(E().cot.unifilar.lectura) ? f() : null;
+    if (!r) return { nota: '', error: '' };
+    return {
+      nota: r.n ? ` y ${r.n} ${r.equipos === 1 ? 'del ventilador elegido' : 'de los ventiladores elegidos'}` : '',
+      error: r.errores.length ? ` ${r.errores[0]}` : '',
+    };
+  }
+  function desdeTrazado(lect, respuestas, avisos, opciones) {
+    alAgregarTrazado = opciones && typeof opciones.alAgregar === 'function' ? opciones.alAgregar : null;
     const g = guardada();
     const previas = g && deTrazado(g.lectura) ? g.respuestas : {};
     const ids = new Set([...lect.red.nodos.map((n) => n.id), ...lect.red.aristas.map((a) => a.id)]);
@@ -788,8 +803,9 @@
     if (primera) E().sel = primera.id;
     W.recalcular();
     cerrar();
+    const v = conVentilador();
     const pend = UF().pendientes(bom).length;
-    W.toast(`${habia ? `Se reemplazaron las partidas del unifilar: ${n}` : `${n} ${n === 1 ? 'partida agregada' : 'partidas agregadas'}`}${pend ? ` · ${pend} ${pend === 1 ? 'pregunta' : 'preguntas'} por responder` : ''}`);
+    W.toast(`${habia ? `Se reemplazaron las partidas del unifilar: ${n}` : `${n} ${n === 1 ? 'partida agregada' : 'partidas agregadas'}`}${v.nota}${pend ? ` · ${pend} ${pend === 1 ? 'pregunta' : 'preguntas'} por responder` : ''}${v.error ? ` · ${v.error}` : ''}`);
   }
 
   /** Quita la lectura y sus partidas de la cotización (con «Deshacer»). */

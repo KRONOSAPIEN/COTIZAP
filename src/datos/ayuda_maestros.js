@@ -341,9 +341,9 @@
     'No mueve el precio: cambia los modelos que la salida del trazado propone para cada ventilador.',
     { origen: 'ilustrativo', origenTxt: 'Los dos modelos de arranque son curvas inventadas: capture las de su proveedor.', afecta: ['calc'] });
   E('ventiladores.modelos', 'Modelos y sus curvas',
-    'Cada modelo con su nombre, su clave, las rpm de su curva, las que puede dar (con sus poleas) y la curva: caudal, presión estática y potencia al freno.',
+    'Cada modelo con su nombre, su clave, las rpm de su curva, las que puede dar (con sus poleas), la curva (caudal, presión estática y potencia al freno) y, si se quiere, su artículo de compras con el precio.',
     'La curva como la da el fabricante a sus rpm, en aire estándar (1.2 kg/m³), de 3 a 30 puntos con el caudal creciente. Potencia 0 = sin dato. En acople directo, rpm mínima = máxima.',
-    'La salida mueve la curva a otras rpm (caudal ∝ rpm, presión ∝ rpm², potencia ∝ rpm³) y propone los que llegan al punto dentro de sus rpm, por menos potencia.',
+    'La salida mueve la curva a otras rpm (caudal ∝ rpm, presión ∝ rpm², potencia ∝ rpm³) y propone los que llegan al punto. El elegido pasa a la cotización con su motor, al precio de su artículo o por capturar.',
     { afecta: ['calc'], ej: 'Si la curva a 2 800 rpm corta la del sistema en 2 138 m³/h y el diseño pide 2 283, hace falta 2 800 × 2 283 / 2 138 = 2 990 rpm.',
       cols: {
         'Caudal (m³/h)': 'El caudal de ese punto de la curva, creciente de un punto al siguiente.',

@@ -390,6 +390,13 @@
       return h('label', { class: 'm-vent-campo' }, h('span', null, et), el);
     };
     const poner = (k, et) => (v) => cambiarCatalogo((l) => { l[i][k] = v; }, `${nombre}: ${et}`);
+    // el artículo del catálogo de compras con su precio (opcional): sin él, la partida del ventilador queda por capturar
+    const arts = W.estadoApp.M.compras.articulos;
+    const art = h('select', { class: 'm-vent-ctl', 'aria-label': `Artículo de compras · ${nombre}` },
+      h('option', { value: '', selected: !m.articulo }, 'Ninguno: el precio se captura en la partida'),
+      m.articulo && !Object.prototype.hasOwnProperty.call(arts, m.articulo) ? h('option', { value: m.articulo, selected: true }, `${m.articulo} (no está en el catálogo)`) : null,
+      Object.keys(arts).map((k) => h('option', { value: k, selected: m.articulo === k }, `${arts[k].descripcion || k} · ${k}`)));
+    art.addEventListener('change', () => !pintandoVent && cambiarCatalogo((l) => { l[i].articulo = art.value; }, `${nombre}: artículo de compras`));
     const ilus = h('input', { type: 'checkbox', checked: !!m.ilustrativo, 'aria-label': `Ilustrativo · ${nombre}` });
     ilus.addEventListener('change', () => !pintandoVent && cambiarCatalogo((l) => { l[i].ilustrativo = ilus.checked; }, `${nombre}: ${ilus.checked ? 'marcado' : 'ya no'} ilustrativo`));
     const celda = (j, c, et) => {
@@ -414,6 +421,7 @@
         campo('rpm mínima', m.rpm_min, 'num', poner('rpm_min', 'rpm mínima')),
         campo('rpm máxima', m.rpm_max, 'num', poner('rpm_max', 'rpm máxima')),
         campo('Notas', m.notas || '', 'txt', poner('notas', 'notas')),
+        h('label', { class: 'm-vent-campo m-vent-art' }, h('span', null, 'Artículo de compras (su precio)'), art),
         h('label', { class: 'm-vent-campo m-vent-check' }, ilus, h('span', null, 'Ilustrativo (curva de ejemplo)'))),
       h('div', { class: 'tabla-env' }, h('table', { class: 'tabla m-vent-curva' },
         h('thead', null, h('tr', null, A.COLUMNAS_VENTILADORES.map((c) => h('th', { scope: 'col' }, c)), h('th', null, ''))),

@@ -18,6 +18,7 @@ const M = crearMaestros();
 const V3 = (x, y, z) => ({ x, y, z });
 const cerca = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg || ''} ${a} ≠ ${b}`);
 const PD = require('../src/motor/perdidas');
+const U = require('../src/motor/util');
 const completo = JSON.stringify(EJ);
 /** El sistema exportado por el modelo, con el cálculo de pérdidas (etapa 4). */
 const calculado = (s) => JSON.stringify(PD.calcular(s).sistema);
@@ -849,4 +850,39 @@ test('Descarga del ventilador en el tablero (§5.12): se traza desde su brida, s
   // y pasa a partidas, definitivo y cuadrado con el trazo
   const d = TB.despiece(s);
   assert.deepEqual([d.bom.resumen.estado, d.diferencias], ['DEFINITIVA', []]);
+});
+
+test('El ventilador elegido a la cotización (§5.13): el ventilador con su punto y su motor, comprados; su precio, del catálogo de compras o por capturar', () => {
+  const C = require('../src/motor/cotizador');
+  const s = nuevoTablero();
+  TB.reemplazar(s, TB.ejemplo(M), 'ejemplo');
+  assert.match(TB.partidasVentilador(s, 'EQ-01').error, /Elija primero el ventilador de Colector de polvo/);
+  assert.match(TB.partidasVentilador(s, 'EQ-02').error, /no tiene ventilador/);
+  assert.ok(TB.hacer(s, (t) => TZ.elegirVentilador(t, M, 'EQ-01', 'EJEMPLO_BANDAS'), ''));
+  const r = TB.partidasVentilador(s, 'EQ-01');
+  assert.deepEqual(r.partidas.map((p) => [p.familia, p.trazado_ventilador, p.trazado_pieza, p.precio_compra_unitario, p.cantidad]), [['COMPRADO', 'EQ-01', 'VENTILADOR:EJEMPLO_BANDAS', 0, 1], ['COMPRADO', 'EQ-01', 'MOTOR:3', 0, 1]]);
+  assert.match(r.partidas[0].descripcion, /^Ventilador Ejemplo ilustrativo B · con bandas \(curva inventada\) para Colector de polvo: 2283 m³\/h a 1864 Pa \(2439 Pa en aire estándar\), 3001 rpm \(capture su precio\)$/);
+  assert.match(r.partidas[1].descripcion, /^Motor de 3 HP para el ventilador de Colector de polvo \(si el ventilador no lo trae; capture su precio\)$/);
+  assert.deepEqual(r.avisos, ['Ejemplo ilustrativo B · con bandas (curva inventada) es una curva ilustrativa, no de un fabricante.']);
+  const q = C.cotizar({ partidas: r.partidas.map((p, i) => ({ id: `p${i}`, ...p })) }, M);
+  assert.ok(q.partidas.every((f) => f.ok), 'se cotizan (en $0 hasta capturar su precio)');
+  // con el artículo del catálogo de compras ligado al modelo, y un MOTOR_3HP en el catálogo: sus precios
+  const M2 = U.clonar(M);
+  M2.compras.articulos.VENT_PROV_1 = { descripcion: 'Ventilador del proveedor', unidad: 'pza', precio: 1000, iva_incluido: false, categoria: 'PROVEEDOR' };
+  M2.compras.articulos.MOTOR_3HP = { descripcion: 'Motor de 3 HP', unidad: 'pza', precio: 500, iva_incluido: false, categoria: 'PROVEEDOR' };
+  M2.ventiladores.modelos[1].articulo = 'VENT_PROV_1';
+  TB.usarMaestros(s, M2);
+  const r2 = TB.partidasVentilador(s, 'EQ-01');
+  assert.deepEqual(r2.partidas.map((p) => [p.articulo_id, p.precio_compra_unitario]), [['VENT_PROV_1', undefined], ['MOTOR_3HP', undefined]]);
+  assert.ok(!/capture su precio/.test(r2.partidas.map((p) => p.descripcion).join(' ')));
+  // una clave que no es un artículo propio del catálogo (ni de su prototipo) no le da precio
+  M2.ventiladores.modelos[1].articulo = '__proto__';
+  TB.usarMaestros(s, M2);
+  assert.deepEqual(TB.partidasVentilador(s, 'EQ-01').partidas[0].precio_compra_unitario, 0);
+  TB.usarMaestros(s, M);
+  // uno que no llega: se puede, con su aviso; uno que ya no está en el catálogo: hay que elegir otro
+  assert.ok(TB.hacer(s, (t) => TZ.elegirVentilador(t, M, 'EQ-01', 'EJEMPLO_DIRECTO'), ''));
+  assert.match(TB.partidasVentilador(s, 'EQ-01').avisos[0], /no llega al punto de diseño: Pide \d+ rpm/);
+  assert.ok(TB.hacer(s, (t) => TZ.elegirVentilador(t, M, 'EQ-01', 'YA_NO_ESTA'), ''));
+  assert.match(TB.partidasVentilador(s, 'EQ-01').error, /ya no está en el catálogo/);
 });

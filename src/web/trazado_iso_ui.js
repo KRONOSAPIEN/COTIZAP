@@ -1392,6 +1392,64 @@
       h('p', { class: 'ti-nota' }, 'Abajo, en «Problemas», la revisión completa: clic en uno lo selecciona y lo centra; «Corregir» aplica el arreglo (se puede deshacer).'));
   }
 
+  /** Las partidas de la cotización que vienen del ventilador elegido de un equipo del trazo. */
+  const partidasDeVentilador = (eq) => E().cot.partidas.filter((p) => p.trazado_ventilador === eq);
+  /**
+   * Pone en la cotización el ventilador elegido de cada equipo (y su motor), en el lugar de las que ya estaban de ese equipo
+   * (o al final), con deshacer. Devuelve { n, equipos, avisos, errores }; callado (desde «Pasar a la cotización») no avisa: lo dice el diálogo.
+   */
+  function ventiladoresACotizacion(equipos, silencioso) {
+    const s = ui.s;
+    const cot = E().cot;
+    const previa = { partidas: cot.partidas, sel: E().sel };
+    let n = 0;
+    let hechos = 0;
+    const avisos = [];
+    const errores = [];
+    equipos.forEach((eq) => {
+      const r = TB().partidasVentilador(s, eq);
+      if (r.error) { errores.push(r.error); return; }
+      const viejas = partidasDeVentilador(eq);
+      // la misma pieza (mismo modelo, o motor de los mismos HP) conserva su id, su cantidad y el precio que se le capturó
+      const nuevas = r.partidas.map((p) => {
+        const v = viejas.find((x) => x.trazado_pieza === p.trazado_pieza);
+        const precio = v && p.precio_compra_unitario !== undefined && v.precio_compra_unitario > 0 ? { precio_compra_unitario: v.precio_compra_unitario, ...(v.iva_incluido !== undefined ? { iva_incluido: v.iva_incluido } : {}) } : {};
+        // con el precio ya capturado, la descripción ya no pide capturarlo
+        const desc = precio.precio_compra_unitario ? { descripcion: p.descripcion.replace(' (capture su precio)', '').replace('; capture su precio)', ')') } : {};
+        return { id: v ? v.id : W.idNuevo(), ...p, ...(v ? { cantidad: v.cantidad } : {}), ...precio, ...desc };
+      });
+      const i0 = cot.partidas.findIndex((p) => p.trazado_ventilador === eq);
+      const resto = cot.partidas.filter((p) => p.trazado_ventilador !== eq);
+      const pos = i0 < 0 ? resto.length : cot.partidas.slice(0, i0).filter((p) => p.trazado_ventilador !== eq).length;
+      cot.partidas = [...resto.slice(0, pos), ...nuevas, ...resto.slice(pos)];
+      cot.ejemplo = false;
+      n += nuevas.length;
+      hechos += 1;
+      avisos.push(...r.avisos);
+    });
+    if (!n) { if (!silencioso && errores.length) { TB().decir(s, errores[0], true); pintarEstado(); } return { n, equipos: hechos, avisos, errores }; }
+    W.recalcular();
+    if (!silencioso) W.toast(`${n} ${n === 1 ? 'partida' : 'partidas'} del ventilador en la cotización${avisos.length ? `: ${avisos[0]}` : ''}`, {
+      texto: 'Deshacer', fn: () => { cot.partidas = previa.partidas; E().sel = previa.sel; W.recalcular(); pintarInspector(); },
+    });
+    pintarInspector();
+    return { n, equipos: hechos, avisos, errores };
+  }
+
+  /** Quita de la cotización las partidas del ventilador de un equipo (con deshacer); la elección se queda en el trazo. */
+  function quitarVentiladorDeCotizacion(eq) {
+    const cot = E().cot;
+    const previa = { partidas: cot.partidas, sel: E().sel };
+    const n = partidasDeVentilador(eq).length;
+    if (!n) return;
+    cot.partidas = cot.partidas.filter((p) => p.trazado_ventilador !== eq);
+    W.recalcular();
+    W.toast(`Se ${n === 1 ? 'quitó 1 partida' : `quitaron ${n} partidas`} del ventilador de la cotización`, {
+      texto: 'Deshacer', fn: () => { cot.partidas = previa.partidas; E().sel = previa.sel; W.recalcular(); pintarInspector(); },
+    });
+    pintarInspector();
+  }
+
   /**
    * La gráfica para elegir el ventilador (§5.13), en aire estándar: la curva del modelo a las rpm que pide el punto (llena),
    * la de su catálogo (punteada), la parábola del sistema y el punto de diseño.
@@ -1426,7 +1484,12 @@
     if (e.error) return h('p', { class: 'ti-nota' }, e.error);
     const todos = [...e.candidatos, ...e.descartados];
     if (!todos.length) return h('div', { class: 'ti-vent-elegir' }, h('p', { class: 'ti-nota' }, 'El catálogo de ventiladores está vacío: capture las curvas de su proveedor en Tablas maestras › Ventiladores.'), irCatalogo);
-    const sel = e.candidatos.some((c) => c.id === ui.ventSel[v.equipo]) ? ui.ventSel[v.equipo] : (e.candidatos[0] || {}).id;
+    const equipo = ui.s.t.equipos.find((x) => x.id === v.equipo);
+    const elegido = equipo ? equipo.ventilador_modelo : null;
+    const vigente = elegido && e.candidatos.find((c) => c.id === elegido);
+    const sel = e.candidatos.some((c) => c.id === ui.ventSel[v.equipo]) ? ui.ventSel[v.equipo] : vigente ? elegido : (e.candidatos[0] || {}).id;
+    const elegir = (id) => { if (TB().hacer(ui.s, (t) => TZ().elegirVentilador(t, M(), v.equipo, id), id ? `Ventilador de ${v.nombre}: ${e.candidatos.find((c) => c.id === id).nombre}.` : `Se quitó el ventilador elegido de ${v.nombre}.`)) { ui.ventSel[v.equipo] = id || undefined; ui.ventAbierto.add(v.equipo); cambio(); } else pintarEstado(); };
+    const enCot = partidasDeVentilador(v.equipo).length;
     const g = sel ? TB().graficaVentilador(v, sel, M()) : null;
     const ilustrativos = todos.some((c) => c.ilustrativo);
     return h('details', { class: 'ti-vent-elegir', 'data-equipo': v.equipo, open: ui.ventAbierto.has(v.equipo), ontoggle: (ev) => { if (ev.target.open) ui.ventAbierto.add(v.equipo); else ui.ventAbierto.delete(v.equipo); } },
@@ -1435,12 +1498,21 @@
       // una tarjeta por modelo (el inspector es angosto): su nombre (tocarlo lo dibuja), sus rpm, su potencia, el motor y sus notas
       e.candidatos.length ? h('ul', { class: 'ti-vent-lista' }, e.candidatos.map((c) => h('li', { 'data-modelo': c.id, class: `${c.viable ? 'ti-vent-sirve' : 'ti-vent-no'}${c.id === sel ? ' ti-vent-sel' : ''}` },
         h('div', { class: 'ti-vent-cab' }, h('button', { type: 'button', class: 'enlace', 'aria-pressed': c.id === sel ? 'true' : 'false', onclick: () => { ui.ventSel[v.equipo] = c.id; pintarInspector(); } }, c.nombre),
-          h('span', { class: `ti-chip ${c.viable ? 'ti-chip-ok' : ''}` }, c.viable ? 'sirve' : 'no llega')),
+          h('span', { class: `ti-chip ${c.viable ? 'ti-chip-ok' : ''}` }, c.viable ? 'sirve' : 'no llega'),
+          c.id === elegido ? h('span', { class: 'ti-chip ti-chip-elegido' }, 'elegido') : h('button', { type: 'button', class: 'btn btn-sec btn-chico ti-vent-elegir-este', onclick: () => elegir(c.id) }, 'Elegir')),
         h('p', { class: 'ti-vent-datos' }, `${n0(c.rpm)} rpm · ${c.potencia_freno_kW === null ? 'sin potencia en su curva' : `${W.num(c.potencia_freno_kW, 2)} kW al freno`}${c.motor_hp === null ? '' : ` · motor de ${c.motor_hp} HP`}${c.eficiencia === null ? '' : ` · eficiencia ${Math.round(c.eficiencia * 100)} %`}`),
         c.notas.length ? h('p', { class: 'ti-sub' }, c.notas.join(' ')) : null))) : null,
       g ? h('figure', { class: 'ti-vent-grafica' }, graficaVentilador(g),
         h('figcaption', { class: 'ti-nota' }, `${e.candidatos.find((c) => c.id === sel).nombre}: su curva a ${n0(g.rpm)} rpm (llena) y la de su catálogo (punteada), la del sistema y el punto de diseño, ${n0(g.punto[0])} m³/h a ${n0(g.punto[1])} Pa en aire estándar.`)) : null,
       e.descartados.length ? h('ul', { class: 'ti-lista ti-vent-descartados' }, e.descartados.map((d) => h('li', { 'data-modelo': d.id }, `${d.nombre}: ${d.motivo}`))) : null,
+      // el elegido y la cotización
+      elegido && !vigente ? h('p', { class: 'ti-semaforo ti-sem-ambar', id: 'ti-vent-perdido' }, `El ventilador elegido (${elegido}) ya no está en el catálogo o su curva ya no cruza la del sistema: elija otro.`) : null,
+      elegido ? h('div', { class: 'ti-acciones ti-vent-cot' },
+        vigente ? h('button', { type: 'button', class: 'btn btn-primario btn-chico ti-vent-a-cot', onclick: () => ventiladoresACotizacion([v.equipo]) }, enCot ? 'Actualizar en la cotización' : 'Agregar a la cotización') : null,
+        h('button', { type: 'button', class: 'btn btn-sec btn-chico ti-vent-quitar-eleccion', onclick: () => elegir(null) }, 'Quitar la elección'))
+        : h('p', { class: 'ti-nota' }, 'Elija un modelo para guardarlo con el trazo y pasarlo a la cotización con su motor.'),
+      enCot ? h('p', { class: 'ti-nota ti-vent-en-cot' }, `En la cotización: ${enCot} ${enCot === 1 ? 'partida' : 'partidas'} de este ventilador.${vigente ? ' «Pasar a la cotización» también las pone al día.' : ' Ya no corresponden a un modelo elegido que sirva: quítelas o elija otro.'} `,
+        h('button', { type: 'button', class: 'btn-texto ti-vent-quitar-cot', onclick: () => quitarVentiladorDeCotizacion(v.equipo) }, 'Quitarlas de la cotización')) : null,
       h('p', { class: 'ti-nota' }, 'A otras rpm la curva se mueve con las leyes del ventilador (caudal ∝ rpm, presión ∝ rpm², potencia ∝ rpm³). Sirve el que llega al punto dentro de sus rpm y donde su curva baja; se ordenan por potencia. La potencia es con el aire real.'),
       irCatalogo);
   }
@@ -1493,6 +1565,8 @@
    * El trazo a partidas (§5.6): el despiece con las mismas reglas del taller que la foto y el dibujo unifilar, lo que hay que
    * saber, y el botón que lo lleva al diálogo del despiece y a la cotización.
    */
+  /** Los equipos del trazo con ventilador elegido. */
+  const elegidos = () => ui.s.t.equipos.filter((e) => e.ventilador_modelo).map((e) => e.id);
   function seccionPartidas() {
     const s = ui.s;
     const r = TB().despiece(s, yarda());
@@ -1513,7 +1587,8 @@
       h('p', { class: `ti-semaforo ti-sem-${estado[0]}`, id: 'ti-part-estado' }, estado[1]),
       r.avisos.length ? h('ul', { class: 'ti-lista ti-avisos', id: 'ti-part-avisos' }, r.avisos.map((a) => h('li', null, a))) : null,
       ya ? h('p', { class: 'ti-nota', id: 'ti-part-ya' }, `La cotización ya tiene ${ya} ${ya === 1 ? 'partida importada' : 'partidas importadas'}: al pasar el trazo se muestra el despiece nuevo para reemplazarlas.`) : null,
-      h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-primario', id: 'ti-pasar', onclick: () => W.unifilarUI.desdeTrazado(r.lectura, r.respuestas, r.avisos) }, 'Pasar a la cotización')),
+      h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-primario', id: 'ti-pasar', onclick: () => W.unifilarUI.desdeTrazado(r.lectura, r.respuestas, r.avisos, { alAgregar: () => ventiladoresACotizacion(elegidos(), true) }) }, 'Pasar a la cotización')),
+      elegidos().length ? h('p', { class: 'ti-nota', id: 'ti-part-vent' }, `Con ${elegidos().length === 1 ? 'el ventilador elegido y su motor' : `los ${elegidos().length} ventiladores elegidos y sus motores`}, como partidas compradas.`) : null,
       h('p', { class: 'ti-nota' }, `Con las reglas del taller (las de la foto y del dibujo unifilar): los tramos por yardas de ${r.lectura.metadatos.yarda_mm === 1220 ? '4 ft' : '3 ft'}, los codos, los injertos, las reducciones, las bridas, las ménsulas y las compras. En el despiece se contestan las preguntas que queden.`),
     ];
   }
