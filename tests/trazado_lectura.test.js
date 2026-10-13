@@ -295,6 +295,29 @@ test('Caminata al azar: el despiece cuadra con el trazo, cada junta es del Ø de
         const m = TZ.trazar(t, M, desde, { direccion: uno(c).direccion, largo_mm: uno([800, 1500]), diametro_in: uno([4, 5]) });
         return TZ.ponerTapa(m, M, m.ultimo.nodo);
       },
+      () => { // ajustar una pieza (§5.14): radio y gajos del codo, forma y largo de la reducción, largos del injerto, cuello de la tapa
+        const g = TZ.calcular(t, M);
+        const pz = uno(g.piezas.filter((q) => ['CODO', 'REDUCCION', 'ADAPTADOR', 'INJERTO', 'REDUCCION_INJERTO', 'TAPA'].includes(q.tipo)));
+        if (!pz) return t;
+        const mas = (x) => Math.round(x) + uno([0, 50, 120, 300]);
+        const c = {
+          CODO: () => (azar() < 0.5 ? { radio_D: uno([1, 1.5, 2, 2.5, 3]) } : { gajos: uno([2, 3, 4, 5, 6, 8]) }),
+          REDUCCION: () => (azar() < 0.5 && pz.horizontal ? { forma: uno(TZ.FORMAS_REDUCCION) } : { largo_reduccion_mm: mas(pz.auto.largo_mm) }),
+          INJERTO: () => (azar() < 0.5 ? { largo_cuerpo_mm: mas(pz.auto.largo_cuerpo_mm) } : { largo_ramal_mm: mas(pz.auto.largo_ramal_mm) }),
+          TAPA: () => ({ cuello_mm: uno([0, 30, 80, null]) }),
+        }[{ ADAPTADOR: 'REDUCCION', REDUCCION_INJERTO: 'INJERTO' }[pz.tipo] || pz.tipo]();
+        return TZ.ajustarPieza(t, M, pz.nodo, c);
+      },
+      () => { const g = TZ.calcular(t, M); const d = uno(g.piezas.filter((q) => q.tipo === 'INJERTO' || q.tipo === 'REDUCCION_INJERTO')); return d ? TZ.cambiarAngulo(t, M, d.nodo, uno([30, 45])) : t; },
+      () => { // mover una toma en su caja (§5.15): con manguera la manguera se acomoda; con ducto, el ducto la sigue
+        const e = uno(t.equipos.filter((x) => x.puertos.length));
+        const p = uno(e.puertos);
+        const u = TZ.ubicacionEnCara(e.caja_mm, p);
+        if (!u) return t;
+        const cara = azar() < 0.8 ? u.cara : uno(Object.keys(TZ.CARAS_PUERTO));
+        const { ancho, alto } = TZ.medidasCara(e.caja_mm, cara);
+        return TZ.moverPuerto(t, M, p.id, { cara, a_mm: 50 * Math.round((ancho * (0.2 + 0.6 * azar())) / 50), b_mm: 50 * Math.round((alto * (0.2 + 0.6 * azar())) / 50) });
+      },
     ];
     for (let i = 0; i < 35; i += 1) {
       const antes = t;
@@ -316,6 +339,13 @@ test('Caminata al azar: el despiece cuadra con el trazo, cada junta es del Ø de
         assert.ok(ext.get(pz).includes(j.diametro_in), `${msg}: ${j.id} (${j.tipo}) de ${j.diametro_in}″ en ${pz} (${ext.get(pz).join(', ')}″)`);
       }));
       cotiza(r.bom, msg);
+      // cada ajuste es de una pieza que está en su nodo (§5.14)
+      const gg = TZ.calcular(t, M);
+      t.nodos.filter((x) => x.ajustes).forEach((x) => Object.keys(x.ajustes).forEach((k) => {
+        const tipos = { CODO: ['CODO'], REDUCCION: ['REDUCCION', 'ADAPTADOR'], INJERTO: ['INJERTO', 'REDUCCION_INJERTO'], TAPA: ['TAPA'] }[TZ.PIEZA_AJUSTE[k]];
+        assert.ok((gg.piezasDe.get(x.id) || []).some((q) => tipos.includes(q.tipo)), `${msg}: ${x.id} tiene ${k} sin su pieza`);
+        vistos.add('AJUSTE');
+      }));
       r.bom.accesorios.forEach((a) => vistos.add(a.tipo));
       if (r.bom.elementos_union.some((j) => j.tipo === 'UNION_ENGARGOLADA')) vistos.add('PEGADO');
       if (r.bom.partidas_compradas.some((p) => p.articulo_id && p.articulo_id.startsWith('MANGUERA') && p.articulo_id !== 'MANGUERA_5')) vistos.add('OTRA_MANGUERA');
@@ -323,7 +353,7 @@ test('Caminata al azar: el despiece cuadra con el trazo, cada junta es del Ø de
     }
   });
   assert.ok(total >= 140, `se revisaron ${total} trazos`);
-  ['CODO', 'REDUCCION', 'INJERTO', 'REDUCCION_INJERTO', 'COMPUERTA', 'TAPA'].forEach((x) => assert.ok(vistos.has(x), `salió ${x} (${[...vistos].join(', ')})`));
+  ['CODO', 'REDUCCION', 'INJERTO', 'REDUCCION_INJERTO', 'COMPUERTA', 'TAPA', 'AJUSTE'].forEach((x) => assert.ok(vistos.has(x), `salió ${x} (${[...vistos].join(', ')})`));
 });
 
 test('La descarga del ventilador (§5.12) pasa a partidas: su ducto, su codo y el adaptador de la brida, con la punta abierta', () => {

@@ -43,7 +43,10 @@
   W.MM_IN = 25.4;
   /** Interpreta "12", "12.5", "12,5", "12 1/2", "3/8" → número; NaN si no es válido. */
   W.leerNumero = function leerNumero(txt) {
-    const s = String(txt === undefined || txt === null ? '' : txt).trim().replace(',', '.');
+    const crudo = String(txt === undefined || txt === null ? '' : txt).trim();
+    // como se escriben en México: la coma separa miles («1,250» = 1250, «12,500.5»); sola y sin tres cifras después es
+    // el punto decimal («3,5» = 3.5)
+    const s = /^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(crudo) ? crudo.replace(/,/g, '') : crudo.replace(',', '.');
     if (s === '') return NaN;
     const m = s.match(/^(-?\d+(?:\.\d+)?)?\s*(?:(\d+)\s*\/\s*(\d+))?$/);
     if (!m || (m[1] === undefined && m[2] === undefined)) return NaN;

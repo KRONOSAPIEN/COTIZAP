@@ -792,6 +792,10 @@ const ok = (cond, msg) => {
     const msg = async () => (await f.locator('#dlg-prev .errores').innerText().catch(() => '')).replace(/\s+/g, ' ');
     const escribir = async (sel, v) => { await f.fill(sel, v); await f.waitForTimeout(40); return msg(); };
     ok(/«3O00» no es una medida válida/.test(await escribir('#f_L_mm', '3O00')), 'una longitud con la letra O no se toma por un campo vacío');
+    const prev = async () => (await f.locator('#dlg-prev').innerText()).replace(/\s+/g, ' ');
+    ok(await escribir('#f_L_mm', '3,000') === '' && /\b3,000\b/.test(await prev()) && /Precio unitario \$/.test(await prev()), `«3,000» son tres mil mm: la coma separa miles (${(await prev()).slice(0, 90)})`);
+    await escribir('#f_L_mm', '3,5');
+    ok(!/\b3,000\b/.test(await prev()), '«3,5» no: una coma sin tres cifras después es el punto decimal');
     await f.fill('#f_L_mm', '3000');
     await f.click('.fam:has(span:text-is("Reducción"))'); // su longitud axial es opcional (vacío = automática)
     ok(/Longitud axial: «xx» no es una medida válida/.test(await escribir('#f_L_mm', 'xx')), 'tampoco en un campo opcional');
@@ -3539,6 +3543,7 @@ const ok = (cond, msg) => {
     const f2 = ins.locator('.ti-ficha[data-pieza="CO-001"]');
     ok(await f2.locator('.ti-chip-ajustada').count() === 1 && /Los de la regla \(5\)/.test(await f2.locator('[data-campo="gajos"]').innerText()), 'la ficha dice que está ajustada y cuáles son los de la regla');
     ok(/4 gajos/.test(await f2.locator('.ti-ficha-dibujo').innerText()), 'el dibujo se rehace');
+    ok(await p.locator('#ti-lienzo rect.ti-pieza-ajustada[data-pieza-nodo="N-003"]').count() === 1 && await p.locator('#ti-lienzo rect.ti-pieza-ajustada').count() === 1, 'en el lienzo, la etiqueta del codo ajustado va punteada (y sólo la suya)');
     const neta = await R(() => window.COTIZAP.trazadoTablero.infoTramo(window.COTIZAP.web.trazadoUI.estado(), 'TR-002').neta_mm);
     ok(Math.abs(neta - (6500 - 381 - 105.71)) < 0.1, `el codo más abierto ocupa más del tramo (${neta} mm netos)`);
     // deshacer y «Como en el proyecto»

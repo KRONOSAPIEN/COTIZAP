@@ -2133,7 +2133,7 @@
     const P = g.pos.get(nodoId);
     const nodos = ladoDe(gira);
     m.nodos.forEach((x) => { if (nodos.has(x.id)) x.posicion_mm = r3v(suma(P, girarEje(resta(x.posicion_mm, P), k, delta))); });
-    // las direcciones de los puertos de los PT que giran
+    girarPTs(m, nodos, k, delta);
     const gg = calcular(m, M);
     m.tramos.filter(rigido).forEach((tr) => {
       if ((nodos.has(tr.a) || nodos.has(tr.b)) && !gg.seg.get(tr.id).dir) falla('GIRO_NO_FABRICABLE', `Girar ese lado a ${grados}° saca el tramo ${tr.id} de la rejilla.`, [nodoId, tr.id]);
@@ -2142,6 +2142,19 @@
     return terminar(m, M);
   }
 
+  /**
+   * Al girar un lado (un codo, un ramal), el punto de transición de una manguera que va en él gira con su ducto: su
+   * dirección gira igual, para que el ducto siga saliendo alineado con ella; la manguera se acomoda desde su toma.
+   */
+  function girarPTs(m, nodos, k, delta) {
+    m.equipos.forEach((e) => e.puertos.forEach((p) => {
+      const ac = p.acople;
+      if (!ac || ac.tipo !== 'MANGUERA' || !nodos.has(ac.nodo_transicion)) return;
+      const d = direccionDeVector(girarEje(vectorDe(ac.direccion_pt), k, delta), m.politicas);
+      if (!d) falla('GIRO_NO_FABRICABLE', `Ese giro deja el punto de transición ${ac.nodo_transicion} de la manguera de ${p.id} fuera de la rejilla de direcciones.`, [ac.nodo_transicion, p.id]);
+      ac.direccion_pt = d;
+    }));
+  }
   /** El ángulo de una derivación (§5.14): gira el lado del ramal sobre el nodo, en el plano del tronco y el ramal. */
   function girarRamal(m, M, g, nodoId, der, grados) {
     const pol = m.politicas;
@@ -2161,6 +2174,7 @@
     const P = g.pos.get(nodoId);
     const nodos = lado(g, otro, tk.id);
     m.nodos.forEach((x) => { if (nodos.has(x.id)) x.posicion_mm = r3v(suma(P, girarEje(resta(x.posicion_mm, P), k, delta))); });
+    girarPTs(m, nodos, k, delta);
     const gg = calcular(m, M);
     m.tramos.filter(rigido).forEach((tr) => {
       if ((nodos.has(tr.a) || nodos.has(tr.b)) && !gg.seg.get(tr.id).dir) falla('GIRO_NO_FABRICABLE', `Girar el ramal a ${grados}° saca el tramo ${tr.id} de la rejilla.`, [nodoId, tr.id]);

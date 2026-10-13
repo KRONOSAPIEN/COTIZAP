@@ -379,7 +379,9 @@
       const r = lugar.elegir([[q.x + 9, q.y - 27], [q.x - 9 - w, q.y - 27], [q.x + 9, q.y + 9], [q.x - 9 - w, q.y + 9], [q.x - w / 2, q.y - 34], [q.x - w / 2, q.y + 14]].map(([x, y]) => ({ x, y, w, h: 18 })), true);
       const elegida = s.sel && s.sel.tipo === 'NODO' && s.sel.id === nd.id;
       // la etiqueta se toca: abre la ficha de la pieza (§5.14)
-      etiquetas.append(svg('rect', { x: f1(r.x), y: f1(r.y), width: f1(w), height: 18, rx: 9, class: `ti-pieza${err.has(nd.id) ? ' ti-pieza-err' : ''}${elegida ? ' ti-pieza-sel' : ''}${ui.hover === nd.id ? ' ti-pieza-hover' : ''}`, 'data-pieza-nodo': nd.id }, svg('title', null, `${pz.map((x) => x.nombre).join('; ')}: tóquela para cambiarla`)));
+      // una pieza ajustada a mano (§5.14) lleva el borde punteado
+      etiquetas.append(svg('rect', { x: f1(r.x), y: f1(r.y), width: f1(w), height: 18, rx: 9, class: `ti-pieza${err.has(nd.id) ? ' ti-pieza-err' : ''}${nd.ajustes ? ' ti-pieza-ajustada' : ''}${elegida ? ' ti-pieza-sel' : ''}${ui.hover === nd.id ? ' ti-pieza-hover' : ''}`, 'data-pieza-nodo': nd.id },
+        svg('title', null, `${pz.map((x) => x.nombre).join('; ')}${nd.ajustes ? ' (ajustada a mano)' : ''}: tóquela para cambiarla`)));
       etiquetas.append(svg('text', { x: f1(r.x + w / 2), y: f1(r.y + 13), 'text-anchor': 'middle', class: 'ti-pieza-txt' }, t));
     });
     items.filter((x) => x.etiqueta).forEach((x) => {
@@ -1165,9 +1167,10 @@
           `${p.id} · ${p.nombre} · ${pulg(p.diametro_in)}${p.caudal_m3_h ? ` · ${n0(p.caudal_m3_h)} m³/h` : ''}${u ? ` · ${TB().NOMBRE_CARA[u.cara].replace('Lado', 'lado').replace('Arriba', 'arriba')} a ${n0(u.a_mm)} × ${n0(u.b_mm)} mm` : ''}${p.acople ? ` · ${p.acople.tipo === 'BRIDA' ? 'brida' : 'manguera'}` : ' · sin acople'}`));
       })) : h('p', { class: 'ti-nota' }, 'Sin tomas: use «Toma» (P) y toque una cara de la caja, o agréguela aquí.'),
       h('h4', null, deAire ? 'Agregar una boca' : 'Agregar una toma'),
-      h('div', { class: 'ti-rejilla-campos ti-nueva-toma' },
-        campo('Cara', cara), h('div', { class: 'campo ti-campo' }, h('label', { for: 'ti-nt-a' }, etqA), ca), h('div', { class: 'campo ti-campo' }, h('label', { for: 'ti-nt-b' }, etqB), cb),
-        campo('Ø', dNueva), qNueva ? campo('Caudal (m³/h)', qNueva) : null),
+      h('div', { class: 'ti-nueva-toma' },
+        campo('Cara', cara), campo('Ø', dNueva),
+        h('div', { class: 'campo ti-campo' }, h('label', { for: 'ti-nt-a' }, etqA), ca), h('div', { class: 'campo ti-campo' }, h('label', { for: 'ti-nt-b' }, etqB), cb),
+        qNueva ? campo('Caudal (m³/h)', qNueva) : null),
       h('div', { class: 'ti-acciones' },
         h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-agregar-toma', onclick: () => nuevaToma(false) }, `+ ${deAire ? 'Boca' : 'Toma'}`),
         deAire && !conDescarga ? h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-agregar-descarga', onclick: () => nuevaToma(true) }, '+ Descarga') : null),
@@ -1201,7 +1204,8 @@
     if (!u) return null;
     const pu = s.g.puertos.get(pid);
     const mover = (c) => { if (TB().moverPuertoA(s, pid, c)) cambio(); else { pintarEstado(); pintarInspector(); } };
-    const dist = (k, etq, valor, resto, txt) => campo(etq, entrada(`ti-p-${k}`, n0(valor), (v) => {
+    // el campo lleva el número sin separador de miles: «1,250» se leería como 1.25
+    const dist = (k, etq, valor, resto, txt) => campo(etq, entrada(`ti-p-${k}`, Math.round(valor * 10) / 10, (v) => {
       const x = num(v);
       if (!Number.isFinite(x)) { TB().decir(s, 'Escriba la distancia en mm.', true); pintarEstado(); return; }
       mover({ [k]: x });

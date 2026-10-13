@@ -2768,7 +2768,7 @@ Cada una se puede cambiar en su ficha, sin cambiar las reglas.
   - lo que se le cambia, con un toque;
   - el Ø de cada lado (entra, sale, ramal), que es el de su tramo.
 
-  La opción con punto verde es la del proyecto. Una opción que no se puede se ve punteada; al tocarla, dice por qué y no cambia nada.
+  La opción con punto verde es la del proyecto. Una opción que no se puede se ve punteada; al tocarla, dice por qué y no cambia nada. En el lienzo, la etiqueta de una pieza ajustada va con el borde punteado.
 - **El codo:**
   - el ángulo (30°, 45°, 60°, 90°): gira el lado libre, como ya lo hacía;
   - el radio, de 1 D a 3 D, con su medida en mm (el modelo acepta de 1 a 5);
@@ -2780,7 +2780,7 @@ Cada una se puede cambiar en su ficha, sin cambiar las reglas.
   - el largo, en mm: más largo que el de la regla, nunca más corto («mide al menos 47 mm»).
 - **El injerto y la reducción con injerto:**
   - el ángulo del ramal (30° o 45°; 90° si el proyecto permite la T): gira el ramal en el plano del tronco y el ramal, con lo que cuelga de él;
-  - una manguera absorbe ese giro. Si el ramal llega a una toma con brida o a un ancla, no se puede, y lo dice;
+  - una manguera absorbe ese giro: su punto de transición gira con su ducto (también al girar un codo) y la manguera se acomoda desde la toma; si ya no puede doblarse así, lo dice con el radio. Si el ramal llega a una toma con brida o a un ancla, no se puede, y lo dice;
   - el largo del cuerpo (en la reducción con injerto, el del cono) y el del ramal, en mm. Más largos que los de la regla sí; más cortos no caben en la silleta.
 - **La tapa:** el cuello, en mm. 0 es una tapa plana, sin cuello, con la brida en el disco.
 - **El Ø de un lado** cambia su tramo, con las mismas reglas de §2.6: si la cadena lo impide, lo dice y ofrece «Cambiar en cadena».
@@ -2809,7 +2809,7 @@ Lo verifican:
 - `tests/trazado_lectura.test.js`: el despiece con un codo, una reducción, una reducción con injerto, un injerto y una tapa ajustados (definitivo, sin diferencias, con sus partidas cotizadas), `verificar` con los gajos y el radio de las políticas.
 - `tests/trazado_tablero.test.js`: la ficha del codo, de la reducción con injerto (con sus largos), de una reducción y de una tapa (sus opciones, la regla, por qué no se puede un ángulo), cambiarla con su mensaje, deshacer y el dibujo.
 - La sección 46 de `tests/e2e/ui.e2e.js`:
-  - tocar la etiqueta, el ángulo que no se puede, el radio y los gajos, deshacer y «Como en el proyecto»;
+  - tocar la etiqueta, el ángulo que no se puede, el radio y los gajos (la etiqueta de la pieza ajustada va punteada), deshacer y «Como en el proyecto»;
   - el ramal a 30°, más largo, y el Ø de un lado (con la cadena);
   - la forma y el largo de una reducción;
   - el despiece definitivo con las partidas ajustadas;

@@ -201,6 +201,7 @@ Todo dato pasa por una compuerta de validación (`src/motor/validacion.js`) ante
 - **Tablas maestras sanas:** una eficiencia, una velocidad, un paso de tornillos o una densidad en 0, un valor negativo o una tabla de velocidades desordenada se señalan **por su ruta** («proceso › eficiencia taller: debe ser un número mayor que 0») en el aviso de la cotización y en cada partida afectada. El editor de tablas no deja teclear esos valores.
 - **Datos guardados o importados:** de un archivo, del navegador o del almacén compartido sólo entra lo que tiene la forma esperada; se avisa cuántos valores se ignoraron y una importación rechazada no cambia nada.
 - En el formulario de partida, un número que no se puede leer (por ejemplo «3O00» con la letra O) se marca como error en vez de tomarse por «automático».
+- Las medidas se escriben como en México: la coma separa los miles («3,000» son 3 000 mm, «1,250.5» son 1 250.5) y el punto es el decimal; una coma sin tres cifras después se toma como punto decimal («12,5» = 12.5). También se aceptan fracciones («12 1/2», «3/8»).
 
 Las reglas completas están en [§2.3 del documento](docs/arquitectura-cotizador-ducterias.md#23-reglas-de-validación) (V14–V20).
 
