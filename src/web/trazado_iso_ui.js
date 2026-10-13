@@ -92,7 +92,7 @@
   const TECLA_HERR = { s: 'SELECCIONAR', t: 'TRAMO', c: 'TRAMO', v: 'VERTICAL', r: 'REDUCCION', i: 'INJERTO', j: 'RINJ', m: 'MOVER', d: 'MEDIR', p: 'TOMA', g: 'COMPUERTA', a: 'TAPA' };
   const VISTAS_BTN = [['NE', 'Iso', '1'], ['PLANTA', 'Planta', '2'], ['ELEV_XZ', 'Elev. X-Z', '3'], ['ELEV_YZ', 'Elev. Y-Z', '4']];
 
-  const ui = { s: null, montado: false, puntero: null, gesto: null, punteros: new Map(), hover: null, cuadro: 0, espacio: false, abierto: false, dim: null, paleta: null, radial: null, tRadial: 0, ventSel: {}, ventAbierto: new Set() };
+  const ui = { s: null, montado: false, puntero: null, gesto: null, punteros: new Map(), hover: null, cuadro: 0, espacio: false, abierto: false, dim: null, paleta: null, radial: null, tRadial: 0, ventSel: {}, ventAbierto: new Set(), plegadas: new Map() };
 
   /* ------------------------------------------------------------------ el tablero y la cotización */
 
@@ -220,6 +220,57 @@
     return g;
   }
 
+  /** Una polilínea de pantalla corrida de lado: hacia arriba a la izquierda, donde le da la luz. */
+  function haciaLaLuz(qs) {
+    const a = qs[0];
+    const b = qs[qs.length - 1];
+    let cx = -(b.y - a.y);
+    let cy = b.x - a.x;
+    if (Math.hypot(cx, cy) < 1e-6) { cx = -1; cy = -1; }
+    if (cy > 0 || (Math.abs(cy) < 1e-6 && cx > 0)) { cx = -cx; cy = -cy; }
+    return qs.map((q, i) => {
+      const p0 = qs[Math.max(0, i - 1)];
+      const p1 = qs[Math.min(qs.length - 1, i + 1)];
+      const L = Math.hypot(p1.x - p0.x, p1.y - p0.y) || 1;
+      let nx = -(p1.y - p0.y) / L;
+      let ny = (p1.x - p0.x) / L;
+      if (nx * cx + ny * cy < 0) { nx = -nx; ny = -ny; }
+      return { nx, ny };
+    });
+  }
+  const trazo = (qs) => `M${qs.map((q) => `${f1(q.x)} ${f1(q.y)}`).join('L')}`;
+  /**
+   * Un tubo visto de lado: su borde, su cuerpo del Ø que tiene en pantalla y un brillo corrido hacia la luz, para que se
+   * lea como cilindro. Con dos Ø distintos es un cono (reducción).
+   */
+  function tubo(dest, qs, w0, w1, cls, attrs) {
+    const luz = haciaLaLuz(qs);
+    if (Math.abs(w0 - w1) < 0.3) {
+      const d = trazo(qs);
+      dest.append(svg('path', { d, class: 'ti-tubo-borde', 'stroke-width': f1(w0 + 2) }));
+      dest.append(svg('path', { d, class: cls, 'stroke-width': f1(w0), ...attrs }));
+      if (w0 >= 5) dest.append(svg('path', { d: trazo(qs.map((q, i) => ({ x: q.x + luz[i].nx * w0 * 0.22, y: q.y + luz[i].ny * w0 * 0.22 }))), class: 'ti-tubo-brillo', 'stroke-width': f1(Math.max(1, w0 * 0.18)) }));
+      return;
+    }
+    const a = qs[0];
+    const b = qs[qs.length - 1];
+    const { nx, ny } = luz[0];
+    const pts = [[a, w0, 1], [b, w1, 1], [b, w1, -1], [a, w0, -1]].map(([q, w, sg]) => `${f1(q.x + nx * sg * w / 2)},${f1(q.y + ny * sg * w / 2)}`).join(' ');
+    dest.append(svg('polygon', { points: pts, class: `${cls} ti-cono`, ...attrs }));
+    if (Math.min(w0, w1) >= 5) dest.append(svg('line', { x1: f1(a.x + nx * w0 * 0.22), y1: f1(a.y + ny * w0 * 0.22), x2: f1(b.x + nx * w1 * 0.22), y2: f1(b.y + ny * w1 * 0.22), class: 'ti-tubo-brillo', 'stroke-width': f1(Math.max(1, Math.min(w0, w1) * 0.18)) }));
+  }
+  /** Un aro a lo ancho del tubo (una brida o la costura de un gajo); visto de punta, un círculo. */
+  function aro(dest, c, w, cls) {
+    const q = P(c.punto);
+    const q2 = P({ x: c.punto.x + c.eje.x * 100, y: c.punto.y + c.eje.y * 100, z: c.punto.z + c.eje.z * 100 });
+    const L = Math.hypot(q2.x - q.x, q2.y - q.y);
+    if (L < 0.05 * 100 * ui.s.cam.k) { dest.append(svg('circle', { cx: f1(q.x), cy: f1(q.y), r: f1(w / 2 + 1), class: `${cls} ti-aro-punta` })); return; }
+    const nx = -(q2.y - q.y) / L;
+    const ny = (q2.x - q.x) / L;
+    const r = w / 2 + (cls === 'ti-union' ? 2.5 : 0);
+    dest.append(svg('line', { x1: f1(q.x - nx * r), y1: f1(q.y - ny * r), x2: f1(q.x + nx * r), y2: f1(q.y + ny * r), class: cls }));
+  }
+
   /** Dibuja la escena: rejilla, equipos y ductos de lo más lejano a lo más cercano, puertos, piezas y etiquetas sin encimar. */
   function dibujarLienzo() {
     const el = $('#ti-lienzo');
@@ -261,6 +312,7 @@
     });
     // ductos rígidos y mangueras
     const cotas = [];
+    const alturas = [];
     s.t.tramos.forEach((t) => {
       if (t.tipo === 'FLEXIBLE') {
         const rm = g.mang.get(t.id);
@@ -271,9 +323,12 @@
         items.push({
           prof: prof(mid),
           pintar: (dest) => {
-            const d = `M${qs.map((q) => `${f1(q.x)} ${f1(q.y)}`).join('L')}`;
-            dest.append(svg('path', { d, class: clase(t.id, 'ti-manguera'), 'stroke-width': f1(Math.max(4, t.diametro_in * IN * s.cam.k)), 'data-tramo': t.id }));
-            dest.append(svg('path', { d, class: 'ti-manguera-eje' }));
+            const d = trazo(qs);
+            const wm = Math.max(4, t.diametro_in * IN * s.cam.k);
+            // la manguera se ve corrugada: sus anillos a lo largo
+            dest.append(svg('path', { d, class: 'ti-tubo-borde ti-manguera-borde', 'stroke-width': f1(wm + 2) }));
+            dest.append(svg('path', { d, class: clase(t.id, 'ti-manguera'), 'stroke-width': f1(wm), 'data-tramo': t.id }));
+            dest.append(svg('path', { d, class: 'ti-manguera-anillos', 'stroke-width': f1(wm), 'stroke-dasharray': `1.5 ${f1(Math.max(2.5, wm * 0.35))}` }));
           },
         });
         return;
@@ -284,29 +339,9 @@
       const b = P(B);
       const ancho = Math.max(4, t.diametro_in * IN * s.cam.k);
       const L = Math.hypot(b.x - a.x, b.y - a.y);
-      const mid = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2, z: (A.z + B.z) / 2 };
-      items.push({
-        prof: prof(mid),
-        pintar: (dest) => {
-          if (L < 1.5) {
-            dest.append(svg('circle', { cx: f1(a.x), cy: f1(a.y), r: f1(ancho / 2 + 2), class: clase(t.id, 'ti-tramo ti-tramo-punta'), 'data-tramo': t.id }));
-            return;
-          }
-          dest.append(svg('line', { x1: f1(a.x), y1: f1(a.y), x2: f1(b.x), y2: f1(b.y), 'stroke-width': f1(ancho), class: clase(t.id, 'ti-tramo'), 'data-tramo': t.id }));
-          dest.append(svg('line', { x1: f1(a.x), y1: f1(a.y), x2: f1(b.x), y2: f1(b.y), class: 'ti-tramo-eje' }));
-          // la flecha del aire
-          if (g.arriba.has(t.id) && L > 26) {
-            const de = g.arriba.get(t.id) === t.a ? a : b;
-            const al = de === a ? b : a;
-            const ux = (al.x - de.x) / L;
-            const uy = (al.y - de.y) / L;
-            const cx = (a.x + b.x) / 2;
-            const cy = (a.y + b.y) / 2;
-            const k = 6;
-            dest.append(svg('path', { d: `M${f1(cx + ux * k)} ${f1(cy + uy * k)}L${f1(cx - ux * k - uy * k * 0.8)} ${f1(cy - uy * k + ux * k * 0.8)}L${f1(cx - ux * k + uy * k * 0.8)} ${f1(cy - uy * k - ux * k * 0.8)}Z`, class: 'ti-flecha' }));
-          }
-        },
-      });
+      if (L < 1.5) {
+        items.push({ prof: prof(A), pintar: (dest) => dest.append(svg('circle', { cx: f1(a.x), cy: f1(a.y), r: f1(ancho / 2 + 2), class: clase(t.id, 'ti-tramo ti-tramo-punta'), 'data-tramo': t.id })) });
+      }
       if (L >= 2) for (let f = 0, pasoF = Math.max(10, ancho) / L; f <= 1; f += pasoF) lugar.ocupar({ x: a.x + (b.x - a.x) * f - ancho / 2, y: a.y + (b.y - a.y) * f - ancho / 2, w: ancho, h: ancho }, 0.3);
       if (L < 40) return;
       let nx = -(b.y - a.y) / L;
@@ -325,6 +360,84 @@
       [0.5, 0.35, 0.65, 0.22, 0.78].forEach((f) => [1, -1].forEach((ld) => cand.push([a.x + (b.x - a.x) * f + nx * off * ld - w / 2, a.y + (b.y - a.y) * f + ny * off * ld - 8])));
       cotas.push({ t, txt, err: err.has(t.id), cand, corto: L < 80, w, sem: validar ? sem : null });
     });
+    // los cuerpos: cada tramo en sus piezas (rectos, cuellos, conos), los codos en arco, las bridas y las costuras (§0.4)
+    const cu = TB().cuerpos(s);
+    const wDe = (D) => Math.max(3, D * s.cam.k);
+    cu.tubos.forEach((tb) => {
+      const qs = tb.puntos.map(P);
+      const id = tb.tramo || tb.nodo;
+      const medio = tb.puntos[Math.floor(tb.puntos.length / 2)];
+      const m2 = tb.puntos.length === 2 ? { x: (tb.puntos[0].x + tb.puntos[1].x) / 2, y: (tb.puntos[0].y + tb.puntos[1].y) / 2, z: (tb.puntos[0].z + tb.puntos[1].z) / 2 } : medio;
+      items.push({
+        prof: prof(m2),
+        pintar: (dest) => {
+          const cls = clase(id, `ti-tramo ti-tubo ti-tubo-${tb.tipo.toLowerCase()}${tb.tramo && g.descarga.has(tb.tramo) ? ' ti-tubo-descarga' : ''}`);
+          tubo(dest, qs, wDe(tb.D0), wDe(tb.D1), cls, tb.tramo ? { 'data-tramo': tb.tramo } : { 'data-codo': tb.nodo });
+          // la flecha del aire, a la mitad del recto de su tramo
+          const t = tb.tramo && tb.tipo === 'RECTO' && !tb.pieza ? g.tramos.get(tb.tramo) : null;
+          const La = Math.hypot(qs[1].x - qs[0].x, qs[1].y - qs[0].y);
+          if (t && g.arriba.has(t.id) && La > 26) {
+            const haciaB = g.arriba.get(t.id) === t.a;
+            const de = haciaB ? qs[0] : qs[1];
+            const al = haciaB ? qs[1] : qs[0];
+            const ux = (al.x - de.x) / La;
+            const uy = (al.y - de.y) / La;
+            const cx = (qs[0].x + qs[1].x) / 2;
+            const cy = (qs[0].y + qs[1].y) / 2;
+            const k = Math.min(7, Math.max(4, wDe(tb.D0) * 0.45));
+            dest.append(svg('path', { d: `M${f1(cx + ux * k)} ${f1(cy + uy * k)}L${f1(cx - ux * k - uy * k * 0.8)} ${f1(cy - uy * k + ux * k * 0.8)}L${f1(cx - ux * k + uy * k * 0.8)} ${f1(cy - uy * k - ux * k * 0.8)}Z`, class: 'ti-flecha' }));
+          }
+        },
+      });
+    });
+    if (s.cam.k * 100 >= 0.9) {
+      cu.uniones.forEach((c) => items.push({ prof: prof(c.punto) - 1, pintar: (dest) => aro(dest, c, wDe(c.D), 'ti-union') }));
+      cu.costuras.forEach((c) => items.push({ prof: prof(c.punto) - 1, pintar: (dest) => aro(dest, c, wDe(c.D), 'ti-costura') }));
+    }
+    // en el piso: la sombra de lo que va en alto y la plomada de cada punto con su altura, para leer a qué altura va cada cosa
+    const piso = svg('g', { class: 'ti-piso', 'aria-hidden': 'true' });
+    const iso = s.vista !== 'PLANTA' && s.vista !== 'ELEV_XZ' && s.vista !== 'ELEV_YZ';
+    if (s.vista !== 'PLANTA') {
+      const alPiso = (p) => P({ x: p.x, y: p.y, z: 0 });
+      // en una elevación el piso se ve de canto: sólo las plomadas
+      if (iso) cu.tubos.forEach((tb) => {
+        if (Math.min(...tb.puntos.map((q) => q.z)) < 1) return;
+        const qs = tb.puntos.map(alPiso);
+        if (Math.hypot(qs[qs.length - 1].x - qs[0].x, qs[qs.length - 1].y - qs[0].y) < 1 && tb.puntos.length === 2) return;
+        piso.append(svg('path', { d: trazo(qs), class: 'ti-sombra', 'stroke-width': f1(wDe(Math.max(tb.D0, tb.D1))) }));
+      });
+      if (iso) s.t.tramos.filter((t) => t.tipo === 'FLEXIBLE' && g.mang.get(t.id)).forEach((t) => {
+        const pts = TZ().puntosManguera(g.mang.get(t.id).entrada, g.mang.get(t.id));
+        if (Math.min(...pts.map((q) => q.z)) < 1) return;
+        piso.append(svg('path', { d: trazo(pts.map(alPiso)), class: 'ti-sombra', 'stroke-width': f1(wDe(t.diametro_in * IN)) }));
+      });
+      if (iso) s.t.equipos.filter((e) => e.posicion_mm.z > 1).forEach((e) => {
+        const base = TB().esquinas(e).slice(0, 4);
+        piso.append(svg('polygon', { points: [0, 1, 3, 2].map((i) => alPiso(base[i])).map((q) => `${f1(q.x)},${f1(q.y)}`).join(' '), class: 'ti-sombra-caja' }));
+      });
+      // una plomada por columna, desde su punto más alto, con la altura de ese punto
+      const columnas = new Map();
+      s.t.nodos.forEach((nd) => {
+        const p = nd.posicion_mm;
+        if (p.z < 150 || g.puertoDeNodo.has(nd.id) || !(g.ady.get(nd.id) || []).length) return;
+        const clave = `${Math.round(p.x / 50)},${Math.round(p.y / 50)}`;
+        if (!columnas.has(clave) || columnas.get(clave).z < p.z) columnas.set(clave, p);
+      });
+      columnas.forEach((p) => {
+        const q = P(p);
+        const f = alPiso(p);
+        if (Math.hypot(q.x - f.x, q.y - f.y) < 8) return;
+        piso.append(svg('line', { x1: f1(q.x), y1: f1(q.y), x2: f1(f.x), y2: f1(f.y), class: 'ti-plomada' }));
+        const cx = P({ x: p.x + 150, y: p.y, z: 0 });
+        const cy = P({ x: p.x, y: p.y + 150, z: 0 });
+        piso.append(svg('path', { d: `M${f1(2 * f.x - cx.x)} ${f1(2 * f.y - cx.y)}L${f1(cx.x)} ${f1(cx.y)}M${f1(2 * f.x - cy.x)} ${f1(2 * f.y - cy.y)}L${f1(cy.x)} ${f1(cy.y)}`, class: 'ti-plomada-pie' }));
+        // su altura, junto a la plomada si hay lugar
+        const txt = `↑ ${metros(p.z)}`;
+        const w = anchoTexto(txt, 11);
+        const m = { x: (q.x + f.x) / 2, y: (q.y + f.y) / 2 };
+        alturas.push({ txt, w, cand: [[m.x + 5, m.y - 8], [m.x - w - 5, m.y - 8], [f.x + 6, f.y - 14], [f.x - w - 6, f.y - 14]] });
+      });
+    }
     items.filter((x) => x.pintar).sort((p, q) => q.prof - p.prof).forEach((x) => x.pintar(escena));
     // puertos y puntos de transición
     s.t.equipos.forEach((e) => e.puertos.forEach((p) => {
@@ -392,8 +505,12 @@
       const r = lugar.elegir(c.cand.map(([x, y]) => ({ x, y, w: c.w, h: 16 })), !c.corto);
       if (r) etiquetas.append(svg('text', { x: f1(r.x), y: f1(r.y + 12), class: `ti-txt${c.err ? ' ti-txt-err' : c.sem === 'AMBAR' ? ' ti-txt-ambar' : c.sem === 'VERDE' ? ' ti-txt-ok' : ''}`, 'data-cota': c.t.id }, c.txt));
     });
+    alturas.forEach((x) => {
+      const r = lugar.elegir(x.cand.map(([a, b]) => ({ x: a, y: b, w: x.w, h: 15 })), false);
+      if (r) etiquetas.append(svg('text', { x: f1(r.x), y: f1(r.y + 11), class: 'ti-txt-altura' }, x.txt));
+    });
     const defs = svg('defs', null, svg('marker', { id: 'ti-punta', viewBox: '0 0 10 10', refX: '8', refY: '5', markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse' }, svg('path', { d: 'M0 0L10 5L0 10z', class: 'ti-punta' })));
-    el.replaceChildren(defs, grid, escena, sobre, etiquetas, regla, gizmo(), svg('g', { id: 'ti-capa' }));
+    el.replaceChildren(defs, grid, piso, escena, sobre, etiquetas, regla, gizmo(), svg('g', { id: 'ti-capa' }));
     const esc = $('#ti-escala');
     if (esc) esc.textContent = `Rejilla de ${W.num(paso / 1000, paso < 1000 ? 1 : 0)} m · ${TB().NOMBRE_VISTA[s.vista]} · nivel z = ${n0(s.nivel)} mm`;
     dibujarCapa();
@@ -482,7 +599,9 @@
       // la letra se achica si el nombre no cabe a lo ancho de su cara («Poniente» en una cara angosta)
       const ancho = (Math.max(...c.puntos.map((p) => p.x)) - Math.min(...c.puntos.map((p) => p.x))) * k;
       const fs = Math.min(8, (ancho - 4) / (nombre.length * 0.6));
-      g.append(svg('text', { x: f1(cx + m.x * k), y: f1(cy + m.y * k + 3.5), 'text-anchor': 'middle', ...(fs < 8 ? { style: `font-size:${f1(Math.max(fs, 5))}px` } : {}) }, nombre));
+      const txt = svg('text', { x: f1(cx + m.x * k), y: f1(cy + m.y * k + 3.5), 'text-anchor': 'middle' }, nombre);
+      if (fs < 8) txt.style.fontSize = `${f1(Math.max(fs, 5))}px`; // por CSSOM: la página no admite estilos en atributos
+      g.append(txt);
       return g;
     });
     el.replaceChildren(...hijos);
@@ -1075,7 +1194,9 @@
 
   /* ------------------------------------------------------------------ inspector */
 
-  const campo = (etq, control, nota) => h('div', { class: 'campo ti-campo' }, h('label', { for: control.id }, etq), control, nota ? h('span', { class: 'nota' }, nota) : null);
+  /** El control de un campo: el mismo, o el campo de adentro de un número con − y + (para la etiqueta). */
+  const objetivo = (control) => (/^(INPUT|SELECT|TEXTAREA)$/.test(control.tagName) ? control : control.querySelector('input, select, textarea') || control);
+  const campo = (etq, control, nota) => h('div', { class: 'campo ti-campo' }, h('label', { for: objetivo(control).id }, etq), control, nota ? h('span', { class: 'nota' }, nota) : null);
   /** Un campo que ocupa todo el renglón (textos largos y selectores con nombres largos). */
   const campoAncho = (etq, control, nota) => { const c = campo(etq, control, nota); c.classList.add('ti-campo-ancho'); return c; };
   /** 0.00001813 → 1.813×10⁻⁵ */
@@ -1092,12 +1213,64 @@
     el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); aplicar(); } });
     return el;
   }
+  const num = (txt) => W.leerNumero(txt);
+  /**
+   * Un número fácil de ajustar: − y + a los lados (de paso en paso, al múltiplo del paso), ↑ y ↓ en el teclado (con Mayús,
+   * de a décimo), su unidad a la vista y, si se dan, sugerencias que se despliegan. Lo escrito se aplica con Intro o al salir.
+   * o: { paso, unidad, etiqueta, min, max, sugerencias: [[valor, texto]], vacio (el valor de partida si está vacío), attrs }.
+   */
+  function numero(id, valor, alCambiar, o) {
+    const op = o || {};
+    const paso = op.paso || 1;
+    const dec = (String(paso).split('.')[1] || '').length;
+    const lista = op.sugerencias && op.sugerencias.length ? `${id}-lista` : null;
+    const el = entrada(id, valor, alCambiar, { ...(op.attrs || {}), ...(lista ? { list: lista } : {}) });
+    const mover = (sg, fino) => {
+      const x = el.value.trim() === '' ? (op.vacio === undefined ? 0 : op.vacio) : num(el.value);
+      if (!Number.isFinite(x)) { TB().decir(ui.s, `Escriba un número${op.unidad ? ` en ${op.unidad}` : ''}.`, true); pintarEstado(); el.focus(); return; }
+      const d = fino ? paso / 10 : paso;
+      let y = (Math.round(x / d) + sg) * d;
+      if (Math.abs(x / d - Math.round(x / d)) > 1e-9) y = (sg > 0 ? Math.ceil(x / d) : Math.floor(x / d)) * d;
+      if (op.min !== undefined) y = Math.max(op.min, y);
+      if (op.max !== undefined) y = Math.min(op.max, y);
+      el.value = String(Number(y.toFixed(dec + (fino ? 1 : 0))));
+      el.dispatchEvent(new Event('change'));
+    };
+    el.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
+      ev.preventDefault();
+      mover(ev.key === 'ArrowUp' ? 1 : -1, ev.shiftKey);
+    });
+    const que = op.etiqueta || el.getAttribute('aria-label') || id;
+    const u = op.unidad ? ` ${op.unidad}` : '';
+    return h('div', { class: 'ti-num' },
+      h('button', { type: 'button', class: 'ti-num-btn', 'data-paso': '-1', tabindex: '-1', title: `${W.num(paso, dec)}${u} menos`, 'aria-label': `${que}: ${W.num(paso, dec)}${u} menos`, onclick: () => mover(-1) }, '−'),
+      el,
+      op.unidad ? h('span', { class: 'ti-num-u', 'aria-hidden': 'true' }, op.unidad) : null,
+      h('button', { type: 'button', class: 'ti-num-btn', 'data-paso': '1', tabindex: '-1', title: `${W.num(paso, dec)}${u} más`, 'aria-label': `${que}: ${W.num(paso, dec)}${u} más`, onclick: () => mover(1) }, '+'),
+      lista ? h('datalist', { id: lista }, op.sugerencias.map(([v, t]) => h('option', { value: String(v), label: t }))) : null);
+  }
+  /** Una sección plegable del inspector que recuerda si se dejó abierta o cerrada. */
+  function seccion(clave, tituloSec, abierta, ...hijos) {
+    const abierto = ui.plegadas.has(clave) ? !ui.plegadas.get(clave) : abierta;
+    // se recuerda al tocarla (el clic llega antes de que se abra o se cierre): el aviso «toggle» llega después y también al
+    // crearla abierta, y pisaría lo que se acaba de elegir si se vuelve a pintar enseguida
+    const resumen = h('summary', null, tituloSec);
+    const d = h('details', { class: 'ti-sec', 'data-seccion': clave, open: abierto }, resumen, h('div', { class: 'ti-sec-cuerpo' }, ...hijos));
+    resumen.addEventListener('click', () => ui.plegadas.set(clave, d.open));
+    return d;
+  }
+  /** Los giros cada 15°, para un menú: «90° · su +X al norte». */
+  const menuGiros = () => Array.from({ length: 24 }, (_, i) => i * 15).map((g) => [g, `${g}°${g % 90 === 0 ? ` · su frente (+X) al ${TZ().rumboCara(g, 'PX')}` : ''}`]);
+  /** Los rumbos cada 15° en la planta, para un menú: «90° · norte». */
+  const menuRumbos = () => Array.from({ length: 24 }, (_, i) => i * 15).map((g) => [g, `${g}°${g % 45 === 0 ? ` · ${TZ().rumboCara(g, 'PX')}` : ''}`]);
+  /** Las alturas con nombre del proyecto para sugerir: el piso y sus niveles. */
+  const alturasConNombre = () => [[0, 'Piso'], ...(ui.s.t.proyecto.niveles || []).map((x) => [x.z_mm, x.nombre])];
   function selector(id, opciones, valor, alCambiar, etiqueta) {
     const el = h('select', { id, 'aria-label': etiqueta }, opciones.map(([v, t]) => h('option', { value: String(v), selected: String(v) === String(valor) }, t)));
     el.addEventListener('change', () => alCambiar(el.value));
     return el;
   }
-  const num = (txt) => W.leerNumero(txt);
   /** Aplica un cambio del modelo desde el inspector: con deshacer y su mensaje; si se rechaza, lo dice. */
   function aplicar(fn, msg) {
     if (TB().hacer(ui.s, fn, msg)) cambio(); else { pintarEstado(); pintarInspector(); }
@@ -1120,15 +1293,24 @@
     const s = ui.s;
     const T = TZ();
     const mov = (c) => { if (TB().moverEquipo(s, e.id, c)) cambio(); else pintarEstado(); };
-    const caja = (k) => entrada(`ti-e-${k}`, e.caja_mm[k], (v) => aplicar((t) => T.editarEquipo(t, M(), e.id, { caja_mm: { ...e.caja_mm, [k]: num(v) } }), `Caja de ${e.nombre}: ${k} ${v} mm.`));
+    const caja = (k) => numero(`ti-e-${k}`, e.caja_mm[k], (v) => aplicar((t) => T.editarEquipo(t, M(), e.id, { caja_mm: { ...e.caja_mm, [k]: num(v) } }), `Caja de ${e.nombre}: ${k} ${v} mm.`), { paso: 50, unidad: 'mm', min: 50, etiqueta: `${k[0].toUpperCase()}${k.slice(1)} de la caja` });
     // la toma nueva (§5.15): su cara, sus distancias a los bordes (vacío = al centro), su Ø y su caudal
     const cara = h('select', { id: 'ti-nt-cara', 'aria-label': 'Cara de la caja' }, Object.keys(TZ().CARAS_PUERTO).map((v) => h('option', { value: v }, TB().nombreCara(e.rotacion_z_deg, v))));
-    const ca = h('input', { id: 'ti-nt-a', type: 'text', inputmode: 'decimal', value: '', placeholder: 'centro' });
-    const cb = h('input', { id: 'ti-nt-b', type: 'text', inputmode: 'decimal', value: '', placeholder: 'centro' });
+    // las distancias de la toma nueva: vacías es al centro; con − y + se parte del centro
+    const caNum = numero('ti-nt-a', '', () => {}, { paso: 50, unidad: 'mm', min: 0, attrs: { placeholder: 'centro' }, etiqueta: 'Distancia de la toma nueva' });
+    const cbNum = numero('ti-nt-b', '', () => {}, { paso: 50, unidad: 'mm', min: 0, attrs: { placeholder: 'centro' }, etiqueta: 'Otra distancia de la toma nueva' });
+    const ca = caNum.querySelector('input');
+    const cb = cbNum.querySelector('input');
+    const centroDe = () => TZ().medidasCara(e.caja_mm, cara.value);
+    // el + y el − empiezan desde el centro de la cara
+    [[caNum, 'ancho'], [cbNum, 'alto']].forEach(([w, k]) => w.querySelectorAll('.ti-num-btn').forEach((b) => b.addEventListener('pointerdown', () => {
+      const inp = w.querySelector('input');
+      if (inp.value.trim() === '') { inp.value = String(Math.round(centroDe()[k] / 2)); inp.defaultValue = inp.value; }
+    })));
     const etqA = h('span', null);
     const etqB = h('span', null);
     const rotular = () => {
-      const ej = cara.value === 'SUP' ? [`Desde el lado ${T.rumboCara(e.rotacion_z_deg, 'NX')} (mm)`, `Desde el lado ${T.rumboCara(e.rotacion_z_deg, 'NY')} (mm)`] : ['Desde la izquierda (mm)', 'Altura desde la base (mm)'];
+      const ej = cara.value === 'SUP' ? [`Desde el lado ${T.rumboCara(e.rotacion_z_deg, 'NX')}`, `Desde el lado ${T.rumboCara(e.rotacion_z_deg, 'NY')}`] : ['Desde la izquierda', 'Altura desde la base'];
       etqA.textContent = ej[0];
       etqB.textContent = ej[1];
       ca.setAttribute('aria-label', `${ej[0]} de la toma nueva; vacío, al centro`);
@@ -1138,7 +1320,8 @@
     rotular();
     const dNueva = selector('ti-nt-d', diametros(), s.D, () => {}, 'Ø de la toma nueva');
     const deAire = e.tipo === 'COLECTOR' || e.tipo === 'VENTILADOR';
-    const qNueva = deAire ? null : h('input', { id: 'ti-nt-q', type: 'text', inputmode: 'decimal', value: '', placeholder: 'm³/h', 'aria-label': 'Caudal de diseño de la toma nueva (m³/h)' });
+    const qNuevaNum = deAire ? null : numero('ti-nt-q', '', () => {}, { paso: 50, unidad: 'm³/h', min: 0, attrs: { placeholder: 'm³/h', 'aria-label': 'Caudal de diseño de la toma nueva (m³/h)' } });
+    const qNueva = qNuevaNum ? qNuevaNum.querySelector('input') : null;
     const conDescarga = e.puertos.some((p) => p.rol === 'SALIDA');
     const nuevaToma = (salida) => {
       const { ancho, alto } = TZ().medidasCara(e.caja_mm, cara.value);
@@ -1152,32 +1335,39 @@
         (mm) => `Se agregó ${{ ENTRADA: 'la boca', SALIDA: 'la descarga' }[rol] || 'la toma'} a ${e.nombre}. ${TB().textoUbicacion(ui.s, mm.ultimo.puerto)}`);
       if (m) { s.sel = { tipo: 'PUERTO', id: m.ultimo.puerto }; cambio(); } else pintarEstado();
     };
+    const giro = selector('ti-e-giro', menuGiros(), e.rotacion_z_deg, (v) => mov({ giro: Number(v) - e.rotacion_z_deg }), 'Giro del equipo');
+    const girar = (d, txt) => h('button', { type: 'button', class: 'btn btn-sec btn-chico', 'aria-label': `Girar ${e.nombre} ${txt}`, title: `Girar ${txt}`, onclick: () => mov({ giro: d }) }, d > 0 ? `⟲ ${d}°` : `⟳ ${-d}°`);
     return h('section', { class: 'ti-ins' },
       titulo(e.nombre, `${{ COLECTOR: 'Colector', MAQUINA: 'Máquina', CAMPANA: 'Campana', VENTILADOR: 'Ventilador' }[e.tipo]} ${e.id}`),
       h('div', { class: 'ti-rejilla-campos' },
-        campo('Nombre', entrada('ti-e-nombre', e.nombre, (v) => aplicar((t) => T.editarEquipo(t, M(), e.id, { nombre: v }), `Nombre: ${v}.`), { inputmode: 'text' })),
-        campo('X (mm)', entrada('ti-e-x', e.posicion_mm.x, (v) => mov({ posicion_mm: { ...e.posicion_mm, x: num(v) } }))),
-        campo('Y (mm)', entrada('ti-e-y', e.posicion_mm.y, (v) => mov({ posicion_mm: { ...e.posicion_mm, y: num(v) } }))),
-        campo('Z de la base (mm)', entrada('ti-e-z', e.posicion_mm.z, (v) => mov({ posicion_mm: { ...e.posicion_mm, z: num(v) } }))),
-        campo('Giro (°, cada 15)', entrada('ti-e-giro', e.rotacion_z_deg, (v) => mov({ giro: num(v) - e.rotacion_z_deg }))),
-        campo('Largo (mm)', caja('largo')), campo('Ancho (mm)', caja('ancho')), campo('Alto (mm)', caja('alto')),
-        e.tipo === 'COLECTOR' || e.tipo === 'VENTILADOR' ? campo('Pérdida propia (Pa)', entrada('ti-e-perdida', e.perdida_Pa, (v) => aplicar((t) => T.editarEquipo(t, M(), e.id, { perdida_Pa: v === '' ? null : num(v) }), 'Pérdida del equipo.'))) : null),
-      h('p', { class: 'ti-nota' }, 'Flechas: 100 mm (Mayús 10, Alt 1) · RePág/AvPág sube o baja · R gira 15° (Mayús+R 90°). Arrástrelo con «Seleccionar».'),
-      h('h4', null, deAire ? 'Bocas y descarga' : 'Tomas'),
+        campoAncho('Nombre', entrada('ti-e-nombre', e.nombre, (v) => aplicar((t) => T.editarEquipo(t, M(), e.id, { nombre: v }), `Nombre: ${v}.`), { inputmode: 'text' }))),
+      seccion('equipo-lugar', 'Dónde está', true,
+        h('div', { class: 'ti-rejilla-campos' },
+          campo('X', numero('ti-e-x', e.posicion_mm.x, (v) => mov({ posicion_mm: { ...e.posicion_mm, x: num(v) } }), { paso: 100, unidad: 'mm', etiqueta: 'X del equipo' })),
+          campo('Y', numero('ti-e-y', e.posicion_mm.y, (v) => mov({ posicion_mm: { ...e.posicion_mm, y: num(v) } }), { paso: 100, unidad: 'mm', etiqueta: 'Y del equipo' })),
+          campo('Z de la base', numero('ti-e-z', e.posicion_mm.z, (v) => mov({ posicion_mm: { ...e.posicion_mm, z: num(v) } }), { paso: 100, unidad: 'mm', min: 0, etiqueta: 'Z de la base', sugerencias: alturasConNombre() })),
+          campoAncho('Giro', giro)),
+        h('div', { class: 'ti-acciones' }, girar(90, '90° a la izquierda'), girar(-90, '90° a la derecha'), girar(15, '15° a la izquierda'), girar(-15, '15° a la derecha')),
+        h('p', { class: 'ti-nota' }, 'En el lienzo: flechas 100 mm (Mayús 10, Alt 1) · RePág/AvPág sube o baja · R gira 15° (Mayús+R 90°). Arrástrelo con «Seleccionar».')),
+      seccion('equipo-caja', 'Tamaño de la caja', true,
+        h('div', { class: 'ti-rejilla-campos' },
+          campo('Largo', caja('largo')), campo('Ancho', caja('ancho')), campo('Alto', caja('alto')),
+          e.tipo === 'COLECTOR' || e.tipo === 'VENTILADOR' ? campo('Pérdida propia', numero('ti-e-perdida', e.perdida_Pa, (v) => aplicar((t) => T.editarEquipo(t, M(), e.id, { perdida_Pa: v === '' ? null : num(v) }), 'Pérdida del equipo.'), { paso: 50, unidad: 'Pa', min: 0, etiqueta: 'Pérdida propia del equipo' })) : null)),
+      seccion('equipo-tomas', deAire ? 'Bocas y descarga' : 'Tomas', true,
       e.puertos.length ? h('ul', { class: 'ti-lista' }, e.puertos.map((p) => {
         const u = TZ().ubicacionEnCara(e.caja_mm, p);
         return h('li', null, h('button', { type: 'button', class: 'enlace', 'data-puerto': p.id, onclick: () => { s.sel = { tipo: 'PUERTO', id: p.id }; pintar(); } },
           `${p.id} · ${p.nombre} · ${pulg(p.diametro_in)}${p.caudal_m3_h ? ` · ${n0(p.caudal_m3_h)} m³/h` : ''}${u ? ` · ${TB().nombreCara(e.rotacion_z_deg, u.cara).replace('Lado', 'lado').replace('Arriba', 'arriba')} a ${n0(u.a_mm)} × ${n0(u.b_mm)} mm` : ''}${p.acople ? ` · ${p.acople.tipo === 'BRIDA' ? 'brida' : 'manguera'}` : ' · sin acople'}`));
-      })) : h('p', { class: 'ti-nota' }, 'Sin tomas: use «Toma» (P) y toque una cara de la caja, o agréguela aquí.'),
-      h('h4', null, deAire ? 'Agregar una boca' : 'Agregar una toma'),
+      })) : h('p', { class: 'ti-nota' }, 'Sin tomas: use «Toma» (P) y toque una cara de la caja, o agréguela aquí.')),
+      seccion('equipo-nueva-toma', deAire ? 'Agregar una boca' : 'Agregar una toma', true,
       h('div', { class: 'ti-nueva-toma' },
         campo('Cara', cara), campo('Ø', dNueva),
-        h('div', { class: 'campo ti-campo' }, h('label', { for: 'ti-nt-a' }, etqA), ca), h('div', { class: 'campo ti-campo' }, h('label', { for: 'ti-nt-b' }, etqB), cb),
-        qNueva ? campo('Caudal (m³/h)', qNueva) : null),
+        h('div', { class: 'campo ti-campo' }, h('label', { for: 'ti-nt-a' }, etqA), caNum), h('div', { class: 'campo ti-campo' }, h('label', { for: 'ti-nt-b' }, etqB), cbNum),
+        qNuevaNum ? campo('Caudal', qNuevaNum) : null),
       h('div', { class: 'ti-acciones' },
         h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-agregar-toma', onclick: () => nuevaToma(false) }, `+ ${deAire ? 'Boca' : 'Toma'}`),
         deAire && !conDescarga ? h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-agregar-descarga', onclick: () => nuevaToma(true) }, '+ Descarga') : null),
-      h('p', { class: 'ti-nota' }, `Las distancias van al centro de la toma, desde los bordes de la cara (vacías: al centro). Después se mueve y se acota en su ficha.${deAire ? ' La descarga es la brida por donde sale el aire del ventilador: su ducto va a un extremo libre, a la atmósfera.' : ''}`),
+      h('p', { class: 'ti-nota' }, `Las distancias van al centro de la toma, desde los bordes de la cara (vacías: al centro). Después se mueve y se acota en su ficha.${deAire ? ' La descarga es la brida por donde sale el aire del ventilador: su ducto va a un extremo libre, a la atmósfera.' : ''}`)),
       h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-peligro', onclick: () => { if (TB().borrar(s, { tipo: 'EQUIPO', id: e.id })) cambio(); else pintarEstado(); } }, 'Quitar el equipo')));
   }
 
@@ -1210,11 +1400,11 @@
     const rot = pu.equipo.rotacion_z_deg;
     const mover = (c) => { if (TB().moverPuertoA(s, pid, c)) cambio(); else { pintarEstado(); pintarInspector(); } };
     // el campo lleva el número sin separador de miles: «1,250» se leería como 1.25
-    const dist = (k, etq, valor, resto, txt) => campo(etq, entrada(`ti-p-${k}`, Math.round(valor * 10) / 10, (v) => {
+    const dist = (k, etq, valor, resto, txt) => campo(etq, numero(`ti-p-${k}`, Math.round(valor * 10) / 10, (v) => {
       const x = num(v);
       if (!Number.isFinite(x)) { TB().decir(s, 'Escriba la distancia en mm.', true); pintarEstado(); return; }
       mover({ [k]: x });
-    }), `${n0(resto)} mm ${txt}`);
+    }, { paso: 50, unidad: 'mm', min: 0, etiqueta: etq }), `${n0(resto)} mm ${txt}`);
     return h('div', { class: 'ti-ubicacion', id: 'ti-p-ubicacion' },
       h('h4', null, `Dónde va en ${pu.equipo.nombre}`),
       h('div', { class: 'ti-ops', role: 'group', 'aria-label': `Cara de ${pid}` }, u.caras.map((c) => h('button', {
@@ -1225,7 +1415,7 @@
           mover({ cara: c.cara });
         },
       }, c.nombre))),
-      h('div', { class: 'ti-rejilla-campos' }, dist('a', `${u.ejes.a} (mm)`, u.a, u.ancho - u.a, u.ejes.restoA), dist('b', `${u.ejes.b} (mm)`, u.b, u.alto - u.b, u.ejes.restoB)),
+      h('div', { class: 'ti-rejilla-campos' }, dist('a', u.ejes.a, u.a, u.ancho - u.a, u.ejes.restoA), dist('b', u.ejes.b, u.b, u.alto - u.b, u.ejes.restoB)),
       h('div', { class: 'ti-acciones' },
         h('button', { type: 'button', class: 'btn btn-sec btn-chico', id: 'ti-p-centrar-a', onclick: () => mover({ a: u.ancho / 2 }) }, u.cara === 'SUP' ? `Centrar ${T.rumboCara(rot, 'NX')}–${T.rumboCara(rot, 'PX')}` : 'Centrar a lo ancho'),
         h('button', { type: 'button', class: 'btn btn-sec btn-chico', id: 'ti-p-centrar-b', onclick: () => mover({ b: u.alto / 2 }) }, u.cara === 'SUP' ? `Centrar ${T.rumboCara(rot, 'NY')}–${T.rumboCara(rot, 'PY')}` : 'Centrar a lo alto')),
@@ -1236,12 +1426,13 @@
     const s = ui.s;
     const u = TB().ubicacionPuerto(s, pid);
     if (!u) return null;
-    const mm = h('input', { id: 'ti-p-copia-mm', type: 'text', inputmode: 'decimal', value: '300', class: 'ti-ficha-num', 'aria-label': 'A cuántos mm de esta va la otra toma' });
+    const mmNum = numero('ti-p-copia-mm', 300, () => {}, { paso: 50, unidad: 'mm', min: 50, attrs: { class: 'ti-ficha-num', 'aria-label': 'A cuántos mm de esta va la otra toma' } });
+    const mm = mmNum.querySelector('input');
     const hacia = TB().hacia(u.cara, s.g.puertos.get(pid).equipo.rotacion_z_deg);
     const flecha = { IZQUIERDA: '←', DERECHA: '→', ARRIBA: '↑', ABAJO: '↓' };
     return h('div', { class: 'ti-copia', id: 'ti-p-copia' },
       h('h4', null, 'Otra igual'),
-      h('div', { class: 'ti-ficha-ctl' }, h('span', { class: 'ti-sub' }, 'a'), mm, h('span', { class: 'ti-sub' }, 'mm'),
+      h('div', { class: 'ti-ficha-ctl' }, h('span', { class: 'ti-sub' }, 'a'), mmNum,
         ...['IZQUIERDA', 'DERECHA', 'ARRIBA', 'ABAJO'].map((d) => h('button', { type: 'button', class: 'ti-op', 'data-hacia': d, title: hacia[d], 'aria-label': `Otra toma igual ${hacia[d]}`, onclick: () => {
           if (TB().copiarPuerto(s, pid, d, num(mm.value))) cambio(); else pintarEstado();
         } }, `${flecha[d]} ${hacia[d].replace(/^(a la |hacia el )/, '')}`))),
@@ -1261,8 +1452,8 @@
       h('div', { class: 'ti-rejilla-campos' },
         campo('Nombre', entrada('ti-p-nombre', p.nombre, (v) => aplicar((t) => T.editarPuerto(t, M(), pid, { nombre: v }), `Nombre: ${v}.`), { inputmode: 'text' })),
         campo('Ø', selector('ti-p-d', diametros(), p.diametro_in, (v) => aplicar((t) => T.editarPuerto(t, M(), pid, { diametro_in: Number(v) }), `Ø de ${pid}: ${pulg(Number(v))}.`), 'Diámetro del puerto')),
-        toma ? campo('Caudal de diseño (m³/h)', entrada('ti-p-q', p.caudal_m3_h, (v) => aplicar((t) => T.editarPuerto(t, M(), pid, { caudal_m3_h: v === '' ? null : num(v) }), `Caudal de ${pid}: ${v} m³/h.`))) : null,
-        toma ? campo('Coeficiente de entrada K', entrada('ti-p-k', p.coef_entrada_K, (v) => aplicar((t) => T.editarPuerto(t, M(), pid, { coef_entrada_K: num(v) }), `K de ${pid}: ${v}.`))) : null),
+        toma ? campo('Caudal de diseño', numero('ti-p-q', p.caudal_m3_h, (v) => aplicar((t) => T.editarPuerto(t, M(), pid, { caudal_m3_h: v === '' ? null : num(v) }), `Caudal de ${pid}: ${v} m³/h.`), { paso: 50, unidad: 'm³/h', min: 0, etiqueta: 'Caudal de diseño' })) : null,
+        toma ? campo('Coeficiente de entrada K', numero('ti-p-k', p.coef_entrada_K, (v) => aplicar((t) => T.editarPuerto(t, M(), pid, { coef_entrada_K: num(v) }), `K de ${pid}: ${v}.`), { paso: 0.05, min: 0, etiqueta: 'Coeficiente de entrada K' })) : null),
       toma && p.caudal_m3_h ? semaforoV(p.caudal_m3_h, p.diametro_in) : toma ? h('p', { class: 'ti-semaforo ti-sem-ambar' }, 'Escriba el caudal de diseño: sin él no se puede dimensionar.') : null,
       toma ? bloqueDimension(pid) : null,
       bloqueUbicacion(pid),
@@ -1288,20 +1479,20 @@
       hijos.push(
         h('p', { class: `ti-semaforo ${{ VERDE: 'ti-sem-verde', AMBAR: 'ti-sem-ambar', ROJO: 'ti-sem-rojo' }[sem.color]}`, id: 'ti-manguera-sem' }, sem.texto),
         h('div', { class: 'ti-rejilla-campos' },
-          campo('Altura del PT (mm)', entrada('ti-m-h', Math.round(mg.h * 1000) / 1000, (v) => mover(num(v), mg.ev))),
-          campo('Desvío (mm)', entrada('ti-m-e', Math.round(evN * 1000) / 1000, (v) => { const w = desvioVector(num(v), az); if (w) mover(mg.h, w); else { TB().decir(s, 'Ese rumbo va en la dirección de la toma: arrastre el círculo.', true); pintarEstado(); } })),
-          campo('Rumbo del desvío (°)', entrada('ti-m-az', az, (v) => { const w = desvioVector(evN, num(v)); if (w) mover(mg.h, w); else { TB().decir(s, 'Ese rumbo va en la dirección de la toma.', true); pintarEstado(); } }))),
+          campo('Altura del PT', numero('ti-m-h', Math.round(mg.h * 1000) / 1000, (v) => mover(num(v), mg.ev), { paso: 50, unidad: 'mm', min: 0, etiqueta: 'Altura del punto de transición' })),
+          campo('Desvío', numero('ti-m-e', Math.round(evN * 1000) / 1000, (v) => { const w = desvioVector(num(v), az); if (w) mover(mg.h, w); else { TB().decir(s, 'Ese rumbo va en la dirección de la toma: arrastre el círculo.', true); pintarEstado(); } }, { paso: 50, unidad: 'mm', min: 0, etiqueta: 'Desvío de la manguera' })),
+          campo('Rumbo del desvío', selector('ti-m-az', menuRumbos(), az, (v) => { const w = desvioVector(evN, Number(v)); if (w) mover(mg.h, w); else { TB().decir(s, 'Ese rumbo va en la dirección de la toma.', true); pintarEstado(); } }, 'Rumbo del desvío'))),
         h('p', { class: 'ti-nota' }, 'Arrastre el rombo (altura sobre la toma) y el círculo (desvío): van de 50 en 50 mm. El ducto rígido empieza en el punto de transición, con extremo liso para la abrazadera.'),
         h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-trazar-desde', onclick: () => trazarDesde({ tipo: 'PT', id: pid }) }, 'Trazar desde el punto de transición')));
     } else if (ac && ac.tipo === 'BRIDA') {
       const b = ac.barrenos || {};
-      const bar = (k, etq) => campo(etq, entrada(`ti-b-${k}`, b[k] === undefined ? '' : b[k], (v) => {
+      const bar = (k, etq, paso, unidad) => campo(etq, numero(`ti-b-${k}`, b[k] === undefined ? '' : b[k], (v) => {
         const nb = { numero: b.numero || 0, circulo_mm: b.circulo_mm || 0, diametro_mm: b.diametro_mm || 0, [k]: k === 'numero' ? Math.round(num(v)) : num(v) };
         aplicar((t) => T.editarPuerto(t, M(), pid, { barrenos: nb }), 'Barrenos de la brida.');
-      }));
+      }, { paso, unidad, min: 0, etiqueta: etq }));
       hijos.push(h('p', { class: 'ti-nota' }, toma ? 'El ducto sale alineado con el cuello de la toma: es un punto fijo. Si su Ø no es el de la toma, sale un adaptador.'
         : p.rol === 'SALIDA' ? 'La descarga va con brida y es un punto fijo: su ducto lleva todo el aire del equipo, sin ramales, hasta un extremo libre (la salida a la atmósfera). Si su Ø no es el de la brida, sale un adaptador.' : 'La boca del colector va con brida y es un punto fijo.'),
-        h('div', { class: 'ti-rejilla-campos' }, bar('numero', 'Barrenos'), bar('circulo_mm', 'Círculo (mm)'), bar('diametro_mm', 'Ø barreno (mm)')),
+        h('div', { class: 'ti-rejilla-campos' }, bar('numero', 'Barrenos', 2), bar('circulo_mm', 'Círculo', 5, 'mm'), bar('diametro_mm', 'Ø barreno', 1, 'mm')),
         h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-trazar-desde', onclick: () => trazarDesde({ tipo: 'PUERTO', id: pid }) }, toma ? 'Trazar desde la toma' : p.rol === 'SALIDA' ? 'Trazar desde la descarga' : 'Trazar desde la boca')));
     } else if (toma) hijos.push(h('p', { class: 'ti-semaforo ti-sem-ambar' }, 'Sin acople: elija manguera o brida para poder trazar desde aquí.'));
     if (toma) hijos.push(bloqueCopia(pid));
@@ -1379,12 +1570,12 @@
         return fila(cp, h('div', { class: 'ti-ficha-ctl' }, paso(-1, '−', `Un gajo menos a ${f.id}`), h('output', { class: 'ti-paso-v' }, String(cp.valor)), paso(1, '+', `Un gajo más a ${f.id}`),
           cp.ajustado ? h('button', { type: 'button', class: 'btn-texto ti-ficha-regla', onclick: () => cambiar({ [cp.clave]: null }) }, `Los de la regla (${cp.regla})`) : h('small', { class: 'ti-sub' }, 'los de la regla')));
       }
-      const inp = entrada(`ti-f-${cp.clave}-${f.id}`, cp.valor, (v) => {
+      const inp = numero(`ti-f-${cp.clave}-${f.id}`, cp.valor, (v) => {
         const x = num(v);
         if (!Number.isFinite(x)) { TB().decir(s, `Escriba el ${cp.etiqueta.toLowerCase()} en ${cp.unidad}.`, true); pintarEstado(); return; }
         cambiar({ [cp.clave]: Math.round(x) });
-      }, { class: 'ti-ficha-num', 'aria-label': `${cp.etiqueta} de ${f.id} (${cp.unidad})` });
-      return fila(cp, h('div', { class: 'ti-ficha-ctl' }, inp, h('span', { class: 'ti-sub' }, cp.unidad),
+      }, { paso: cp.unidad === 'mm' ? 10 : 1, unidad: cp.unidad, min: 0, attrs: { class: 'ti-ficha-num', 'aria-label': `${cp.etiqueta} de ${f.id} (${cp.unidad})` } });
+      return fila(cp, h('div', { class: 'ti-ficha-ctl' }, inp,
         cp.ajustado ? h('button', { type: 'button', class: 'btn-texto ti-ficha-regla', onclick: () => cambiar({ [cp.clave]: null }) }, `${cp.textoRegla[0].toUpperCase()}${cp.textoRegla.slice(1)} (${cp.regla} ${cp.unidad})`) : h('small', { class: 'ti-sub' }, cp.textoRegla)));
     };
     const lados = h('div', { class: 'ti-ficha-lados' }, f.lados.map((l) => (l.tramo
@@ -1418,11 +1609,11 @@
       h('div', { class: 'ti-rejilla-campos' },
         campo('Ø', selector('ti-t-d', diametros(), info.diametro_in, (v) => cambiarDiametroDe(id, Number(v)), 'Diámetro del tramo')),
         h('label', { class: 'ti-check', for: 'ti-t-candado', title: 'El dimensionamiento por caudal no cambia un Ø con candado' }, candado, h('span', { html: ico(ICONOS.candado) }), 'Candado'),
-        campo('Largo a ejes (m)', entrada('ti-t-largo', Math.round(info.largo_mm) / 1000, (v) => {
+        campo('Largo a ejes', numero('ti-t-largo', Math.round(info.largo_mm) / 1000, (v) => {
           const L = TB().leerCaja(v).largo;
           if (L === undefined) { TB().decir(s, 'Escriba el largo en m (3.25) o en mm (3250mm).', true); pintarEstado(); return; }
           aplicar((m) => T.cambiarLargo(m, M(), id, L), (m) => `${id}: ${metros(L)}${m.ultimo.compensacion && m.ultimo.compensacion.length ? `; se compensó en ${m.ultimo.compensacion.map((c) => `${c.tramo} (${c.delta_mm > 0 ? '+' : ''}${n0(c.delta_mm)} mm)`).join(', ')}` : ''}.`);
-        }))),
+        }, { paso: Math.max(0.05, s.t.politicas.paso_largo_mm / 1000), unidad: 'm', min: s.t.politicas.largo_min_tramo_mm / 1000, etiqueta: 'Largo a ejes del tramo' }))),
       info.corto ? h('div', { class: 'ti-corto' },
         h('p', { class: `ti-semaforo ${info.corto.decision ? 'ti-sem-verde' : 'ti-sem-ambar'}` }, `Tramo corto: ${W.num(Math.max(0, info.corto.neta), 0)} mm de recto ${info.corto.piezas.length > 1 ? `entre ${info.corto.piezas.join(' y ')}` : `después de ${info.corto.piezas[0]}`} (mínimo ${s.t.politicas.recto_min_entre_accesorios_mm} mm).`),
         h('div', { class: 'ti-seg', role: 'group', 'aria-label': 'Qué se hace con el tramo corto' },
@@ -1461,7 +1652,8 @@
     if (libre) {
       const ops = TZ().candidatas(s.t, M(), nid);
       const dir = h('select', { id: 'ti-n-dir', 'aria-label': 'Dirección del tramo nuevo' }, ops.map((o, i) => h('option', { value: String(i) }, `${TZ().textoDireccion(o.direccion)}${o.pieza === 'CODO' ? ` · codo de ${o.giro_deg}°` : ''}`)));
-      const largo = h('input', { id: 'ti-n-largo', type: 'text', inputmode: 'decimal', value: '1', 'aria-label': 'Largo del tramo nuevo (m)' });
+      const largoNum = numero('ti-n-largo', 1, () => {}, { paso: 0.5, unidad: 'm', min: 0.5, attrs: { 'aria-label': 'Largo del tramo nuevo (m)' }, sugerencias: [0.5, 1, 1.5, 2, 3, 4, 6].map((x) => [x, `${W.num(x, 1)} m`]) });
+      const largo = largoNum.querySelector('input');
       const ok = () => {
         const L = TB().leerCaja(largo.value).largo;
         const o = ops[Number(dir.value)];
@@ -1470,7 +1662,7 @@
         if (m) { s.sel = { tipo: 'NODO', id: m.ultimo.nodo }; cambio(); } else pintarEstado();
       };
       largo.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); ok(); } });
-      agregar = h('div', { class: 'ti-agregar' }, h('h4', null, 'Agregar un tramo desde aquí'), ops.length ? h('div', { class: 'ti-rejilla-campos' }, campo('Dirección', dir), campo('Largo (m)', largo), h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-n-agregar', onclick: ok }, `Agregar de ${pulg(s.D)}`)) : h('p', { class: 'ti-nota' }, TZ().textoCandidatas(nid, ops)));
+      agregar = h('div', { class: 'ti-agregar' }, h('h4', null, 'Agregar un tramo desde aquí'), ops.length ? h('div', { class: 'ti-rejilla-campos' }, campoAncho('Dirección', dir), campo('Largo', largoNum), h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-n-agregar', onclick: ok }, `Agregar de ${pulg(s.D)}`)) : h('p', { class: 'ti-nota' }, TZ().textoCandidatas(nid, ops)));
     }
     return h('section', { class: 'ti-ins' },
       titulo(pz.length ? `${pz.map((p) => p.corto).join(' + ')} · ${nid}` : `Nodo ${nid}`, `X ${n0(nd.posicion_mm.x)}, Y ${n0(nd.posicion_mm.y)}, Z ${n0(nd.posicion_mm.z)}${pz.length ? ' · toque una opción para cambiar la pieza' : ''}`),
@@ -1492,7 +1684,7 @@
     const a = T.aire(pr.aire.temperatura_C, pr.aire.altitud_m);
     const cal = Object.keys(M().calibres[M().materiales[s.t.material.material].tabla_calibre] || {}).map(Number).sort((x, y) => x - y);
     const rejillaModo = pol.rejilla.paso_azimut_deg === 90 ? 'EJES' : pol.rejilla.paso_azimut_deg === 45 ? 'EJES_45' : 'FINA';
-    const pp = (k, etq) => campo(etq, entrada(`ti-pol-${k}`, pol[k], (v) => aplicar((t) => T.cambiarPoliticas(t, M(), { [k]: num(v) }), `Política ${etq}: ${v}.`)));
+    const pp = (k, etq, paso, unidad) => campo(etq, numero(`ti-pol-${k}`, pol[k], (v) => aplicar((t) => T.cambiarPoliticas(t, M(), { [k]: num(v) }), `Política ${etq.toLowerCase()}: ${v}${unidad ? ` ${unidad}` : ''}.`), { paso, unidad, min: 0, etiqueta: etq }));
     const t90 = h('input', { type: 'checkbox', id: 'ti-pol-t90', checked: pol.permite_t_90 });
     t90.addEventListener('change', () => aplicar((t) => T.cambiarPoliticas(t, M(), { permite_t_90: t90.checked }), t90.checked ? 'T a 90° permitida en este proyecto.' : 'Sin T a 90°.'));
     return h('section', { class: 'ti-ins' },
@@ -1502,8 +1694,8 @@
         campo('Clave', entrada('ti-pr-id', pr.id, (v) => aplicar((t) => T.cambiarProyecto(t, M(), { id: v }), 'Clave del proyecto.'), { inputmode: 'text' })),
         campoAncho('Servicio', selector('ti-pr-servicio', [['POLVO', 'Polvo'], ['ABRASIVO', 'Material abrasivo'], ['VENTILACION', 'Ventilación'], ['HUMOS', 'Humos']], pr.servicio, (v) => aplicar((t) => T.cambiarProyecto(t, M(), { servicio: v }), (m) => `Servicio: velocidades de ${m.politicas.velocidad_min_m_s} a ${m.politicas.velocidad_max_m_s} m/s.`), 'Servicio')),
         campoAncho('Material transportado', entrada('ti-pr-mat', pr.material_transportado || '', (v) => aplicar((t) => T.cambiarProyecto(t, M(), { material_transportado: v || null }), 'Material transportado.'), { inputmode: 'text' })),
-        campo('Temperatura (°C)', entrada('ti-pr-temp', pr.aire.temperatura_C, (v) => aplicar((t) => T.cambiarProyecto(t, M(), { aire: { temperatura_C: num(v) } }), 'Temperatura del aire.'))),
-        campo('Altitud (m)', entrada('ti-pr-alt', pr.aire.altitud_m, (v) => aplicar((t) => T.cambiarProyecto(t, M(), { aire: { altitud_m: num(v) } }), 'Altitud.'))),
+        campo('Temperatura', numero('ti-pr-temp', pr.aire.temperatura_C, (v) => aplicar((t) => T.cambiarProyecto(t, M(), { aire: { temperatura_C: num(v) } }), 'Temperatura del aire.'), { paso: 1, unidad: '°C', etiqueta: 'Temperatura del aire' })),
+        campo('Altitud', numero('ti-pr-alt', pr.aire.altitud_m, (v) => aplicar((t) => T.cambiarProyecto(t, M(), { aire: { altitud_m: num(v) } }), 'Altitud.'), { paso: 10, unidad: 'm', etiqueta: 'Altitud' })),
         campoAncho('Origen', entrada('ti-pr-origen', pr.origen, (v) => aplicar((t) => T.cambiarProyecto(t, M(), { origen: v }), 'Origen.'), { inputmode: 'text' }))),
       h('p', { class: 'ti-nota', id: 'ti-pr-aire' }, `Aire: ${W.num(a.presion_Pa / 1000, 2)} kPa, ρ = ${W.num(a.densidad_kg_m3, 4)} kg/m³, μ = ${cientifico(a.viscosidad_Pa_s)} Pa·s.`),
       seccionNiveles(),
@@ -1518,7 +1710,7 @@
       h('details', { class: 'ti-politicas' }, h('summary', null, 'Políticas de este proyecto'),
         h('p', { class: 'ti-nota' }, `Codos a ${pol.angulos_codo_deg.join('°, ')}° (R = ${pol.radio_codo_D}·D); injertos a ${pol.angulos_injerto_deg.join('° y ')}°; entradas ${pol.entradas_permitidas.map((e) => e.toLowerCase()).join(' y ')}; largo al paso de ${pol.paso_largo_mm} mm (mínimo ${pol.largo_min_tramo_mm} mm). Vienen de las tablas del taller; los cambios valen sólo para este trazo.`),
         h('div', { class: 'ti-rejilla-campos' },
-          pp('velocidad_min_m_s', 'Velocidad mínima (m/s)'), pp('velocidad_max_m_s', 'Velocidad máxima (m/s)'), pp('holgura_min_mm', 'Holgura (mm)'), pp('altura_libre_min_mm', 'Altura libre (mm)'),
+          pp('velocidad_min_m_s', 'Velocidad mínima', 0.5, 'm/s'), pp('velocidad_max_m_s', 'Velocidad máxima', 0.5, 'm/s'), pp('holgura_min_mm', 'Holgura', 10, 'mm'), pp('altura_libre_min_mm', 'Altura libre', 100, 'mm'),
           campo('Direcciones', selector('ti-pol-rejilla', [['FINA', 'Finas: 170'], ['EJES_45', 'Ejes y 45°: 26'], ['EJES', 'Sólo ejes: 6']], rejillaModo, (v) => aplicar((t) => T.cambiarPoliticas(t, M(), { rejilla: T.REJILLAS[v] }), 'Rejilla de direcciones.'), 'Rejilla de direcciones')),
           h('label', { class: 'ti-check', for: 'ti-pol-t90' }, t90, 'Permitir T a 90°'))));
   }
@@ -1528,7 +1720,8 @@
     const s = ui.s;
     const lista = s.t.proyecto.niveles || [];
     const nombre = h('input', { id: 'ti-nv-nombre', type: 'text', autocomplete: 'off', placeholder: `Nivel ${Math.round(s.nivel || 3000)}`, 'aria-label': 'Nombre del nivel' });
-    const z = h('input', { id: 'ti-nv-z', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: String(s.nivel || 3000), 'aria-label': 'Altura del nivel (mm)' });
+    const zNum = numero('ti-nv-z', s.nivel || 3000, () => {}, { paso: 100, unidad: 'mm', min: 0, attrs: { 'aria-label': 'Altura del nivel (mm)' } });
+    const z = zNum.querySelector('input');
     const agregar = () => { if (TB().nombrarNivel(s, nombre.value, num(z.value))) cambio(); else { pintarEstado(); pintarInspector(); } };
     [nombre, z].forEach((el) => el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); agregar(); } }));
     return h('div', { class: 'ti-niveles', id: 'ti-niveles' },
@@ -1538,7 +1731,7 @@
           h('button', { type: 'button', class: 'enlace', title: 'Trabajar en este nivel', onclick: () => { TB().irANivel(s, x.z_mm); pintar(); } }, x.nombre), ` · z = ${n0(x.z_mm)} mm `,
           h('button', { type: 'button', class: 'btn-texto ti-nv-quitar', 'aria-label': `Quitar el nivel ${x.nombre}`, onclick: () => { if (TB().quitarNivel(s, x.nombre)) cambio(); else pintarEstado(); } }, 'Quitar'))))
         : h('p', { class: 'ti-nota' }, 'Sin niveles con nombre. Un nivel es la altura del eje de los ductos («Nivel de ductería 3 000»): RePág y AvPág se detienen en él, Mayús+RePág salta al siguiente y el trazo que sube o baja se ajusta a su altura.'),
-      h('div', { class: 'ti-rejilla-campos' }, campo('Nombre', nombre), campo('Altura (mm)', z)),
+      h('div', { class: 'ti-rejilla-campos' }, campo('Nombre', nombre), campo('Altura', zNum)),
       h('div', { class: 'ti-acciones' }, h('button', { type: 'button', class: 'btn btn-sec', id: 'ti-nv-agregar', onclick: agregar }, 'Agregar nivel')));
   }
 

@@ -2865,6 +2865,52 @@ Lo verifican:
   - el caudal de su Ø y otra igual a 250 mm;
   - la toma con manguera y la de ducto, que lo arrastra.
 
+### 5.16 El dibujo en 3D y la edición con − y +
+
+Para que el trazo se lea como lo que se va a fabricar, cada tramo se dibuja con sus piezas (`cuerpos` en `trazado_tablero.js`):
+
+- **Tubos:** cada ducto es un tubo de su Ø a la escala de la vista (mínimo 3 px), con borde, cuerpo y un brillo corrido hacia la luz (arriba a la izquierda), para que se lea como cilindro.
+- **Piezas de cada tramo:** el tramo se parte en lo que ocupa cada pieza desde cada nodo, en el orden de sus piezas, y el recto que queda.
+  - **Codos:** en arco con su radio R. Empiezan a R·tan(θ/2) del nodo y su centro queda a √(R² + T²) por la bisectriz. Luego viene su cuello recto, hasta su tangente. Llevan una costura por cada unión de sus gajos: dos medios en las puntas y los demás enteros.
+  - **Reducciones:** en cono, de un Ø al otro. Partida en dos tramos, el Ø a mitad del cono va en el nodo. La de un codo va toda en el tramo menor, después del codo. En la reducción con injerto, el tronco va en cono y el ramal recto.
+  - **Tramo corto:** si las piezas de los dos extremos no caben, se reparten lo que hay.
+- **Bridas:** un aro más ancho que el tubo donde acaba cada pieza, en la boca de cada equipo y en el punto de transición. Visto de punta, un círculo.
+- **Manguera:** corrugada, con sus anillos a lo largo.
+- **En el piso (vistas isométricas):**
+  - la sombra de cada tubo y de cada manguera que va en alto, y la de la caja de un equipo que no está en el piso;
+  - una plomada punteada por columna, desde su punto más alto, con una cruz en el piso y su altura («↑ 3.0 m») si hay lugar.
+  - En planta no se dibujan. En las elevaciones sólo van las plomadas, porque el piso se ve de canto.
+- **Equipos:** se distinguen por color: el colector azul, el ventilador verde, la campana ámbar y la máquina gris.
+- **Teléfono:** el encuadre deja 24 px a los lados (70 en pantallas anchas), para que el dibujo ocupe el ancho.
+
+Los números del inspector se ajustan sin teclear:
+
+- **Botones − y +:** a los lados de cada número, con su unidad a la vista.
+  - Cada toque va de paso en paso: 100 mm en la posición de un equipo, 50 mm en su caja, en las distancias de una toma y en la manguera, 50 m³/h en el caudal, 0.05 en K, el paso de largo de las políticas en un tramo, 0.5 m en un tramo nuevo, 10 mm en los largos de una pieza, 1 °C, 10 m de altitud, 100 mm en un nivel y lo propio de cada política.
+  - Un valor fuera del paso pasa primero al múltiplo siguiente: 10 750 + 100 da 10 800.
+- **Teclado:** ↑ y ↓ hacen lo mismo en el campo (con Mayús, de a décimo) y el campo sigue elegido. Lo escrito se aplica con Intro o al salir, como antes.
+- **Menús:**
+  - el giro del equipo, de 15 en 15° y con hacia dónde queda su frente, con botones ⟲ y ⟳ de 90° y 15°;
+  - el rumbo del desvío de la manguera, de 15 en 15° con su rumbo;
+  - la Z de la base sugiere el piso y los niveles con nombre, y el largo de un tramo nuevo sugiere 0.5 a 6 m.
+- **Secciones plegables:** la ficha del equipo va en «Dónde está», «Tamaño de la caja», «Tomas» y «Agregar una toma». Cada una se queda abierta o plegada como se dejó.
+- **Toma nueva:** su − y su + parten del centro de la cara.
+
+Lo verifican:
+
+- `tests/trazado_tablero.test.js`: los cuerpos del ejemplo.
+  - Cada tramo queda en sus piezas sin huecos, desde el arco de sus codos.
+  - Los arcos van a R·tan(θ/2) del nodo, con su panza a √(R² + T²) − R. Llevan 8 costuras.
+  - Los dos conos de la reducción con injerto: de 7″ a 6″ y de 7″ a 8″.
+  - Las 10 bridas.
+- `tests/trazado_lectura.test.js`: en cada paso de las caminatas al azar, cada tramo rígido queda cubierto, seguido y sin huecos, y ningún cuerpo queda sin medida.
+- La sección 48 de `tests/e2e/ui.e2e.js`:
+  - arcos, costuras, conos, bridas, brillo, manguera, sombras, plomadas y altura, y que en planta no van;
+  - el + y las flechas (con Mayús), y deshacer paso por paso;
+  - el menú y los botones del giro;
+  - las sugerencias de la Z y la sección que se queda plegada;
+  - el caudal de 50 en 50 y el rumbo del desvío en un menú.
+
 ---
 
 ## 6. Autoevaluación

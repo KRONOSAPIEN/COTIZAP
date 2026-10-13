@@ -176,6 +176,15 @@ La pestaña **Trazado isométrico** es el tablero de [`docs/trazado-isometrico.m
 | **6 · Salida** | Las partidas, el cálculo y el JSON del sistema | **Pasar a la cotización**: el despiece del trazo con las reglas del taller (definitivo, preliminar o lo que falta, con sus avisos) y el botón que lo lleva al diálogo del despiece y agrega las partidas (o las reemplaza). El **ventilador** de cada colector (caudal, succión, la misma en aire estándar para la curva del fabricante, potencia y motor), las **tomas** (el caudal que va a jalar cada una con el balanceo, la succión de su campana, la pérdida de su camino y la crítica), el **balanceo** de cada confluencia (ajustar caudal, redimensionar o compuerta, con la sugerencia; «Poner compuerta» la pone y el cálculo dice cuánto cerrarla) y la **hoja de cálculo** por tramo; las cotas dicen Ø, caudal y succión. Copiar o descargar el sistema con el cálculo; abrir uno; renumerar |
 
 - **Vistas:** isométrico NE, SE, SO y NO (Q y E giran), planta y las dos elevaciones (1 a 4, o el cubo de vista), encuadrar (F o 0), rueda o dos dedos para acercar, Espacio y arrastrar para mover. Ctrl+Z y Ctrl+Y deshacen hasta 100 pasos.
+- **El dibujo en 3D:**
+  - Cada ducto es un tubo de su Ø con volumen, y cada tramo se dibuja con sus piezas: los codos en arco con su radio y las costuras de sus gajos, las reducciones en cono y una brida donde acaba cada pieza. La manguera se ve corrugada.
+  - En el isométrico, lo que va en alto deja su sombra en el piso, y una plomada con su altura («↑ 3.0 m») dice a qué altura va cada punto.
+  - Cada tipo de equipo tiene su color: el colector azul, el ventilador verde, la campana ámbar y la máquina gris ([§5.16](docs/trazado-isometrico.md)).
+- **Los números se ajustan sin teclear:**
+  - Cada número del inspector lleva − y + a los lados, con su unidad: 100 mm en la posición de un equipo, 50 mm en su caja y en las tomas, 50 m³/h en el caudal. En el campo, ↑ y ↓ hacen lo mismo (con Mayús, de a décimo).
+  - El giro del equipo va en un menú de 15 en 15°, con botones de 90° y 15°. El rumbo del desvío de la manguera también va en un menú.
+  - La Z de la base sugiere el piso y los niveles con nombre.
+  - La ficha del equipo va en secciones plegables, que se quedan como se dejaron ([§5.16](docs/trazado-isometrico.md)).
 - **Lo que no se puede, no se hace:** el fantasma sale verde, ámbar (con su aviso) o rojo con el motivo, y la barra de abajo lo dice. La barra de fases cuenta lo pendiente de cada una.
 - **Cambiar el Ø de un tramo** que bajaría hacia el colector (o haría un ramal mayor que su tronco) se rechaza con la alternativa «Cambiar en cadena», que cambia también lo que sigue. Un **tramo corto** entre piezas se decide en su inspector: pegar las piezas (soldadas, o engargoladas en galvanizado) o fabricarlo corto con bridas.
 - *Abrir el ejemplo* carga el de la especificación (sierra con brida y cepillo con manguera a un colector). Jugarlo a mano, con ratón y teclado, da exactamente su JSON, con el cálculo (`tests/e2e/ui.e2e.js`, secciones 35 y 37).

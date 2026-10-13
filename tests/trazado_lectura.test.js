@@ -346,6 +346,21 @@ test('Caminata al azar: el despiece cuadra con el trazo, cada junta es del Ø de
         assert.ok((gg.piezasDe.get(x.id) || []).some((q) => tipos.includes(q.tipo)), `${msg}: ${x.id} tiene ${k} sin su pieza`);
         vistos.add('AJUSTE');
       }));
+      // el dibujo 3D (§0.4): cada tramo rígido en sus piezas, seguidas y sin huecos, de los arcos de sus codos hacia dentro
+      const s3 = TB.crear(M, null, { ancho: 900, alto: 600 });
+      TB.reemplazar(s3, t, 'caminata');
+      const cu = TB.cuerpos(s3);
+      const d3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+      const ta = (nid) => { const pz = gg.piezas.find((q) => q.tipo === 'CODO' && q.nodo === nid); return pz ? pz.geometria.radio_eje_mm * Math.tan((pz.geometria.angulo_deg * Math.PI) / 360) : 0; };
+      t.tramos.filter((x) => x.tipo === 'RIGIDO').forEach((x) => {
+        const A = gg.pos.get(x.a);
+        const L = gg.seg.get(x.id).L;
+        const tb = cu.tubos.filter((y) => y.tramo === x.id).map((y) => [d3(A, y.puntos[0]), d3(A, y.puntos[1])].sort((p, q) => p - q)).sort((p, q) => p[0] - q[0]);
+        assert.ok(tb.length, `${msg}: ${x.id} sin cuerpo`);
+        for (let k = 1; k < tb.length; k += 1) assert.ok(Math.abs(tb[k][0] - tb[k - 1][1]) < 0.5, `${msg}: ${x.id} con un hueco en ${tb[k - 1][1]}`);
+        assert.ok(tb[0][0] <= ta(x.a) + 0.5 && tb[tb.length - 1][1] >= L - ta(x.b) - 0.5 && tb[tb.length - 1][1] <= L + 0.5, `${msg}: ${x.id} no llega a sus arcos`);
+      });
+      assert.ok(cu.tubos.every((y) => y.D0 > 0 && y.D1 > 0 && y.puntos.every((q) => Number.isFinite(q.x + q.y + q.z))), `${msg}: un cuerpo sin medida`);
       r.bom.accesorios.forEach((a) => vistos.add(a.tipo));
       if (r.bom.elementos_union.some((j) => j.tipo === 'UNION_ENGARGOLADA')) vistos.add('PEGADO');
       if (r.bom.partidas_compradas.some((p) => p.articulo_id && p.articulo_id.startsWith('MANGUERA') && p.articulo_id !== 'MANGUERA_5')) vistos.add('OTRA_MANGUERA');

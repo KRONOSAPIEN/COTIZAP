@@ -3689,6 +3689,62 @@ const ok = (cond, msg) => {
     await p.close();
   }
 
+  console.log('48) El dibujo en 3D se entiende: tubos con su Ø, codos en arco con sus gajos, conos, bridas, sombras y plomadas; y los números se ajustan con − y +, flechas y menús, en secciones plegables');
+  {
+    const p = await nuevaPagina();
+    const R = (fn, a) => p.evaluate(fn, a);
+    const ins = p.locator('#ti-inspector');
+    const lz = p.locator('#ti-lienzo');
+    const elegir = (sel) => R((x) => { const W = window.COTIZAP.web; W.trazadoUI.estado().sel = x; W.trazadoUI.render(); }, sel);
+    const eq = (id) => R((x) => window.COTIZAP.web.estadoApp.cot.trazado_iso.equipos.find((e) => e.id === x), id);
+    await p.click('#tab-trazado');
+    await p.click('#ti-ejemplo');
+    // los cuerpos: el ejemplo tiene dos codos (en arco, con 4 costuras cada uno), dos conos en la reducción con injerto y sus bridas
+    ok(await lz.locator('path.ti-tubo-arco').count() === 2 && await lz.locator('.ti-costura').count() === 8, 'los dos codos en arco, con las costuras de sus 5 gajos');
+    ok(await lz.locator('polygon.ti-tubo-cono').count() === 2, 'el cono de la reducción con injerto, a los dos lados');
+    ok(await lz.locator('.ti-union').count() === 10 && await lz.locator('.ti-tubo-brillo').count() > 5, 'las bridas entre piezas y el brillo que da volumen');
+    ok(await lz.locator('.ti-manguera-anillos').count() === 1, 'la manguera corrugada');
+    // en el piso: la sombra de lo que va en alto, la plomada y su altura
+    ok(await lz.locator('.ti-sombra').count() > 3 && await lz.locator('.ti-plomada').count() >= 1, 'sombras en el piso y plomadas');
+    ok((await lz.locator('.ti-txt-altura').allTextContents()).includes('↑ 3.0 m'), 'la altura del trazo junto a su plomada');
+    await p.click('#ti-vista-planta');
+    ok(await lz.locator('.ti-sombra').count() === 0 && await lz.locator('.ti-plomada').count() === 0, 'en planta no hacen falta');
+    await p.click('#ti-vista-ne');
+    // los números con − y +, de paso en paso y al múltiplo del paso
+    await elegir({ tipo: 'EQUIPO', id: 'EQ-03' });
+    const masX = ins.locator('[data-seccion="equipo-lugar"] .ti-num').first().locator('[data-paso="1"]');
+    ok(await p.inputValue('#ti-e-x') === '7000' && /X del equipo: 100 mm más/.test(await masX.getAttribute('aria-label')), 'X con su − y su +');
+    await masX.click();
+    ok((await eq('EQ-03')).posicion_mm.x === 7100 && await p.inputValue('#ti-e-x') === '7100', 'el + lo mueve 100 mm');
+    await p.focus('#ti-e-x');
+    await p.keyboard.press('ArrowDown');
+    await p.keyboard.press('ArrowDown');
+    ok((await eq('EQ-03')).posicion_mm.x === 6900 && await p.evaluate(() => document.activeElement.id) === 'ti-e-x', 'con ↓ en el teclado, sin perder el campo');
+    await p.keyboard.press('Shift+ArrowUp');
+    ok((await eq('EQ-03')).posicion_mm.x === 6910, 'con Mayús, de a 10');
+    await p.click('#ti-deshacer'); await p.click('#ti-deshacer'); await p.click('#ti-deshacer'); await p.click('#ti-deshacer');
+    ok((await eq('EQ-03')).posicion_mm.x === 7000, 'y se deshace paso por paso');
+    // el giro en un menú, con sus botones; las caras de sus tomas se nombran con el giro
+    await elegir({ tipo: 'EQUIPO', id: 'EQ-03' });
+    ok(await ins.locator('#ti-e-giro option').count() === 24 && /su frente \(\+X\) al norte/.test(await ins.locator('#ti-e-giro option[value="90"]').innerText()), 'el giro en un menú de 15 en 15');
+    await p.selectOption('#ti-e-giro', '90');
+    ok((await eq('EQ-03')).rotacion_z_deg === 90, 'elegido en el menú');
+    await ins.locator('button[aria-label="Girar Cepillo 90° a la derecha"]').click();
+    ok((await eq('EQ-03')).rotacion_z_deg === 0, 'y con el botón de 90°');
+    // la Z de la base sugiere el piso y los niveles con nombre
+    ok(await p.locator('#ti-e-z-lista option[value="0"]').getAttribute('label') === 'Piso', 'la Z sugiere el piso');
+    // una sección plegada se queda plegada
+    await ins.locator('[data-seccion="equipo-caja"] > summary').click();
+    await elegir({ tipo: 'EQUIPO', id: 'EQ-02' });
+    await elegir({ tipo: 'EQUIPO', id: 'EQ-03' });
+    ok(await ins.locator('[data-seccion="equipo-caja"]').evaluate((d) => d.open) === false && await ins.locator('[data-seccion="equipo-lugar"]').evaluate((d) => d.open) === true, 'la caja se queda plegada y lo demás abierto');
+    // en la toma: el caudal de 50 en 50 y el rumbo del desvío en un menú
+    await elegir({ tipo: 'PUERTO', id: 'PU-03' });
+    await ins.locator('#ti-p-q').locator('xpath=..').locator('[data-paso="1"]').click();
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.trazado_iso.equipos.find((e) => e.id === 'EQ-03').puertos.find((x) => x.id === 'PU-03').caudal_m3_h) === 950, 'el caudal sube 50 m³/h');
+    ok(await ins.locator('#ti-m-az').evaluate((x) => x.tagName) === 'SELECT' && await p.inputValue('#ti-m-az') === '90', 'el rumbo del desvío en un menú (al norte)');
+    await p.close();
+  }
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

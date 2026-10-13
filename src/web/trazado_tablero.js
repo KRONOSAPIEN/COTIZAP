@@ -237,6 +237,102 @@
       .sort((a, b) => b.prof - a.prof);
   }
 
+  /**
+   * Los cuerpos del dibujo 3D, en el mundo (mm): cada tramo rígido partido en lo que es de cada pieza y su recto, y cada
+   * codo como arco con su radio (§0.4). { tubos, uniones, costuras }:
+   * - tubos: [{ tramo, nodo, pieza, tipo: RECTO | CUELLO | ARCO | CONO, puntos, D0, D1 }] (D en mm; en un cono D0 es el
+   *   del primer punto y D1 el del último);
+   * - uniones: [{ punto, eje, D }] donde se juntan dos piezas, o una pieza y el recto (sus bridas), y en las bocas;
+   * - costuras: [{ punto, eje, D }] entre los gajos de los codos.
+   * Si las piezas de los dos extremos no caben en el tramo (un tramo corto), se reparten lo que hay.
+   */
+  function cuerpos(s) {
+    const g = s.g;
+    const tubos = [];
+    const uniones = [];
+    const costuras = [];
+    const ramalDe = new Map((g.derivaciones || []).map((d) => [d.nodo, d.ramal]));
+    const enLinea = (A, u, x) => suma(A, por(u, x));
+    s.t.tramos.forEach((t) => {
+      if (t.tipo === 'FLEXIBLE' || !g.seg.has(t.id)) return;
+      const A = g.pos.get(t.a);
+      const B = g.pos.get(t.b);
+      const L = g.seg.get(t.id).L;
+      if (!A || !B || L < 1) return;
+      const u = unitario(resta(B, A));
+      const D = t.diametro_in * IN;
+      const oc = g.ocupa.get(t.id) || [];
+      // lo de cada extremo, de su nodo hacia dentro, en el orden de sus piezas
+      const lado = (nid) => { let x = 0; return oc.filter((o) => o.nodo === nid).map((o) => { const r = { pieza: o.pieza, de: x, a: x + o.mm }; x = r.a; return r; }); };
+      const iA = lado(t.a);
+      const iB = lado(t.b);
+      const sA = iA.length ? iA[iA.length - 1].a : 0;
+      const sB = iB.length ? iB[iB.length - 1].a : 0;
+      const f = sA + sB > L ? L / (sA + sB) : 1;
+      // el Ø de una pieza a x mm de su nodo, en este tramo
+      const diam = (pz, x, largo) => {
+        const enCono = pz.tipo === 'REDUCCION' || (pz.tipo === 'REDUCCION_INJERTO' && ramalDe.get(pz.nodo) !== t.id);
+        if (!enCono) return pz.tipo === 'CODO' ? pz.conexiones[0].diametro_in * IN : D;
+        const partida = pz.ocupa.filter((o) => o.tramo !== ramalDe.get(pz.nodo)).length === 2;
+        const otro = pz.tipo === 'REDUCCION' ? (Math.abs(t.diametro_in - pz.D1) < 1e-9 ? pz.D2 : pz.D1)
+          : pz.conexiones.filter((c) => c.tramo !== t.id && c.tramo !== ramalDe.get(pz.nodo)).map((c) => c.diametro_in)[0];
+        const cerca = (partida ? (t.diametro_in + otro) / 2 : otro) * IN;
+        const k = largo > 0 ? Math.min(1, Math.max(0, x / largo)) : 1;
+        return cerca + (D - cerca) * k;
+      };
+      const desde = (nid, ints, haciaDentro, origen) => ints.forEach((r) => {
+        const pz = r.pieza;
+        const de = r.de * f;
+        const a = r.a * f;
+        // en un codo, su arco ocupa los primeros R·tan(θ/2); el resto es su cuello recto
+        const arco = pz.tipo === 'CODO' ? Math.min(a, pz.geometria.radio_eje_mm * Math.tan((pz.geometria.angulo_deg * Math.PI) / 360) * f) : de;
+        const ini = Math.max(de, arco);
+        if (a - ini > 0.5) {
+          const cono = pz.tipo === 'REDUCCION' || (pz.tipo === 'REDUCCION_INJERTO' && ramalDe.get(nid) !== t.id);
+          const largo = a - de;
+          tubos.push({ tramo: t.id, nodo: nid, pieza: pz.id || pz.tipo, tipo: cono ? 'CONO' : pz.tipo === 'CODO' ? 'CUELLO' : 'RECTO', puntos: [enLinea(origen, haciaDentro, ini), enLinea(origen, haciaDentro, a)], D0: diam(pz, ini - de, largo), D1: diam(pz, a - de, largo) });
+        }
+        uniones.push({ punto: enLinea(origen, haciaDentro, a), eje: u, D: diam(pz, a - de, a - de) });
+      });
+      desde(t.a, iA, u, A);
+      desde(t.b, iB, por(u, -1), B);
+      const x0 = sA * f;
+      const x1 = L - sB * f;
+      if (x1 - x0 > 0.5) tubos.push({ tramo: t.id, nodo: null, pieza: null, tipo: 'RECTO', puntos: [enLinea(A, u, x0), enLinea(A, u, x1)], D0: D, D1: D });
+      // la brida de la boca del equipo o la del punto de transición
+      [t.a, t.b].forEach((nid) => { if (g.puertoDeNodo.has(nid) || g.pt.has(nid)) uniones.push({ punto: g.pos.get(nid), eje: u, D }); });
+    });
+    // los arcos de los codos, con las costuras de sus gajos
+    g.piezas.filter((pz) => pz.tipo === 'CODO').forEach((pz) => {
+      const P0 = g.pos.get(pz.nodo);
+      const [ti, to] = pz.conexiones.map((c) => g.tramos.get(c.tramo));
+      if (!P0 || !ti || !to || !g.seg.has(ti.id) || !g.seg.has(to.id)) return;
+      const d1 = g.fuera(ti, pz.nodo);
+      const d2 = g.fuera(to, pz.nodo);
+      const R = pz.geometria.radio_eje_mm;
+      const th = (pz.geometria.angulo_deg * Math.PI) / 180;
+      const Ta = R * Math.tan(th / 2);
+      const bis = unitario(suma(d1, d2));
+      if (!(R > 0) || norma(suma(d1, d2)) < 1e-9) return;
+      const C = suma(P0, por(bis, Math.sqrt(R * R + Ta * Ta)));
+      const v1 = resta(suma(P0, por(d1, Ta)), C);
+      const v2 = resta(suma(P0, por(d2, Ta)), C);
+      const en = (k) => suma(C, por(suma(por(v1, Math.sin((1 - k) * th)), por(v2, Math.sin(k * th))), 1 / Math.sin(th)));
+      const n = Math.max(6, 2 * Math.ceil(pz.geometria.angulo_deg / 12)); // par: el punto de en medio es su panza
+      const Dc = pz.conexiones[0].diametro_in * IN;
+      tubos.push({ tramo: null, nodo: pz.nodo, pieza: pz.id || 'CODO', tipo: 'ARCO', puntos: Array.from({ length: n + 1 }, (_, i) => en(i / n)), D0: Dc, D1: Dc });
+      const gajos = pz.geometria.gajos;
+      // dos medios gajos en las puntas y los demás enteros: n − 1 costuras
+      if (gajos > 1) {
+        for (let i = 1; i < gajos; i += 1) {
+          const k = (2 * i - 1) / (2 * (gajos - 1));
+          costuras.push({ punto: en(k), eje: unitario(resta(en(Math.min(1, k + 0.01)), en(Math.max(0, k - 0.01)))), D: Dc });
+        }
+      }
+    });
+    return { tubos, uniones, costuras };
+  }
+
   /** Lo que el dibujo ocupa: el origen, los nodos y las cajas de los equipos. */
   function puntosDelDibujo(s) {
     const pts = [V3(0, 0, 0)];
@@ -254,7 +350,7 @@
     const w = Math.max(u1 - u0, 8000);
     const hh = Math.max(v1 - v0, 5000);
     // márgenes: arriba la barra de vistas, abajo la escala; a los lados, el cubo y los ejes
-    const m = { arriba: 64, abajo: 40, lados: 70 };
+    const m = { arriba: 64, abajo: 40, lados: s.ancho < 560 ? 24 : 70 }; // en el teléfono, casi a la orilla
     const k = clamp(Math.min(Math.max(80, s.ancho - 2 * m.lados) / w, Math.max(80, s.alto - m.arriba - m.abajo) / hh), 0.003, 2);
     s.cam.k = k;
     s.cam.ox = s.ancho / 2 - ((u0 + u1) / 2) * k;
@@ -1910,7 +2006,7 @@
   return {
     CAJAS, FASES, VISTAS, NOMBRE_VISTA, AYUDA, CAPTURA_PX, IMAN_PX, ALINEAR_PX,
     crear, usarMaestros, recalcular, hacer, reemplazar, deshacer, rehacer, decir,
-    adelante, profundidad, pantalla, enPlano, enNivel, esquinas, carasVisibles, encuadrar, zoom, desplazar, medidas, ponerVista, girarVista,
+    adelante, profundidad, pantalla, enPlano, enNivel, esquinas, carasVisibles, cuerpos, encuadrar, zoom, desplazar, medidas, ponerVista, girarVista,
     tocar, caraBajo, fases, irFase, elegir,
     colocarEquipo, moverEquipo, ponerToma, puntoDelPiso,
     mangueraDe, acoplar, semaforoManguera, alturaPorArrastre, desvioPorArrastre, previaManguera, moverManguera,

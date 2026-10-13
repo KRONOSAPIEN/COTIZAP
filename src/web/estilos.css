@@ -1140,6 +1140,10 @@ kbd { font: 500 11.5px var(--font-mono); padding: 1px 6px; border: 1px solid var
   --ti-cara-arriba: #f7f9fb;
   --ti-cara-x: #dde4ec;
   --ti-cara-y: #c9d3de;
+  --ti-ducto: #7d9cc0;
+  --ti-ducto-borde: #3f5c7e;
+  --ti-ducto-brillo: rgba(255, 255, 255, 0.62);
+  --ti-sombra: rgba(20, 35, 55, 0.13);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -1150,6 +1154,10 @@ kbd { font: 500 11.5px var(--font-mono); padding: 1px 6px; border: 1px solid var
     --ti-cara-arriba: #2a3a4b;
     --ti-cara-x: #223040;
     --ti-cara-y: #1b2734;
+    --ti-ducto: #6f8fb6;
+    --ti-ducto-borde: #c9d8ea;
+    --ti-ducto-brillo: rgba(255, 255, 255, 0.45);
+    --ti-sombra: rgba(0, 0, 0, 0.35);
   }
 }
 :root[data-theme="dark"] {
@@ -1160,6 +1168,10 @@ kbd { font: 500 11.5px var(--font-mono); padding: 1px 6px; border: 1px solid var
   --ti-cara-arriba: #2a3a4b;
   --ti-cara-x: #223040;
   --ti-cara-y: #1b2734;
+  --ti-ducto: #6f8fb6;
+  --ti-ducto-borde: #c9d8ea;
+  --ti-ducto-brillo: rgba(255, 255, 255, 0.45);
+  --ti-sombra: rgba(0, 0, 0, 0.35);
 }
 .ti { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 .ti-fases { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -1240,9 +1252,30 @@ kbd { font: 500 11.5px var(--font-mono); padding: 1px 6px; border: 1px solid var
 .ti-ins h4 { margin: 4px 0 0; }
 .ti-ins-tit h3 { font-size: 15px; }
 .ti-ins-sub { font-size: 12.5px; color: var(--fg-2); margin-top: 2px; }
-.ti-rejilla-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; align-items: end; }
+.ti-rejilla-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 8px; align-items: end; }
 .ti-campo input, .ti-campo select { min-height: 34px; padding: 5px 8px; }
 .ti-campo-ancho { grid-column: 1 / -1; }
+/* un número con − y + a los lados y su unidad a la vista (↑ ↓ en el teclado) */
+.ti-num { display: flex; align-items: stretch; min-width: 0; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); overflow: hidden; }
+.ti-num:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.ti-num input, .ti-campo .ti-num input { flex: 1 1 auto; min-width: 3.2em; width: 100%; border: 0; border-radius: 0; background: transparent; box-shadow: none; text-align: right; font-variant-numeric: tabular-nums; padding: 5px 3px; }
+.ti-num input:focus { outline: none; box-shadow: none; }
+.ti-num-u { display: flex; align-items: center; padding: 0 5px 0 1px; color: var(--fg-3); font: 500 11px var(--font-ui); white-space: nowrap; }
+.ti-num-btn { flex: 0 0 auto; width: 27px; min-height: 34px; border: 0; background: var(--surface-2); color: var(--fg-2); font: 600 17px/1 var(--font-ui); cursor: pointer; touch-action: manipulation; }
+.ti-num-btn:hover { background: var(--accent-soft); color: var(--accent); }
+.ti-num-btn:active { background: var(--accent); color: var(--surface); }
+.ti-num-btn[data-paso="-1"] { border-right: 1px solid var(--line); }
+.ti-num-btn[data-paso="1"] { border-left: 1px solid var(--line); }
+.ti-ficha-ctl .ti-num { flex: 0 1 190px; }
+@media (pointer: coarse) { .ti-num-btn { width: 40px; min-height: 40px; } }
+/* secciones plegables del inspector: recuerdan si se dejaron abiertas */
+.ti-sec { border-top: 1px solid var(--line); padding-top: 4px; margin-top: 6px; }
+.ti-sec > summary { display: flex; align-items: center; gap: 6px; min-height: 34px; cursor: pointer; list-style: none; font: 700 12px var(--font-ui); letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-2); }
+.ti-sec > summary::-webkit-details-marker { display: none; }
+.ti-sec > summary::before { content: '▸'; display: inline-block; width: 12px; color: var(--fg-3); transition: transform 0.15s; }
+.ti-sec[open] > summary::before { transform: rotate(90deg); }
+.ti-sec > summary:hover { color: var(--fg); }
+.ti-sec-cuerpo { display: flex; flex-direction: column; gap: 8px; padding-bottom: 6px; }
 .ti-nota { font-size: 12.5px; color: var(--fg-2); }
 .ti-semaforo { font-size: 13px; font-weight: 600; padding: 6px 9px; border-radius: 8px; }
 .ti-sem-verde { color: var(--good); background: var(--good-soft); }
@@ -1335,11 +1368,39 @@ dd.ti-sem-verde, dd.ti-sem-ambar { background: none; font-weight: 600; }
 .ti-tramo.ti-err { stroke: var(--crit); }
 .ti-tramo.ti-hover { opacity: 1; }
 .ti-tramo.ti-sel { stroke: var(--ti-sel); opacity: 1; }
-.ti-tramo-eje { stroke: var(--surface); stroke-width: 1; stroke-dasharray: 6 4; opacity: 0.7; pointer-events: none; }
-.ti-flecha { fill: var(--surface); pointer-events: none; }
-.ti-manguera { stroke: var(--s6); stroke-linecap: round; stroke-linejoin: round; fill: none; opacity: 0.55; }
-.ti-manguera.ti-sel { stroke: var(--ti-sel); opacity: 0.8; }
-.ti-manguera-eje { stroke: var(--s6); stroke-width: 1.2; stroke-dasharray: 3 3; fill: none; pointer-events: none; }
+/* los ductos como tubos (§0.4): borde, cuerpo del Ø en pantalla y un brillo hacia la luz; los codos en arco, las
+   reducciones en cono, las bridas y las costuras de los gajos como aros */
+.ti-tubo { stroke: var(--ti-ducto); stroke-linejoin: round; opacity: 1; }
+.ti-tubo.ti-cono { fill: var(--ti-ducto); stroke: var(--ti-ducto-borde); stroke-width: 1; }
+.ti-tubo.ti-aviso { stroke: var(--warn); }
+.ti-tubo.ti-err { stroke: var(--crit); }
+.ti-tubo.ti-sel { stroke: var(--ti-sel); }
+.ti-tubo.ti-cono.ti-aviso { fill: var(--warn); }
+.ti-tubo.ti-cono.ti-err { fill: var(--crit); }
+.ti-tubo.ti-cono.ti-sel { fill: var(--ti-sel); }
+.ti-tubo.ti-hover:not(.ti-sel) { stroke: var(--accent); }
+.ti-tubo.ti-cono.ti-hover:not(.ti-sel) { fill: var(--accent); }
+.ti-tubo-borde { stroke: var(--ti-ducto-borde); fill: none; stroke-linejoin: round; pointer-events: none; }
+.ti-tubo-brillo { stroke: var(--ti-ducto-brillo); fill: none; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.ti-union { stroke: var(--ti-ducto-borde); stroke-width: 2.5; stroke-linecap: round; pointer-events: none; }
+.ti-costura { stroke: var(--ti-ducto-borde); stroke-width: 1; opacity: 0.55; pointer-events: none; }
+.ti-aro-punta { fill: none; stroke-width: 1.5; }
+.ti-flecha { fill: var(--surface); stroke: var(--ti-ducto-borde); stroke-width: 0.8; pointer-events: none; }
+.ti-manguera { stroke: var(--s6); stroke-linecap: round; stroke-linejoin: round; fill: none; opacity: 0.75; }
+.ti-manguera.ti-sel { stroke: var(--ti-sel); opacity: 0.9; }
+.ti-manguera-borde { stroke-linecap: round; }
+.ti-manguera-anillos { stroke: var(--ti-ducto-borde); stroke-linejoin: round; fill: none; opacity: 0.35; pointer-events: none; }
+/* en el piso: sombras y plomadas con su altura */
+.ti-sombra { stroke: var(--ti-sombra); fill: none; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.ti-sombra-caja { fill: var(--ti-sombra); stroke: none; pointer-events: none; }
+.ti-plomada { stroke: var(--fg-3); stroke-width: 1; stroke-dasharray: 2 3; opacity: 0.8; pointer-events: none; }
+.ti-plomada-pie { stroke: var(--fg-3); stroke-width: 1; opacity: 0.8; pointer-events: none; }
+.ti-txt-altura { font: 600 11px var(--font-ui); fill: var(--fg-2); paint-order: stroke; stroke: var(--surface-2); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+/* el tipo de equipo se lee por su color: colector azul, ventilador verde, campana ámbar */
+.ti-equipo-ventilador .ti-cara { stroke: var(--good); }
+.ti-equipo-ventilador .ti-cara-arriba { fill: var(--good-soft); }
+.ti-equipo-campana .ti-cara { stroke: var(--warn); }
+.ti-equipo-campana .ti-cara-arriba { fill: var(--warn-soft); }
 .ti-puerto-marca { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5; }
 .ti-puerto-libre .ti-puerto-marca { fill: var(--surface); stroke: var(--warn); stroke-width: 2.5; }
 .ti-puerto-entrada .ti-puerto-marca, .ti-puerto-salida .ti-puerto-marca { fill: var(--good); }

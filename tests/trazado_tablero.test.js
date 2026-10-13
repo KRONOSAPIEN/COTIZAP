@@ -1007,3 +1007,42 @@ test('Las tomas en el tablero (§5.15): su ubicación con sus caras, moverla, ot
   assert.deepEqual(cotas.map((c) => c.texto), ['400', '400']);
   cotas.forEach((c) => assert.ok(Math.abs(Math.hypot(c.hasta.x - c.desde.x, c.hasta.y - c.desde.y, c.hasta.z - c.desde.z) - Number(c.texto)) < 0.01));
 });
+
+test('Los cuerpos del dibujo 3D (§0.4): cada tramo en sus piezas sin huecos, los codos en arco con su radio, los conos y las bridas', () => {
+  const s = nuevoTablero();
+  TB.reemplazar(s, TB.ejemplo(M), 'ejemplo');
+  const c = TB.cuerpos(s);
+  const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+  const g = s.g;
+  // el arco de un codo arranca a R·tan(θ/2) de su nodo
+  const Ta = (nid) => { const pz = g.piezas.find((p) => p.tipo === 'CODO' && p.nodo === nid); return pz ? pz.geometria.radio_eje_mm * Math.tan((pz.geometria.angulo_deg * Math.PI) / 360) : 0; };
+  s.t.tramos.filter((t) => t.tipo === 'RIGIDO').forEach((t) => {
+    const A = g.pos.get(t.a);
+    const B = g.pos.get(t.b);
+    const tb = c.tubos.filter((x) => x.tramo === t.id).map((x) => [d(A, x.puntos[0]), d(A, x.puntos[1])].sort((p, q) => p - q)).sort((p, q) => p[0] - q[0]);
+    cerca(tb[0][0], Ta(t.a), 0.01, `${t.id} empieza donde acaba el arco`);
+    for (let i = 1; i < tb.length; i += 1) cerca(tb[i][0], tb[i - 1][1], 0.01, `${t.id} sin huecos`);
+    cerca(tb[tb.length - 1][1], d(A, B) - Ta(t.b), 0.01, `${t.id} acaba donde empieza el arco`);
+  });
+  // los dos codos en arco: de punta a punta a R·tan(θ/2) del nodo, todos sus puntos a R del centro; 5 gajos, 4 costuras
+  const arcos = c.tubos.filter((x) => x.tipo === 'ARCO');
+  assert.deepEqual(arcos.map((x) => x.nodo), ['N-003', 'N-005']);
+  arcos.forEach((x) => {
+    const pz = g.piezas.find((p) => p.tipo === 'CODO' && p.nodo === x.nodo);
+    const R = pz.geometria.radio_eje_mm;
+    const N = g.pos.get(x.nodo);
+    cerca(d(N, x.puntos[0]), Ta(x.nodo), 0.01, 'su punta');
+    cerca(d(N, x.puntos[x.puntos.length - 1]), Ta(x.nodo), 0.01, 'su otra punta');
+    // el centro, a √(R² + T²) del nodo por la bisectriz: todos los puntos a R
+    const m = x.puntos[Math.floor(x.puntos.length / 2)];
+    cerca(d(N, m), Math.sqrt(R * R + Ta(x.nodo) ** 2) - R, 0.01, 'su panza');
+  });
+  assert.equal(c.costuras.length, 8);
+  // la reducción con injerto: el tronco en cono de 7″ en el nodo a 6″ y a 8″; el ramal recto de 5″
+  const conos = c.tubos.filter((x) => x.tipo === 'CONO').map((x) => [x.tramo, Math.round(x.D0), Math.round(x.D1)]);
+  assert.deepEqual(conos, [['TR-002', 178, 152], ['TR-003', 178, 203]]);
+  assert.ok(c.tubos.some((x) => x.tramo === 'TR-006' && x.pieza === 'RI-001' && x.tipo === 'RECTO' && Math.round(x.D0) === 127));
+  // bridas: donde acaba cada pieza en cada tramo y en las bocas
+  assert.equal(c.uniones.length, 10);
+  assert.ok(c.uniones.every((u) => u.D > 0 && Math.abs(Math.hypot(u.eje.x, u.eje.y, u.eje.z) - 1) < 1e-9));
+});
