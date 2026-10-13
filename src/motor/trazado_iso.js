@@ -585,7 +585,7 @@
   /**
    * Las caras de la caja donde va un puerto (§5.15), en coordenadas locales del equipo: su normal hacia fuera (n) y su eje
    * «a» (u). En una lateral, a es desde el borde izquierdo mirándola de frente y b la altura desde la base; arriba, a es
-   * desde el lado −X y b desde el lado −Y.
+   * desde el lado −X y b desde el lado −Y. En pantalla se nombran por su rumbo en la planta (rumboCara).
    */
   const CARAS_PUERTO = {
     SUP: { n: V3(0, 0, 1), u: V3(1, 0, 0), v: V3(0, 1, 0) },
@@ -594,6 +594,17 @@
     PY: { n: V3(0, 1, 0), u: V3(-1, 0, 0), v: V3(0, 0, 1) },
     NY: { n: V3(0, -1, 0), u: V3(1, 0, 0), v: V3(0, 0, 1) },
   };
+  const RUMBOS = ['oriente', 'noreste', 'norte', 'noroeste', 'poniente', 'suroeste', 'sur', 'sureste'];
+  const AZIMUT_CARA = { PX: 0, PY: 90, NX: 180, NY: 270 };
+  /**
+   * Hacia dónde mira en la planta una cara lateral de un equipo girado rotacion_z_deg: «norte», «oriente», «sur»,
+   * «poniente» o, con giros que no son de 90°, el rumbo intermedio más cercano («noreste»…). Arriba: «arriba».
+   */
+  function rumboCara(rotacion_z_deg, cara) {
+    if (cara === 'SUP') return 'arriba';
+    dato(AZIMUT_CARA[cara] !== undefined, 'La cara es SUP, PX, NX, PY o NY.');
+    return RUMBOS[Math.round(norm360(AZIMUT_CARA[cara] + (rotacion_z_deg || 0)) / 45) % 8];
+  }
   /** Un punto local de un equipo, en el mundo. */
   const localAMundo = (e, q) => r3v(suma(e.posicion_mm, girarZ(q, e.rotacion_z_deg)));
   /** Lo ancho (a) y lo alto (b) de una cara de la caja. */
@@ -628,14 +639,17 @@
     const b = cara === 'SUP' ? punto(q, c.v) + alto / 2 : q.z;
     return { cara, a_mm: r3(a), b_mm: r3(b), ancho_mm: ancho, alto_mm: alto };
   }
-  /** Si un puerto de Ø D cabe en la cara a a y b de sus bordes (su centro a medio Ø o más de cada borde): null, o el porqué. */
-  function noCabeEnCara(caja, cara, a_mm, b_mm, D_in, quien) {
+  /**
+   * Si un puerto de Ø D cabe en la cara a a y b de sus bordes (su centro a medio Ø o más de cada borde): null, o el porqué.
+   * Arriba, los lados se nombran por su rumbo con el giro del equipo.
+   */
+  function noCabeEnCara(caja, cara, a_mm, b_mm, D_in, quien, rotacion_z_deg) {
     dato(!!CARAS_PUERTO[cara], 'La cara es SUP, PX, NX, PY o NY.');
     dato(finito(a_mm) && finito(b_mm), 'Faltan las distancias del puerto a los bordes de la cara.');
     const r = (D_in * IN) / 2;
     const { ancho, alto } = medidasCara(caja, cara);
     const rango = (x, L, eje) => (x < r - TOL_MM || x > L - r + TOL_MM ? `${eje} va de ${n(r)} a ${n(L - r)} mm` : null);
-    const malos = [rango(a_mm, ancho, cara === 'SUP' ? 'desde el lado −X' : 'desde la izquierda'), rango(b_mm, alto, cara === 'SUP' ? 'desde el lado −Y' : 'la altura')].filter(Boolean);
+    const malos = [rango(a_mm, ancho, cara === 'SUP' ? `desde el lado ${rumboCara(rotacion_z_deg, 'NX')}` : 'desde la izquierda'), rango(b_mm, alto, cara === 'SUP' ? `desde el lado ${rumboCara(rotacion_z_deg, 'NY')}` : 'la altura')].filter(Boolean);
     if (2 * r > ancho + TOL_MM || 2 * r > alto + TOL_MM) return `${quien} de ${pulgadas(D_in)} no cabe en esa cara (${n(ancho)} × ${n(alto)} mm).`;
     return malos.length ? `${quien} de ${pulgadas(D_in)} no cabe ahí: su centro va a medio Ø o más de cada borde (${malos.join('; ')}).` : null;
   }
@@ -1315,7 +1329,7 @@
     dato(rol !== 'SALIDA' || !e.puertos.some((p) => p.rol === 'SALIDA'), `${e.nombre} ya tiene su descarga: el ventilador descarga por una sola brida.`);
     // en una cara a distancias de sus bordes (§5.15): tiene que caber
     if (x.cara !== undefined) {
-      const porque = noCabeEnCara(e.caja_mm, x.cara, x.a_mm, x.b_mm, diametroValido(m, x.diametro_in, 'El puerto'), rol === 'TOMA' ? 'La toma' : rol === 'ENTRADA' ? 'La boca' : 'La descarga');
+      const porque = noCabeEnCara(e.caja_mm, x.cara, x.a_mm, x.b_mm, diametroValido(m, x.diametro_in, 'El puerto'), rol === 'TOMA' ? 'La toma' : rol === 'ENTRADA' ? 'La boca' : 'La descarga', e.rotacion_z_deg);
       dato(!porque, porque);
       x = { ...x, ...enCara(e.caja_mm, x.cara, x.a_mm, x.b_mm) };
     }
@@ -1386,7 +1400,7 @@
     const { equipo: e, puerto: p } = puertoDe(m, puertoId);
     dato(esObjeto(x), 'Falta a dónde va el puerto.');
     const quien = p.rol === 'TOMA' ? 'La toma' : p.rol === 'ENTRADA' ? 'La boca' : 'La descarga';
-    const porque = noCabeEnCara(e.caja_mm, x.cara, x.a_mm, x.b_mm, p.diametro_in, quien);
+    const porque = noCabeEnCara(e.caja_mm, x.cara, x.a_mm, x.b_mm, p.diametro_in, quien, e.rotacion_z_deg);
     dato(!porque, porque, [p.id]);
     const nuevo = enCara(e.caja_mm, x.cara, x.a_mm, x.b_mm);
     const antes = ubicarPuerto(e, p);
@@ -3388,7 +3402,7 @@
     nuevo, validar, calcular, revisar, resumen, aSistema, desdeSistema, renumerar, rejillaDeCajas, CELDA_CHOQUES_MM,
     cambiarProyecto, cambiarPoliticas, cambiarMaterial,
     ponerEquipo, editarEquipo, elegirVentilador, moverEquipo, quitarEquipo, agregarPuerto, editarPuerto, moverPuerto, quitarPuerto,
-    CARAS_PUERTO, medidasCara, enCara, ubicacionEnCara, noCabeEnCara, localAMundo,
+    CARAS_PUERTO, rumboCara, medidasCara, enCara, ubicacionEnCara, noCabeEnCara, localAMundo,
     acoplarBrida, acoplarManguera, moverTransicion, desacoplar,
     candidatas, textoCandidatas, elegirDireccion, ajustarLargo, trazar, conectar, rutas,
     cambiarLargo, moverSegmento, cambiarAngulo, ajustarPieza, CAMPOS_AJUSTE, PIEZA_AJUSTE, CUELLO_TAPA_MAX_MM, RADIOS_CODO_D, RADIO_CODO_D, GAJOS, FORMAS_REDUCCION, LARGO_REDUCCION_MAX_MM, gajosAuto, cambiarDiametro, reducir, decidirCorto, ponerCompuerta, quitarCompuerta, ponerTapa, quitarTapa, anclar, borrarTramo, dimensionar, aplicarDimensiones,

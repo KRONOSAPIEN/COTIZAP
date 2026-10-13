@@ -1341,3 +1341,16 @@ test('Las tomas en su cara (§5.15): dónde están, agregarlas y moverlas a dist
   const t4 = T.moverEquipo(t1, M, 'EQ-02', { rotacion_z_deg: 90 });
   assert.deepEqual(T.ubicacionEnCara(eq(t4, 'EQ-02').caja_mm, pu(t4, t1.ultimo.puerto)), { cara: 'PY', a_mm: 300, b_mm: 600, ancho_mm: 1200, alto_mm: 1200 });
 });
+
+test('El rumbo de cada cara en la planta (§5.15): por el giro del equipo, con los rumbos intermedios', () => {
+  assert.deepEqual(['SUP', 'PX', 'NX', 'PY', 'NY'].map((k) => T.rumboCara(0, k)), ['arriba', 'oriente', 'poniente', 'norte', 'sur']);
+  assert.deepEqual(['PX', 'NX', 'PY', 'NY'].map((k) => T.rumboCara(90, k)), ['norte', 'sur', 'poniente', 'oriente']);
+  assert.deepEqual(['PX', 'PY'].map((k) => T.rumboCara(45, k)), ['noreste', 'noroeste']);
+  assert.deepEqual(['PX', 'PY'].map((k) => T.rumboCara(15, k)), ['oriente', 'norte'], 'a 15° sigue siendo el más cercano');
+  assert.equal(T.rumboCara(-90, 'PX'), 'sur');
+  assert.throws(() => T.rumboCara(0, 'ABAJO'), /La cara es SUP/);
+  // arriba, el rango dice los lados por su rumbo
+  const caja = { largo: 1000, ancho: 600, alto: 1000 };
+  assert.match(T.noCabeEnCara(caja, 'SUP', 10, 300, 4, 'La toma', 90), /desde el lado sur va de 51 a 949 mm/);
+  assert.match(T.noCabeEnCara(caja, 'SUP', 10, 300, 4, 'La toma'), /desde el lado poniente/);
+});

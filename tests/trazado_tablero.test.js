@@ -969,20 +969,21 @@ test('Las tomas en el tablero (§5.15): su ubicación con sus caras, moverla, ot
   const s = nuevoTablero();
   TB.reemplazar(s, TB.ejemplo(M), 'ejemplo');
   const u = TB.ubicacionPuerto(s, 'PU-02');
-  assert.deepEqual([u.cara, u.a, u.b, u.ancho, u.alto, u.conDucto, u.ejes.a], ['SUP', 600, 400, 1200, 800, true, 'Desde el lado −X']);
+  assert.deepEqual([u.cara, u.a, u.b, u.ancho, u.alto, u.conDucto, u.ejes.a], ['SUP', 600, 400, 1200, 800, true, 'Desde el lado poniente']);
+  assert.deepEqual(u.caras.map((c) => c.nombre), ['Arriba', 'Lado oriente', 'Lado poniente', 'Lado norte', 'Lado sur']);
   assert.ok(u.caras.filter((c) => !c.actual).every((c) => /tiene ducto: se mueve sobre su misma cara/.test(c.motivo)), 'con ducto, sólo su cara');
   const u3 = TB.ubicacionPuerto(s, 'PU-03');
   assert.deepEqual(u3.caras.map((c) => [c.cara, c.motivo]), [['SUP', null], ['PX', null], ['NX', null], ['PY', null], ['NY', null]]);
   // moverla: lo que no se da se queda
   assert.ok(TB.moverPuertoA(s, 'PU-02', { a: 400 }), s.msg);
-  assert.equal(s.msg, 'La toma PU-02: arriba, a 400 mm del lado −X y 400 mm del lado −Y.');
+  assert.equal(s.msg, 'La toma PU-02: arriba, a 400 mm del lado poniente y 400 mm del lado sur.');
   assert.equal(TB.moverPuertoA(s, 'PU-02', { cara: 'PX' }), false);
   assert.match(s.msg, /tiene ducto/);
   // otra cara empieza centrada; en una lateral, desde la izquierda y la altura
   assert.equal(TB.moverPuertoA(s, 'PU-03', { cara: 'NY' }), false, 'la manguera no llega a la cara −Y');
-  // otra igual a 300 mm hacia +X: su Ø, su caudal y su K, sin acople, y queda elegida
+  // otra igual a 300 mm hacia +X (el oriente): su Ø, su caudal y su K, sin acople, y queda elegida
   assert.ok(TB.copiarPuerto(s, 'PU-03', 'DERECHA', 300), s.msg);
-  assert.equal(s.msg, 'La toma PU-04 de Cepillo: igual a PU-03, a 300 mm hacia +X.');
+  assert.equal(s.msg, 'La toma PU-04 de Cepillo: igual a PU-03, a 300 mm hacia el oriente.');
   const p4 = s.t.equipos.find((e) => e.id === 'EQ-03').puertos.find((p) => p.id === 'PU-04');
   assert.deepEqual([p4.diametro_in, p4.caudal_m3_h, p4.coef_entrada_K, p4.acople, s.sel.id], [5, 900, 0.5, null, 'PU-04']);
   assert.deepEqual([TB.ubicacionPuerto(s, 'PU-04').a, TB.ubicacionPuerto(s, 'PU-04').b], [800, 300]);
@@ -995,6 +996,12 @@ test('Las tomas en el tablero (§5.15): su ubicación con sus caras, moverla, ot
   assert.ok(Math.abs(d.velocidad - 19.796) < 0.01);
   assert.ok(TB.hacer(s, (t) => TZ.editarPuerto(t, M, 'PU-02', { caudal_m3_h: 800 }), ''));
   assert.deepEqual([TB.dimensionPuerto(s, 'PU-02').diametro_sugerido, Math.round(TB.dimensionPuerto(s, 'PU-02').velocidad_sugerida * 10) / 10], [4, 27.4]);
+  // girado el equipo, cada cara se nombra por hacia dónde mira en la planta (90°: su +X mira al norte)
+  assert.ok(TB.moverEquipo(s, 'EQ-03', { giro: 90 }), s.msg);
+  const g3 = TB.ubicacionPuerto(s, 'PU-04');
+  assert.deepEqual(g3.caras.map((c) => c.nombre), ['Arriba', 'Lado norte', 'Lado sur', 'Lado poniente', 'Lado oriente']);
+  assert.deepEqual([g3.ejes.a, g3.ejes.b, TB.hacia('SUP', 90).DERECHA], ['Desde el lado sur', 'Desde el lado oriente', 'hacia el norte']);
+  assert.ok(TB.deshacer(s));
   // las cotas: del borde al centro de la toma, del largo que dicen
   const cotas = TB.cotasPuerto(s, 'PU-02');
   assert.deepEqual(cotas.map((c) => c.texto), ['400', '400']);

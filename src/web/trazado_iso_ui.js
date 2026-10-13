@@ -468,18 +468,21 @@
     const x1 = Math.max(...pts.map((p) => p.x));
     const y0 = Math.min(...pts.map((p) => p.y));
     const y1 = Math.max(...pts.map((p) => p.y));
-    const k = 70 / Math.max(x1 - x0, y1 - y0, 0.5); // caras grandes: «Oeste» y «Norte» caben en la suya
+    const k = 70 / Math.max(x1 - x0, y1 - y0, 0.5); // caras grandes: los nombres caben en la suya
     const cx = 41 - ((x0 + x1) / 2) * k;
     const cy = 41 - ((y0 + y1) / 2) * k;
     const hijos = caras.map((c) => {
       const nn = c.cara.n;
       const vista = nn.z > 0.5 ? 'PLANTA' : Math.abs(nn.y) > 0.5 ? 'ELEV_XZ' : 'ELEV_YZ';
-      const nombre = nn.z > 0.5 ? 'Arriba' : nn.x > 0.5 ? 'Este' : nn.x < -0.5 ? 'Oeste' : nn.y > 0.5 ? 'Norte' : 'Sur';
+      const nombre = nn.z > 0.5 ? 'Arriba' : nn.x > 0.5 ? 'Oriente' : nn.x < -0.5 ? 'Poniente' : nn.y > 0.5 ? 'Norte' : 'Sur';
       const poly = c.puntos.map((p) => `${f1(cx + p.x * k)},${f1(cy + p.y * k)}`).join(' ');
       const m = c.puntos.reduce((a, p) => ({ x: a.x + p.x / 4, y: a.y + p.y / 4 }), { x: 0, y: 0 });
       const g = svg('g', { class: 'ti-cubo-cara', role: 'button', tabindex: '-1', 'data-vista': vista, 'aria-label': `${nombre}: ${TB().NOMBRE_VISTA[vista]}` });
       g.append(svg('polygon', { points: poly }));
-      g.append(svg('text', { x: f1(cx + m.x * k), y: f1(cy + m.y * k + 3.5), 'text-anchor': 'middle' }, nombre));
+      // la letra se achica si el nombre no cabe a lo ancho de su cara («Poniente» en una cara angosta)
+      const ancho = (Math.max(...c.puntos.map((p) => p.x)) - Math.min(...c.puntos.map((p) => p.x))) * k;
+      const fs = Math.min(8, (ancho - 4) / (nombre.length * 0.6));
+      g.append(svg('text', { x: f1(cx + m.x * k), y: f1(cy + m.y * k + 3.5), 'text-anchor': 'middle', ...(fs < 8 ? { style: `font-size:${f1(Math.max(fs, 5))}px` } : {}) }, nombre));
       return g;
     });
     el.replaceChildren(...hijos);
@@ -1119,13 +1122,13 @@
     const mov = (c) => { if (TB().moverEquipo(s, e.id, c)) cambio(); else pintarEstado(); };
     const caja = (k) => entrada(`ti-e-${k}`, e.caja_mm[k], (v) => aplicar((t) => T.editarEquipo(t, M(), e.id, { caja_mm: { ...e.caja_mm, [k]: num(v) } }), `Caja de ${e.nombre}: ${k} ${v} mm.`));
     // la toma nueva (§5.15): su cara, sus distancias a los bordes (vacío = al centro), su Ø y su caudal
-    const cara = h('select', { id: 'ti-nt-cara', 'aria-label': 'Cara de la caja' }, Object.keys(TZ().CARAS_PUERTO).map((v) => h('option', { value: v }, TB().NOMBRE_CARA[v])));
+    const cara = h('select', { id: 'ti-nt-cara', 'aria-label': 'Cara de la caja' }, Object.keys(TZ().CARAS_PUERTO).map((v) => h('option', { value: v }, TB().nombreCara(e.rotacion_z_deg, v))));
     const ca = h('input', { id: 'ti-nt-a', type: 'text', inputmode: 'decimal', value: '', placeholder: 'centro' });
     const cb = h('input', { id: 'ti-nt-b', type: 'text', inputmode: 'decimal', value: '', placeholder: 'centro' });
     const etqA = h('span', null);
     const etqB = h('span', null);
     const rotular = () => {
-      const ej = cara.value === 'SUP' ? ['Desde el lado −X (mm)', 'Desde el lado −Y (mm)'] : ['Desde la izquierda (mm)', 'Altura desde la base (mm)'];
+      const ej = cara.value === 'SUP' ? [`Desde el lado ${T.rumboCara(e.rotacion_z_deg, 'NX')} (mm)`, `Desde el lado ${T.rumboCara(e.rotacion_z_deg, 'NY')} (mm)`] : ['Desde la izquierda (mm)', 'Altura desde la base (mm)'];
       etqA.textContent = ej[0];
       etqB.textContent = ej[1];
       ca.setAttribute('aria-label', `${ej[0]} de la toma nueva; vacío, al centro`);
@@ -1164,7 +1167,7 @@
       e.puertos.length ? h('ul', { class: 'ti-lista' }, e.puertos.map((p) => {
         const u = TZ().ubicacionEnCara(e.caja_mm, p);
         return h('li', null, h('button', { type: 'button', class: 'enlace', 'data-puerto': p.id, onclick: () => { s.sel = { tipo: 'PUERTO', id: p.id }; pintar(); } },
-          `${p.id} · ${p.nombre} · ${pulg(p.diametro_in)}${p.caudal_m3_h ? ` · ${n0(p.caudal_m3_h)} m³/h` : ''}${u ? ` · ${TB().NOMBRE_CARA[u.cara].replace('Lado', 'lado').replace('Arriba', 'arriba')} a ${n0(u.a_mm)} × ${n0(u.b_mm)} mm` : ''}${p.acople ? ` · ${p.acople.tipo === 'BRIDA' ? 'brida' : 'manguera'}` : ' · sin acople'}`));
+          `${p.id} · ${p.nombre} · ${pulg(p.diametro_in)}${p.caudal_m3_h ? ` · ${n0(p.caudal_m3_h)} m³/h` : ''}${u ? ` · ${TB().nombreCara(e.rotacion_z_deg, u.cara).replace('Lado', 'lado').replace('Arriba', 'arriba')} a ${n0(u.a_mm)} × ${n0(u.b_mm)} mm` : ''}${p.acople ? ` · ${p.acople.tipo === 'BRIDA' ? 'brida' : 'manguera'}` : ' · sin acople'}`));
       })) : h('p', { class: 'ti-nota' }, 'Sin tomas: use «Toma» (P) y toque una cara de la caja, o agréguela aquí.'),
       h('h4', null, deAire ? 'Agregar una boca' : 'Agregar una toma'),
       h('div', { class: 'ti-nueva-toma' },
@@ -1203,6 +1206,8 @@
     const u = TB().ubicacionPuerto(s, pid);
     if (!u) return null;
     const pu = s.g.puertos.get(pid);
+    const T = TZ();
+    const rot = pu.equipo.rotacion_z_deg;
     const mover = (c) => { if (TB().moverPuertoA(s, pid, c)) cambio(); else { pintarEstado(); pintarInspector(); } };
     // el campo lleva el número sin separador de miles: «1,250» se leería como 1.25
     const dist = (k, etq, valor, resto, txt) => campo(etq, entrada(`ti-p-${k}`, Math.round(valor * 10) / 10, (v) => {
@@ -1222,8 +1227,8 @@
       }, c.nombre))),
       h('div', { class: 'ti-rejilla-campos' }, dist('a', `${u.ejes.a} (mm)`, u.a, u.ancho - u.a, u.ejes.restoA), dist('b', `${u.ejes.b} (mm)`, u.b, u.alto - u.b, u.ejes.restoB)),
       h('div', { class: 'ti-acciones' },
-        h('button', { type: 'button', class: 'btn btn-sec btn-chico', id: 'ti-p-centrar-a', onclick: () => mover({ a: u.ancho / 2 }) }, u.cara === 'SUP' ? 'Centrar en X' : 'Centrar a lo ancho'),
-        h('button', { type: 'button', class: 'btn btn-sec btn-chico', id: 'ti-p-centrar-b', onclick: () => mover({ b: u.alto / 2 }) }, u.cara === 'SUP' ? 'Centrar en Y' : 'Centrar a lo alto')),
+        h('button', { type: 'button', class: 'btn btn-sec btn-chico', id: 'ti-p-centrar-a', onclick: () => mover({ a: u.ancho / 2 }) }, u.cara === 'SUP' ? `Centrar ${T.rumboCara(rot, 'NX')}–${T.rumboCara(rot, 'PX')}` : 'Centrar a lo ancho'),
+        h('button', { type: 'button', class: 'btn btn-sec btn-chico', id: 'ti-p-centrar-b', onclick: () => mover({ b: u.alto / 2 }) }, u.cara === 'SUP' ? `Centrar ${T.rumboCara(rot, 'NY')}–${T.rumboCara(rot, 'PY')}` : 'Centrar a lo alto')),
       h('p', { class: 'ti-nota' }, `Al centro de la toma, en mm; la cara mide ${n0(u.ancho)} × ${n0(u.alto)} mm y las cotas se ven en el lienzo.${u.conDucto ? ' Con ducto se mueve sobre su cara y el ducto la sigue.' : ''}`));
   }
   /** Otra toma igual a esta, a mm controlados en su misma cara. */
@@ -1232,14 +1237,14 @@
     const u = TB().ubicacionPuerto(s, pid);
     if (!u) return null;
     const mm = h('input', { id: 'ti-p-copia-mm', type: 'text', inputmode: 'decimal', value: '300', class: 'ti-ficha-num', 'aria-label': 'A cuántos mm de esta va la otra toma' });
-    const hacia = TB().HACIA[u.cara === 'SUP' ? 'SUP' : 'LADO'];
+    const hacia = TB().hacia(u.cara, s.g.puertos.get(pid).equipo.rotacion_z_deg);
     const flecha = { IZQUIERDA: '←', DERECHA: '→', ARRIBA: '↑', ABAJO: '↓' };
     return h('div', { class: 'ti-copia', id: 'ti-p-copia' },
       h('h4', null, 'Otra igual'),
       h('div', { class: 'ti-ficha-ctl' }, h('span', { class: 'ti-sub' }, 'a'), mm, h('span', { class: 'ti-sub' }, 'mm'),
         ...['IZQUIERDA', 'DERECHA', 'ARRIBA', 'ABAJO'].map((d) => h('button', { type: 'button', class: 'ti-op', 'data-hacia': d, title: hacia[d], 'aria-label': `Otra toma igual ${hacia[d]}`, onclick: () => {
           if (TB().copiarPuerto(s, pid, d, num(mm.value))) cambio(); else pintarEstado();
-        } }, `${flecha[d]} ${hacia[d].replace(/^(a la |hacia )/, '')}`))),
+        } }, `${flecha[d]} ${hacia[d].replace(/^(a la |hacia el )/, '')}`))),
       h('p', { class: 'ti-nota' }, 'Con su Ø, su caudal y su K, en la misma cara; queda sin acople.'));
   }
 

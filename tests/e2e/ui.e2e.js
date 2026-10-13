@@ -2786,6 +2786,7 @@ const ok = (cond, msg) => {
     await p.locator('.ti-prob-btn', { hasText: 'EQUIPO_SIN_PUERTOS' }).click();
     ok(await p.locator('#ti-e-nombre').inputValue() === 'Máquina', 'un clic en el problema selecciona el equipo');
     // el cubo de vista: la cara de arriba da la planta
+    ok((await p.locator('#ti-cubo text').allTextContents()).every((x) => /^(Arriba|Norte|Sur|Oriente|Poniente)$/.test(x)), 'el cubo nombra las caras por su rumbo');
     await p.locator('#ti-cubo [data-vista="PLANTA"]').click();
     ok(await R(() => window.COTIZAP.web.trazadoUI.estado().vista) === 'PLANTA' && await p.locator('#ti-vista-planta').getAttribute('aria-pressed') === 'true', 'el cubo de vista: arriba = planta');
     // un trazado guardado que el modelo no acepta se descarta sin romper la página
@@ -3369,7 +3370,7 @@ const ok = (cond, msg) => {
     await p.mouse.click(q.x, q.y);
     ok(/Bocas y descarga/i.test(await p.locator('#ti-inspector').innerText()) && await p.locator('#ti-agregar-descarga').count() === 1, 'la ficha del colector ofrece agregar su descarga');
     await p.click('#ti-agregar-descarga');
-    ok(await msg() === 'Se agregó la descarga a Colector de polvo. La descarga PU-04: arriba, a 750 mm del lado −X y 750 mm del lado −Y.' && /^Descarga PU-04/.test(await p.locator('.ti-ins-tit').first().innerText()), `la descarga PU-04 al centro de la cara superior, con su ficha (${await msg()})`);
+    ok(await msg() === 'Se agregó la descarga a Colector de polvo. La descarga PU-04: arriba, a 750 mm del lado poniente y 750 mm del lado sur.' && /^Descarga PU-04/.test(await p.locator('.ti-ins-tit').first().innerText()), `la descarga PU-04 al centro de la cara superior, con su ficha (${await msg()})`);
     await p.selectOption('#ti-p-d', '10');
     ok(/va con brida y es un punto fijo/.test(await p.locator('#ti-inspector').innerText()) && await p.locator('#ti-trazar-desde').innerText() === 'Trazar desde la descarga', 'la ficha explica la descarga y ofrece trazar desde ella');
     await p.click('#ti-trazar-desde');
@@ -3631,9 +3632,9 @@ const ok = (cond, msg) => {
     const ubic = (pid) => R((id) => { const u = window.COTIZAP.trazadoTablero.ubicacionPuerto(window.COTIZAP.web.trazadoUI.estado(), id); return u && [u.cara, u.a, u.b]; }, pid);
     await p.click('#tab-trazado');
     await p.click('#ti-ejemplo');
-    // agregar en la ficha de la máquina: cara +Y, a 300 mm de la izquierda y 500 de altura, de 4″ y 450 m³/h
+    // agregar en la ficha de la máquina: cara +Y (la del norte), a 300 mm de la izquierda y 500 de altura, de 4″ y 450 m³/h
     await elegir({ tipo: 'EQUIPO', id: 'EQ-02' });
-    ok(/^Desde la izquierda/.test(await ins.locator('label[for="ti-nt-a"]').innerText()) === false && /Desde el lado −X/.test(await ins.locator('label[for="ti-nt-a"]').innerText()), 'arriba, las distancias son desde los lados −X y −Y');
+    ok(/^Desde la izquierda/.test(await ins.locator('label[for="ti-nt-a"]').innerText()) === false && /Desde el lado poniente/.test(await ins.locator('label[for="ti-nt-a"]').innerText()) && /Desde el lado sur/.test(await ins.locator('label[for="ti-nt-b"]').innerText()), 'arriba, las distancias son desde los lados poniente y sur');
     await p.selectOption('#ti-nt-cara', 'PY');
     ok(/Desde la izquierda/.test(await ins.locator('label[for="ti-nt-a"]').innerText()) && /Altura desde la base/.test(await ins.locator('label[for="ti-nt-b"]').innerText()), 'en una lateral, desde la izquierda y la altura');
     await p.fill('#ti-nt-a', '300');
@@ -3641,7 +3642,7 @@ const ok = (cond, msg) => {
     await p.selectOption('#ti-nt-d', '4');
     await p.fill('#ti-nt-q', '450');
     await p.click('#ti-agregar-toma');
-    ok(await msg() === 'Se agregó la toma a Sierra de banco. La toma PU-04: en el lado +Y, a 300 mm de la izquierda y 500 mm de altura.', `la toma nueva y dónde quedó (${await msg()})`);
+    ok(await msg() === 'Se agregó la toma a Sierra de banco. La toma PU-04: en el lado norte, a 300 mm de la izquierda y 500 mm de altura.', `la toma nueva y dónde quedó (${await msg()})`);
     ok(/^Toma PU-04/.test(await ins.locator('.ti-ins-tit').first().innerText()) && await p.inputValue('#ti-p-d') === '4' && await p.inputValue('#ti-p-q') === '450', 'queda elegida, con su Ø y su caudal');
     // sus cotas en el lienzo
     ok(await p.locator('#ti-lienzo .ti-cota-toma').count() === 2 && JSON.stringify(await p.locator('#ti-lienzo .ti-txt-cota-toma').allTextContents()) === JSON.stringify(['300 mm', '500 mm']), 'las dos cotas a los bordes de su cara');
@@ -3653,7 +3654,8 @@ const ok = (cond, msg) => {
     await p.click('#ti-p-centrar-b');
     ok(JSON.stringify(await ubic('PU-04')) === JSON.stringify(['PY', 450, 600]) && /600 mm de altura/.test(await msg()), 'centrada a lo alto');
     await ins.locator('#ti-p-ubicacion [data-cara="NX"]').click();
-    ok(JSON.stringify(await ubic('PU-04')) === JSON.stringify(['NX', 400, 600]), 'en el lado −X, al centro');
+    ok(JSON.stringify(await ubic('PU-04')) === JSON.stringify(['NX', 400, 600]), 'en el lado poniente, al centro');
+    ok(JSON.stringify(await ins.locator('#ti-p-ubicacion [data-cara]').allInnerTexts()) === JSON.stringify(['Arriba', 'Lado oriente', 'Lado poniente', 'Lado norte', 'Lado sur']), 'las caras se nombran por su rumbo en la planta');
     await p.fill('#ti-p-b', '1180');
     await p.press('#ti-p-b', 'Enter');
     ok(/no cabe ahí: su centro va a medio Ø o más de cada borde \(la altura va de 51 a 1149 mm\)/.test(await msg()) && JSON.stringify(await ubic('PU-04')) === JSON.stringify(['NX', 400, 600]), 'fuera de la cara no: dice su rango y no cambia');
@@ -3668,12 +3670,12 @@ const ok = (cond, msg) => {
     ok(await R(() => { const p5 = window.COTIZAP.web.estadoApp.cot.trazado_iso.equipos.find((e) => e.id === 'EQ-02').puertos.find((x) => x.id === 'PU-05'); return p5.diametro_in === 4 && p5.caudal_m3_h === 526; }), 'con su Ø y su caudal');
     // la lista de la máquina dice dónde va cada toma
     await elegir({ tipo: 'EQUIPO', id: 'EQ-02' });
-    ok(/PU-05 · Toma · 4″ · 526 m³\/h · lado −X a 650 × 600 mm · sin acople/.test(await ins.locator('.ti-lista').innerText()), 'la lista de tomas con su lugar');
+    ok(/PU-05 · Toma · 4″ · 526 m³\/h · lado poniente a 650 × 600 mm · sin acople/.test(await ins.locator('.ti-lista').innerText()), 'la lista de tomas con su lugar');
     // la toma del cepillo, con manguera: se mueve y la manguera se acomoda
     await elegir({ tipo: 'PUERTO', id: 'PU-03' });
     await p.fill('#ti-p-a', '250');
     await p.press('#ti-p-a', 'Enter');
-    ok(await msg() === 'La toma PU-03: arriba, a 250 mm del lado −X y 300 mm del lado −Y.' && /Manguera/.test(await ins.locator('#ti-manguera-sem').innerText()), 'con manguera, la toma se mueve y la manguera se acomoda');
+    ok(await msg() === 'La toma PU-03: arriba, a 250 mm del lado poniente y 300 mm del lado sur.' && /Manguera/.test(await ins.locator('#ti-manguera-sem').innerText()), 'con manguera, la toma se mueve y la manguera se acomoda');
     // la de la sierra, con ducto: sobre su cara, y el ducto la sigue; a otra cara, no
     await elegir({ tipo: 'PUERTO', id: 'PU-02' });
     ok(await ins.locator('#ti-p-ubicacion [data-cara="PX"]').getAttribute('aria-disabled') === 'true', 'con ducto, las otras caras no');

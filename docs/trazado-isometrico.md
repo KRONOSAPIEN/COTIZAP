@@ -2434,7 +2434,7 @@ El esquema (§3.5) creció con esos campos. Lo que el trazo exporta sigue llevan
 **El pulido del tablero:**
 
 - **Etiquetas.** Si ningún lugar está libre, una etiqueta obligada va donde menos tape, y una cota sólo si tapa poco. Tapar un ducto pesa poco, otra etiqueta más, y la barra de vistas, el cubo, los ejes y la escala mucho. Las cotas ya no se enciman en el cubo ni en los controles.
-- **Cubo de vista.** Caras más grandes: «Oeste», «Norte» y «Arriba» caben en la suya.
+- **Cubo de vista.** Caras más grandes, con los rumbos de la planta (Arriba, Norte, Sur, Oriente y Poniente); si un nombre no cabe a lo ancho de su cara, su letra se achica.
 - **Encuadre.** El dibujo se centra debajo de la barra de vistas. Al entrar a la salida, cuyo inspector es más ancho, la vista se aleja lo que se angosta el lienzo, para que no se salga nada.
 - **Inspector del proyecto.** Servicio, material transportado, origen y material del ducto van a lo ancho, y la viscosidad sale como 1.813×10⁻⁵ Pa·s.
 - **Tableta y teléfono.** En la columna angosta los nombres de la paleta se parten en dos renglones en lugar de cortarse. En el teléfono, la barra de estado deja las coordenadas (no hay puntero) y cabe en un renglón.
@@ -2820,9 +2820,9 @@ Lo verifican:
 Una toma (y la boca de un colector o su descarga) va sobre una cara de la caja de su equipo. Su lugar se dice con dos distancias, al centro de la toma:
 
 - en una cara lateral, **desde la izquierda** (mirándola de frente, desde fuera) y **la altura desde la base**;
-- arriba, **desde el lado −X** y **desde el lado −Y** del equipo.
+- arriba, **desde el lado −X** y **desde el lado −Y** del equipo; en pantalla, por su rumbo («desde el lado poniente», «desde el lado sur»).
 
-Las cinco caras son Arriba, Lado +X, Lado −X, Lado +Y y Lado −Y, en los ejes del equipo; girar el equipo no cambia dónde va la toma en su caja. Una toma cabe si su centro queda a medio Ø o más de cada borde; si no, se dice el rango («la altura va de 51 a 1149 mm»).
+Las cinco caras van en los ejes del equipo (SUP, PX, NX, PY, NY en el modelo); girar el equipo no cambia dónde va la toma en su caja. En pantalla se nombran por hacia dónde miran en la planta (X al este, Y al norte), con el giro del equipo: sin giro, Arriba, Lado oriente (+X), Lado poniente (−X), Lado norte (+Y) y Lado sur (−Y); girado 90°, su +X mira al norte. Con giros que no son de 90° se toma el rumbo más cercano de los ocho («noreste»…). Igual se dice hacia dónde va «otra igual» arriba de la caja («hacia el oriente») y los botones de centrar («Centrar poniente–oriente»). Una toma cabe si su centro queda a medio Ø o más de cada borde; si no, se dice el rango («la altura va de 51 a 1149 mm»).
 
 - **Agregarla:** en la ficha del equipo, la cara, las dos distancias (vacías: al centro), el Ø y el caudal. O, como antes, con «Toma» (P) y un toque en la cara.
 - **Su ficha** dice dónde va:

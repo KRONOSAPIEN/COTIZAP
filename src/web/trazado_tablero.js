@@ -541,10 +541,12 @@
   /** La manguera de una toma: toma, eje, altura y desvío del PT, su dirección y la manguera resuelta. */
   /* ------------------------------------------------------------------ las tomas: dónde van y de qué tamaño (§5.15) */
 
-  const NOMBRE_CARA = { SUP: 'Arriba', PX: 'Lado +X', NX: 'Lado −X', PY: 'Lado +Y', NY: 'Lado −Y' };
+  /** El nombre de una cara de un equipo girado rot: «Arriba» o «Lado norte», «Lado oriente»… por su rumbo en la planta. */
+  const nombreCara = (rot, k) => (k === 'SUP' ? 'Arriba' : `Lado ${TZ.rumboCara(rot, k)}`);
   const QUIEN_PUERTO = { TOMA: 'La toma', ENTRADA: 'La boca', SALIDA: 'La descarga' };
-  /** Cómo se llaman las dos distancias en una cara. */
-  const EJES_CARA = (cara) => (cara === 'SUP' ? { a: 'Desde el lado −X', b: 'Desde el lado −Y', restoA: 'al lado +X', restoB: 'al lado +Y' }
+  /** Cómo se llaman las dos distancias en una cara (arriba, desde los lados que miran al −X y al −Y del equipo). */
+  const EJES_CARA = (cara, rot) => (cara === 'SUP'
+    ? { a: `Desde el lado ${TZ.rumboCara(rot, 'NX')}`, b: `Desde el lado ${TZ.rumboCara(rot, 'NY')}`, restoA: `al lado ${TZ.rumboCara(rot, 'PX')}`, restoB: `al lado ${TZ.rumboCara(rot, 'PY')}` }
     : { a: 'Desde la izquierda', b: 'Altura desde la base', restoA: 'a la derecha', restoB: 'arriba' });
   /**
    * Dónde está un puerto en su equipo, para su ficha: { cara, nombre, a, b, ancho, alto, ejes, conDucto, caras: [{ cara,
@@ -560,11 +562,11 @@
     const conDucto = s.t.tramos.some((t) => t.tipo === 'RIGIDO' && (t.a === p.nodo || t.b === p.nodo));
     const caras = Object.keys(TZ.CARAS_PUERTO).map((k) => {
       const { ancho, alto } = TZ.medidasCara(e.caja_mm, k);
-      const noCabe = TZ.noCabeEnCara(e.caja_mm, k, ancho / 2, alto / 2, p.diametro_in, QUIEN_PUERTO[p.rol]);
+      const noCabe = TZ.noCabeEnCara(e.caja_mm, k, ancho / 2, alto / 2, p.diametro_in, QUIEN_PUERTO[p.rol], e.rotacion_z_deg);
       const motivo = k === u.cara ? null : conDucto ? `${QUIEN_PUERTO[p.rol]} ${pid} tiene ducto: se mueve sobre su misma cara.` : noCabe;
-      return { cara: k, nombre: NOMBRE_CARA[k], actual: k === u.cara, motivo };
+      return { cara: k, nombre: nombreCara(e.rotacion_z_deg, k), actual: k === u.cara, motivo };
     });
-    return { cara: u.cara, nombre: NOMBRE_CARA[u.cara], a: u.a_mm, b: u.b_mm, ancho: u.ancho_mm, alto: u.alto_mm, ejes: EJES_CARA(u.cara), conDucto, caras };
+    return { cara: u.cara, nombre: nombreCara(e.rotacion_z_deg, u.cara), a: u.a_mm, b: u.b_mm, ancho: u.ancho_mm, alto: u.alto_mm, ejes: EJES_CARA(u.cara, e.rotacion_z_deg), conDucto, caras };
   }
   /**
    * Mueve un puerto en su equipo: { cara?, a?, b? } (lo que no se da se queda; otra cara empieza centrada). Con deshacer
@@ -580,28 +582,30 @@
     const b = c.b !== undefined ? c.b : cara === u.cara ? u.b : alto / 2;
     return !!hacer(s, (t) => TZ.moverPuerto(t, s.M, pid, { cara, a_mm: a, b_mm: b }), () => textoUbicacion(s, pid));
   }
-  /** «La toma PU-02: arriba, a 400 mm del lado −X y 400 mm del lado −Y.» */
+  /** «La toma PU-02: arriba, a 400 mm del lado poniente y 400 mm del lado sur.» */
   function textoUbicacion(s, pid) {
     const u = ubicacionPuerto(s, pid);
     if (!u) return '';
-    const p = s.g.puertos.get(pid).puerto;
+    const { puerto: p, equipo: e } = s.g.puertos.get(pid);
     return u.cara === 'SUP'
-      ? `${QUIEN_PUERTO[p.rol]} ${pid}: arriba, a ${n(u.a)} mm del lado −X y ${n(u.b)} mm del lado −Y.`
+      ? `${QUIEN_PUERTO[p.rol]} ${pid}: arriba, a ${n(u.a)} mm del lado ${TZ.rumboCara(e.rotacion_z_deg, 'NX')} y ${n(u.b)} mm del lado ${TZ.rumboCara(e.rotacion_z_deg, 'NY')}.`
       : `${QUIEN_PUERTO[p.rol]} ${pid}: en el ${u.nombre.replace('Lado', 'lado')}, a ${n(u.a)} mm de la izquierda y ${n(u.b)} mm de altura.`;
   }
   const PASO_COPIA = { DERECHA: [1, 0], IZQUIERDA: [-1, 0], ARRIBA: [0, 1], ABAJO: [0, -1] };
-  /** Cómo se dice hacia dónde, en una lateral y arriba de la caja. */
-  const HACIA = {
-    LADO: { DERECHA: 'a la derecha', IZQUIERDA: 'a la izquierda', ARRIBA: 'arriba', ABAJO: 'abajo' },
-    SUP: { DERECHA: 'hacia +X', IZQUIERDA: 'hacia −X', ARRIBA: 'hacia +Y', ABAJO: 'hacia −Y' },
-  };
+  /**
+   * Cómo se dice hacia dónde, en una lateral y arriba de la caja (ahí, por el rumbo de los lados +X, −X, +Y y −Y del
+   * equipo girado rot).
+   */
+  const hacia = (cara, rot) => (cara === 'SUP'
+    ? { DERECHA: `hacia el ${TZ.rumboCara(rot, 'PX')}`, IZQUIERDA: `hacia el ${TZ.rumboCara(rot, 'NX')}`, ARRIBA: `hacia el ${TZ.rumboCara(rot, 'PY')}`, ABAJO: `hacia el ${TZ.rumboCara(rot, 'NY')}` }
+    : { DERECHA: 'a la derecha', IZQUIERDA: 'a la izquierda', ARRIBA: 'arriba', ABAJO: 'abajo' });
   /**
    * Otra toma igual (su Ø, su caudal y su K) en la misma cara, a mm de esta hacia DERECHA, IZQUIERDA, ARRIBA o ABAJO
-   * (arriba de la caja: hacia +X, −X, +Y o −Y). Queda sin acople.
+   * (arriba de la caja: hacia los lados +X, −X, +Y o −Y del equipo). Queda sin acople.
    */
-  function copiarPuerto(s, pid, hacia, mm) {
+  function copiarPuerto(s, pid, haciaDonde, mm) {
     const u = ubicacionPuerto(s, pid);
-    const d = PASO_COPIA[hacia];
+    const d = PASO_COPIA[haciaDonde];
     if (!u || !d) return decir(s, 'Elija hacia dónde va la otra toma.', true);
     if (!(Number.isFinite(mm) && mm > 0)) return decir(s, 'Escriba a cuántos mm de esta va la otra toma.', true);
     const pu = s.g.puertos.get(pid);
@@ -609,7 +613,7 @@
     const m = hacer(s, (t) => TZ.agregarPuerto(t, s.M, pu.equipo.id, {
       rol: p.rol, cara: u.cara, a_mm: u.a + d[0] * mm, b_mm: u.b + d[1] * mm, diametro_in: p.diametro_in,
       ...(p.rol === 'TOMA' ? { caudal_m3_h: p.caudal_m3_h, coef_entrada_K: p.coef_entrada_K } : {}),
-    }), (mm2) => `${QUIEN_PUERTO[p.rol]} ${mm2.ultimo.puerto} de ${pu.equipo.nombre}: igual a ${pid}, a ${n(mm)} mm ${HACIA[u.cara === 'SUP' ? 'SUP' : 'LADO'][hacia]}.`);
+    }), (mm2) => `${QUIEN_PUERTO[p.rol]} ${mm2.ultimo.puerto} de ${pu.equipo.nombre}: igual a ${pid}, a ${n(mm)} mm ${hacia(u.cara, pu.equipo.rotacion_z_deg)[haciaDonde]}.`);
     if (m) s.sel = { tipo: 'PUERTO', id: m.ultimo.puerto };
     return !!m;
   }
@@ -634,7 +638,7 @@
   }
   /**
    * Las cotas de un puerto sobre su cara, para dibujarlas: [{ desde, hasta, texto }] en el mundo (mm). En una lateral, desde
-   * el borde izquierdo y desde la base; arriba, desde el lado −X y desde el lado −Y.
+   * el borde izquierdo y desde la base; arriba, desde los lados −X y −Y del equipo.
    */
   function cotasPuerto(s, pid) {
     const u = ubicacionPuerto(s, pid);
@@ -1914,7 +1918,7 @@
     niveles, irANivel, nombrarNivel, quitarNivel, reglaNiveles, PASO_NIVEL_MM,
     reducirEn, compuertaEn, compuertaSugerida, quitarCompuerta, tapaEn, quitarTapa, RADIAL_MS, radial, radialElegir, desplazamientoSegmento, moverSegmento, borrar, medir,
     correccionesDe, correccionesListas, corregir, cambiarDiametroTramo, cambiarDiametroEnCadena, decidirCorto,
-    NOMBRE_CARA, HACIA, ubicacionPuerto, moverPuertoA, textoUbicacion, copiarPuerto, dimensionPuerto, cotasPuerto,
+    nombreCara, hacia, ubicacionPuerto, moverPuertoA, textoUbicacion, copiarPuerto, dimensionPuerto, cotasPuerto,
     infoTramo, piezasDe, fichasPieza, partidaDePieza, cambiarPieza, NOMBRE_FORMA, velocidadSemaforo, calcularTrazo, calculo, efectoEnTrazo, informeCalculo, graficaVentilador, efectoCatalogo, partidasVentilador, filaCalculo, NOMBRE_ACCION, despiece, exportar, importar, ejemplo,
   };
 }));
