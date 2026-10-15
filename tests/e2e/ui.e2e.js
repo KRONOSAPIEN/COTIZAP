@@ -1916,9 +1916,13 @@ const ok = (cond, msg) => {
     await p.fill('#r_metros', '40');
     ok(await total() === '$43,392.00', '11″ y 40 m: $43,392.00 con IVA');
     const d = await desglose();
-    ok(/Lámina: 11 hojas × \$793\.10/.test(d) && /\$8,724\.14/.test(d) && /Lámina × 3\s+Cubre/.test(d) && /\$26,172\.41/.test(d) && /Por 40 m: hasta 40 m\.\s+\$5,000\.00/.test(d)
+    ok(/Lámina × 3\s+11 hojas × \$793\.10 = \$8,724\.14 de lámina, × 3: cubre/.test(d) && /\$26,172\.41/.test(d) && /Por 40 m: hasta 40 m\.\s+\$5,000\.00/.test(d)
       && /Utilidad 20 %[\s\S]*\$6,234\.48/.test(d) && /IVA 16 %\s+\$5,985\.10/.test(d), 'el desglose: 11 hojas × $793.10, × 3, bridas $5,000 (hasta 40 m), utilidad 20 % sobre el costo e IVA');
-    ok(/33 yardas de 4 ft/.test(d) && /3 yardas de 11″/.test(d), 'dice cómo salen las hojas: 33 yardas de 4 ft, 3 por lámina');
+    {
+      const laminas = await p.locator('#rapida-desglose tr').evaluateAll((trs) => trs.map((tr) => tr.innerText.trim()).filter((t) => /^Lámina/.test(t)));
+      ok(laminas.length === 1 && /^Lámina × 3\s/.test(laminas[0]) && /\$26,172\.41$/.test(laminas[0]), 'en el desglose sólo hay un renglón de lámina y su importe es el de la lámina × 3 ($26,172.41), el que entra al costo');
+    }
+    ok(/33 yardas de 4 ft/.test(d) &&/3 yardas de 11″/.test(d), 'dice cómo salen las hojas: 33 yardas de 4 ft, 3 por lámina');
 
     // la lámina dibujada: sus 3 yardas numeradas, el sobrante y la tira con las 11 láminas
     ok(await p.locator('#r_yarda input[value="1220"]').isChecked() && !(await p.locator('#r_yarda input[value="914"]').isChecked()), 'la yarda arranca en 4 ft (la de las tablas)');
@@ -1967,7 +1971,7 @@ const ok = (cond, msg) => {
     ok(await total() === `$${esperado.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'la utilidad capturada (30 %) se suma sobre el costo');
     await p.fill('#r_utilidad', '');
     await p.selectOption('#r_hoja', 'GALV_C24_4X10');
-    ok(/Lámina: 11 hojas × \$603\.45/.test(await desglose()), 'otra lámina de la lista del proveedor (cal. 24: $700 con IVA → $603.45)');
+    ok(/11 hojas × \$603\.45/.test(await desglose()), 'otra lámina de la lista del proveedor (cal. 24: $700 con IVA → $603.45)');
     await p.selectOption('#r_hoja', '');
     await p.click('#tab-maestros');
     await p.fill('#maestros-buscar', 'factor');

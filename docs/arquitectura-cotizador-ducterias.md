@@ -1382,6 +1382,8 @@ total      = precio × (1 + IVA)                                      # el IVA d
 
 **El acomodo.** Las plantillas (yarda × B) se acomodan en la hoja con cortes de guillotina, y se queda el que da más: todas **a lo ancho** (la yarda a lo ancho de la hoja, como en el tramo recto), todas **a lo largo**, o una franja de un tipo y el resto del otro. Así, con yardas de 3 ft en la hoja de 4 × 10 ft, en la franja de 1 ft que sobra caben plantillas giradas si el ducto es chico (3″: 11 + 3 = 14 por hoja). La pestaña lo dibuja: una lámina a escala con sus yardas numeradas y el sobrante rayado, y una tira con todas las láminas y cuántas yardas lleva cada una (la última, las que falten). También dice qué fracción de la lámina se aprovecha.
 
+En la tabla de desglose de la pestaña la lámina va en un solo renglón (hojas × precio = costo de la lámina, × 3) y sólo ese importe entra al costo.
+
 Con la lámina galvanizada cal. 22 de 4 × 10 ft ($920 con IVA = $793.10 sin IVA) y la utilidad de arranque:
 
 | Diámetro | Metros | Yarda | Yardas | Por lámina | Láminas | Aprovechamiento | Lámina sin IVA | Lámina × 3 | Bridas | Costo | Utilidad 20 % | Total con IVA |

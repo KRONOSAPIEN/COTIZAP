@@ -106,7 +106,7 @@ El encabezado de la cotización lleva los parámetros comerciales que se ajustan
 Para dar un precio en minutos, la pestaña **Cotización rápida** (*Rápida* en pantallas angostas) pide sólo el **diámetro máximo** y los **metros hasta el punto más alejado**, y aplica la regla del taller:
 
 1. Cuenta las **hojas enteras** de lámina para esos metros a ese diámetro, con **yardas de 3 o 4 ft** (se elige). La plantilla de cada yarda es su largo por el perímetro más la holgura del engargolado; se acomodan en la hoja a lo ancho, a lo largo o mezcladas, lo que dé más. Con la galvanizada cal. 22 de 4 × 10 ft, cada hoja da 3 yardas de 11″.
-2. Multiplica el costo de esas hojas (sin IVA, de la lista del proveedor) **por 3**.
+2. Multiplica el costo de esas hojas (sin IVA, de la lista del proveedor) **por 3**. En el desglose la lámina va en un solo renglón (hojas × precio = costo de la lámina, × 3) y sólo ese importe entra al costo.
 3. Suma las **bridas según los metros**: hasta 40 m, $5,000; de 40 a 80 m, $12,000; de 80 a 120 m, $18,000.
 4. Suma la **mano de obra de los días**: la fabricación de bridas, 1 persona a $500 por día; la instalación, 2 personas a $500 por día.
 5. Suma lo que el factor no cubre, **por piezas** y a los precios de las tablas: las **ménsulas** que estime el ingeniero, del ángulo (1¼″ × 1/8″ o 1½″ × 3/16″) y con la solera de abrazadera (1¼″ × 1/8″ o 1½″ × 3/16″) que elija, costeadas como partidas de soportería (vacío: las sugeridas, una cada 2.5 m; 0 = no lleva); los **tramos de manguera** del catálogo de compras con sus abrazaderas (6 por tramo si no se dice: 3 tramos de 6″ son $6,275.92), y los **viáticos** en pesos sin IVA.
