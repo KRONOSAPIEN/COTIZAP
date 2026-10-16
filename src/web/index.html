@@ -60,6 +60,7 @@
         <button type="button" class="btn btn-sec" id="btn-unifilar">Importar unifilar</button>
         <button type="button" class="btn btn-sec" id="btn-io">Guardar y cargar</button>
         <button type="button" class="btn btn-sec" id="btn-imprimir">Imprimir propuesta</button>
+        <button type="button" class="btn btn-sec" id="btn-lista-pdf-cot" title="Las piezas para fabricar con todas sus especificaciones, en PDF">Lista de fabricación (PDF)</button>
       </div>
     </div>
     <form class="datos" aria-label="Datos de la cotización">
@@ -163,10 +164,11 @@
       <div>
         <h2>Planos de pedido</h2>
         <p>Cada pieza de la cotización dibujada y acotada, en una hoja por tipo de pieza y material, como las que se mandan a fabricar: con su número de piezas y una marca para ubicarla. Todas las medidas en mm.</p>
-        <p class="nota" id="planos-sin-imprimir" hidden>En este visor no se puede imprimir. Para imprimir los planos o guardarlos en PDF, copie la cotización con «Guardar y cargar» y cárguela en COTIZAP abierto en su navegador (el archivo cotizap.html).</p>
+        <p class="nota" id="planos-sin-imprimir" hidden>En este visor no se puede imprimir. Para imprimir los planos o guardarlos en PDF, copie la cotización con «Guardar y cargar» y cárguela en COTIZAP abierto en su navegador (el archivo cotizap.html). La lista de fabricación (PDF) sí se puede descargar aquí, con su confirmación.</p>
       </div>
       <div class="planos-acc">
         <button type="button" class="btn btn-primario" id="btn-imprimir-planos">Imprimir planos</button>
+        <button type="button" class="btn btn-sec" id="btn-lista-pdf-planos" title="Las piezas para fabricar con todas sus especificaciones, en PDF">Lista de fabricación (PDF)</button>
         <button type="button" class="btn btn-sec" id="planos-ejemplo">Ver el ejemplo: pedido del 30-sep-2026</button>
       </div>
     </div>
@@ -342,10 +344,14 @@
 <script src="dom.js"></script>
 <script src="esquemas.js"></script>
 <script src="planos.js"></script>
+<script src="../motor/lista_fabricacion.js"></script>
+<script src="pdf.js"></script>
+<script src="lista_pdf.js"></script>
 <script src="maestros_ayuda_ui.js"></script>
 <script src="maestros_ui.js"></script>
 <script src="compras_ui.js"></script>
 <script src="planos_ui.js"></script>
+<script src="lista_pdf_ui.js"></script>
 <script src="rapida_ui.js"></script>
 <script src="unifilar_cad_ui.js"></script>
 <script src="unifilar_ui.js"></script>

@@ -3749,6 +3749,111 @@ const ok = (cond, msg) => {
     ok(await ins.locator('#ti-m-az').evaluate((x) => x.tagName) === 'SELECT' && await p.inputValue('#ti-m-az') === '90', 'el rumbo del desvío en un menú (al norte)');
     await p.close();
   }
+  console.log('49) Lista de fabricación (PDF): el botón en Planos y en la cotización, la descarga en el navegador y el guardado con confirmación en el artefacto');
+  {
+    const fs = require('fs');
+    const { execFileSync } = require('child_process');
+    const hay = (cmd) => { try { execFileSync('sh', ['-c', `command -v ${cmd}`], { stdio: 'ignore' }); return true; } catch (e) { return false; } };
+    const conTexto = (bytes) => {
+      if (!hay('pdftotext')) return null;
+      const f = path.join(require('os').tmpdir(), `cotizap-e2e-${process.pid}-${Date.now()}.pdf`);
+      fs.writeFileSync(f, bytes);
+      try { return execFileSync('pdftotext', ['-layout', f, '-'], { encoding: 'utf8' }); } finally { fs.rmSync(f, { force: true }); }
+    };
+    const aviso = (p, re) => p.waitForFunction((s) => [...document.querySelectorAll('#toasts .toast')].some((t) => new RegExp(s).test(t.textContent)), re.source, { timeout: 4000 }).then(() => true, () => false);
+
+    // a) fuera del artefacto: los dos botones existen y bajan un PDF de verdad
+    const p = await nuevaPagina();
+    ok(await p.locator('#btn-lista-pdf-cot').isVisible() && /Lista de fabricación \(PDF\)/.test(await p.locator('#btn-lista-pdf-cot').innerText()), 'la cotización detallada tiene el botón «Lista de fabricación (PDF)»');
+    await p.click('#tab-planos');
+    ok(await p.locator('#btn-lista-pdf-planos').isVisible() && await p.locator('#btn-imprimir-planos').isVisible(), 'Planos lo tiene junto a «Imprimir planos»');
+    const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#btn-lista-pdf-planos')]);
+    ok(/^lista-fabricacion-colector-de-polvo-linea-2-\d{4}-\d{2}-\d{2}\.pdf$/.test(dl.suggestedFilename()), `el archivo se llama ${dl.suggestedFilename()}`);
+    const bytes = fs.readFileSync(await dl.path());
+    ok(bytes.slice(0, 5).toString('latin1') === '%PDF-' && bytes.slice(-5).toString('latin1') === '%%EOF', 'es un PDF (empieza con %PDF- y termina con %%EOF)');
+    const tx = conTexto(bytes);
+    if (tx !== null) {
+      ok(/Lista de fabricación/.test(tx) && /\bC1\b/.test(tx) && /\bD1\b/.test(tx) && /Hoja 1 de \d+/.test(tx), 'el texto del PDF trae «Lista de fabricación», las marcas C1 y D1 y «Hoja 1 de N»');
+      ok(/No se fabrican aquí/.test(tx) && /Instalación en obra/.test(tx) && /Compuerta de guillotina/.test(tx), '«No se fabrican aquí» nombra la instalación y la compuerta comprada');
+      ok(!tx.includes('$'), 'la hoja de taller no lleva precios');
+    } else console.log('  (pdftotext no está instalado: no se lee el texto del PDF)');
+    ok(await aviso(p, /Lista de fabricación guardada: lista-fabricacion-/), 'avisa que la lista se guardó');
+    // desde la cotización detallada también
+    await p.click('#tab-cotizacion');
+    const [dl2] = await Promise.all([p.waitForEvent('download'), p.click('#btn-lista-pdf-cot')]);
+    ok(/\.pdf$/.test(dl2.suggestedFilename()) && fs.readFileSync(await dl2.path()).slice(0, 4).toString('latin1') === '%PDF', 'el botón de la cotización detallada baja el mismo PDF');
+    // el pedido del 30-sep trae sus 36 piezas
+    await p.evaluate(() => window.COTIZAP.web.abrirCotizacion(window.COTIZAP.ejemplos.pedidoDucteria()));
+    const [dl3] = await Promise.all([p.waitForEvent('download'), p.click('#btn-lista-pdf-cot')]);
+    const b3 = fs.readFileSync(await dl3.path());
+    const tx3 = conTexto(b3);
+    ok(b3.length > 100000 && (tx3 === null || (/\bB1\b/.test(tx3) && /\bA6\b/.test(tx3) && /Total\s+36 partidas/.test(tx3))), 'el pedido del 30-sep sale con sus 36 piezas (B1 a A6) y el total en el resumen');
+    // sin piezas que fabricar: avisa y no genera nada
+    await p.click('#btn-nueva');
+    let bajo = false;
+    p.once('download', () => { bajo = true; });
+    await p.click('#btn-lista-pdf-cot');
+    ok(await aviso(p, /No hay piezas que fabricar/), 'sin partidas fabricables avisa «No hay piezas que fabricar»');
+    await p.waitForTimeout(300);
+    ok(!bajo, 'y no genera ningún archivo');
+    await p.context().close();
+
+    // b) en el artefacto no se baja un enlace: se guarda con la capacidad `downloads` (que pide confirmación)
+    const artefacto = (modo) => (ctx) => ctx.addInitScript((m) => {
+      window.COTIZAP_ENTORNO_ARTIFACT = true;
+      window.__descargas = [];
+      window.__usos = [];
+      window.claude = {
+        use: async (nombre) => {
+          window.__usos.push(nombre);
+          if (nombre !== 'downloads' || m === 'sin') return null;
+          return {
+            save: async (a) => {
+              window.__descargas.push({ filename: a.filename, tipo: Object.prototype.toString.call(a.data), n: a.data.length, cabecera: String.fromCharCode(...a.data.slice(0, 5)), cola: String.fromCharCode(...a.data.slice(-5)) });
+              if (m === 'declined') throw { code: 'declined' };
+              if (m === 'rate_limited') throw { code: 'rate_limited' };
+              if (m === 'unavailable') throw { code: 'unavailable' };
+            },
+          };
+        },
+      };
+    }, modo);
+    const a = await nuevaPagina({}, artefacto('ok'));
+    await a.click('#tab-planos');
+    ok(await a.locator('#btn-imprimir-planos').isHidden() && await a.locator('#btn-lista-pdf-planos').isVisible(), 'en el artefacto «Imprimir planos» se oculta y la lista en PDF no');
+    await a.click('#tab-cotizacion');
+    ok(await a.locator('#btn-lista-pdf-cot').isVisible() && await a.locator('#btn-imprimir').isHidden(), 'en la cotización, «Imprimir propuesta» se oculta y la lista en PDF no');
+    await a.click('#tab-planos');
+    let hubo = false;
+    a.on('download', () => { hubo = true; });
+    await a.click('#btn-lista-pdf-planos');
+    ok(await aviso(a, /Lista de fabricación guardada: lista-fabricacion-/), 'avisa que se guardó');
+    const gs = await a.evaluate(() => window.__descargas);
+    ok(gs.length === 1 && /^lista-fabricacion-.*\.pdf$/.test(gs[0].filename) && gs[0].tipo === '[object Uint8Array]' && gs[0].cabecera === '%PDF-' && gs[0].cola === '%%EOF' && gs[0].n > 5000,
+      `llama a save({ filename, data }) una vez con un Uint8Array PDF (${gs.length ? gs[0].filename : 'sin llamada'})`);
+    ok(!hubo, 'y no baja ningún enlace');
+    ok((await a.evaluate(() => window.__usos)).includes('downloads'), 'pidió la capacidad «downloads»');
+    await a.click('#tab-cotizacion');
+    await a.click('#btn-lista-pdf-cot');
+    await a.waitForFunction(() => window.__descargas.length === 2, null, { timeout: 4000 }).catch(() => null);
+    ok(await a.evaluate(() => window.__descargas.length) === 2, 'el botón de la cotización guarda también');
+    await a.context().close();
+
+    for (const [modo, re, texto] of [
+      ['declined', /Descarga cancelada/, 'si la persona rechaza («declined») avisa que se canceló, sin reintentar y sin error'],
+      ['rate_limited', /Demasiadas descargas/, 'si hay «rate_limited» pide esperar'],
+      ['unavailable', /no se puede descargar/, 'si no está disponible («unavailable») lo avisa'],
+      ['sin', /no se puede descargar/, 'si el visor no trae la capacidad lo avisa'],
+    ]) {
+      const r = await nuevaPagina({}, artefacto(modo));
+      await r.click('#tab-planos');
+      await r.click('#btn-lista-pdf-planos');
+      ok(await aviso(r, re), texto);
+      await r.waitForTimeout(150);
+      if (modo === 'declined') ok(await r.evaluate(() => window.__descargas.length) === 1, 'y no vuelve a intentar el guardado');
+      await r.context().close();
+    }
+  }
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

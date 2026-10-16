@@ -39,6 +39,15 @@
   });
   W.pct = (x, d) => `${W.num(x * 100, d === undefined ? 1 : d)} %`;
 
+  /** Baja un archivo con un enlace de descarga (fuera del artefacto). `datos`: texto, Uint8Array o Blob. */
+  W.bajarArchivo = function bajarArchivo(datos, nombre, tipo) {
+    const blob = datos instanceof Blob ? datos : new Blob([datos], { type: tipo || 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = W.h('a', { href: url, download: nombre });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  };
+
   /* ---------------- Unidades de captura ---------------- */
   W.MM_IN = 25.4;
   /** Interpreta "12", "12.5", "12,5", "12 1/2", "3/8" → número; NaN si no es válido. */

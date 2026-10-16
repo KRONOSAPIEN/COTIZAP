@@ -1753,9 +1753,7 @@
     const bajar = $('#io-descargar');
     if (SOLO_COPIAR) bajar.hidden = true;
     bajar.addEventListener('click', () => {
-      const blob = new Blob([area.value], { type: 'application/json' });
-      const a = h('a', { href: URL.createObjectURL(blob), download: `cotizap-${estado.cot.fecha || hoy()}.json` });
-      document.body.append(a); a.click(); a.remove();
+      W.bajarArchivo(area.value, `cotizap-${estado.cot.fecha || hoy()}.json`, 'application/json');
     });
     dialogo.addEventListener('click', (e) => { if (e.target === dialogo) dialogo.close(); });
   }
@@ -1892,6 +1890,7 @@
   }
 
   W.estadoApp = estado;
+  W.toast = toast;
   W.tituloPartida = tituloPartida;
   W.resumenMaterial = resumenMaterial;
   /** Lleva a una partida de la cotización (desde los planos): la selecciona y muestra su desglose. */

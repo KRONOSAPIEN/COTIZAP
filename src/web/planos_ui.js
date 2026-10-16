@@ -19,25 +19,6 @@
   const E = () => W.estadoApp;
   const SOLO_COPIAR = !!root.COTIZAP_ENTORNO_ARTIFACT; // en un visor restringido no se puede imprimir
 
-  /** Las hojas, en el orden de los planos de pedido (bridas, codos, reducciones con injerto) y luego lo demás. */
-  const GRUPOS = [
-    { id: 'BRIDAS', fams: ['BRIDA', 'COMPRADO'], marca: 'B', nombre: () => 'Bridas' },
-    { id: 'CODOS', fams: ['CODO'], marca: 'C', lamina: true, nombre: () => 'Codos' },
-    {
-      id: 'INJERTOS', fams: ['REDUCCION_INJERTO', 'RAMAL'], marca: 'I', lamina: true,
-      nombre: (ps) => (ps.some((x) => x.p.familia === 'REDUCCION_INJERTO') ? (ps.some((x) => x.p.familia === 'RAMAL') ? 'Reducciones con injerto e injertos' : 'Reducciones con injerto') : 'Injertos'),
-    },
-    { id: 'REDUCCIONES', fams: ['REDUCCION'], marca: 'R', lamina: true, nombre: () => 'Reducciones' },
-    { id: 'TRANSICIONES', fams: ['TRANSICION'], marca: 'T', lamina: true, nombre: () => 'Transiciones' },
-    { id: 'RECTOS', fams: ['RECTO'], marca: 'D', lamina: true, porMedida: true, nombre: (ps) => `Ductos de ${medida(ps[0].p)}` },
-    { id: 'SOPORTERIA', fams: ['SOPORTE'], marca: 'S', nombre: () => 'Soportería' },
-    { id: 'ARMADO', fams: ['UNION'], marca: 'A', nombre: () => 'Armado de piezas' },
-  ];
-  /** «11″» o «500 × 300 mm»: la medida de un ducto recto (las hojas de yardas van por diámetro). */
-  function medida(p) {
-    const f = C.planos.formato;
-    return p.forma === 'RECTANGULAR' ? `${f.mm(p.a_mm)} × ${f.mm(p.b_mm)} mm` : f.nominal(Number(p.D_mm));
-  }
   /** Las yardas que lleva una hoja de ductos rectos: «18 yardas y 1 tramo de ajuste». */
   function yardasDe(items) {
     let y = 0;
@@ -60,41 +41,13 @@
     return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' });
   }
 
-  /** Las partidas que se dibujan, repartidas en hojas; y cuántas no tienen plano (instalación, compras sin barrenos, errores). */
+  /**
+   * Las partidas que se dibujan, repartidas en hojas con sus marcas; y cuántas no tienen plano (instalación, compras sin
+   * barrenos, errores). El reparto y las marcas son los de la lista de fabricación (motor/lista_fabricacion.js).
+   */
   function hojas() {
     const { cot, res } = E();
-    const M = res.maestros;
-    const dibujables = [];
-    let sinPlano = 0;
-    let conError = 0;
-    cot.partidas.forEach((p, i) => {
-      const f = res.partidas[i];
-      if (!f || !f.ok) { conError += 1; return; }
-      const d = C.planos.plano(f, M);
-      if (!d) { sinPlano += 1; return; }
-      dibujables.push({ p, f, d });
-    });
-    const out = [];
-    GRUPOS.forEach((g) => {
-      const del = dibujables.filter((x) => g.fams.includes(x.p.familia));
-      if (!del.length) return;
-      // las de lámina, una hoja por material y calibre (como «CODOS / ACERO GALVANIZADO CAL. 24»)
-      const llaves = [];
-      const por = new Map();
-      // los ductos rectos, además, por medida (de la mayor a la menor), como los planos de yardas
-      const orden = g.porMedida ? del.slice().sort((a, b) => (Number(b.p.D_mm) || Number(b.p.a_mm) || 0) - (Number(a.p.D_mm) || Number(a.p.a_mm) || 0)) : del;
-      orden.forEach((x) => {
-        const mat = g.lamina ? (W.resumenMaterial(x.p) || '') : '';
-        const k = g.porMedida ? `${medida(x.p)}|${mat}` : mat;
-        if (!por.has(k)) { por.set(k, []); llaves.push(k); }
-        por.get(k).push(x);
-      });
-      llaves.forEach((k) => out.push({ g, material: g.porMedida ? k.split('|')[1] : k, items: por.get(k) }));
-    });
-    // marcas por tipo de pieza (B1, B2… C1, C2…), seguidas aunque el material parta la hoja
-    const cuenta = {};
-    out.forEach((hj) => hj.items.forEach((x) => { cuenta[hj.g.marca] = (cuenta[hj.g.marca] || 0) + 1; x.marca = `${hj.g.marca}${cuenta[hj.g.marca]}`; }));
-    return { hojas: out, sinPlano, conError, n: dibujables.length };
+    return C.listaFabricacion.agrupar(cot, res, res.maestros, W.resumenMaterial);
   }
 
   function tarjeta(x) {
