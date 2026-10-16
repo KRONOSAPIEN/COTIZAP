@@ -3776,6 +3776,7 @@ const ok = (cond, msg) => {
       ok(/Lista de fabricación/.test(tx) && /\bC1\b/.test(tx) && /\bD1\b/.test(tx) && /Hoja 1 de \d+/.test(tx), 'el texto del PDF trae «Lista de fabricación», las marcas C1 y D1 y «Hoja 1 de N»');
       ok(/No se fabrican aquí/.test(tx) && /Instalación en obra/.test(tx) && /Compuerta de guillotina/.test(tx), '«No se fabrican aquí» nombra la instalación y la compuerta comprada');
       ok(!tx.includes('$'), 'la hoja de taller no lleva precios');
+      ok(!/mínimo\s+recomendado/.test(tx), 'el texto del PDF no trae la advertencia de calibre «mínimo recomendado»');
     } else console.log('  (pdftotext no está instalado: no se lee el texto del PDF)');
     ok(await aviso(p, /Lista de fabricación guardada: lista-fabricacion-/), 'avisa que la lista se guardó');
     // desde la cotización detallada también
@@ -3788,6 +3789,7 @@ const ok = (cond, msg) => {
     const b3 = fs.readFileSync(await dl3.path());
     const tx3 = conTexto(b3);
     ok(b3.length > 100000 && (tx3 === null || (/\bB1\b/.test(tx3) && /\bA6\b/.test(tx3) && /Total\s+36 partidas/.test(tx3))), 'el pedido del 30-sep sale con sus 36 piezas (B1 a A6) y el total en el resumen');
+    ok(tx3 === null || !/mínimo\s+recomendado/.test(tx3), 'el pedido del 30-sep tampoco lleva «mínimo recomendado» en el PDF');
     // sin piezas que fabricar: avisa y no genera nada
     await p.click('#btn-nueva');
     let bajo = false;

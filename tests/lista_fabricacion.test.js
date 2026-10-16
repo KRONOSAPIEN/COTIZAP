@@ -147,3 +147,13 @@ test('Lista: es una hoja de taller, sin precios ni signos de pesos', () => {
   assert.doesNotMatch(JSON.stringify(Object.keys(L.piezas[0])), /precio|importe|costo/i);
   assert.doesNotMatch(JSON.stringify(Object.keys(L.totales)), /precio|importe|costo/i);
 });
+
+test('Lista: sin la advertencia de calibre «mínimo recomendado»; las demás notas siguen y la cotización la conserva', () => {
+  // la cotización detallada sí la trae (es una recomendación de cotización, no de taller)
+  assert.ok(res.partidas.some((f) => (f.advertencias || []).some((w) => /mínimo recomendado/.test(w))));
+  assert.ok(L.piezas.every((q) => [...q.advertencias, ...q.notas].every((n) => !/mínimo recomendado/.test(n))));
+  const notas = new Set(L.piezas.flatMap((q) => q.notas));
+  assert.ok(notas.has('Costuras y juntas engargoladas'));
+  assert.ok([...notas].some((n) => /^Bridas con ceja/.test(n)));
+  assert.ok([...notas].some((n) => /^Bridas de otra partida/.test(n)));
+});

@@ -300,7 +300,9 @@
     const kgT = f.peso ? f.peso.neto_total_kg : 0;
     const aros = bridasDe(f);
     const her = f.qto && f.qto.her;
-    const avisos = [...(f.advertencias || [])];
+    // El calibre «más delgado que el mínimo recomendado» (cotizador.js) es una recomendación de la cotización,
+    // no una instrucción de taller: no trae código, se reconoce por su texto y no entra a la lista de fabricación.
+    const avisos = (f.advertencias || []).filter((w) => !/más delgado que el mínimo recomendado/.test(w));
     const notas = [...(d.notas || [])];
     let material = lamina ? sinParentesis(f.material) : '';
     if (f.familia === 'SOPORTE' && f.soporte && f.soporte.barra) material = f.soporte.barra.descripcion || '';
