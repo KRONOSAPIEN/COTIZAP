@@ -253,6 +253,7 @@ main { padding: 16px 24px 48px; max-width: 1540px; margin-inline: auto; }
 .rejilla { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (min-width: 1100px) { .rejilla { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); } }
 .col-lista, .col-der { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.lista-cab-acc { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .lista-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .tarjeta { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: var(--sombra); min-width: 0; }
 
@@ -1560,3 +1561,26 @@ dd.ti-sem-verde, dd.ti-sem-ambar { background: none; font-weight: 600; }
 .ti-vent-cab .ti-vent-elegir-este { margin-left: auto; padding: 2px 10px; }
 .ti-vent-cot { margin-top: 8px; }
 .chip-trazado { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0; }
+
+/* -------------------------------------------------------------------------- conjuntos armados en taller */
+.chip-armado { font-weight: 600; }
+.chip-deshacer { font-size: 12px; padding: 0 4px; }
+.notas-armado { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.nota-armado { color: var(--accent); }
+.arm-lista { display: flex; flex-direction: column; gap: 10px; max-height: 55vh; overflow: auto; }
+.arm-sug { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.arm-sug h3 { font-size: 15px; margin: 0 0 4px; }
+.arm-sug-meta, .arm-sug-desglose { margin: 0; font-size: 12.5px; color: var(--fg-2); }
+.arm-sug-der { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: 0 0 auto; }
+.arm-sug-ahorro { font: 600 20px var(--font-ui); color: var(--good); }
+.arm-sug-et { font-size: 11.5px; color: var(--fg-2); }
+.conjuntos-armados { display: flex; flex-direction: column; gap: 12px; }
+.conjunto-armado { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 16px; align-items: start; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
+.conjunto-armado .pieza-cab { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; }
+.conjunto-armado ul { margin: 0; padding-left: 18px; }
+.conj-fig { width: 260px; max-width: 100%; height: auto; }
+.conj-fig rect { fill: var(--surface-2); stroke: var(--fg-2); stroke-width: 1.2; }
+.conj-fig line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; }
+.conj-fig text { fill: var(--fg); font: 600 11px var(--font-ui); }
+.conj-fig .conj-txt { fill: var(--fg-2); font-weight: 500; font-size: 10px; }
+@media (max-width: 620px) { .arm-sug { flex-direction: column; align-items: stretch; } .arm-sug-der { align-items: flex-start; } .conjunto-armado { grid-template-columns: minmax(0, 1fr); } }

@@ -185,6 +185,72 @@
     return { alto, pintar };
   }
 
+  /**
+   * La tarjeta de un conjunto armado en taller (E1, E2…): una figura simple con las dos piezas y su junta, sus marcas con la cara
+   * que se une, el ángulo resultante, el tamaño y la nota del taller. Misma forma que `tarjeta`: { alto, pintar(pagina, y) }.
+   */
+  function tarjetaConjunto(c, t) {
+    const wTit = ANCHO - 54 - 90;
+    const titulo = PDF.ajustar(c.titulo, wTit, 10.5, true).slice(0, 2);
+    const altoCab = Math.max(30, 8 + titulo.length * 12.5 + 6);
+    const xEsp = COL_DIBUJO + 10;
+    const anchoEsp = ANCHO - xEsp - 8;
+    const wEt = Math.round(anchoEsp * 0.38);
+    const filas = [];
+    c.piezas.forEach((x, i) => filas.push([`Pieza ${i + 1}`, `${x.marca} · ${x.titulo}`, `Cara que se une: ${x.cara_texto} (sin brida)`]));
+    filas.push(['Junta de armado', c.junta === 'engargolada' ? 'Engargolada (galvanizado)' : 'Soldada (filete continuo)']);
+    if (c.angulo_deg !== undefined && c.angulo_deg !== null) filas.push(c.pareja === 'a' ? ['Ángulo resultante', `${num(c.angulo_deg, 0)}°${c.es_90 ? ' (el ramal sale a 90°)' : ''}`] : ['Giro del codo', `${num(c.angulo_deg, 0)}°`]);
+    filas.push(['Ø de la unión', `${num(c.D_mm, 1)} mm`]);
+    filas.push(['Dimensión del conjunto', `hasta ${num(c.dim_mm, 0)} mm${c.limite_mm ? ` (máximo ${num(c.limite_mm, 0)} mm por manejo y transporte)` : ''}`]);
+    const medidas = filas.map(([et, ...vals]) => {
+      const lv = vals.flatMap((v) => PDF.ajustar(v, anchoEsp - wEt - 4, t, false));
+      const le = PDF.ajustar(et, wEt, t - 1, true);
+      return { le, lv, h: Math.max(le.length, lv.length) * (t + 1.3) + 2.5 };
+    });
+    const lNota = PDF.ajustar(c.nota, ANCHO - 12, t, true);
+    const altoCuerpo = Math.max(112, medidas.reduce((a, r) => a + r.h, 0) + 10);
+    const altoNota = lNota.length * (t + 1) + 8;
+    const alto = altoCab + altoCuerpo + altoNota + 4;
+
+    function pintar(pg, y) {
+      const x = MARGEN;
+      pg.rect(x, y, ANCHO, alto, { grosor: 0.7, gris: 0.45 });
+      pg.rect(x, y, ANCHO, altoCab, { grosor: 0, relleno: 0.94, sinTrazo: true });
+      pg.rect(x + 6, y + 5, 42, altoCab - 10, { sinTrazo: true, relleno: 0.15 });
+      pg.texto(x + 27, y + altoCab / 2 + 6, c.marca, { tam: 17, negrita: true, align: 'center', gris: 1 });
+      let yy = y + 15;
+      titulo.forEach((l) => { pg.texto(x + 54, yy, l, { tam: 10.5, negrita: true }); yy += 12.5; });
+      pg.texto(x + ANCHO - 6, y + 11, 'CONJUNTOS', { tam: 6, negrita: true, align: 'right', gris: GRIS_ET });
+      pg.texto(x + ANCHO - 6, y + 28, `${num(c.cantidad, 0)} ${c.cantidad === 1 ? 'conjunto' : 'conjuntos'}`, { tam: 14, negrita: true, align: 'right' });
+      pg.linea(x, y + altoCab, x + ANCHO, y + altoCab, { grosor: 0.5, gris: 0.45 });
+      // figura: las dos piezas lado a lado, con su marca, y la junta entre ellas
+      const fy = y + altoCab + 26;
+      const wCaja = 66;
+      const hCaja = 44;
+      const x0 = x + (COL_DIBUJO - 2 * wCaja) / 2;
+      c.piezas.forEach((q, i) => {
+        const bx = x0 + i * wCaja;
+        pg.rect(bx, fy, wCaja, hCaja, { grosor: 1, gris: 0.2, relleno: 0.93 });
+        pg.texto(bx + wCaja / 2, fy + 21, q.marca, { tam: 14, negrita: true, align: 'center' });
+        pg.texto(bx + wCaja / 2, fy + 35, q.cara_texto, { tam: 6.5, align: 'center', gris: 0.3 });
+      });
+      pg.linea(x0 + wCaja, fy - 8, x0 + wCaja, fy + hCaja + 8, { grosor: 1.6, gris: 0.1, guion: [3, 2] });
+      pg.texto(x0 + wCaja, fy - 12, `junta ${c.junta}`, { tam: 7, negrita: true, align: 'center' });
+      pg.texto(x0 + wCaja, fy + hCaja + 20, 'sin brida en la cara que se une', { tam: 6.5, align: 'center', gris: 0.35 });
+      pg.linea(x + COL_DIBUJO + 4, y + altoCab + 4, x + COL_DIBUJO + 4, y + altoCab + altoCuerpo - 4, { grosor: 0.4, gris: 0.75 });
+      let cy = y + altoCab + 6;
+      medidas.forEach((r) => {
+        r.le.forEach((l, i) => pg.texto(x + xEsp, cy + t + i * (t + 1.3), l, { tam: t - 1, negrita: true, gris: GRIS_ET }));
+        r.lv.forEach((l, i) => pg.texto(x + xEsp + wEt + 4, cy + t + i * (t + 1.3), l, { tam: t }));
+        cy += r.h;
+      });
+      const ya = y + altoCab + altoCuerpo;
+      pg.linea(x, ya, x + ANCHO, ya, { grosor: 0.4, gris: 0.75 });
+      lNota.forEach((l, i) => pg.texto(x + 6, ya + t + 3 + i * (t + 1), l, { tam: t, negrita: true, gris: 0.15 }));
+    }
+    return { alto, pintar };
+  }
+
   /* ---------------- Resumen y partidas que no se fabrican ---------------- */
 
   /** Tabla con columnas [{ t, w, num }] y filas [[celdas]] que pasa de hoja con su encabezado repetido. `fin` = fila de totales. */
@@ -283,13 +349,29 @@
       cursor.y += tj.alto + 8;
     });
 
+    // los conjuntos armados en taller (E1, E2…), después de las piezas
+    const conjuntos = lista.conjuntos || [];
+    if (conjuntos.length) {
+      if (cursor.y + 22 + 140 > cursor.fondo) cursor.salto();
+      cursor.pagina().texto(MARGEN, cursor.y + 12, 'Conjuntos armados en taller', { tam: 11, negrita: true });
+      cursor.y += 20;
+      conjuntos.forEach((c) => {
+        const tj = tarjetaConjunto(c, o.tamLetra || 8);
+        if (cursor.y + tj.alto > cursor.fondo) cursor.salto();
+        tj.pintar(cursor.pagina(), cursor.y);
+        posiciones.push({ marca: c.marca, pagina: hojas.indexOf(cursor.actual) + 1, y: cursor.y, alto: tj.alto, letra: o.tamLetra || 8, conjunto: true });
+        cursor.y += tj.alto + 8;
+      });
+    }
+
     // resumen
     if (lista.piezas.length) {
       cursor.y += 6;
       tabla(cursor, 'Resumen', [
         { t: 'Marca', w: 48 }, { t: 'Pieza', w: 282 }, { t: 'Cantidad', w: 50, num: true }, { t: 'kg por pieza', w: 76, num: true }, { t: 'kg total', w: 84, num: true },
-      ], lista.piezas.map((q) => [q.marca, q.titulo, num(q.cantidad, 0), q.peso_unitario_kg > 0 ? num(q.peso_unitario_kg, 2) : '—', q.peso_total_kg > 0 ? num(q.peso_total_kg, 2) : '—']),
-      ['Total', `${num(lista.totales.partidas, 0)} ${lista.totales.partidas === 1 ? 'partida' : 'partidas'}`, num(lista.totales.piezas, 0), '', num(lista.totales.kg, 2)]);
+      ], [...lista.piezas.map((q) => [q.marca, q.titulo, num(q.cantidad, 0), q.peso_unitario_kg > 0 ? num(q.peso_unitario_kg, 2) : '—', q.peso_total_kg > 0 ? num(q.peso_total_kg, 2) : '—']),
+        ...conjuntos.map((c) => [c.marca, `Conjunto armado en taller: ${c.piezas.map((x) => x.marca).join(' + ')} (junta ${c.junta})`, num(c.cantidad, 0), '—', '—'])],
+      ['Total', `${num(lista.totales.partidas, 0)} ${lista.totales.partidas === 1 ? 'partida' : 'partidas'}${conjuntos.length ? ` · ${num(conjuntos.length, 0)} ${conjuntos.length === 1 ? 'armado en taller' : 'armados en taller'} (${num(lista.totales.conjuntos, 0)} ${lista.totales.conjuntos === 1 ? 'conjunto' : 'conjuntos'})` : ''}`, num(lista.totales.piezas, 0), '', num(lista.totales.kg, 2)]);
     }
     // lo que no se fabrica aquí
     cursor.y += 10;

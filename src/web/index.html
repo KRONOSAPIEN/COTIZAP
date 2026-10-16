@@ -98,7 +98,10 @@
       <section class="col-lista" aria-labelledby="tit-partidas">
         <div class="lista-cab">
           <h2 id="tit-partidas">Partidas</h2>
+          <div class="lista-cab-acc">
+          <button type="button" class="btn btn-sec" id="btn-sugerir-armados" title="Piezas que se unen en taller sin brida en las caras que se juntan: ahorran aros, tornillos y juntas">Sugerir armados</button>
           <button type="button" class="btn btn-primario" id="btn-agregar"><span class="icono" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>Agregar partida</button>
+          </div>
         </div>
         <ul id="lista-partidas" class="partidas"></ul>
       </section>
@@ -283,6 +286,21 @@
   </form>
 </dialog>
 
+<dialog id="dlg-armados" aria-labelledby="arm-titulo">
+  <div class="io">
+    <header class="dlg-cab">
+      <h2 id="arm-titulo">Sugerir armados</h2>
+      <button type="button" class="btn-icono" id="arm-cerrar" aria-label="Cerrar"><span class="icono" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span></button>
+    </header>
+    <p class="io-ayuda" id="arm-ayuda"></p>
+    <div id="arm-lista" class="arm-lista"></div>
+    <div class="io-acc">
+      <button type="button" class="btn btn-primario" id="arm-todas">Armar todas</button>
+      <button type="button" class="btn btn-sec" id="arm-cerrar2">Cerrar</button>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="dlg-io" aria-labelledby="io-titulo">
   <div class="io">
     <header class="dlg-cab">
@@ -331,6 +349,7 @@
 <script src="../motor/validacion.js"></script>
 <script src="../motor/compras.js"></script>
 <script src="../motor/soportes.js"></script>
+<script src="../motor/armados.js"></script>
 <script src="../motor/cotizador.js"></script>
 <script src="../motor/rapida.js"></script>
 <script src="../motor/unifilar.js"></script>
@@ -352,6 +371,7 @@
 <script src="compras_ui.js"></script>
 <script src="planos_ui.js"></script>
 <script src="lista_pdf_ui.js"></script>
+<script src="armados_ui.js"></script>
 <script src="rapida_ui.js"></script>
 <script src="unifilar_cad_ui.js"></script>
 <script src="unifilar_ui.js"></script>

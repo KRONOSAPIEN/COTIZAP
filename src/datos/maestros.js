@@ -258,6 +258,11 @@
         junta_entre_yardas: 'PITTSBURGH', // cómo se unen las yardas de una pieza: clave de proceso.costuras (engargolado; una soldada las soldaría)
         extremo_ajuste_defecto: 'SUELTA', // SUELTA | SIN_BRIDA | CON_BRIDA: qué lleva el extremo libre del tramo de ajuste
       },
+      // Conjuntos armados en taller (motor/armados.js): dos piezas que se unen en taller no llevan brida en las caras que se juntan.
+      // Política del taller (manejo y transporte): un conjunto no puede medir más que esto en su dimensión mayor.
+      conjuntos_armados: {
+        dim_max_mm: 3660, // 3 yardas de 1 220 mm
+      },
       semiangulo_max_deg: 15,
       alfa_max_junta_deg: 22.5,
       k_R_defecto: 1.5,

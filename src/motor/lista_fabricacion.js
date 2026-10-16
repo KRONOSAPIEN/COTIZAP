@@ -337,6 +337,33 @@
     }
   }
 
+  const NOMBRE_CARA = {
+    A: 'extremo A', B: 'extremo B', D1: 'extremo mayor', D2: 'extremo menor', injerto: 'cara del injerto',
+    tronco_1: 'extremo 1 del tronco', tronco_2: 'extremo 2 del tronco', final: 'extremo final',
+  };
+
+  /**
+   * Los conjuntos armados en taller (E1, E2…, en el orden de `res.armados`): cada uno con sus dos piezas —su marca, su título y
+   * la cara que se une—, la junta (soldada en acero al carbón, engargolada en galvanizado), el ángulo resultante y la nota del
+   * taller. Sólo los armados válidos; las marcas de las piezas son las de `piezas`.
+   */
+  function conjuntosDe(res, piezas) {
+    return (res.armados || []).filter((a) => a.ok).map((a) => {
+      const union = res.partidas[a.union_indice];
+      const junta = union && union.ok && union.geometria.costura === 'ENGARGOLADA' ? 'engargolada' : 'soldada';
+      const mias = a.piezas.map((q) => {
+        const pz = piezas.find((x) => x.id === q.partida);
+        return { marca: pz ? pz.marca : '—', titulo: pz ? pz.titulo : q.nombre, cara: q.cara, cara_texto: NOMBRE_CARA[q.cara] || q.cara };
+      });
+      return {
+        marca: a.marca, id: a.id, cantidad: a.n, piezas: mias, junta, descripcion: a.descripcion,
+        titulo: `Conjunto armado: ${mias.map((x) => x.titulo).join(' + ')}`,
+        pareja: a.pareja, angulo_deg: a.angulo_deg, es_90: a.es_90, dim_mm: a.dim_mm, limite_mm: a.limite_mm, D_mm: a.D_mm,
+        nota: `Se arma en taller: sin brida en esta cara; junta ${junta}.`,
+      };
+    });
+  }
+
   function listaFabricacion(cot, res, M, opciones) {
     const o = opciones || {};
     const A = agrupar(cot, res, M, o.materialDe);
@@ -347,6 +374,13 @@
       titulo: (f && f.ok && f.descripcion) || p.descripcion || PL().titulo(p) || TIPO_FAMILIA[p.familia] || p.familia,
       motivo: motivoAparte(p, f, error),
     })).sort((a, b) => a.indice - b.indice);
+    const conjuntos = conjuntosDe(res, piezas);
+    // cada pieza armada dice en qué conjunto va y con quién
+    conjuntos.forEach((c) => c.piezas.forEach((x, k) => {
+      const q = piezas.find((y) => y.marca === x.marca);
+      const otra = c.piezas[1 - k];
+      if (q) q.notas.push(`Conjunto ${c.marca}: se arma en taller con ${otra.marca} (${otra.titulo}), ${x.cara_texto} sin brida; junta ${c.junta}.`);
+    }));
     const materiales = [];
     piezas.forEach((q) => {
       const t = q.material && q.espesor_mm !== null ? `${q.material} · ${q.calibre ? `cal. ${q.calibre}` : `${num(q.espesor_mm, 3)} mm`}` : '';
@@ -358,8 +392,11 @@
         material: materiales.join(' / '),
       },
       piezas,
+      conjuntos,
       aparte,
       totales: {
+        armados: conjuntos.length, // conjuntos armados en taller (E1, E2…) y cuántos conjuntos son en total
+        conjuntos: conjuntos.reduce((s, c) => s + c.cantidad, 0),
         partidas: piezas.length,
         piezas: piezas.reduce((s, q) => s + (Number(q.cantidad) || 0), 0),
         kg: piezas.reduce((s, q) => s + q.peso_total_kg, 0),
@@ -367,5 +404,5 @@
     };
   }
 
-  return { listaFabricacion, agrupar, GRUPOS, medida, formato: { num, mmt, grados, dn } };
+  return { listaFabricacion, conjuntosDe, agrupar, GRUPOS, medida, formato: { num, mmt, grados, dn } };
 }));

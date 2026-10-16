@@ -348,7 +348,7 @@
   // de tornillos, tamaño de hoja, densidad). Un cero aquí produce NaN o un precio infinito. `*` = cualquier clave.
   const POSITIVOS = [
     'proceso.eficiencia_taller', 'proceso.hoja.ancho_mm', 'proceso.hoja.largo_mm',
-    'proceso.armado_yardas.yarda_defecto_mm', 'proceso.armado_yardas.yardas_por_pieza_max', 'proceso.armado_yardas.yardas_mm.*',
+    'proceso.armado_yardas.yarda_defecto_mm', 'proceso.armado_yardas.yardas_por_pieza_max', 'proceso.armado_yardas.yardas_mm.*', 'proceso.conjuntos_armados.dim_max_mm',
     'proceso.semiangulo_max_deg', 'proceso.alfa_max_junta_deg', 'proceso.k_R_defecto',
     'proceso.rolado.n_pasadas', 'proceso.rolado.n_pasadas_plegado', 'proceso.rolado.k_conico',
     'proceso.soldadura.procesos.*.v_mult', 'proceso.soldadura.procesos.*.FO', 'proceso.soldadura.procesos.*.eta_dep', 'proceso.soldadura.rho_dep_g_cm3',

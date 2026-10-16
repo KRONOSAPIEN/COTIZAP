@@ -3856,6 +3856,93 @@ const ok = (cond, msg) => {
       await r.context().close();
     }
   }
+  console.log('50) Conjuntos armados en taller: «Sugerir armados», armar, el chip y la junta automática, deshacer, el PDF con la marca E1 y los planos');
+  {
+    const fs = require('fs');
+    const { execFileSync } = require('child_process');
+    const hay = (cmd) => { try { execFileSync('sh', ['-c', `command -v ${cmd}`], { stdio: 'ignore' }); return true; } catch (e) { return false; } };
+    const conTexto = (bytes) => {
+      if (!hay('pdftotext')) return null;
+      const f = path.join(require('os').tmpdir(), `cotizap-e2e-armados-${process.pid}-${Date.now()}.pdf`);
+      fs.writeFileSync(f, bytes);
+      try { return execFileSync('pdftotext', ['-layout', f, '-'], { encoding: 'utf8' }); } finally { fs.rmSync(f, { force: true }); }
+    };
+    const p = await nuevaPagina();
+    // las piezas del caso: reducción con injerto 11→10 con injerto de 5″ a 30°, codo de 60° de 5″, recto de 5″ de 914 mm y codo de 90° de 5″
+    await p.evaluate(() => {
+      const pulg = (x) => x * 25.4;
+      const lam = { material_id: 'GALVANIZADO', calibre: 22, tipo_union: 'BRIDADO', ref_diametro: 'INTERIOR', cantidad: 1 };
+      window.COTIZAP.web.abrirCotizacion({
+        cliente: '', proyecto: 'Prueba de armados', fecha: '2026-10-16', riesgo: 'MEDIO', servicio: 'POLVO', ubicacion: 'INTERIOR', unidad_diam: 'in', unidad_long: 'mm', yarda_mm: 914,
+        partidas: [
+          { id: 'ri', familia: 'REDUCCION_INJERTO', ...lam, D1_mm: pulg(11), D2_mm: pulg(10), d_mm: pulg(5), beta_deg: 30, L_reduccion_mm: 500, L_ramal_mm: 450 },
+          { id: 'c60', familia: 'CODO', ...lam, D_mm: pulg(5), theta_deg: 60, k_R: 1.5, n_gajos: 3 },
+          { id: 'rt', familia: 'RECTO', ...lam, D_mm: pulg(5), L_mm: 914 },
+          { id: 'c90', familia: 'CODO', ...lam, D_mm: pulg(5), theta_deg: 90, k_R: 1.5, n_gajos: 5 },
+        ],
+      }, 'Caso de armados');
+    });
+    await p.waitForTimeout(150);
+    const total = () => p.evaluate(() => window.COTIZAP.web.estadoApp.res.totales.total);
+    const total0 = await total();
+    ok(await p.locator('#lista-partidas .partida:not(.partida-auto)').count() === 4 && await p.locator('.chip-armado').count() === 0, 'el caso trae las 4 piezas, ninguna armada: nada se arma solo');
+
+    // sugerir: el par injerto + codo de 60° (90°) y el par recto + codo de 90°, cada uno con su ahorro
+    await p.click('#btn-sugerir-armados');
+    await p.waitForSelector('#dlg-armados[open]');
+    const sug = await p.locator('#arm-lista .arm-sug').evaluateAll((els) => els.map((e) => ({ txt: e.textContent, ahorro: Number(e.querySelector('.arm-sug-ahorro').dataset.ahorro) })));
+    ok(sug.length === 2 && sug.every((s) => s.ahorro > 0), `«Sugerir armados» propone 2 parejas, cada una con su ahorro (${sug.map((s) => s.ahorro).join(' y ')})`);
+    ok(sug.some((s) => /con injerto de 5″ a 30° con codo de 60° de 5″/i.test(s.txt) && /Ángulo resultante 90°/.test(s.txt)) && sug.some((s) => /tramo recto de 5″ × 914 mm con codo de 90° de 5″/i.test(s.txt)), 'son injerto + codo de 60° (sale a 90°) y recto + codo de 90°; codo + codo no aparece');
+    ok(/3,?660 mm/.test(await p.locator('#arm-ayuda').innerText()), 'el diálogo dice el límite de 3,660 mm');
+
+    // armar una: el total baja, aparece el chip en las dos piezas y la partida automática de la junta
+    await p.locator('#arm-lista .arm-sug').first().locator('button[data-armar]').click();
+    await p.waitForTimeout(150);
+    const total1 = await total();
+    ok(total1 < total0, `armar baja el total (${total0} → ${total1})`);
+    ok(await p.locator('#lista-partidas .chip-armado').count() === 2 && /Armada con/.test(await p.locator('#lista-partidas .partida:not(.partida-auto) .chip-armado').first().innerText()), 'las dos piezas llevan el chip «Armada con …»');
+    ok(await p.locator('#lista-partidas .partida-auto[data-auto="UNION"]').count() === 1 && /Armado E1/.test(await p.locator('#lista-partidas .partida-auto[data-auto="UNION"]').innerText()), 'la junta de armado sale como partida automática con su costo');
+    ok(await p.locator('#arm-lista .arm-sug').count() === 1, 'el diálogo se actualiza: queda la otra sugerencia');
+    await p.click('#arm-cerrar');
+
+    // el detalle de la pieza armada y el total
+    const armada = p.locator('#lista-partidas .partida:not(.partida-auto):has(.chip-armado)').first();
+    await armada.click();
+    await p.waitForTimeout(100);
+    ok(/Esta cara va armada con .* \(sin brida\)/.test(await p.locator('#detalle').innerText()), 'el detalle dice «Esta cara va armada con … (sin brida)»');
+    ok(await p.locator('#totales [data-ahorro-armados]').count() === 1, 'los totales dicen cuánto ahorran los armados');
+
+    // deshacer: el total vuelve al de antes
+    await p.locator('#lista-partidas .chip-deshacer').first().click();
+    await p.waitForTimeout(150);
+    ok(Math.abs(await total() - total0) < 0.005 && await p.locator('#lista-partidas .chip-armado').count() === 0 && await p.locator('#lista-partidas .partida-auto[data-auto="UNION"]').count() === 0, 'Deshacer armado devuelve el total y quita el chip y la junta');
+
+    // armar todas: los dos armados, y persisten al recargar
+    await p.click('#btn-sugerir-armados');
+    await p.waitForSelector('#dlg-armados[open]');
+    await p.click('#arm-todas');
+    await p.waitForTimeout(200);
+    await p.click('#arm-cerrar');
+    const total2 = await total();
+    ok(total2 < total1 && await p.locator('#lista-partidas .partida-auto[data-auto="UNION"]').count() === 2, `«Armar todas» acepta los dos (total ${total2})`);
+    await p.reload();
+    await p.waitForSelector('#lista-partidas .partida:not(.partida-auto)');
+    ok(Math.abs(await total() - total2) < 0.005 && await p.locator('#lista-partidas .chip-armado').count() === 4, 'los armados se guardan: tras recargar el total y los chips son los mismos');
+
+    // Planos y lista de fabricación: los conjuntos E1 y E2 con sus piezas
+    await p.click('#tab-planos');
+    const conj = await p.locator('#planos-hojas .conjunto-armado').evaluateAll((els) => els.map((e) => e.textContent));
+    ok(conj.length === 2 && /E1/.test(conj[0]) && /E2/.test(conj[1]) && /Se arma en taller: sin brida en esta cara; junta engargolada/.test(conj[0]), 'Planos muestra los conjuntos E1 y E2 con la nota «Se arma en taller: sin brida en esta cara; junta engargolada»');
+    const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#btn-lista-pdf-planos')]);
+    const bytes = fs.readFileSync(await dl.path());
+    const tx = conTexto(bytes);
+    ok(bytes.slice(0, 5).toString('latin1') === '%PDF-' && bytes.length > 5000, 'la lista de fabricación baja como PDF');
+    if (tx !== null) {
+      ok(/\bE1\b/.test(tx) && /\bE2\b/.test(tx) && /Se arma en taller: sin brida en esta cara; junta engargolada/.test(tx), 'el PDF trae las marcas E1 y E2 y la nota del taller');
+      ok(/2 armados en taller/.test(tx), 'el resumen del PDF cuenta los conjuntos');
+    } else console.log('  (pdftotext no está instalado: no se lee el texto del PDF)');
+    await p.context().close();
+  }
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

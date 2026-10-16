@@ -10,13 +10,13 @@
   if (typeof module === 'object' && module.exports) {
     module.exports = factory(
       require('./util'), require('./geometria'), require('./material'),
-      require('./mano_obra'), require('./consumibles'), require('./precios'), require('./validacion'), require('./proveedor'), require('./compras'), require('./soportes'),
+      require('./mano_obra'), require('./consumibles'), require('./precios'), require('./validacion'), require('./proveedor'), require('./compras'), require('./soportes'), require('./armados'),
     );
   } else {
     const C = root.COTIZAP;
-    root.COTIZAP.cotizador = factory(C.util, C.geometria, C.material, C.manoObra, C.consumibles, C.precios, C.validacion, C.proveedor, C.compras, C.soportes);
+    root.COTIZAP.cotizador = factory(C.util, C.geometria, C.material, C.manoObra, C.consumibles, C.precios, C.validacion, C.proveedor, C.compras, C.soportes, C.armados);
   }
-}(typeof self !== 'undefined' ? self : this, function (U, GEO, MAT, MO, CON, PRE, VAL, PROV, COMP, SOP) {
+}(typeof self !== 'undefined' ? self : this, function (U, GEO, MAT, MO, CON, PRE, VAL, PROV, COMP, SOP, ARM) {
   'use strict';
 
   const FAMILIAS = {
@@ -545,11 +545,11 @@
     return { activo: true, filas: lista, piden, hay: lista.reduce((s, x) => s + x.hay, 0), cuadra: lista.every((x) => x.diferencia === 0) };
   }
 
-  function cotizar(cot, M0) {
-    const c = esObjeto(cot) ? cot : {};
-    const ef = maestrosEfectivos(c, M0);
-    const M = ef.M;
-    const problemas = VAL.problemasMaestros(M); // una sola vez para todas las partidas
+  /**
+   * Cómo hereda una partida los valores de la cotización (riesgo, servicio, ubicación, `defaults` y el ancho de yarda de los tramos
+   * rectos) cuando no los trae. Devuelve { heredar(p), defs, yarda }; `cotizar` y las sugerencias de armado usan la misma.
+   */
+  function crearHeredar(c, M) {
     // Valores de la cotización que heredan las partidas que no los traen (o los dejan vacíos: «según la cotización»)
     const defs = { riesgo: c.riesgo || 'MEDIO', servicio: c.servicio, ubicacion: c.ubicacion, ...(esObjeto(c.defaults) ? c.defaults : {}) };
     Object.keys(defs).forEach((k) => sinValor(defs[k]) && delete defs[k]);
@@ -561,7 +561,18 @@
       if (p.familia === 'RECTO' && yarda.yarda_mm !== undefined && (sinValor(p.yarda_mm) || VAL.aNumero(p.yarda_mm) === 0)) fusion.yarda_mm = yarda.yarda_mm;
       return fusion;
     };
-    const lista = Array.isArray(c.partidas) ? c.partidas : [];
+    return { heredar, defs, yarda };
+  }
+
+  function cotizar(cot, M0) {
+    const c = esObjeto(cot) ? cot : {};
+    const ef = maestrosEfectivos(c, M0);
+    const M = ef.M;
+    const problemas = VAL.problemasMaestros(M); // una sola vez para todas las partidas
+    const { heredar, defs, yarda } = crearHeredar(c, M);
+    // Armados en taller aceptados: las partidas efectivas llevan la cara sin brida y, al final, la UNION de cada armado
+    const armados = ARM.aplicarArmados(Array.isArray(c.partidas) ? c.partidas : [], c.armados, M, { heredar });
+    const lista = armados.partidas;
     // Las partidas de soportería en modo automático (`cantidad_modo: 'AUTO'`) piden su cantidad al ducto de las demás: se calculan al final
     const esAuto = (p) => esObjeto(p) && p.familia === 'SOPORTE' && p.cantidad_modo === 'AUTO';
     const calcular = (p, indice, propios) => {
@@ -604,6 +615,7 @@
     const riesgoSobrante = typeof defs.riesgo === 'string' && M.capas.imprevistos_pct && Object.prototype.hasOwnProperty.call(M.capas.imprevistos_pct, defs.riesgo) ? defs.riesgo : 'MEDIO';
     const automaticas = compras.sobrante > 0.005 ? [partidaSobrante(compras.sobrante, riesgoSobrante, M)] : [];
     const ok = [...filas.filter((f) => f.ok), ...automaticas];
+    const propias = filas.filter((f) => !(f.entrada && f.entrada.armado_id)); // sin las UNION derivadas de los armados
     const C = M.capas;
     const subtotal = U.redondear(ok.reduce((s, f) => s + f.precio.importe, 0), 2);
     const descuento = U.redondear(subtotal * ef.descuento_pct, 2);
@@ -620,6 +632,7 @@
     const avisos = [...ef.avisos];
     if (yarda.aviso) avisos.push(yarda.aviso);
     if (vp.aviso) avisos.push(vp.aviso);
+    avisos.push(...armados.avisos);
     if (problemas.length) {
       avisos.push(`Tablas maestras con ${problemas.length === 1 ? 'un valor no válido' : `${problemas.length} valores no válidos`}: ${VAL.textoProblema(problemas[0])}${problemas.length > 1 ? ' (y otros)' : ''}.`);
     }
@@ -628,6 +641,7 @@
       automaticas, // partidas que agrega el cálculo (el sobrante de comprar piezas enteras): no son de la lista del usuario
       compras,
       bridas: cuadreBridas(filas), // las bridas que piden las piezas contra las partidas de bridas, por medida
+      armados: armados.conjuntos, // los conjuntos armados en taller (E1, E2…): cómo quedó cada uno; sus UNION van al final de `partidas`
       maestros: M, // las tablas con las capas de esta cotización: lo que usó cada partida
       capas: C,
       parametros: ef.aplicados,
@@ -657,14 +671,14 @@
           iva: U.redondear(vp.venta * C.iva_pct, 2),
           total: U.redondear(vp.venta * (1 + C.iva_pct), 2),
         },
-        n_partidas_ok: filas.filter((f) => f.ok).length, // sólo las del usuario: la automática del sobrante no cuenta
-        n_partidas_error: filas.filter((f) => !f.ok).length,
+        n_partidas_ok: propias.filter((f) => f.ok).length, // sólo las del usuario: ni la automática del sobrante ni la UNION de un armado cuentan
+        n_partidas_error: propias.filter((f) => !f.ok).length,
         n_partidas_automaticas: automaticas.length,
       },
     };
   }
 
   return {
-    FAMILIAS, PARAMETROS_COTIZACION, parametroDeMaestros, maestrosEfectivos, yardaDeCotizacion, ventaPactada, validarPartida, levantarCantidades, cotizarPartida, cotizar,
+    FAMILIAS, PARAMETROS_COTIZACION, parametroDeMaestros, maestrosEfectivos, yardaDeCotizacion, crearHeredar, ventaPactada, validarPartida, levantarCantidades, cotizarPartida, cotizar,
   };
 }));

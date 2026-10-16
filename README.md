@@ -239,6 +239,29 @@ El taller no rola un tramo de 3 m de una pieza: rola **yardas**, anillos del **a
 
 Cada yarda se **rola por separado** (tiempo fijo por anillo), las juntas entre yardas son **engargolado** (con sellador), cada plantilla de una yarda sale con un solo tajo a lo ancho de la hoja y el precio de la lámina se busca con ese ancho de hoja. El desglose muestra el armado con un diagrama (anillos, bridas de taller, el extremo libre y su aro suelto), la tabla de piezas y el aro suelto en los herrajes. Los parámetros están en *Tablas maestras → Proceso de fabricación → armado yardas*; el documento explica la regla ([§3.2](docs/arquitectura-cotizador-ducterias.md#32-tramo-recto-armado-por-yardas)), la brida suelta ([§3.5.7](docs/arquitectura-cotizador-ducterias.md#357-brida-suelta-extremo-libre-del-tramo-de-ajuste)) y sus supuestos por confirmar ([§10.9](docs/arquitectura-cotizador-ducterias.md#109-supuestos-del-armado-por-yardas-por-confirmar)). Una cotización guardada con la opción anterior (*sí/no* para la brida del ajuste) se convierte sola: *sí* = sin brida, *no* = brida de taller.
 
+## Conjuntos armados en taller (ahorro de bridas)
+
+Si todas las piezas se cotizan con brida en sus extremos, el costo sube. Dos piezas que **se unen en taller no llevan brida en las caras que se juntan**: llevan una **junta de armado** (soldada en acero al carbón, engargolada en galvanizado). En la cotización detallada, **Sugerir armados** muestra las parejas que ahorran, cada una con su ahorro en pesos, y **usted acepta cada una** (*Armar*) o todas (*Armar todas*); nada se arma solo.
+
+**Parejas permitidas** (las caras que se unen deben medir lo mismo y las dos piezas ser del mismo material y calibre, redondas y con bridas):
+
+| Pareja | Cara de cada pieza | Regla |
+| --- | --- | --- |
+| Injerto (o reducción con injerto) + codo | «injerto» + una cara del codo del Ø del injerto | β + θ = 90°: injerto a 30° con codo de 60°; a 45° con codo de 45°. Se muestra el ángulo resultante |
+| Tramo recto + codo | extremo final del recto + una cara del codo | mismo Ø |
+| Reducción + codo, recto, injerto o reducción con injerto | D1 o D2 de la reducción + la cara de la otra pieza del mismo Ø | — |
+
+**No se arma un codo con otro codo.**
+
+**Límite de tamaño.** Un conjunto no puede medir más de **3 660 mm** en su dimensión mayor (manejo y transporte). Es una política del taller, editable en *Tablas maestras → Proceso de fabricación → Conjuntos armados en taller* (con su ayuda). La dimensión se calcula de forma conservadora, con la geometría del motor, como la suma de la dimensión mayor de cada pieza: tramo recto, su largo; codo, la caja de su eje (radio, gajos y tangentes) más el Ø exterior; reducción, su largo; injerto, el mayor entre el largo del tronco y el alto del injerto inclinado.
+
+**Cómo se calcula el ahorro.** Para cada pareja se cotiza, con el mismo motor, las dos piezas con y sin armado más la junta de armado, y el ahorro es la diferencia de **precio** (sin IVA). El desglose (aros, tornillos, juntas, mano de obra) es del costo directo. Si una partida puede ir en varias parejas se sugiere la de mayor ahorro sin repetir piezas; al aceptarla, la otra cara del codo puede dar una sugerencia nueva. El total de la cotización refleja el ahorro y debajo de los totales se dice cuánto es (con IVA).
+Cuando las piezas llevan *bridas de otra partida* (como el pedido del 30-sep), el ahorro de aros y tornillos está en las partidas de bridas: el cuadre de bridas dirá cuántas sobran y la sugerencia sólo cuenta lo que ahorra la pieza.
+
+**Cómo se guarda.** `cot.armados = [{ id, piezas: [{ partida, cara }, { partida, cara }], n }]`, con el `id` de cada partida. `n` es cuántos conjuntos; si una partida tiene más piezas que `n`, **se parte al aceptar** (`n` armadas y el resto normal) y **al deshacer se vuelven a juntar** si son idénticas. Las partidas del usuario no cambian: el motor (`src/motor/armados.js`, `aplicarArmados`) pone la cara sin brida a las piezas al cotizar y agrega la partida *Armado de piezas* de cada conjunto como **partida automática** (no se edita a mano). Si una partida armada se edita y el armado deja de valer (otro Ø, otra cantidad) o se borra, se avisa y se cotiza sin armar. Una cotización sin armados da exactamente el mismo precio que antes.
+
+En **Planos** y en la **Lista de fabricación (PDF)** cada armado sale como conjunto con marca **E1, E2…**: sus piezas con su marca y la cara que se une, la nota *«Se arma en taller: sin brida en esta cara; junta soldada|engargolada»* y una figura simple; el resumen del PDF cuenta los conjuntos.
+
 ## Pintura según el material y la instalación
 
 Lo que se pinta depende del **material**, y el sistema, de **dónde va instalado el ducto** (se elige en el encabezado de la cotización, *Instalación*, y cada partida puede traer la suya):
@@ -323,8 +346,8 @@ src/
   datos/ayuda_maestros.js                  ayuda de cada dato de las tablas (qué es · cómo se llena · qué esperar)
   datos/ejemplos.js                        el proyecto real de la hoja de control de gastos y el pedido de ductería del 30-sep-2026
   datos/unifilar_ejemplo.js                la lectura del croquis unifilar del caso de prueba (docs/vision-unifilares.md §11)
-  motor/                                   util · gastos · geometria · material · proveedor · mano_obra · consumibles · precios · validacion · compras · soportes · cotizador · lista_fabricacion · rapida · unifilar · unifilar_vision · imagen · unifilar_evaluacion · unifilar_cad · trazado_iso · perdidas · trazado_lectura
-  web/                                     index.html · app.js · almacen.js · maestros_ui.js · maestros_ayuda_ui.js · compras_ui.js · planos.js · planos_ui.js · pdf.js · lista_pdf.js · lista_pdf_ui.js · rapida_ui.js · unifilar_ui.js · unifilar_cad_ui.js · trazado_tablero.js · trazado_iso_ui.js · esquemas.js · dom.js · estilos.css
+  motor/                                   util · gastos · geometria · material · proveedor · mano_obra · consumibles · precios · validacion · compras · soportes · armados · cotizador · lista_fabricacion · rapida · unifilar · unifilar_vision · imagen · unifilar_evaluacion · unifilar_cad · trazado_iso · perdidas · trazado_lectura
+  web/                                     index.html · app.js · almacen.js · maestros_ui.js · maestros_ayuda_ui.js · compras_ui.js · planos.js · planos_ui.js · pdf.js · lista_pdf.js · lista_pdf_ui.js · armados_ui.js · rapida_ui.js · unifilar_ui.js · unifilar_cad_ui.js · trazado_tablero.js · trazado_iso_ui.js · esquemas.js · dom.js · estilos.css
 tests/                                     *.test.js (node:test) · e2e/ui.e2e.js (Playwright, opcional)
 scripts/construir.js                       empaquetado a un solo HTML
 scripts/caso-unifilar.js                   regenera el caso de prueba de unifilares desde las reglas

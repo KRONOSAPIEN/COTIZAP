@@ -83,6 +83,49 @@
         h('span', { class: 'hoja-num' }, `Hoja ${i + 1} de ${n}`)));
   }
 
+  /** La figura simple de un conjunto: sus dos piezas lado a lado, con su marca, y la junta de armado entre ellas. */
+  function figuraConjunto(c) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const el = (tag, at, txt) => { const e = document.createElementNS(NS, tag); Object.keys(at).forEach((k) => e.setAttribute(k, at[k])); if (txt !== undefined) e.textContent = txt; return e; };
+    const svg = el('svg', { viewBox: '0 0 260 120', class: 'conj-fig', role: 'img', 'aria-label': `Conjunto ${c.marca}: ${c.piezas.map((x) => x.marca).join(' con ')}, junta ${c.junta}` });
+    c.piezas.forEach((x, i) => {
+      const bx = 30 + i * 100;
+      svg.append(el('rect', { x: bx, y: 34, width: 100, height: 52, rx: 6 }));
+      svg.append(el('text', { x: bx + 50, y: 58, 'text-anchor': 'middle' }, x.marca));
+      svg.append(el('text', { x: bx + 50, y: 74, 'text-anchor': 'middle', class: 'conj-txt' }, x.cara_texto));
+    });
+    svg.append(el('line', { x1: 130, y1: 24, x2: 130, y2: 96 }));
+    svg.append(el('text', { x: 130, y: 16, 'text-anchor': 'middle' }, `junta ${c.junta}`));
+    svg.append(el('text', { x: 130, y: 112, 'text-anchor': 'middle', class: 'conj-txt' }, 'sin brida en la cara que se une'));
+    return svg;
+  }
+
+  function tarjetaConjunto(c) {
+    return h('article', { class: 'conjunto-armado', dataset: { marca: c.marca, armado: c.id } },
+      h('div', { class: 'pieza-cab' },
+        h('span', { class: 'pieza-marca', title: 'Marca del conjunto armado' }, c.marca),
+        h('span', { class: 'pieza-cant' }, `${W.num(c.cantidad, 0)} ${c.cantidad === 1 ? 'conjunto' : 'conjuntos'}`)),
+      h('figure', { class: 'pieza-fig' }, figuraConjunto(c)),
+      h('div', null,
+        h('h4', { class: 'pieza-tit' }, c.titulo),
+        h('ul', { class: 'plano-datos' },
+          c.piezas.map((x) => h('li', null, `${x.marca} · ${x.titulo}: ${x.cara_texto} (sin brida)`)),
+          c.angulo_deg !== undefined && c.angulo_deg !== null ? h('li', null, c.pareja === 'a' ? `Ángulo resultante ${W.num(c.angulo_deg, 0)}°${c.es_90 ? ' (el ramal sale a 90°)' : ''}` : `Giro del codo ${W.num(c.angulo_deg, 0)}°`) : null,
+          h('li', null, `Conjunto de hasta ${W.num(c.dim_mm, 0)} mm${c.limite_mm ? ` (máximo ${W.num(c.limite_mm, 0)} mm)` : ''}`)),
+        h('p', { class: 'nota nota-armado' }, W.icono('info'), c.nota)));
+  }
+
+  /** Los conjuntos armados en taller (E1, E2…), después de las hojas; sus piezas llevan las marcas de las hojas. */
+  function conjuntos(R) {
+    const piezas = R.hojas.flatMap((hj) => hj.items.map((x) => ({ id: x.p.id, marca: x.marca, titulo: x.d.titulo_corto || C.planos.titulo(x.p) || sinParentesis(x.d.titulo || W.tituloPartida(x.p)) })));
+    const lista = C.listaFabricacion.conjuntosDe(E().res, piezas);
+    if (!lista.length) return null;
+    return h('section', { class: 'conjuntos-armados', 'aria-labelledby': 'conj-tit' },
+      h('h3', { id: 'conj-tit' }, 'Conjuntos armados en taller'),
+      h('p', { class: 'nota' }, 'Cada conjunto se arma en taller: las dos piezas se unen con una junta de armado y no llevan brida en la cara que se junta.'),
+      lista.map(tarjetaConjunto));
+  }
+
   function render() {
     const cont = $('#planos-hojas');
     if (!cont || !E() || !E().res) return;
@@ -103,7 +146,7 @@
         h('button', { type: 'button', class: 'btn btn-primario', onclick: verEjemplo }, 'Ver el ejemplo: pedido del 30-sep-2026')));
       return;
     }
-    W.reemplazar(cont, cuadre(), R.hojas.map((hj, i) => hoja(hj, i, R.hojas.length)));
+    W.reemplazar(cont, cuadre(), R.hojas.map((hj, i) => hoja(hj, i, R.hojas.length)), conjuntos(R));
   }
 
   /**

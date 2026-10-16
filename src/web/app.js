@@ -166,6 +166,9 @@
     if (venta === undefined) delete cot.venta_pactada; else cot.venta_pactada = venta;
     if (venta === undefined || cot.venta_pactada_con_iva !== true) delete cot.venta_pactada_con_iva;
     delete cot.piezas_enteras;
+    // Conjuntos armados en taller (motor/armados.js): sólo los que tienen la forma esperada; una cotización sin armados no los guarda
+    const armados = C.armados.limpiarArmados(c.armados);
+    if (armados.length) cot.armados = armados; else delete cot.armados;
     const vistosG = new Set();
     cot.gastos = (Array.isArray(c.gastos) ? c.gastos : []).filter(esObjeto).slice(0, 5000).map((g) => {
       const q = gastoValido(g);
@@ -235,7 +238,7 @@
     const cot = estado.cot;
     return {
       riesgo: cot.riesgo, servicio: cot.servicio, ubicacion: cot.ubicacion, parametros: cot.parametros, yarda_mm: cot.yarda_mm,
-      venta_pactada: cot.venta_pactada, venta_pactada_con_iva: cot.venta_pactada_con_iva === true, partidas: cot.partidas,
+      venta_pactada: cot.venta_pactada, venta_pactada_con_iva: cot.venta_pactada_con_iva === true, partidas: cot.partidas, armados: cot.armados,
     };
   };
 
@@ -243,6 +246,9 @@
     const cot = estado.cot;
     try {
       estado.res = C.cotizador.cotizar(entradaCotizacion(), estado.M);
+      // lo que ahorran los armados en taller: el total contra cotizar las mismas piezas todas con bridas (null si no hay armados)
+      const armadas = (estado.res.armados || []).filter((a) => a.ok);
+      estado.ahorroArmados = armadas.length ? C.cotizador.cotizar({ ...entradaCotizacion(), armados: [] }, estado.M).totales.total - estado.res.totales.total : null;
     } catch (err) {
       // No debería pasar (cotizar() atrapa lo que falle en cada partida): si pasa, la pantalla sigue viva y lo dice.
       const msg = `No se pudo calcular la cotización (${String((err && err.message) || err)}). Revise las tablas maestras.`;
@@ -250,6 +256,7 @@
       estado.res.partidas = cot.partidas.map((p, indice) => ({ ok: false, indice, interno: true, errores: [msg], entrada: p }));
       estado.res.totales.n_partidas_error = cot.partidas.length;
       estado.res.avisos = [msg];
+      estado.ahorroArmados = null;
     }
   }
 
@@ -546,6 +553,7 @@
     if (adv) chips.push(h('span', { class: 'chip chip-adv', title: f.advertencias.join('\n') }, W.icono('aviso'), `${adv} ${adv === 1 ? 'aviso' : 'avisos'}`));
     if (p.unifilar_id) chips.push(h('span', { class: 'chip chip-auto chip-unifilar', title: p.unifilar_editada ? 'Pieza del croquis unifilar, editada a mano' : 'Pieza del croquis unifilar' }, p.unifilar_id, p.unifilar_editada ? ' · editada' : ''));
     if (p.trazado_ventilador) chips.push(h('span', { class: 'chip chip-auto chip-trazado', title: 'El ventilador elegido en el trazado isométrico (o su motor): se pone al día al volver a pasarlo' }, `Trazado · ${p.trazado_ventilador}`));
+    chips.push(...W.armadosUI.chipsDe(p));
     const activar = () => seleccionar(p.id);
     const li = h('li', { class: `partida${sel ? ' sel' : ''}${f && !f.ok ? ' err' : ''}`, dataset: { id: p.id } },
       h('div', {
@@ -581,7 +589,9 @@
           h('button', { type: 'button', class: 'btn btn-sec', onclick: () => W.planosUI.verEjemplo() }, 'Ver un pedido de ejemplo'))));
       return;
     }
-    reemplazar(ul, ps.map(filaPartida), (estado.res.automaticas || []).map(filaAutomatica));
+    // las UNION de los armados aceptados van al final de los resultados, después de las partidas del usuario
+    const unidas = estado.res.partidas.slice(ps.length).filter((f) => f.entrada && f.entrada.armado_id).map((f) => W.armadosUI.filaUnion(f));
+    reemplazar(ul, ps.map(filaPartida), unidas, (estado.res.automaticas || []).map(filaAutomatica));
   }
 
   /** La partida que agrega el cálculo (el sobrante de comprar piezas enteras): se ve en la lista pero no se edita aquí. */
@@ -621,7 +631,13 @@
     const i = estado.cot.partidas.findIndex((p) => p.id === id);
     if (i < 0) return;
     const [p] = estado.cot.partidas.splice(i, 1);
-    estado.eliminada = { p, i };
+    // los armados que usaban la partida se quitan con ella (y vuelven si se deshace)
+    const armadosQuitados = (estado.cot.armados || []).filter((a) => a.piezas.some((q) => q.partida === id));
+    if (armadosQuitados.length) {
+      estado.cot.armados = estado.cot.armados.filter((a) => !armadosQuitados.includes(a));
+      if (!estado.cot.armados.length) delete estado.cot.armados;
+    }
+    estado.eliminada = { p, i, armados: armadosQuitados };
     if (estado.sel === id) estado.sel = estado.cot.partidas[Math.min(i, estado.cot.partidas.length - 1)]?.id || null;
     persistir();
     render();
@@ -630,6 +646,7 @@
       fn: () => {
         if (!estado.eliminada) return;
         estado.cot.partidas.splice(estado.eliminada.i, 0, estado.eliminada.p);
+        if (estado.eliminada.armados.length) estado.cot.armados = [...(estado.cot.armados || []), ...estado.eliminada.armados];
         estado.sel = estado.eliminada.p.id;
         estado.eliminada = null;
         persistir();
@@ -667,6 +684,7 @@
         tile('Piso de negociación', W.mxn(piso), bajoPiso ? 'El descuento deja el precio por debajo del piso' : ok.length ? `hasta −${W.num(margenMax * 100, 1)} % con utilidad cero` : '', bajoPiso ? 'tile-adv' : ''),
         tile('Utilidad', W.mxn(T.utilidad), ok.length ? `${W.num(T.margen_real_pct * 100, 1)} % del precio${T.descuento > 0 ? ' con el descuento' : ''}` : '', T.utilidad < 0 ? 'tile-adv' : ''),
         tile('Costo total', W.mxn(T.costo_total), 'directo + indirectos + imprevistos')),
+      W.armadosUI.notaTotales(estado.ahorroArmados),
       auto > 0 ? h('p', { class: 'nota' }, W.icono('info'), `Incluye ${W.mxn(auto)} por el material sobrante de comprar piezas enteras (hojas, barras, tornillos y envases completos).`) : null,
       T.venta ? ventaResumen(T) : null,
       ok.length ? barraComposicion(composicion(ok), 'De qué se compone el precio') : null);
@@ -1166,6 +1184,15 @@
   }
 
   function renderDetalle() {
+    renderDetalleBase();
+    // «Esta cara va armada con … (sin brida)», justo debajo del título de la pieza
+    const i = estado.cot.partidas.findIndex((p) => p.id === estado.sel);
+    const cab = $('#detalle .det-cab');
+    const nota = i >= 0 && cab ? W.armadosUI.notasDetalle(estado.cot.partidas[i]) : null;
+    if (nota) cab.after(nota);
+  }
+
+  function renderDetalleBase() {
     const cont = $('#detalle');
     const i = estado.cot.partidas.findIndex((p) => p.id === estado.sel);
     if (i < 0) {
@@ -1683,7 +1710,7 @@
     const fila = (c) => [txt(c[0]), txt(c[1]), txt(c[2]), esc(c[3]), esc(c[4]), esc(c[5]), esc(c[6]), esc(c[7])].join(',');
     const filas = [fila(['Descripción', 'Familia', 'Material', 'Calibre', 'Cantidad', 'Precio unitario', 'Importe', 'Peso neto total kg'])];
     estado.res.partidas.forEach((f, i) => {
-      const p = estado.cot.partidas[i];
+      const p = estado.cot.partidas[i] || f.entrada; // las UNION de los armados no están en la lista del usuario
       if (!f.ok) { filas.push(fila([tituloPartida(p), p.familia, '', '', cantidadDe(p, f), 'ERROR', '', ''])); return; }
       filas.push(fila([tituloPartida(p), p.familia, esLamina(p.familia) ? nombreMaterial(p) : '', esLamina(p.familia) ? p.calibre || p.espesor_mm || '' : '', cantidadDe(p, f),
         f.precio.unitario.toFixed(2), f.precio.importe.toFixed(2), f.peso.neto_total_kg.toFixed(3)]));
@@ -1768,7 +1795,7 @@
     const c = estado.cot;
     const vigencia = Number.isFinite(c.vigencia_dias) && c.vigencia_dias > 0 ? Math.min(3650, Math.round(c.vigencia_dias)) : 0;
     const T = estado.res.totales;
-    const filas = estado.res.partidas.map((f, i) => ({ f, p: c.partidas[i] })).filter((x) => x.f.ok);
+    const filas = estado.res.partidas.map((f, i) => ({ f, p: c.partidas[i] || f.entrada })).filter((x) => x.f.ok);
     const dias = estado.res.capas.financiamiento.dias_cobro;
     const sec = $('#propuesta');
     sec.replaceChildren(
@@ -1890,6 +1917,7 @@
   }
 
   W.estadoApp = estado;
+  W.entradaCotizacion = entradaCotizacion;
   W.toast = toast;
   W.tituloPartida = tituloPartida;
   W.resumenMaterial = resumenMaterial;

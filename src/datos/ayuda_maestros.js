@@ -853,6 +853,17 @@
         CON_BRIDA: 'Brida fabricada y soldada en el taller, como en los demás extremos.',
       } });
 
+  E('proceso.conjuntos_armados', 'Conjuntos armados en taller',
+    'Dos piezas que se unen en taller (injerto con codo, tramo recto con codo…) no llevan brida en las caras que se juntan: llevan una junta de armado.',
+    'Aquí se fija la política de tamaño: el conjunto no puede ser más grande de lo que el taller maneja y transporta.',
+    'Cambia cuáles armados sugiere el cotizador y cuáles acepta: el ahorro de bridas depende de que el conjunto quepa.',
+    { afecta: ['mat', 'mo', 'lim'] });
+  E('proceso.conjuntos_armados.dim_max_mm', 'Dimensión máxima del conjunto',
+    'Lo más grande que puede medir un conjunto armado en su dimensión mayor, por manejo y transporte.',
+    'En mm. 3 660 mm = 3 yardas de 1 220 mm (12 ft). Se compara con la suma de las dimensiones mayores de las dos piezas.',
+    'Con un límite menor se arman menos piezas (se ahorran menos bridas); con uno mayor, más, pero conjuntos más difíciles de mover.',
+    { afecta: ['geo', 'lim'], tip: [1000, 6000] });
+
   E('proceso.semiangulo_max_deg', 'Semiángulo máximo del cono',
     'La inclinación máxima de la pared de una reducción o transición para que el flujo no se separe.',
     'En grados. 15° es lo usual en ductos de aire: una reducción más corta que esto se ve «brusca».',
