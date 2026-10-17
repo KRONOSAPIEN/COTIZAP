@@ -242,13 +242,25 @@
     };
   };
 
+  /** La misma cotización con todos los armados deshechos (copia profunda: la abierta no se toca). */
+  function entradaSinArmar() {
+    const copia = JSON.parse(JSON.stringify(entradaCotizacion()));
+    for (let guarda = 0; (copia.armados || []).length && guarda < 1000; guarda += 1) {
+      if (!C.armados.deshacerArmado(copia, copia.armados[0].id).ok) copia.armados.shift();
+    }
+    copia.armados = [];
+    return copia;
+  }
+
   function calcular() {
     const cot = estado.cot;
     try {
       estado.res = C.cotizador.cotizar(entradaCotizacion(), estado.M);
       // lo que ahorran los armados en taller: el total contra cotizar las mismas piezas todas con bridas (null si no hay armados)
       const armadas = (estado.res.armados || []).filter((a) => a.ok);
-      estado.ahorroArmados = armadas.length ? C.cotizador.cotizar({ ...entradaCotizacion(), armados: [] }, estado.M).totales.total - estado.res.totales.total : null;
+      // La base es una copia con cada armado deshecho por el motor (deshacerArmado vuelve a juntar las partidas que armar() partió):
+      // si no, la base pagaría dos veces el arranque de las partidas partidas y el ahorro saldría de más.
+      estado.ahorroArmados = armadas.length ? C.cotizador.cotizar(entradaSinArmar(), estado.M).totales.total - estado.res.totales.total : null;
     } catch (err) {
       // No debería pasar (cotizar() atrapa lo que falle en cada partida): si pasa, la pantalla sigue viva y lo dice.
       const msg = `No se pudo calcular la cotización (${String((err && err.message) || err)}). Revise las tablas maestras.`;
@@ -311,12 +323,13 @@
 
   /** Tabla con columnas [{t, num}] y filas [[celdas] | {celdas, clase}]. */
   function tabla(cols, filas) {
-    return h('div', { class: 'tabla-env' },
+    // `data-et` = el encabezado de cada celda: en celular la tabla se apila en tarjetas y cada dato lleva su etiqueta (estilos.css, .apila)
+    return h('div', { class: `tabla-env apila${cols.length === 3 && cols[1].t === 'Base' ? ' apila-linea' : ''}` },
       h('table', { class: 'tabla' },
         h('thead', null, h('tr', null, cols.map((c) => h('th', { class: c.num ? 'num' : '', scope: 'col' }, c.t)))),
         h('tbody', null, filas.map((f) => {
           const celdas = Array.isArray(f) ? f : f.celdas;
-          return h('tr', { class: Array.isArray(f) ? '' : f.clase || '' }, celdas.map((c, i) => h('td', { class: cols[i].num ? 'num' : '' }, c)));
+          return h('tr', { class: Array.isArray(f) ? '' : f.clase || '' }, celdas.map((c, i) => h('td', { class: cols[i].num ? 'num' : '', dataset: { et: cols[i].t } }, c)));
         }))));
   }
 
@@ -748,8 +761,21 @@
     L_ramal_mm: ['Longitud del injerto', 'mm', 1], L_ramal_auto_mm: ['Longitud automática del injerto', 'mm', 1],
     L_reduccion_mm: ['Longitud de la reducción', 'mm', 1], L_reduccion_auto_mm: ['Largo mínimo de la reducción (automático)', 'mm', 1], A_cono_m2: ['Área del cono de la reducción', 'm²', 4],
     x_silleta_min_mm: ['Silleta: desde el extremo mayor', 'mm', 1], x_silleta_max_mm: ['Silleta: hasta', 'mm', 1], holgura_mm: ['Holgura de la silleta al extremo del cono', 'mm', 1],
+    D_disco_mm: ['Diámetro del disco', 'mm', 3], L_cuello_mm: ['Largo del cuello', 'mm', 1], A_disco_m2: ['Área del disco', 'm²', 4], A_cuello_m2: ['Área del cuello', 'm²', 4],
+    n_uniones: ['Número de uniones', '', 0], engargolado_long_m: ['Engargolado de costuras (largo)', 'm', 3], engargolado_circ_m: ['Engargolado de juntas (vuelta completa)', 'm', 3],
+    holgura_engargolado_mm: ['Holgura del engargolado', 'mm', 1],
     k_entrepierna: ['Factor de entrepierna', '', 3], razon_areas_ramales_tronco: ['Σ áreas ramales / área del tronco', '', 3], A_tronco_m2: ['Área del tronco', 'm²', 4], A_ramales_m2: ['Área de los ramales', 'm²', 4],
   };
+
+  /** Un nombre interno (snake_case) vuelto texto legible con su unidad, para que ningún dato salga crudo en pantalla. */
+  function etiquetaDetalle(k) {
+    const e = ETQ_DET[k];
+    if (e) return { et: e[0], un: e[1], dec: e[2] };
+    const sufijos = { _mm: 'mm', _m2: 'm²', _m: 'm', _deg: '°', _kg: 'kg', _pct: '%' };
+    const suf = Object.keys(sufijos).find((x) => k.endsWith(x));
+    const base = (suf ? k.slice(0, -suf.length) : k).replace(/^n_/, 'número de ').replace(/_sobre_/g, ' / ').replace(/_/g, ' ').trim();
+    return { et: base.charAt(0).toUpperCase() + base.slice(1), un: suf ? sufijos[suf] : '', dec: 3 };
+  }
 
   /**
    * Plantillas de un tramo recto sobre la hoja, a escala. La yarda ES el ancho de la hoja (914 ó 1 220 mm): cada plantilla
@@ -905,8 +931,8 @@
     Object.keys(g.detalle).forEach((k) => {
       const v = g.detalle[k];
       if (typeof v === 'number') {
-        const e = ETQ_DET[k];
-        kvs.append(kv(e ? e[0] : k, W.num(v, e ? e[2] : 3), e ? e[1] : ''));
+        const e = etiquetaDetalle(k);
+        kvs.append(kv(e.et, W.num(v, e.dec), e.un));
       } else if (k === 'sentido') {
         kvs.append(kv('El injerto se inclina hacia', v === 'MENOR' ? 'El extremo menor (D2)' : 'El extremo mayor (D1)'));
       } else if (k === 'patron' && v) {
@@ -918,8 +944,7 @@
     kvs.append(kv('Piezas a armar', String(g.n_piezas)), kv('Longitud de corte', W.num(f.qto.tmp.detalle.L_corte_m, 3), 'm'), kv('Longitud de soldadura', W.num(f.qto.tmp.detalle.L_soldadura_m, 3), 'm'));
     // el galvanizado se engargola: costuras y juntas que en otro material se soldarían
     if (g.costura === 'ENGARGOLADA' && f.familia !== 'RECTO') {
-      kvs.append(kv('Costuras y juntas', 'engargoladas (la costura del material)'),
-        kv('Engargolado: costuras / juntas', `${W.num(g.engargolado_long_m, 3)} / ${W.num(g.engargolado_circ_m, 3)}`, 'm'));
+      kvs.append(kv('Costuras y juntas', 'engargoladas (la costura del material)'));
     }
     const mat = h('dl', { class: 'kvs' },
       kv('Densidad', W.num(f.qto.mat.densidad_kg_m3, 0), 'kg/m³'),
@@ -1189,7 +1214,8 @@
     filas.push({ clase: 'total', celdas: ['Precio antes de IVA', `costo base ÷ ${W.num(p.divisor, 3)}`, W.mxn(f.precio.total_sin_redondeo)] });
     const dif = Math.round((f.precio.importe - f.precio.total_sin_redondeo) * 100) / 100;
     if (Math.abs(dif) >= 0.005) {
-      filas.push(['Redondeo a precio unitario', `${W.mxn(f.precio.unitario)} × ${f.entrada.cantidad}`, `${dif < 0 ? '−' : '+'}${W.mxn(Math.abs(dif))} → Importe ${W.mxn(f.precio.importe)}`]);
+      filas.push(['Redondeo a precio unitario', `${W.mxn(f.precio.unitario)} × ${f.entrada.cantidad}`, `${dif < 0 ? '−' : '+'}${W.mxn(Math.abs(dif))}`],
+        { clase: 'total', celdas: ['Importe', '', W.mxn(f.precio.importe)] });
     }
     return [
       tabla([{ t: 'Capa' }, { t: 'Base' }, { t: 'MXN', num: true }], filas),
@@ -1964,6 +1990,7 @@
   W.idNuevo = idNuevo;
   W.tile = tile;
   W.tabla = tabla;
+  W.etiquetaDetalle = etiquetaDetalle;
   W.reemplazar = reemplazar;
 
   /** Copia un texto al portapapeles; si el navegador no deja, lo muestra seleccionado en «Guardar y cargar» para copiarlo a mano. */

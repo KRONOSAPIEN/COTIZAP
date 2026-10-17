@@ -133,8 +133,42 @@
     return h('p', { class: 'arm-sug-bridas nota' }, `Se ahorran ${por}, que se descuentan de las partidas de bridas.`);
   }
 
-  function tarjetaSugerencia(s, i) {
+  /**
+   * Las partes del costo directo en centavos que suman exacto el total redondeado (método del mayor residuo):
+   * lo que se muestra cuadra al centavo con `ahorro_costo` aunque cada parte se redondee por separado.
+   */
+  function partesEnCentavos(partes, total) {
+    const meta = Math.round(total * 100);
+    const base = partes.map((p) => Math.round(p.valor * 100));
+    let falta = meta - base.reduce((a, b) => a + b, 0);
+    const orden = partes.map((p, k) => ({ k, resto: p.valor * 100 - base[k] })).sort((a, b) => (falta > 0 ? b.resto - a.resto : a.resto - b.resto));
+    for (let n = 0; falta !== 0 && orden.length; n += 1) {
+      const paso = falta > 0 ? 1 : -1;
+      base[orden[n % orden.length].k] += paso;
+      falta -= paso;
+    }
+    return base.map((c) => c / 100);
+  }
+
+  /** «Se ahorra», «Cuesta de más» y el resultado: las partes del motor (s.desglose) suman s.ahorro_costo al centavo. */
+  function textoDesglose(s) {
     const d = s.desglose;
+    const claves = [['aros', 'aros'], ['tornillos', 'tornillos'], ['juntas', 'juntas'], ['mano_obra', 'mano de obra'], ['otros', 'otros'],
+      ['bridas_otra_partida', 'bridas de otra partida'], ['sobrante', 'sobrante de lámina']];
+    const partes = claves.map(([k, et]) => ({ et, valor: d[k] || 0 }));
+    const cent = partesEnCentavos(partes, s.ahorro_costo);
+    const items = partes.map((p, k) => ({ et: p.et, valor: cent[k] })).filter((p) => Math.abs(p.valor) >= 0.005);
+    const lista = (xs) => xs.map((p) => `${p.et} ${dinero(Math.abs(p.valor))}`).join(' · ');
+    const ahorra = items.filter((p) => p.valor > 0);
+    const cuesta = items.filter((p) => p.valor < 0);
+    const costo = Math.round(s.ahorro_costo * 100) / 100;
+    return h('div', { class: 'arm-sug-desglose', dataset: { costoDirecto: String(costo) } },
+      ahorra.length ? h('p', null, `Se ahorra: ${lista(ahorra)}`) : null,
+      cuesta.length ? h('p', null, `Cuesta de más: ${lista(cuesta)}`) : null,
+      h('p', null, `Costo directo: ${costo >= 0 ? '−' : '+'}${dinero(Math.abs(costo))}; con indirectos, utilidad y el sobrante el subtotal ${s.ahorro >= 0 ? 'baja' : 'sube'} ${dinero(Math.abs(s.ahorro))} (sin IVA).`));
+  }
+
+  function tarjetaSugerencia(s, i) {
     const partes = [
       s.pareja === 'a' && s.angulo_deg !== undefined ? `Ángulo resultante ${W.num(s.angulo_deg, 0)}°${s.es_90 ? ' (el ramal sale a 90°)' : ''}` : (s.angulo_deg !== undefined ? `Gira ${W.num(s.angulo_deg, 0)}°` : ''),
       `Conjunto de ${mm(s.dim_mm)} (máximo ${mm(s.limite_mm)})`,
@@ -146,7 +180,7 @@
       h('div', { class: 'arm-sug-txt' },
         h('h3', null, mayuscula(s.descripcion)),
         h('p', { class: 'arm-sug-meta' }, partes.join(' · ')),
-        h('p', { class: 'arm-sug-desglose' }, `Del costo directo se ahorra: aros ${dinero(d.aros)} · tornillos ${dinero(d.tornillos)} · juntas ${dinero(d.juntas)} · mano de obra ${dinero(d.mano_obra)}${Math.abs(d.otros) >= 0.005 ? ` · otros ${dinero(d.otros)}` : ''}${Math.abs(d.bridas_otra_partida) >= 0.005 ? ` · bridas de otra partida ${dinero(d.bridas_otra_partida)}` : ''}${Math.abs(d.sobrante) >= 0.005 ? ` · sobrante de lámina ${dinero(d.sobrante)}` : ''}. El ahorro de abajo es el cambio real del subtotal, con el sobrante de lámina que se cobra.`),
+        textoDesglose(s),
         textoBridas(s)),
       h('div', { class: 'arm-sug-der' },
         h('div', { class: 'arm-sug-ahorro', dataset: { ahorro: String(s.ahorro) } }, dinero(s.ahorro)),

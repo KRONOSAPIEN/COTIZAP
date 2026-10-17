@@ -197,7 +197,16 @@ input, select, textarea {
 }
 input:hover, select:hover, textarea:hover { border-color: var(--fg-3); }
 input::placeholder { color: var(--fg-3); }
-input[type="checkbox"] { width: 16px; height: 16px; min-height: 0; accent-color: var(--accent); }
+/* casilla propia: la nativa casi no se ve en el tema oscuro; el borde usa --fg-3 (contraste suficiente en ambos temas) */
+input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none; position: relative; flex: none; width: 16px; height: 16px; min-height: 0; padding: 0; margin: 0;
+  border: 1.5px solid var(--fg-3); border-radius: 4px; background: var(--surface); cursor: pointer; vertical-align: middle;
+}
+input[type="checkbox"]:hover { border-color: var(--fg); }
+input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+input[type="checkbox"]:checked::after { content: ""; position: absolute; left: 4px; top: 0; width: 4px; height: 9px; border: solid var(--accent-fg); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
+input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 textarea { font-family: var(--font-mono); font-size: 12.5px; resize: vertical; }
 .campo { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .campo > label, .dlg-unidad { font-size: 12px; font-weight: 600; color: var(--fg-2); }
@@ -322,7 +331,7 @@ main { padding: 16px 24px 48px; max-width: 1540px; margin-inline: auto; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
 .tile { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; min-width: 0; }
 .tile-et { font-size: 12px; color: var(--fg-2); }
-.tile-val { font: 600 20px/1.2 var(--font-ui); margin-top: 2px; overflow-wrap: break-word; word-break: keep-all; }
+.tile-val { font: 600 20px/1.2 var(--font-ui); margin-top: 2px; white-space: nowrap; font-variant-numeric: tabular-nums; } /* una cifra nunca se parte a la mitad */
 .tile-sub { font-size: 12px; color: var(--fg-3); margin-top: 1px; }
 .tile-principal { background: var(--accent-soft); }
 .tile-adv .tile-sub { color: var(--crit); font-weight: 600; }
@@ -503,8 +512,7 @@ legend { font: 600 12px var(--font-ui); letter-spacing: 0.07em; text-transform: 
   .dlg-prev { position: static; order: -1; padding: 10px 12px; gap: 6px; }
   .dlg-prev .kvs { display: none; }
   .prev-val { font-size: 28px; }
-  .familias { display: flex; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 4px; }
-  .fam { flex: 0 0 92px; scroll-snap-align: start; }
+  .familias { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); } /* los tipos de pieza se acomodan en renglones: ninguno queda fuera de la pantalla */
   .sub-fila { grid-template-columns: minmax(0, 1fr) 34px; }
   .sub-fila .sc-driver, .sub-fila .sc-precio { grid-column: 1; }
   dialog { width: 100vw; max-height: 100dvh; border-radius: 0; }
@@ -709,9 +717,9 @@ dialog.uf-dlg-cad { width: min(1440px, calc(100vw - 24px)); height: calc(100dvh 
 }
 
 #toasts { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: center; width: min(92vw, 420px); pointer-events: none; }
-.toast { pointer-events: auto; display: flex; align-items: center; gap: 12px; background: var(--fg); color: var(--bg); padding: 10px 14px; border-radius: 10px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3); }
-.toast .btn-texto { color: var(--bg); text-decoration: underline; }
-.toast .btn-texto:hover { background: rgba(255, 255, 255, 0.14); color: var(--bg); }
+.toast { pointer-events: auto; flex: none; display: flex; align-items: center; gap: 12px; width: 100%; background: var(--toast-bg); color: var(--toast-fg); border: 1px solid var(--toast-borde); padding: 10px 14px; border-radius: 10px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3); }
+.toast .btn-texto { color: var(--toast-fg); text-decoration: underline; }
+.toast .btn-texto:hover { background: rgba(255, 255, 255, 0.14); color: var(--toast-fg); }
 
 /* -------------------------------------------------------------------------- tablas maestras */
 .maestros-cab { display: flex; flex-wrap: wrap; gap: 14px 24px; justify-content: space-between; align-items: flex-end; margin-bottom: 14px; }
@@ -789,7 +797,7 @@ kbd { font: 500 11.5px var(--font-mono); padding: 1px 6px; border: 1px solid var
 .m-et-caja label { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .m-fila label .m-clave { font: 400 11px var(--font-mono); color: var(--fg-3); overflow-wrap: anywhere; }
 .m-fila label .m-et-txt { font: 500 13px/1.25 var(--font-ui); color: var(--fg); }
-.m-ayuda { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--fg-3); cursor: pointer; }
+.m-ayuda { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--fg-3); cursor: pointer; }
 .m-ayuda .ico { width: 16px; height: 16px; }
 .m-ayuda:hover, .m-ayuda[aria-expanded="true"] { color: var(--accent); background: var(--accent-soft); }
 .m-grupo > summary .m-ayuda { align-self: center; }
@@ -908,7 +916,9 @@ kbd { font: 500 11.5px var(--font-mono); padding: 1px 6px; border: 1px solid var
 .planos-cab p { color: var(--fg-2); max-width: 82ch; margin-top: 4px; }
 .planos-acc { display: flex; flex-wrap: wrap; gap: 8px; }
 .planos-resumen { font-size: 13px; color: var(--fg-2); margin: 0 0 12px; font-variant-numeric: tabular-nums; }
-#planos-hojas { display: grid; gap: 20px; }
+#planos-hojas { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 560px), 1fr)); gap: 20px; align-items: start; }
+#planos-hojas > * { grid-column: 1 / -1; }
+#planos-hojas > .hoja-corta { grid-column: auto; } /* una hoja de una o dos piezas ocupa media pantalla: la siguiente se acomoda a su lado */
 .cuadre { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radio); padding: 12px 16px; display: grid; gap: 8px; }
 .cuadre[data-cuadra="no"] { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
 .cuadre h3 { font: 600 15px var(--font-ui); display: flex; align-items: center; gap: 8px; }
@@ -1193,7 +1203,7 @@ kbd { font: 500 11.5px var(--font-mono); padding: 1px 6px; border: 1px solid var
 .ti-bloque:hover { background: var(--surface-2); }
 .ti-bloque .icono { color: var(--accent); }
 .ti-bloque .ico { width: 20px; height: 20px; }
-.ti-bloque-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ti-bloque-txt { min-width: 0; white-space: normal; line-height: 1.15; overflow-wrap: anywhere; }
 .ti-bloque-activo { background: var(--accent-soft); border-color: var(--accent); }
 .ti-bloque-apagado { color: var(--fg-3); cursor: help; }
 .ti-bloque-apagado .icono { color: var(--fg-3); }
@@ -1475,20 +1485,17 @@ dd.ti-sem-verde, dd.ti-sem-ambar { background: none; font-weight: 600; }
 }
 @media (max-width: 859px) {
   .ti-cuerpo { grid-template-columns: minmax(0, 1fr); min-height: 0; }
-  .ti-paleta { flex-direction: row; overflow-x: auto; max-height: none; scroll-snap-type: x proximity; padding: 6px; }
-  .ti-grupo { flex-direction: row; flex: none; align-items: center; }
+  .ti-paleta { flex-direction: row; flex-wrap: wrap; overflow: visible; max-height: none; padding: 6px; }
+  .ti-grupo { flex-direction: row; flex-wrap: wrap; flex: 1 1 100%; align-items: center; }
   .ti-grupo-tit { display: none; }
   .ti-bloque { grid-template-columns: 22px auto; flex: none; }
-  .ti-bloque-txt { white-space: nowrap; }
   .ti-coords { display: none; } /* sin puntero que pase por encima, las coordenadas sólo estorban */
   .ti-caja { min-width: 0; }
   .ti-bloque .ti-tecla, .ti-bloque .ti-n, .ti-bloque .ti-candado { display: none; }
   .ti-lienzo-marco { min-height: 0; height: max(320px, 58dvh); flex: none; }
-  .ti-vistas { max-width: calc(100% - 112px); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .ti-vistas { max-width: calc(100% - 112px); }
   .ti-vista-btn { padding: 3px 7px; flex: none; }
   .ti-vistas .btn-icono { flex: none; }
-  .ti-fases-lista { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  .ti-fases-lista li { flex: none; }
   .ti-coords { min-width: 0; }
   .ti-fase-txt { display: none; }
   .ti-fase-activa .ti-fase-txt { display: inline; }
@@ -1588,3 +1595,57 @@ dd.ti-sem-verde, dd.ti-sem-ambar { background: none; font-weight: 600; }
 .conj-fig text { fill: var(--fg); font: 600 11px var(--font-ui); }
 .conj-fig .conj-txt { fill: var(--fg-2); font-weight: 500; font-size: 10px; }
 @media (max-width: 620px) { .arm-sug { flex-direction: column; align-items: stretch; } .arm-sug-fig { flex-basis: auto; } .arm-sug-der { align-items: flex-start; } .conjunto-armado { grid-template-columns: minmax(0, 1fr); } }
+
+/* -------------------------------------------------------------------------- pulido: avisos, tablas apiladas en celular, ayudas y gastos */
+:root { --toast-bg: #162130; --toast-fg: #f3f6f9; --toast-borde: transparent; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --toast-bg: #2b3d50; --toast-fg: #f1f5f9; --toast-borde: #4a6179; }
+}
+:root[data-theme="dark"] { --toast-bg: #2b3d50; --toast-fg: #f1f5f9; --toast-borde: #4a6179; }
+
+/* el botón ⓘ conserva su aspecto (22 px) pero su zona de toque es de 32 px */
+.m-ayuda::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; }
+
+/* Control de gastos: el concepto se ve completo (renglones que crecen) y el precio unitario se formatea al salir del campo */
+.cg-in-concepto { min-width: 260px; width: 100%; resize: none; field-sizing: content; min-height: 32px; font-family: var(--font-ui); line-height: 1.3; white-space: pre-wrap; overflow: hidden; }
+.cg-tabla-gastos td:nth-child(2) { min-width: 280px; }
+.cg-td-concepto .cg-in-concepto { display: block; }
+.cg-td-concepto .chip { display: inline-block; margin: 4px 0 0; }
+
+/* Armados sugeridos: el desglose en renglones cortos */
+.arm-sug-desglose { display: flex; flex-direction: column; gap: 2px; }
+.arm-sug-desglose p { margin: 0; }
+
+/* Celular: las tablas se apilan en tarjetas (cada dato con su encabezado) para que ninguna columna quede cortada */
+@media screen and (max-width: 719px) {
+  .apila .tabla thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  #cg-lista .apila .tabla, #cg-comparacion .apila .tabla, .apila .tabla { min-width: 0; }
+  .apila .tabla, .apila .tabla tbody { display: block; width: 100%; }
+  .apila .tabla tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2px 12px; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+  .apila .tabla td { display: flex; flex-direction: column; align-items: flex-start; gap: 0; min-width: 0; padding: 1px 4px; border: 0; text-align: left; overflow-wrap: anywhere; white-space: normal; }
+  .apila .tabla td:last-child:not(:first-child), .apila .tabla .num { text-align: left; white-space: normal; }
+  .apila .tabla td:empty { display: none; }
+  .apila .tabla td::before { content: attr(data-et); font-size: 11.5px; font-weight: 600; color: var(--fg-3); }
+  .apila .tabla td[data-et=""]::before { display: none; }
+  .apila .tabla td:first-child { grid-column: 1 / -1; font-weight: 600; }
+  .apila .tabla td:first-child::before { display: none; }
+  .apila .tabla tr.total { background: var(--surface-2); }
+  .apila .tabla tr.total td { border-top: 0; }
+  .apila .tabla tr.grupo { background: var(--surface-2); }
+  .apila .tabla tr.grupo td { background: none; }
+  /* concepto, base y monto (la pila de precio, la compra, los viáticos): el monto a la derecha y la base debajo, más chica */
+  .apila-linea .tabla tr { grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; }
+  .apila-linea .tabla td { flex-direction: row; }
+  .apila-linea .tabla td::before { display: none; }
+  .apila-linea .tabla td:nth-child(1) { grid-column: 1; grid-row: 1; }
+  .apila-linea .tabla td:nth-child(3) { grid-column: 2; grid-row: 1; justify-content: flex-end; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .apila-linea .tabla td:nth-child(2) { grid-column: 1 / -1; grid-row: 2; font-size: 12px; color: var(--fg-3); }
+  /* campos con lista: una por renglón para que se lea la opción completa */
+  .datos > .campo:has(select), .datos-mas-cuerpo > .campo:has(select) { grid-column: 1 / -1; }
+  .datos-mas-cuerpo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-campos, .grid-armado { grid-template-columns: minmax(0, 1fr); }
+  .tile-val { font-size: 18px; }
+  .tile-principal .tile-val { font-size: 22px; }
+  .dlg-cuerpo { padding-bottom: 28px; }
+  .hero-val { white-space: nowrap; font-size: 36px; }
+}

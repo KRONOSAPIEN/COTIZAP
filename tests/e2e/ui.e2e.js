@@ -4044,7 +4044,17 @@ const ok = (cond, msg) => {
     ok(await R(() => window.COTIZAP.web.estadoApp.cot.gastos[0].precio_unitario) === 1500 && await fila.locator('[data-campo="precio_unitario"]').getAttribute('aria-invalid') === 'true', 'un precio ilegible conserva el anterior y se marca');
     await fila.locator('[data-campo="concepto"]').focus();
     await p.waitForTimeout(80);
-    ok(await fila.locator('[data-campo="precio_unitario"]').inputValue() === '1500' && await p.locator('.toast', { hasText: 'No se entiende «mucho»' }).count() >= 1, 'al salir del campo vuelve el valor anterior y un aviso visible lo dice');
+    ok(await fila.locator('[data-campo="precio_unitario"]').inputValue() === '1,500.00' && await p.locator('.toast', { hasText: 'No se entiende «mucho»' }).count() >= 1, 'al salir del campo vuelve el valor anterior (con formato es-MX) y un aviso visible lo dice');
+    await fila.locator('[data-campo="precio_unitario"]').focus();
+    ok(await fila.locator('[data-campo="precio_unitario"]').inputValue() === '1500', 'al entrar al precio se ve el valor guardado, sin formato');
+    await fila.locator('[data-campo="precio_unitario"]').fill('4.2572');
+    await fila.locator('[data-campo="concepto"]').focus();
+    ok(await fila.locator('[data-campo="precio_unitario"]').inputValue() === '4.2572' && await R(() => window.COTIZAP.web.estadoApp.cot.gastos[0].precio_unitario) === 4.2572, 'con más de 2 decimales se muestran (hasta 4) y se guarda todo');
+    await fila.locator('[data-campo="precio_unitario"]').fill('22000');
+    await fila.locator('[data-campo="concepto"]').focus();
+    ok(await fila.locator('[data-campo="precio_unitario"]').inputValue() === '22,000.00' && await R(() => window.COTIZAP.web.estadoApp.cot.gastos[0].precio_unitario) === 22000, '22000 se ve «22,000.00» fuera del campo');
+    await fila.locator('[data-campo="precio_unitario"]').fill('1500');
+    await fila.locator('[data-campo="concepto"]').focus();
     // un renglón con concepto y sin precio se marca «falta el precio»
     await p.click('#cg-agregar');
     const fila2 = p.locator('#cg-captura tr[data-id]').nth(1);
@@ -4101,6 +4111,110 @@ const ok = (cond, msg) => {
     const mg = por(/^Mangueras/);
     const mm = mg.d.match(/(\d+) tramos × \$([\d,.]+).*?\+ (\d+) abrazaderas × \$([\d,.]+)/);
     ok(mm && cent(cent(Number(mm[1]) * dinero(mm[2])) + cent(Number(mm[3]) * dinero(mm[4]))) === dinero(mg.v), 'las mangueras (tramos × precio + abrazaderas × precio) suman exacto');
+    await p.context().close();
+  }
+  console.log('54) Celular (390 px): tablas dentro de la pantalla, cifras en un renglón, sin nombres internos, y el ahorro de los armados cuadra al centavo');
+  {
+    const p = await nuevaPagina({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await p.evaluate(() => window.COTIZAP.web.abrirCotizacion(window.COTIZAP.ejemplos.pedidoDucteria(), 'Ejemplo del 30-sep'));
+    await p.waitForTimeout(250);
+    const cent = (x) => Math.round(x * 100);
+    // ninguna celda de las tablas de un contenedor se sale de la pantalla (o de su recuadro, si éste se desliza a propósito)
+    const salidas = (selector) => p.evaluate((sel) => {
+      const W_ = document.documentElement.clientWidth;
+      const mal = [];
+      document.querySelectorAll(`${sel} td, ${sel} th`).forEach((c) => {
+        if (!c.offsetParent && getComputedStyle(c).position !== 'fixed') return;
+        const b = c.getBoundingClientRect();
+        if (b.width === 0 || b.height === 0) return;
+        const env = c.closest('.tabla-env');
+        const desliza = env && env.scrollWidth > env.clientWidth + 1 && getComputedStyle(env).overflowX !== 'visible';
+        if (b.right > W_ + 1 && !desliza) mal.push(`${(c.textContent || '').trim().slice(0, 30)} (${Math.round(b.right)})`);
+        if (env && !desliza && b.right > env.getBoundingClientRect().right + 1) mal.push(`fuera de su recuadro: ${(c.textContent || '').trim().slice(0, 30)}`);
+      });
+      return { mal, pagina: document.documentElement.scrollWidth - W_ };
+    }, selector);
+    const cifrasEnUnRenglon = () => p.evaluate(() => [...document.querySelectorAll('.tile-val, .hero-val')].filter((e) => e.offsetParent).filter((e) => {
+      const r = document.createRange();
+      r.selectNodeContents(e);
+      return new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size > 1;
+    }).map((e) => e.textContent));
+
+    // detalle de la partida: pila de precio y armado por yardas
+    const n = await p.locator('#lista-partidas .partida:not(.partida-auto)').count();
+    let pilaVista = false;
+    let malDetalle = [];
+    for (let i = 0; i < n; i += 1) {
+      await p.locator('#lista-partidas .partida:not(.partida-auto)').nth(i).locator('.partida-titulo').click();
+      await p.waitForTimeout(60);
+      const s = await salidas('#detalle');
+      malDetalle = malDetalle.concat(s.mal);
+      pilaVista = pilaVista || await p.locator('#detalle .apila-linea').count() > 0;
+      const unaLinea = await cifrasEnUnRenglon();
+      if (unaLinea.length) malDetalle.push(`cifra partida: ${unaLinea.join(', ')}`);
+    }
+    ok(pilaVista, 'la pila de precio se apila en celular (concepto y monto, con la base debajo)');
+    ok(malDetalle.length === 0, `el detalle de ninguna partida se sale de la pantalla${malDetalle.length ? `: ${malDetalle.slice(0, 4).join(' | ')}` : ''}`);
+    const monto = await p.locator('#detalle .apila-linea tr', { hasText: 'Precio antes de IVA' }).first().locator('td').nth(2).evaluate((e) => e.getBoundingClientRect().right <= document.documentElement.clientWidth);
+    ok(monto, 'el monto de «Precio antes de IVA» se ve completo');
+
+    // compras y gastos
+    await p.click('#tab-compras');
+    await p.waitForTimeout(300);
+    const sc = await salidas('#panel-compras');
+    ok(sc.mal.length === 0 && sc.pagina <= 1, `Compras: la lista y «Real contra cotizado» caben en la pantalla${sc.mal.length ? `: ${sc.mal.slice(0, 4).join(' | ')}` : ''} (página +${sc.pagina})`);
+    const tiles = await cifrasEnUnRenglon();
+    ok(tiles.length === 0, `las cifras de los recuadros no se parten${tiles.length ? `: ${tiles.join(', ')}` : ''}`);
+
+    // planos: el cuadre de bridas
+    await p.click('#tab-planos');
+    await p.waitForSelector('#planos-hojas .cuadre');
+    const sp = await salidas('#planos-hojas .cuadre');
+    ok(sp.mal.length === 0 && sp.pagina <= 1, `Planos: el cuadre de bridas cabe en la pantalla${sp.mal.length ? `: ${sp.mal.slice(0, 3).join(' | ')}` : ''}`);
+    ok(await p.locator('#planos-hojas .cuadre').innerText().then((t) => /por armados|\d+/.test(t)), 'el cuadre conserva sus cifras');
+
+    // geometría: ningún nombre interno (snake_case) llega a la pantalla, ni con una clave desconocida
+    const feos = [];
+    await p.click('#tab-cotizacion');
+    const recogerFeos = async (pg) => {
+      const m = await pg.locator('#lista-partidas .partida:not(.partida-auto)').count();
+      for (let i = 0; i < m; i += 1) {
+        await pg.locator('#lista-partidas .partida:not(.partida-auto)').nth(i).locator('.partida-titulo').click();
+        await pg.waitForTimeout(40);
+        (await pg.locator('#detalle dt').allInnerTexts()).filter((t) => /[a-z0-9]_[a-z]/.test(t)).forEach((t) => feos.push(t));
+      }
+    };
+    await recogerFeos(p);
+    const p2 = await nuevaPagina({ viewport: { width: 390, height: 844 } });
+    await recogerFeos(p2);
+    await p2.context().close();
+    ok(feos.length === 0, `«Geometría, peso y merma» no muestra nombres internos${feos.length ? `: ${feos.slice(0, 3).join(', ')}` : ''}`);
+    const etq = await p.evaluate(() => ['engargolado_long_m', 'engargolado_circ_m', 'holgura_engargolado_mm', 'D_disco_mm', 'dato_nuevo_raro_mm', 'n_cosas_m2'].map((k) => window.COTIZAP.web.etiquetaDetalle(k)));
+    ok(etq.every((e) => e.et && !/_/.test(e.et) && e.un), `cada clave tiene etiqueta con unidad: ${etq.map((e) => `${e.et} (${e.un})`).join(' · ')}`);
+    ok(etq[4].et === 'Dato nuevo raro' && etq[4].un === 'mm' && etq[5].et === 'Número de cosas' && etq[5].un === 'm²', 'una clave desconocida se vuelve texto legible');
+
+    // el ahorro de los armados = total antes de armar − total después, al centavo
+    await p.evaluate(() => window.COTIZAP.web.abrirCotizacion(window.COTIZAP.ejemplos.pedidoDucteria(), 'Ejemplo del 30-sep'));
+    await p.waitForTimeout(250);
+    const totalDe = () => p.evaluate(() => window.COTIZAP.web.estadoApp.res.totales.total);
+    const antes = await totalDe();
+    await p.click('#btn-sugerir-armados');
+    await p.waitForSelector('#dlg-armados[open]');
+    const desg = await p.locator('#arm-lista .arm-sug').evaluateAll((els) => els.map((e) => {
+      const d = e.querySelector('.arm-sug-desglose');
+      const lineas = [...d.querySelectorAll('p')].map((x) => x.textContent);
+      const suma = (re) => { const l = lineas.find((x) => re.test(x)); return l ? [...l.matchAll(/\$([\d,]+\.\d\d)/g)].reduce((a, m) => a + Math.round(Number(m[1].replace(/,/g, '')) * 100), 0) : 0; };
+      return { txt: d.textContent, ahorra: suma(/^Se ahorra/), cuesta: suma(/^Cuesta de más/), costo: Math.round(Number(d.dataset.costoDirecto) * 100), ceros: /\$0\.00/.test(d.textContent) && !/\$0\.00;/.test(d.textContent) };
+    }));
+    ok(desg.length >= 3 && desg.every((d) => d.ahorra - d.cuesta === d.costo), `las partes del desglose suman el costo directo al centavo (${desg.map((d) => `${d.ahorra}−${d.cuesta}=${d.costo}`).join(', ')})`);
+    ok(desg.every((d) => !/-\$/.test(d.txt) && !/(aros|tornillos|juntas|mano de obra|otros|sobrante de lámina) \$0\.00/.test(d.txt) && /Costo directo: [−+]\$[\d,.]+; con indirectos, utilidad y el sobrante el subtotal (baja|sube) \$[\d,.]+ \(sin IVA\)/.test(d.txt)), 'el desglose omite lo que vale $0.00, no trae negativos y cierra con «Costo directo … el subtotal baja …»');
+    const nSug = await p.locator('#arm-lista .arm-sug').count();
+    await p.click('#arm-todas');
+    await p.waitForTimeout(300);
+    await p.click('#arm-cerrar');
+    const despues = await totalDe();
+    const mostrado = await p.locator('#totales [data-ahorro-armados]').getAttribute('data-ahorro-armados');
+    ok(nSug >= 3 && cent(Number(mostrado)) === cent(antes - despues), `el ahorro mostrado (${mostrado}) es el total antes de armar (${antes.toFixed(2)}) menos el de después (${despues.toFixed(2)}) = ${(antes - despues).toFixed(2)}`);
     await p.context().close();
   }
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);

@@ -73,7 +73,7 @@
   function hoja(hj, i, n) {
     const cot = E().cot;
     const total = hj.items.reduce((s, x) => s + (Number(cantidadDe(x)) || 0), 0);
-    return h('section', { class: 'hoja', dataset: { grupo: hj.g.id }, 'aria-label': `${hj.g.nombre(hj.items)}${hj.material ? ` · ${hj.material}` : ''}` },
+    return h('section', { class: `hoja${hj.items.length <= 2 ? ' hoja-corta' : ''}`, dataset: { grupo: hj.g.id }, 'aria-label': `${hj.g.nombre(hj.items)}${hj.material ? ` · ${hj.material}` : ''}` },
       h('header', { class: 'hoja-cab' },
         h('h3', null, hj.g.nombre(hj.items), hj.material ? h('span', { class: 'hoja-mat' }, hj.material) : null),
         h('span', { class: 'hoja-cuenta' }, [`${piezas(total)} en ${hj.items.length} ${hj.items.length === 1 ? 'partida' : 'partidas'}`, hj.g.porMedida ? yardasDe(hj.items) : ''].filter(Boolean).join(' · '))),

@@ -173,18 +173,35 @@
   const ivaCompras = () => E().M.compras.iva_pct;
   let firmaCaptura = null; // los id de los renglones dibujados: si cambian, se redibuja la captura
 
+  const crudo = (v) => (v === '' || v === undefined || v === null ? '' : String(v));
+  /** El precio unitario con miles y 2 decimales (hasta 4 si el valor guardado trae más): sólo se ve así fuera del campo; lo guardado no cambia. */
+  function textoPrecio(v) {
+    const t = crudo(v);
+    if (t === '') return '';
+    const x = Number(v);
+    if (!Number.isFinite(x)) return t;
+    const dec = (t.split('.')[1] || '').replace(/0+$/, '').length;
+    return x.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: dec > 2 ? 4 : 2 });
+  }
+  /** El concepto crece con su texto (sin barra de desplazamiento): se ve completo aunque sea largo. */
+  function ajustarAlto(el) {
+    if (!el || !el.offsetParent) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }
+
   function filaGasto(g, i) {
     const n = i + 1;
-    const num = (v) => (v === '' || v === undefined || v === null ? '' : String(v));
+    const num = crudo;
     return h('tr', { class: g.estimado ? 'cg-estimado' : '', dataset: { id: g.id } },
       h('td', null, h('input', { type: 'date', class: 'cg-in-fecha', value: g.fecha || '', dataset: { campo: 'fecha' }, 'aria-label': `Fecha del gasto ${n}` })),
       h('td', { class: 'cg-td-concepto' },
-        h('input', { type: 'text', class: 'cg-in-concepto', value: g.concepto, maxlength: '200', placeholder: 'Concepto (p. ej. 6 soleras 1½″ × 3/16″)', dataset: { campo: 'concepto' }, 'aria-label': `Concepto del gasto ${n}` }),
+        h('textarea', { rows: '1', class: 'cg-in-concepto', maxlength: '200', placeholder: 'Concepto (p. ej. 6 soleras 1½″ × 3/16″)', title: g.concepto, dataset: { campo: 'concepto' }, 'aria-label': `Concepto del gasto ${n}` }, g.concepto),
         g.estimado ? h('span', { class: 'chip chip-adv cg-chip-est', title: 'Viene de la lista de compras con el precio cotizado: cámbielo por el del ticket' }, 'estimado') : null),
       h('td', null, h('select', { dataset: { campo: 'categoria' }, 'aria-label': `Categoría del gasto ${n}` },
         Object.keys(G.CATEGORIAS).map((k) => h('option', { value: k, selected: k === g.categoria }, corta(k))))),
       h('td', { class: 'num' }, h('input', { type: 'text', class: 'cg-in-num', inputmode: 'decimal', autocomplete: 'off', value: num(g.cantidad), placeholder: '1', dataset: { campo: 'cantidad' }, 'aria-label': `Cantidad del gasto ${n}` })),
-      h('td', { class: 'num' }, h('input', { type: 'text', class: 'cg-in-num', inputmode: 'decimal', autocomplete: 'off', value: num(g.precio_unitario), placeholder: '0.00', dataset: { campo: 'precio_unitario' }, 'aria-label': `Precio unitario del gasto ${n}` })),
+      h('td', { class: 'num' }, h('input', { type: 'text', class: 'cg-in-num', inputmode: 'decimal', autocomplete: 'off', value: textoPrecio(g.precio_unitario), placeholder: '0.00', dataset: { campo: 'precio_unitario' }, 'aria-label': `Precio unitario del gasto ${n}` })),
       h('td', { class: 'cg-c' }, h('input', { type: 'checkbox', checked: g.iva_incluido === true, dataset: { campo: 'iva_incluido' }, 'aria-label': `El precio del gasto ${n} trae IVA` })),
       h('td', { class: 'cg-c' }, h('input', { type: 'checkbox', checked: g.con_factura === true, dataset: { campo: 'con_factura' }, 'aria-label': `El gasto ${n} tiene factura` })),
       h('td', { class: 'num cg-costo', dataset: { campo: 'costo' } }, '—'),
@@ -493,6 +510,20 @@
     $('#cg-copiar-gastos').addEventListener('click', () => W.copiarTexto(csvGastos(), 'Gastos copiados (CSV)'));
     const cap = $('#cg-captura');
     cap.addEventListener('input', alEditar);
+    cap.addEventListener('input', (ev) => { if (ev.target.dataset && ev.target.dataset.campo === 'concepto') { ajustarAlto(ev.target); ev.target.title = ev.target.value; } });
+    // un renglón de una sola línea: Enter no mete saltos en el concepto
+    cap.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target.dataset && ev.target.dataset.campo === 'concepto') ev.preventDefault(); });
+    // el precio unitario se ve con miles y decimales fuera del campo; al entrar se muestra tal como está guardado
+    cap.addEventListener('focusin', (ev) => {
+      const el = ev.target;
+      if (!el.dataset || el.dataset.campo !== 'precio_unitario') return;
+      const tr = el.closest('tr[data-id]');
+      const g = tr && gastos().find((x) => x.id === tr.dataset.id);
+      if (g && el.getAttribute('aria-invalid') !== 'true' && el.value !== crudo(g.precio_unitario)) {
+        el.value = crudo(g.precio_unitario);
+        el.select(); // al cambiar el texto se perdería la selección: se vuelve a seleccionar todo para sobrescribir de una vez
+      }
+    });
     cap.addEventListener('change', alEditar);
     cap.addEventListener('focusout', (ev) => {
       const el = ev.target;
@@ -505,6 +536,13 @@
       el.removeAttribute('aria-invalid');
       el.title = '';
       actualizarGastos();
+    });
+    cap.addEventListener('focusout', (ev) => {
+      const el = ev.target;
+      if (!el.dataset || el.dataset.campo !== 'precio_unitario' || el.getAttribute('aria-invalid') === 'true') return;
+      const tr = el.closest('tr[data-id]');
+      const g = tr && gastos().find((x) => x.id === tr.dataset.id);
+      if (g) el.value = textoPrecio(g.precio_unitario);
     });
     cap.addEventListener('click', (ev) => {
       const b = ev.target.closest('[data-quitar]');
@@ -522,6 +560,7 @@
     const firma = gastos().map((g) => g.id).join('|');
     if (firma !== firmaCaptura) renderCaptura();
     actualizarGastos();
+    $$('#cg-captura .cg-in-concepto').forEach(ajustarAlto);
   }
 
   W.comprasUI = { render, gastosEsperados, csvLista, csvGastos };
