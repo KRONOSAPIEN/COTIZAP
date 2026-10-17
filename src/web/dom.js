@@ -38,6 +38,11 @@
     maximumFractionDigits: d === undefined ? 2 : d,
   });
   W.pct = (x, d) => `${W.num(x * 100, d === undefined ? 1 : d)} %`;
+  /** Porcentaje tal como se usó en la cuenta: hasta 2 decimales sin ceros de sobra (2.25 → «2.25 %», 20 → «20 %»). */
+  W.pctExacto = (x) => {
+    const n = Number((x * 100).toFixed(2));
+    return `${n.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} %`;
+  };
 
   /** Baja un archivo con un enlace de descarga (fuera del artefacto). `datos`: texto, Uint8Array o Blob. */
   W.bajarArchivo = function bajarArchivo(datos, nombre, tipo) {
@@ -62,7 +67,7 @@
     const entero = m[1] === undefined ? 0 : Number(m[1]);
     if (m[2] === undefined) return entero;
     const frac = Number(m[2]) / Number(m[3]);
-    return entero < 0 ? entero - frac : entero + frac;
+    return s.startsWith('-') ? -(Math.abs(entero) + frac) : entero + frac;
   };
 
   /* ---------------- Dibujos (árbol { tag, a, c, t } de planos.js) → SVG con nodos, sin innerHTML ---------------- */

@@ -84,7 +84,7 @@
         fila(may(`${p}perfil`), g.a.perfil);
         fila(may(`${p}ancho`), mm(g.a.ancho_mm));
         fila(may(`${p}gramil`), mm(g.a.gramil_mm));
-        fila(may(`${p}Ø barreno`), mm(g.a.diam_barreno_mm));
+        fila(may(`${p}Ø barreno`), `${num(g.a.diam_barreno_mm, 2)} mm`);
         fila(may(`${p}tornillos`), `${g.a.n_tornillos} barrenos`);
         fila(may(`${p}paso`), g.a.paso_mm ? mm(g.a.paso_mm) : '');
       });

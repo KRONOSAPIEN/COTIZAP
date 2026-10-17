@@ -371,7 +371,7 @@
       const b = a.ancho_mm;
       const g = a.gramil_mm;
       d.titulo = `Marco de brida para ducto de ${mm(p.a_mm)} × ${mm(p.b_mm)}`;
-      d.datos = [a.descripcion, `Interior ${mm(ai)} × ${mm(bi)} mm`, `${n} barrenos de ${Math.round(a.diam_barreno_mm * 10) / 10} mm`];
+      d.datos = [a.descripcion, `Interior ${mm(ai)} × ${mm(bi)} mm`, `${n} barrenos de ${Number(a.diam_barreno_mm.toFixed(2))} mm`];
       d.trazos.push({ t: 'marco', w0: ai, h0: bi, w1: ai + 2 * b, h1: bi + 2 * b });
       const wp = ai + 2 * g;
       const hp = bi + 2 * g;
@@ -395,7 +395,7 @@
     const Dext = Dint + 2 * a.ancho_mm;
     const Dperf = a.P_perno_mm / PI;
     d.titulo = `Brida de ${nominal(p.D_mm)}`;
-    d.datos = [a.descripcion, `Dint = ${mm(Dint)} mm`, `Dperf = ${mm(Dperf)} mm`, `Dext = ${mm(Dext)} mm`, `${n} barrenos de ${Math.round(a.diam_barreno_mm * 10) / 10} mm`];
+    d.datos = [a.descripcion, `Dint = ${mm(Dint)} mm`, `Dperf = ${mm(Dperf)} mm`, `Dext = ${mm(Dext)} mm`, `${n} barrenos de ${Number(a.diam_barreno_mm.toFixed(2))} mm`];
     aroFrente(d, { Dint, Dext, Dperf, n, db: a.diam_barreno_mm, campo: 'D_mm' });
     return true;
   }
