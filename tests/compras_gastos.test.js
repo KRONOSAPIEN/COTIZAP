@@ -281,7 +281,8 @@ test('Brida de placa cortada por el proveedor: precio sin IVA del catálogo, sus
   // en el control de gastos, la compra va a «compras a terceros» y su tornillería y su junta a material
   const R = G.resumen(res, [], 0.16);
   casi(R.categorias.find((x) => x.clave === 'PROVEEDOR').cotizado, 3440, 1e-9);
-  const material = [...res.partidas, ...res.automaticas].reduce((s, f) => s + f.costos.subtotales.materiales, 0) - 3440; // con el sobrante, que siempre se cobra
+  const spc = res.compras.sobrante_por_categoria;
+  const material = [...res.partidas, ...res.automaticas].reduce((s, f) => s + f.costos.subtotales.materiales, 0) - 3440 - (res.compras.sobrante - (spc.MATERIAL || 0)); // con el sobrante, que siempre se cobra, sólo el de renglones de material
   casi(R.categorias.find((x) => x.clave === 'MATERIAL').cotizado, material, 1e-9);
   // el catálogo rechaza juegos que no son enteros
   const malo = crearMaestros({ compras: { articulos: { BRIDA_PLACA_5: { tornillos_pieza: -1 } } } });
@@ -470,10 +471,11 @@ test('Resumen del control de gastos: lo cotizado por categoría suma el costo di
   casi(R.categorias.find((x) => x.clave === 'VIATICOS').cotizado, 500, 1e-12);
   casi(R.categorias.find((x) => x.clave === 'INSTALACION').cotizado, 8 * HORA, 1e-12, 'la cuadrilla (la herramienta menor va a consumibles)');
   const sop = res.partidas[4].costos;
-  casi(R.categorias.find((x) => x.clave === 'SOPORTERIA').cotizado, sop.subtotales.materiales + (2 * 16) / (1 + IVA), 1e-12, 'el material de la soportería y los taquetes del catálogo');
+  const spc = res.compras.sobrante_por_categoria;
+  casi(R.categorias.find((x) => x.clave === 'SOPORTERIA').cotizado, sop.subtotales.materiales + (2 * 16) / (1 + IVA) + (spc.SOPORTERIA || 0), 1e-12, 'el material de la soportería, los taquetes del catálogo y su sobrante');
   casi(R.categorias.find((x) => x.clave === 'MANO_OBRA').cotizado, res.partidas[0].costos.subtotales.mano_obra + sop.subtotales.mano_obra, 1e-9, 'la mano de obra del taller, también la de la soportería');
   const herramienta = [...res.partidas, ...res.automaticas].reduce((s, f) => s + f.costos.subtotales.herramienta_menor, 0);
-  casi(R.categorias.find((x) => x.clave === 'CONSUMIBLE').cotizado, res.partidas[0].costos.subtotales.consumibles + herramienta, 1e-9, 'consumibles y herramienta menor');
+  casi(R.categorias.find((x) => x.clave === 'CONSUMIBLE').cotizado, res.partidas[0].costos.subtotales.consumibles + herramienta + (spc.CONSUMIBLE || 0), 1e-9, 'consumibles, herramienta menor y el sobrante de la pintura');
   casi(R.totales.real, 1000 + 300 + 500, 1e-12);
   casi(R.totales.iva_acreditable, 160, 1e-12, 'sólo la lámina: la comida no tiene factura y la raya no lleva IVA');
   assert.equal(R.totales.n_gastos, 3, 'el vacío y el inválido no cuentan');
@@ -497,4 +499,72 @@ test('Resumen del control de gastos: lo cotizado por categoría suma el costo di
   // entradas raras
   assert.doesNotThrow(() => G.resumen(null, 'nada', NaN));
   assert.equal(G.resumen(res, [1, 'x', null]).errores.length, 3);
+});
+
+/* ---------------- Correcciones de cuentas (oct-2026) ---------------- */
+
+test('Fijaciones de espiga: la lista de compras las trae en piezas enteras (con su reserva) y su cotizado cuadra con el costo de las partidas', () => {
+  const esp = { ...recto, material_id: 'GALVANIZADO', calibre: 20, servicio: 'VENTILACION', tipo_union: 'ESPIGA', tipo_costura: 'PITTSBURGH', cantidad: 3 };
+  const res = C.cotizar({ partidas: [esp, { ...esp, D_mm: 203.2, cantidad: 5 }] }, M);
+  assert.equal(res.compras.fijaciones.length, 1);
+  const f = res.compras.fijaciones[0];
+  const exactos = res.partidas.reduce((s, p) => s + p.entrada.cantidad * p.qto.her.n_fijaciones, 0);
+  assert.ok(exactos > 0);
+  assert.equal(f.necesario, exactos);
+  casi(f.con_reserva, exactos * (1 + M.herrajes.uniones.ESPIGA.f_reserva_fijaciones), 1e-12);
+  assert.equal(f.compra, Math.ceil(f.con_reserva - 1e-9), 'piezas enteras');
+  assert.equal(f.categoria, 'MATERIAL');
+  assert.equal(f.unidad, 'pza');
+  casi(f.costo_cotizado, res.partidas.reduce((s, p) => s + p.costos.materiales.fijaciones, 0), 1e-12, 'lo cotizado = lo que cobran las partidas');
+  casi(f.sobrante, Math.max(0, f.importe_compra - f.costo_cotizado), 1e-12);
+  assert.ok(f.compra * f.unitario_sin_iva + 1e-9 >= f.costo_cotizado);
+  assert.ok(res.compras.renglones.includes(f));
+  // ya no queda hueco: el material cotizado en la lista explica el de las partidas (menos flete y crédito de chatarra)
+  const matPartidas = res.partidas.reduce((s, p) => s + p.costos.materiales.fijaciones, 0);
+  assert.ok(matPartidas > 0);
+  // sin espigas no hay renglón
+  assert.deepEqual(C.cotizar({ partidas: [recto] }, M).compras.fijaciones, []);
+});
+
+test('Sobrante por categoría: el de cada renglón cae en su categoría (soportería, consumibles, material) y el total no cambia', () => {
+  const cot = {
+    partidas: [
+      { ...recto, cantidad: 3 },
+      { familia: 'SOPORTE', cantidad: 5, barra_id: 'PTR_2X2_C14', largo_pieza_mm: 1000 },
+    ],
+  };
+  const res = C.cotizar(cot, M);
+  const L = res.compras;
+  const spc = L.sobrante_por_categoria;
+  Object.keys(spc).forEach((k) => assert.ok(spc[k] > 0, k));
+  casi(Object.values(spc).reduce((s, x) => s + x, 0), L.sobrante, 1e-12, 'las categorías suman el sobrante');
+  ['MATERIAL', 'CONSUMIBLE', 'SOPORTERIA'].forEach((k) => {
+    casi(spc[k] || 0, L.renglones.filter((r) => r.categoria === k).reduce((s, r) => s + r.sobrante, 0), 1e-12, k);
+  });
+  assert.ok(spc.SOPORTERIA > 0, 'la barra de la soportería deja sobrante de soportería');
+  assert.ok(spc.CONSUMIBLE > 0, 'la pintura deja sobrante de consumibles');
+  const R = G.resumen(res, [], 0.16);
+  const cat = (k) => R.categorias.find((x) => x.clave === k).cotizado;
+  // lo cotizado de cada categoría = su costo directo de las partidas + su sobrante
+  const partidas = res.partidas;
+  const sop = partidas[1].costos.subtotales;
+  casi(cat('SOPORTERIA'), sop.materiales + spc.SOPORTERIA, 1e-9);
+  const consum = partidas.reduce((s, f) => s + f.costos.subtotales.consumibles + f.costos.subtotales.herramienta_menor, 0);
+  casi(cat('CONSUMIBLE'), consum + spc.CONSUMIBLE, 1e-9);
+  const mat = partidas[0].costos.subtotales.materiales;
+  casi(cat('MATERIAL'), mat + (spc.MATERIAL || 0), 1e-9);
+  // el total no cambia contra repartir todo en material
+  const equipo = G.equipoCotizado(res);
+  casi(R.totales.cotizado + equipo, res.totales.costo_directo, 1e-9);
+});
+
+test('Gastos: un concepto sin precio se marca «falta el precio» (no cuenta como $0); un renglón con precio 0 capturado sí es válido', () => {
+  const sinPrecio = G.normalizarGasto({ concepto: 'Tornillos', cantidad: 2, precio_unitario: '' });
+  assert.match(sinPrecio.errores[0], /Tornillos: falta el precio/);
+  assert.match(G.normalizarGasto({ concepto: 'Tornillos', cantidad: 2 }).errores[0], /falta el precio/);
+  assert.deepEqual(G.normalizarGasto({ concepto: 'Cortesía', cantidad: 1, precio_unitario: 0 }).errores, []);
+  assert.deepEqual(G.normalizarGasto({ concepto: '', cantidad: '', precio_unitario: '' }).errores, [], 'el renglón vacío sigue sin ser error');
+  const R = G.resumen(C.cotizar({ partidas: [recto] }, M), [{ concepto: 'Tornillos', categoria: 'MATERIAL', cantidad: 2, precio_unitario: '' }], 0.16);
+  assert.equal(R.totales.n_gastos, 0);
+  assert.match(R.errores[0], /Renglón 1: Tornillos: falta el precio/);
 });

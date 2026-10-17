@@ -69,6 +69,8 @@
     const etiqueta = g.concepto || 'Gasto';
     if (!(g.cantidad >= 0 && g.cantidad <= 1e7)) errores.push(`${etiqueta}: la cantidad debe ser un número de 0 en adelante.`);
     if (!(g.precio_unitario >= 0 && g.precio_unitario <= 1e9)) errores.push(`${etiqueta}: el precio debe ser un número de 0 en adelante.`);
+    // un concepto sin precio no es un gasto de $0: falta capturarlo
+    if (g.concepto.trim() && (entrada.precio_unitario === undefined || entrada.precio_unitario === null || entrada.precio_unitario === '')) errores.push(`${etiqueta}: falta el precio.`);
     g.vacio = !g.concepto.trim() && !(g.cantidad * g.precio_unitario > 0);
     return { g, errores };
   }
@@ -106,7 +108,13 @@
       } else if (f.familia === 'INSTALACION') {
         c.INSTALACION += s.mano_obra;
         c.VIATICOS += s.viaticos;
-      } else if (f.familia === 'AJUSTE_COMPRA') c.MATERIAL += s.materiales;
+      } else if (f.familia === 'AJUSTE_COMPRA') {
+        // el sobrante cae en la categoría del renglón de compra de donde sale; el total no cambia
+        const por = (res && res.compras && res.compras.sobrante_por_categoria) || {};
+        const tot = Object.keys(por).reduce((a, k) => a + (Object.prototype.hasOwnProperty.call(c, k) ? por[k] : 0), 0);
+        if (tot > 0) Object.keys(por).forEach((k) => { if (Object.prototype.hasOwnProperty.call(c, k)) c[k] += s.materiales * (por[k] / tot); });
+        else c.MATERIAL += s.materiales;
+      }
       else {
         c.MATERIAL += s.materiales;
         c.CONSUMIBLE += s.consumibles;

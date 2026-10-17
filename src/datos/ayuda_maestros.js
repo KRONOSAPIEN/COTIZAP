@@ -210,7 +210,7 @@
       } });
   E('rapida.soporteria', 'Ménsulas de la cotización rápida',
     'Con qué se costean las ménsulas de la cotización rápida, cada una con su abrazadera. El ingeniero dice cuántas (vacío: las sugeridas, una cada 2.5 m de Proceso › Soportería) y de qué ángulo y solera; aquí están los de arranque.',
-    'La ménsula y la abrazadera se cotizan como dos partidas de soportería (material de la lista del proveedor, anclajes y minutos reales de taller), sin utilidad: la utilidad la suma la cotización rápida.',
+    'La ménsula y la abrazadera se cotizan como dos partidas de soportería (material de la lista del proveedor, anclajes y minutos reales de taller). Es su costo directo: la cotización rápida le suma la utilidad junto con todo el costo.',
     'Con 31 m se sugieren 13, unos $345 cada una de costo directo con ángulo 1¼″ y solera 1¼″: $4,488.',
     { afecta: ['rapida'] });
   E('rapida.soporteria.menula_barra', 'Barra de la ménsula',

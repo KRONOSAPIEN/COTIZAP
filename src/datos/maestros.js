@@ -559,7 +559,7 @@
       ],
       // Ménsulas (el taller, 8-oct-2026): el ingeniero dice cuántas (se sugiere una cada «horizontal_m» de
       // proceso.soportes.espaciado, 2.5 m) y de qué ángulo y solera; se costean como las partidas de soportería (material y
-      // taller, sin utilidad). Sin elegir: la ménsula de ángulo 1¼″ × 1/8″ (brazo y pierna de 650 mm) con 4 taquetes, en
+      // taller; la cotización rápida les suma la utilidad junto con todo el costo). Sin elegir: la ménsula de ángulo 1¼″ × 1/8″ (brazo y pierna de 650 mm) con 4 taquetes, en
       // 137 min (las 7 del caso real en 2 días), y la abrazadera tipo cuna de solera 1¼″ × 1/8″, media vuelta, en 15 min
       soporteria: {
         menula_barra: 'ANG_1_1_4X1_8', menula_largo_mm: 1300, menula_anclajes: 4, menula_min: 137.14,

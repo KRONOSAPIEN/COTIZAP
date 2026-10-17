@@ -1914,13 +1914,13 @@ const ok = (cond, msg) => {
     // a) el caso del taller: 11″ y 40 m en galvanizada cal. 22 de 4 × 10 ft
     await p.fill('#r_diam', '11');
     await p.fill('#r_metros', '40');
-    ok(await total() === '$43,392.00', '11″ y 40 m: $43,392.00 con IVA');
+    ok(await total() === '$43,391.84', '11″ y 40 m: $43,391.84 con IVA (cada cifra al centavo)');
     const d = await desglose();
-    ok(/Lámina × 3\s+11 hojas × \$793\.10 = \$8,724\.14 de lámina, × 3: cubre/.test(d) && /\$26,172\.41/.test(d) && /Por 40 m: hasta 40 m\.\s+\$5,000\.00/.test(d)
-      && /Utilidad 20 %[\s\S]*\$6,234\.48/.test(d) && /IVA 16 %\s+\$5,985\.10/.test(d), 'el desglose: 11 hojas × $793.10, × 3, bridas $5,000 (hasta 40 m), utilidad 20 % sobre el costo e IVA');
+    ok(/Lámina × 3\s+11 hojas × \$793\.10 = \$8,724\.10 de lámina, × 3: cubre/.test(d) && /\$26,172\.30/.test(d) && /Por 40 m: hasta 40 m\.\s+\$5,000\.00/.test(d)
+      && /Utilidad 20 %[\s\S]*\$6,234\.46/.test(d) && /IVA 16 %\s+\$5,985\.08/.test(d), 'el desglose: 11 hojas × $793.10, × 3, bridas $5,000 (hasta 40 m), utilidad 20 % sobre el costo e IVA');
     {
       const laminas = await p.locator('#rapida-desglose tr').evaluateAll((trs) => trs.map((tr) => tr.innerText.trim()).filter((t) => /^Lámina/.test(t)));
-      ok(laminas.length === 1 && /^Lámina × 3\s/.test(laminas[0]) && /\$26,172\.41$/.test(laminas[0]), 'en el desglose sólo hay un renglón de lámina y su importe es el de la lámina × 3 ($26,172.41), el que entra al costo');
+      ok(laminas.length === 1 && /^Lámina × 3\s/.test(laminas[0]) && /\$26,172\.30$/.test(laminas[0]), 'en el desglose sólo hay un renglón de lámina y su importe es el de la lámina × 3 ($26,172.30), el que entra al costo');
     }
     ok(/33 yardas de 4 ft/.test(d) &&/3 yardas de 11″/.test(d), 'dice cómo salen las hojas: 33 yardas de 4 ft, 3 por lámina');
 
@@ -1931,7 +1931,7 @@ const ok = (cond, msg) => {
     ok(await p.locator('.lam-tira li').count() === 11 && await p.locator('.lam-tira li.lam-parcial').count() === 0 && /Se aprovecha el 90 %/.test(await p.locator('#rapida-acomodo').innerText()), 'la tira trae las 11 láminas, todas con 3 yardas; se aprovecha el 90 %');
     await p.locator('#r_yarda input[value="914"]').check();
     const de3 = await p.locator('#rapida-acomodo').innerText();
-    ok(/44 yardas ÷ 3 = 15 láminas; la última lleva 2 yardas/.test(de3) && await p.locator('.lam-tira li').count() === 15 && await p.locator('.lam-tira li.lam-parcial').count() === 1 && await total() !== '$43,392.00',
+    ok(/44 yardas ÷ 3 = 15 láminas; la última lleva 2 yardas/.test(de3) && await p.locator('.lam-tira li').count() === 15 && await p.locator('.lam-tira li.lam-parcial').count() === 1 && await total() !== '$43,391.84',
       'con yardas de 3 ft: 44 yardas, 15 láminas (la última con 2) y otro precio');
     ok(/Lámina galvanizada 3 × 10 ft/.test(await desglose()) && await p.locator('.lam-svg .lam-yarda').count() === 3, 'con yardas de 3 ft toma sola la lámina galvanizada de 3 × 10 ft (aproximada)');
     await p.selectOption('#r_hoja', 'GALV_C22_4X10');
@@ -1948,8 +1948,8 @@ const ok = (cond, msg) => {
     await p.fill('#r_dias_ins', '3');
     const dd = await desglose();
     ok(await p.locator('#rapida-plazo').innerText() === 'Plazo: 5 días de fabricación de bridas + 3 días de instalación = 8 días' && /Fabricación de bridas: 5 días\s+5 días × 1 persona × \$500\.00 por día\.\s+\$2,500\.00/.test(dd)
-      && /Instalación: 3 días\s+3 días × 2 personas × \$500\.00 por día\.\s+\$3,000\.00/.test(dd) && await total() === '$51,048.00',
-      'el plazo (8 días) y su mano de obra: bridas $2,500 + instalación $3,000, con utilidad e IVA: $51,048.00');
+      && /Instalación: 3 días\s+3 días × 2 personas × \$500\.00 por día\.\s+\$3,000\.00/.test(dd) && await total() === '$51,047.84',
+      'el plazo (8 días) y su mano de obra: bridas $2,500 + instalación $3,000, con utilidad e IVA: $51,047.84');
     await p.fill('#r_dias_ins', '-2');
     ok(/días de instalación deben ser de 0 a 365/.test(await p.locator('#rapida-resultado').innerText()), 'días inválidos: lo dice');
     await p.fill('#r_dias_ins', '3');
@@ -1967,7 +1967,10 @@ const ok = (cond, msg) => {
     // c) la utilidad de esta cotización, otra lámina y el factor de las tablas
     await p.fill('#r_metros', '40');
     await p.fill('#r_utilidad', '30');
-    const esperado = ((11 * 920 / 1.16) * 3 + 5000 + 2500 + 3000) * 1.3 * 1.16; // con los días de bridas e instalación capturados arriba
+    const c2 = (x) => Math.round((x + Number.EPSILON) * 100) / 100; // cada cifra al centavo, como el motor
+    const costoE = c2(3 * c2(11 * c2(920 / 1.16)) + 5000 + 2500 + 3000);
+    const precioE = c2(costoE + c2(costoE * 0.3));
+    const esperado = c2(precioE + c2(precioE * 0.16)); // con los días de bridas e instalación capturados arriba
     ok(await total() === `$${esperado.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'la utilidad capturada (30 %) se suma sobre el costo');
     await p.fill('#r_utilidad', '');
     await p.selectOption('#r_hoja', 'GALV_C24_4X10');
@@ -2037,7 +2040,7 @@ const ok = (cond, msg) => {
     await p.fill('#r_dias_fab', '5');
     await p.fill('#r_dias_ins', '3');
     const txt = await p.inputValue('#rapida-texto');
-    ok(/^Cotización de ductería · Nave 3/.test(txt) && /Ø11″, 40 m/.test(txt) && /Incluye suministro, fabricación e instalación\./.test(txt) && /\$44,006\.90 \+ IVA 16 % = \$51,048\.00/.test(txt)
+    ok(/^Cotización de ductería · Nave 3/.test(txt) && /Ø11″, 40 m/.test(txt) && /Incluye suministro, fabricación e instalación\./.test(txt) && /\$44,006\.76 \+ IVA 16 % = \$51,047\.84/.test(txt)
       && /Plazo: 5 días de fabricación \+ 3 días de instalación = 8 días/.test(txt) && /Vigencia: 15 días/.test(txt) && !/tilidad|factor|× 3/.test(txt),
       'el texto para el cliente: cliente, ducto, qué incluye, precio con IVA, plazo y vigencia; sin factor ni utilidad');
     await p.click('#rapida-copiar');
@@ -2052,7 +2055,7 @@ const ok = (cond, msg) => {
     await p.evaluate(() => document.body.classList.add('imprimir-rapida'));
     await p.emulateMedia({ media: 'print' });
     const imp = await p.locator('#rapida-impresion').innerText();
-    ok(await p.locator('#rapida-impresion').isVisible() && await p.locator('.barra').isHidden() && await p.locator('main').isHidden() && /Total\s*\$51,048\.00/.test(imp) && /Cliente: Nave 3/.test(imp) && !/tilidad/.test(imp),
+    ok(await p.locator('#rapida-impresion').isVisible() && await p.locator('.barra').isHidden() && await p.locator('main').isHidden() && /Total\s*\$51,047\.84/.test(imp) && /Cliente: Nave 3/.test(imp) && !/tilidad/.test(imp),
       'al imprimir la cotización rápida sale sólo la hoja del cliente (subtotal, IVA, total, plazo y vigencia)');
     await p.emulateMedia({ media: 'screen' });
     await p.evaluate(() => document.body.classList.remove('imprimir-rapida'));
@@ -2069,7 +2072,7 @@ const ok = (cond, msg) => {
     await p.waitForTimeout(100);
     ok(await p.inputValue('#r_diam') === '11' && await p.inputValue('#r_metros') === '31' && await p.locator('#r_yarda input[value="914"]').isChecked()
       && await p.inputValue('#r_dias_fab') === '4' && await p.inputValue('#r_dias_ins') === '5', 'el ejemplo carga el sistema del unifilar: 11″, 31 m, yardas de 3 ft, 4 días de bridas y 5 de instalación');
-    ok(await p.locator('#rapida-total-val').innerText() === '$46,512.00' && /34 yardas ÷ 3 = 12 láminas/.test(await p.locator('#rapida-acomodo').innerText()), '31 m son 34 yardas: 12 láminas de 3 × 10 ft (no 5), $46,512.00');
+    ok(await p.locator('#rapida-total-val').innerText() === '$46,512.13' && /34 yardas ÷ 3 = 12 láminas/.test(await p.locator('#rapida-acomodo').innerText()), '31 m son 34 yardas: 12 láminas de 3 × 10 ft (no 5), $46,512.13');
     ok(/Desarrollo de cada yarda: π × 280\.3 mm = 880 mm \+ 32 mm de la costura = 912 mm: el perímetro, no el diámetro/.test(await p.locator('#rapida-desarrollo').innerText()),
       'dice el desarrollo de la yarda: el perímetro (π × D), no el diámetro');
     ok(/de las 2 del ancho de la yarda, la que menos desperdicia/.test(await p.locator('#r_hoja_nota').innerText()) && /3 × 10 ft/.test(await p.locator('#r_hoja option[value=""]').innerText()),
@@ -2086,27 +2089,27 @@ const ok = (cond, msg) => {
     await p.fill('#r_menulas', '0');
     await p.click('#rapida-ejemplo');
     await p.waitForTimeout(100);
-    ok(await p.locator('#rapida-total-val').innerText() === '$46,512.00' && !/Ménsulas|Mangueras|Viáticos/.test(await p.locator('#rapida-desglose').innerText()), 'sin ménsulas, mangueras ni viáticos no hay renglones extra: $46,512.00');
+    ok(await p.locator('#rapida-total-val').innerText() === '$46,512.13' && !/Ménsulas|Mangueras|Viáticos/.test(await p.locator('#rapida-desglose').innerText()), 'sin ménsulas, mangueras ni viáticos no hay renglones extra: $46,512.13');
     ok(await p.locator('#r_menulas').getAttribute('placeholder') === '13 sugeridas', 'la caja de ménsulas sugiere 13 (una cada 2.5 m)');
     await p.fill('#r_menulas', '7');
     await p.waitForTimeout(100);
-    ok(/7 piezas × \$345\.25 con abrazadera = \$2,416\.78/.test(await p.locator('#r_menulas_nota').innerText()), 'las 7 que estima el ingeniero: ángulo 1¼″ × 1/8″ y solera 1¼″ × 1/8″, $345.25 cada una = $2,416.78');
+    ok(/7 piezas × \$345\.25 con abrazadera = \$2,416\.75/.test(await p.locator('#r_menulas_nota').innerText()), 'las 7 que estima el ingeniero: ángulo 1¼″ × 1/8″ y solera 1¼″ × 1/8″, $345.25 cada una = $2,416.75');
     ok(await p.inputValue('#r_menula_barra') === 'ANG_1_1_4X1_8' && await p.inputValue('#r_abrazadera_barra') === 'SOL_1_1_4X1_8', 'de arranque, ángulo y solera de 1¼″ × 1/8″');
     await p.selectOption('#r_menula_barra', 'ANG_1_1_2X3_16');
     await p.selectOption('#r_abrazadera_barra', 'SOL_1_1_2X3_16');
     await p.waitForTimeout(100);
     let des = await p.locator('#rapida-desglose').innerText();
-    ok(/Ménsulas: 7 piezas con abrazadera/.test(des) && /Ángulo 1½" × 3\/16"[\s\S]*\$351\.86/.test(des) && /Solera 1½" × 3\/16": \$43\.00/.test(des) && /\$2,764\.04/.test(des),
-      'de ángulo 1½″ × 3/16″ ($351.86) y solera 1½″ × 3/16″ ($43.00): 7 × $394.86 = $2,764.04');
+    ok(/Ménsulas: 7 piezas con abrazadera/.test(des) && /Ángulo 1½" × 3\/16"[\s\S]*\$351\.86/.test(des) && /Solera 1½" × 3\/16": \$43\.00/.test(des) && /\$2,764\.02/.test(des),
+      'de ángulo 1½″ × 3/16″ ($351.86) y solera 1½″ × 3/16″ ($43.00): 7 × $394.86 = $2,764.02');
     ok(await p.locator('#r_menula_barra option').count() === 4 && await p.locator('#r_abrazadera_barra option').count() === 3, 'se elige entre los ángulos y las soleras de la lista del proveedor');
     await p.fill('#r_mangueras_tramos', '3');
     await p.waitForTimeout(100);
     ok(await p.locator('#r_abrazaderas_manguera').getAttribute('placeholder') === '18 (6 por tramo)', 'con 3 tramos se cuentan 18 abrazaderas de manguera (6 por tramo)');
     des = await p.locator('#rapida-desglose').innerText();
-    ok(/Mangueras: 3 tramos y 18 abrazaderas/.test(des) && /3 tramos × \$1,807\.49 \(Manguera azul de 6″/.test(des) && /\$6,275\.92/.test(des), 'mangueras de 6″ del catálogo: 3 × $1,807.49 + 18 × $47.41 = $6,275.92 (lo del caso real)');
+    ok(/Mangueras: 3 tramos y 18 abrazaderas/.test(des) && /3 tramos × \$1,807\.49 \(Manguera azul de 6″/.test(des) && /\$6,275\.85/.test(des), 'mangueras de 6″ del catálogo: 3 × $1,807.49 + 18 × $47.41 = $6,275.85 (el caso real gastó $6,275.92)');
     await p.fill('#r_viaticos', '1987.93');
     await p.waitForTimeout(100);
-    ok(await p.locator('#rapida-total-val').innerText() === '$61,862.83', 'con ménsulas, mangueras y viáticos el total es $61,862.83');
+    ok(await p.locator('#rapida-total-val').innerText() === '$61,862.82', 'con ménsulas, mangueras y viáticos el total es $61,862.82');
     ok(/Incluye suministro, fabricación, instalación, mangueras, soportería y viáticos\./.test(await p.inputValue('#rapida-texto')), 'el texto del cliente dice lo que incluye');
     await p.selectOption('#r_manguera_id', 'MANGUERA_5');
     await p.fill('#r_abrazaderas_manguera', '4');
@@ -2211,17 +2214,17 @@ const ok = (cond, msg) => {
     await p.click('#rapida-ejemplo');
     await p.waitForTimeout(100);
     const des = await p.locator('#rapida-desglose').innerText();
-    ok(/Ménsulas: 13 piezas con abrazadera/.test(des) && /Las sugeridas: una cada 2\.5 m en 31 m/.test(des) && /\$4,488\.31/.test(des), 'vacía, van las 13 sugeridas: $4,488.31 de costo directo');
+    ok(/Ménsulas: 13 piezas con abrazadera/.test(des) && /Las sugeridas: una cada 2\.5 m en 31 m/.test(des) && /\$4,488\.25/.test(des), 'vacía, van las 13 sugeridas: $4,488.25 de costo directo');
     ok(/1,300 mm de Ángulo 1¼" × 1\/8" con 4 anclajes y 137\.14 min de taller: \$310\.57/.test(des) && /abrazadera de media vuelta de Solera 1¼" × 1\/8": \$34\.68/.test(des), 'dice con qué se costea: la ménsula ($310.57) y la abrazadera ($34.68)');
-    ok(await p.locator('#rapida-total-val').innerText() === '$52,759.73', 'el unifilar con sus ménsulas sugeridas: $52,759.73');
-    ok(/13 sugeridas \(una cada 2\.5 m\) × \$345\.25 con abrazadera = \$4,488\.31/.test(await p.locator('#r_menulas_nota').innerText()), 'junto a la caja se ve cuántas y cuánto');
+    ok(await p.locator('#rapida-total-val').innerText() === '$52,759.77', 'el unifilar con sus ménsulas sugeridas: $52,759.77');
+    ok(/13 sugeridas \(una cada 2\.5 m\) × \$345\.25 con abrazadera = \$4,488\.25/.test(await p.locator('#r_menulas_nota').innerText()), 'junto a la caja se ve cuántas y cuánto');
     await p.fill('#r_metros', '40');
     await p.waitForTimeout(100);
     ok(/Ménsulas: 16 piezas/.test(await p.locator('#rapida-desglose').innerText()), 'con 40 m se sugieren 16');
     await p.fill('#r_metros', '31');
     await p.fill('#r_menulas', '0');
     await p.waitForTimeout(100);
-    ok(await p.locator('#rapida-total-val').innerText() === '$46,512.00' && !/Ménsulas/.test(await p.locator('#rapida-desglose').innerText()), '0 = no lleva: vuelve a $46,512.00');
+    ok(await p.locator('#rapida-total-val').innerText() === '$46,512.13' && !/Ménsulas/.test(await p.locator('#rapida-desglose').innerText()), '0 = no lleva: vuelve a $46,512.13');
     await p.fill('#r_menulas', '9');
     await p.selectOption('#r_menula_barra', 'ANG_1_1_2X3_16');
     await p.reload();
@@ -3991,6 +3994,89 @@ const ok = (cond, msg) => {
     const dif = await p.evaluate(() => window.COTIZAP.web.estadoApp.res.bridas.filas.map((f) => [f.D_nom_mm, f.diferencia]));
     ok(dif.length > 0, 'el cuadre sigue activo');
     if (capturas) await p.locator('#planos-hojas .cuadre').screenshot({ path: path.join(capturas, 'muestra-cuadre-30sep.png') });
+    await p.context().close();
+  }
+  console.log('53) Cuentas: números con coma en gastos y venta pactada, consumibles esperados y la cotización rápida suma al centavo');
+  {
+    const p = await nuevaPagina();
+    const R = (fn, arg) => estadoApp(p, fn, arg);
+    const dinero = (t) => Number(String(t).replace(/[^0-9.]/g, ''));
+    await p.click('#tab-compras');
+
+    // a) un precio con coma de miles se lee completo; un texto ilegible conserva el valor y avisa
+    await p.click('#cg-agregar');
+    const fila = p.locator('#cg-captura tr[data-id]').first();
+    await fila.locator('[data-campo="concepto"]').fill('Soleras');
+    await fila.locator('[data-campo="cantidad"]').fill('2');
+    await fila.locator('[data-campo="precio_unitario"]').fill('1,500');
+    await p.waitForTimeout(80);
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.gastos[0].precio_unitario) === 1500, 'escribir «1,500» en el precio registra 1500 (no $0)');
+    ok(/\$2,586\.21/.test(await fila.locator('[data-campo="costo"]').innerText()), 'y el costo es 2 × $1,500 ÷ 1.16 = $2,586.21');
+    await fila.locator('[data-campo="cantidad"]').fill('1,5');
+    await p.waitForTimeout(80);
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.gastos[0].cantidad) === 1.5, '«1,5» en la cantidad se lee como 1.5');
+    await fila.locator('[data-campo="precio_unitario"]').fill('mucho');
+    await p.waitForTimeout(80);
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.gastos[0].precio_unitario) === 1500 && await fila.locator('[data-campo="precio_unitario"]').getAttribute('aria-invalid') === 'true', 'un precio ilegible conserva el anterior y se marca');
+    await fila.locator('[data-campo="concepto"]').focus();
+    await p.waitForTimeout(80);
+    ok(await fila.locator('[data-campo="precio_unitario"]').inputValue() === '1500' && await p.locator('.toast', { hasText: 'No se entiende «mucho»' }).count() >= 1, 'al salir del campo vuelve el valor anterior y un aviso visible lo dice');
+    // un renglón con concepto y sin precio se marca «falta el precio»
+    await p.click('#cg-agregar');
+    const fila2 = p.locator('#cg-captura tr[data-id]').nth(1);
+    await fila2.locator('[data-campo="concepto"]').fill('Tornillos');
+    await p.waitForTimeout(80);
+    ok(/falta el precio/.test(await fila2.getAttribute('title') || '') && /falta el precio/.test(await p.locator('#cg-comparacion').innerText()), 'un concepto sin precio se marca «falta el precio» (no cuenta como $0 en silencio)');
+
+    // b) la venta pactada con coma de miles
+    await p.fill('#cg_venta_pactada', '150,000');
+    await p.waitForTimeout(100);
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.venta_pactada) === 150000, 'escribir «150,000» en la venta pactada registra 150000');
+    await p.fill('#cg_venta_pactada', 'abc');
+    await p.waitForTimeout(100);
+    ok(await R(() => window.COTIZAP.web.estadoApp.cot.venta_pactada) === 150000 && await p.locator('#cg_venta_aviso').isVisible() && /se conserva la venta pactada anterior/.test(await p.locator('#cg_venta_aviso').innerText()), 'un texto ilegible no borra la venta pactada: se conserva y se avisa');
+    await p.locator('#cg_venta_pactada').blur();
+    await p.waitForTimeout(100);
+    ok(await p.inputValue('#cg_venta_pactada') === '150000' && !(await p.locator('#cg_venta_aviso').isVisible()), 'al salir del campo vuelve a mostrar 150000 y el aviso se quita');
+
+    // c) los consumibles de corte y la herramienta menor llegan como gastos esperados
+    const esp = await R(() => window.COTIZAP.web.comprasUI.gastosEsperados().map((g) => [g.concepto, g.categoria, g.cantidad * g.precio_unitario]));
+    const res = await R(() => { const r = window.COTIZAP.web.estadoApp.res; const v = [...r.partidas, ...(r.automaticas || [])].filter((f) => f.ok && !f.agotada_por_armados); return { corte: v.reduce((s, f) => s + (f.costos.consumibles.corte || 0), 0), herr: v.reduce((s, f) => s + f.costos.subtotales.herramienta_menor, 0) }; });
+    const eC = esp.find((x) => /^Consumibles de corte \(estimado\)/.test(x[0]));
+    const eH = esp.find((x) => /^Herramienta menor \(estimado\)/.test(x[0]));
+    ok(res.herr > 0 && eH && eH[1] === 'CONSUMIBLE' && Math.abs(eH[2] - res.herr) < 0.01, 'la herramienta menor llega como «Herramienta menor (estimado)» en consumibles, con lo cotizado');
+    ok(res.corte > 0 ? (eC && eC[1] === 'CONSUMIBLE' && Math.abs(eC[2] - res.corte) < 0.01) : !eC, 'y el consumible de corte como «Consumibles de corte (estimado)» (sólo si se cotizó)');
+    await p.click('#cg-a-gastos');
+    await p.waitForTimeout(150);
+    const dif = await R(() => { const c = window.COTIZAP; const E = c.web.estadoApp; const r = c.gastos.resumen(E.res, E.cot.gastos.filter((g) => g.estimado), 0.16); return r.categorias.find((x) => x.clave === 'CONSUMIBLE'); });
+    ok(dif.cotizado > 0 && dif.real >= dif.cotizado - 0.02, `consumibles: lo esperado (${dif.real.toFixed(2)}) ya cubre lo cotizado (${dif.cotizado.toFixed(2)}): sin diferencia negativa`);
+
+    // d) la cotización rápida suma y multiplica exacto con lo que se ve
+    await p.click('#tab-rapida');
+    await p.click('#rapida-ejemplo');
+    await p.waitForTimeout(150);
+    await p.fill('#r_menulas', '7');
+    await p.fill('#r_mangueras_tramos', '3');
+    await p.fill('#r_viaticos', '1987.93');
+    await p.waitForTimeout(150);
+    const filas = await p.locator('#rapida-desglose tr').evaluateAll((trs) => trs.map((tr) => ({ c: tr.querySelector('.r-concepto').innerText.trim(), d: (tr.querySelector('.r-detalle') || { innerText: '' }).innerText, v: tr.querySelector('td.num').innerText })));
+    const por = (re) => filas.find((f) => re.test(f.c));
+    const lam = por(/^Lámina/);
+    const m = lam.d.match(/(\d+) hojas? × \$([\d,.]+) = \$([\d,.]+) de lámina/);
+    const cent = (x) => Math.round(x * 100) / 100;
+    ok(m && cent(Number(m[1]) * dinero(m[2])) === dinero(m[3]), `«${m ? m[0] : lam.d.slice(0, 60)}» multiplica exacto`);
+    ok(cent(dinero(m[3]) * 3) === dinero(lam.v), 'lámina × 3 = el renglón de lámina');
+    const costoFilas = filas.filter((f) => !/^(Costo|Utilidad|Precio antes de IVA|IVA|Total)/.test(f.c));
+    ok(costoFilas.length >= 6, `hay ${costoFilas.length} renglones de costo (lámina, bridas, fabricación, instalación, ménsulas, mangueras, viáticos)`);
+    const costo = dinero(por(/^Costo$/).v);
+    ok(cent(costoFilas.reduce((s, f) => s + dinero(f.v), 0)) === costo, 'el costo es la suma exacta de sus renglones');
+    const util = dinero(por(/^Utilidad/).v);
+    const precio = dinero(por(/^Precio antes de IVA/).v);
+    ok(cent(costo + util) === precio, 'costo + utilidad = precio antes de IVA, al centavo');
+    ok(cent(precio + dinero(por(/^IVA/).v)) === dinero(por(/^Total/).v), 'precio + IVA = total, al centavo');
+    const mg = por(/^Mangueras/);
+    const mm = mg.d.match(/(\d+) tramos × \$([\d,.]+).*?\+ (\d+) abrazaderas × \$([\d,.]+)/);
+    ok(mm && cent(cent(Number(mm[1]) * dinero(mm[2])) + cent(Number(mm[3]) * dinero(mm[4]))) === dinero(mg.v), 'las mangueras (tramos × precio + abrazaderas × precio) suman exacto');
     await p.context().close();
   }
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
