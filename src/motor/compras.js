@@ -9,6 +9,7 @@
  *   barras   = acomodo de las piezas (aros de brida, piezas de soportería) en barras: primero las más largas, cada una en la
  *              primera barra donde quepa; un aro más largo que la barra se arma de varios tramos
  *   tornillos= ⌈ Σ juegos con reserva ÷ múltiplo ⌉ × múltiplo        (compras.tornillos_multiplo)
+ *   fijaciones de espiga = ⌈ Σ piezas con reserva ⌉                (piezas enteras)
  *   sellador = ⌈ Σ mL ÷ mL del cartucho ⌉;  pintura = ⌈ Σ L ÷ envase ⌉ × envase   (compras.pintura_envase_L)
  *
  * El «sobrante» de cada renglón es lo que cuesta la compra entera menos lo que ya cobran las partidas (nunca negativo). La
@@ -68,6 +69,7 @@
     const laminas = new Map();
     const barras = new Map();
     const tornillos = new Map();
+    const fijaciones = new Map();
     const pintura = new Map();
     const anclajes = new Map();
     const soldadura = new Map();
@@ -178,6 +180,15 @@
         t.costo_cotizado += exactos * (1 + reserva) * precio;
         tornillos.set(tipo, t);
       });
+      // Fijaciones de las espigas (autotaladrantes), con su reserva: son material y se compran por pieza
+      if (q.her.n_fijaciones > 0) {
+        const precio = PRE.precioDe(M, M.herrajes.precio_fijacion_ref);
+        const t = fijaciones.get('espiga') || { exactos: 0, con_reserva: 0, precio, costo_cotizado: 0 };
+        t.exactos += n * q.her.n_fijaciones;
+        t.con_reserva += n * q.her.n_fijaciones * (1 + M.herrajes.uniones.ESPIGA.f_reserva_fijaciones);
+        t.costo_cotizado += f.costos.materiales.fijaciones;
+        fijaciones.set('espiga', t);
+      }
       // Sellador, empaque, pintura y soldadura
       if (q.her.V_sellador_ml > 0) {
         const S = M.herrajes.sellador;
@@ -243,6 +254,13 @@
         unitario_sin_iva: t.precio, importe_compra: compra * t.precio, costo_cotizado: t.costo_cotizado,
       });
     });
+    const filasFijacion = [...fijaciones.values()].map((t) => {
+      const compra = Math.ceil(t.con_reserva - EPS); // piezas enteras
+      return renglon({
+        grupo: 'fijacion', categoria: 'MATERIAL', clave: 'fijacion-espiga', descripcion: 'Fijaciones de espiga (autotaladrantes)', unidad: 'pza', necesario: t.exactos, con_reserva: t.con_reserva, compra,
+        unitario_sin_iva: t.precio, importe_compra: compra * t.precio, costo_cotizado: t.costo_cotizado,
+      });
+    });
     const filasSellador = sellador ? [renglon({
       grupo: 'sellador', categoria: 'MATERIAL', clave: 'sellador', descripcion: `Sellador (cartucho de ${sellador.cartucho_ml} mL)`, unidad: 'cartucho', ml: sellador.ml,
       necesario: sellador.ml / sellador.cartucho_ml, compra: Math.ceil(sellador.ml / sellador.cartucho_ml - EPS), unitario_sin_iva: sellador.cartucho_sin_iva,
@@ -273,13 +291,16 @@
       grupo: 'soldadura', clave: `${g.alambre_ref}|${g.gas_ref}`, alambre_ref: g.alambre_ref, gas_ref: g.gas_ref, kg_alambre: g.kg_alambre, m3_gas: g.m3_gas, costo: g.costo,
     }));
 
-    const renglones = [...filasLamina, ...filasBarra, ...filasTornillo, ...filasSellador, ...filasPintura, ...filasEmpaque, ...filasAnclaje, ...filasComprado];
+    const renglones = [...filasLamina, ...filasBarra, ...filasTornillo, ...filasFijacion, ...filasSellador, ...filasPintura, ...filasEmpaque, ...filasAnclaje, ...filasComprado];
     const suma = (k) => renglones.reduce((s, r) => s + r[k], 0);
+    // el sobrante, en la categoría de cada renglón de donde sale (para que cada categoría compare cotizado y real de lo mismo)
+    const sobrante_por_categoria = {};
+    renglones.forEach((r) => { if (r.sobrante > 0) sobrante_por_categoria[r.categoria] = (sobrante_por_categoria[r.categoria] || 0) + r.sobrante; });
     return {
       renglones,
-      laminas: filasLamina, barras: filasBarra, tornillos: filasTornillo, sellador: filasSellador, pintura: filasPintura,
+      laminas: filasLamina, barras: filasBarra, tornillos: filasTornillo, fijaciones: filasFijacion, sellador: filasSellador, pintura: filasPintura,
       empaque: filasEmpaque, anclajes: filasAnclaje, comprados: filasComprado, soldadura: filasSoldadura,
-      costo_cotizado: suma('costo_cotizado'), importe_compra: suma('importe_compra'), sobrante: suma('sobrante'),
+      costo_cotizado: suma('costo_cotizado'), importe_compra: suma('importe_compra'), sobrante: suma('sobrante'), sobrante_por_categoria,
     };
   }
 

@@ -97,7 +97,7 @@
   /* Lista de compras                                                   */
   /* ================================================================== */
   const NOMBRE_GRUPO = {
-    lamina: 'Lámina (hojas)', barra: 'Perfiles y soportería (barras)', tornillo: 'Tornillería', sellador: 'Sellador', pintura: 'Pintura',
+    lamina: 'Lámina (hojas)', barra: 'Perfiles y soportería (barras)', tornillo: 'Tornillería', fijacion: 'Fijaciones de espiga', sellador: 'Sellador', pintura: 'Pintura',
     empaque: 'Empaque', anclaje: 'Anclajes', comprado: 'Artículos comprados',
   };
 
@@ -106,6 +106,7 @@
       case 'lamina': return `${W.num(r.necesario, 2)} hojas · ${W.num(r.kg, 1)} kg`;
       case 'barra': return `${W.num(r.metros, 2)} m · ${r.piezas} ${r.piezas === 1 ? 'pieza' : 'piezas'}${r.empalmes ? ` (${r.empalmes} con empalme)` : ''}`;
       case 'tornillo': return `${cifra(r.necesario)} + reserva = ${W.num(r.con_reserva, 1)}`;
+      case 'fijacion': return `${cifra(r.necesario)} + reserva = ${W.num(r.con_reserva, 1)}`;
       case 'sellador': return `${W.num(r.ml, 0)} mL`;
       case 'pintura': return `${W.num(r.necesario, 2)} L`;
       case 'empaque': return `${W.num(r.necesario, 2)} m`;
@@ -182,8 +183,8 @@
         g.estimado ? h('span', { class: 'chip chip-adv cg-chip-est', title: 'Viene de la lista de compras con el precio cotizado: cámbielo por el del ticket' }, 'estimado') : null),
       h('td', null, h('select', { dataset: { campo: 'categoria' }, 'aria-label': `Categoría del gasto ${n}` },
         Object.keys(G.CATEGORIAS).map((k) => h('option', { value: k, selected: k === g.categoria }, corta(k))))),
-      h('td', { class: 'num' }, h('input', { type: 'number', class: 'cg-in-num', min: '0', step: 'any', inputmode: 'decimal', value: num(g.cantidad), placeholder: '1', dataset: { campo: 'cantidad' }, 'aria-label': `Cantidad del gasto ${n}` })),
-      h('td', { class: 'num' }, h('input', { type: 'number', class: 'cg-in-num', min: '0', step: 'any', inputmode: 'decimal', value: num(g.precio_unitario), placeholder: '0.00', dataset: { campo: 'precio_unitario' }, 'aria-label': `Precio unitario del gasto ${n}` })),
+      h('td', { class: 'num' }, h('input', { type: 'text', class: 'cg-in-num', inputmode: 'decimal', autocomplete: 'off', value: num(g.cantidad), placeholder: '1', dataset: { campo: 'cantidad' }, 'aria-label': `Cantidad del gasto ${n}` })),
+      h('td', { class: 'num' }, h('input', { type: 'text', class: 'cg-in-num', inputmode: 'decimal', autocomplete: 'off', value: num(g.precio_unitario), placeholder: '0.00', dataset: { campo: 'precio_unitario' }, 'aria-label': `Precio unitario del gasto ${n}` })),
       h('td', { class: 'cg-c' }, h('input', { type: 'checkbox', checked: g.iva_incluido === true, dataset: { campo: 'iva_incluido' }, 'aria-label': `El precio del gasto ${n} trae IVA` })),
       h('td', { class: 'cg-c' }, h('input', { type: 'checkbox', checked: g.con_factura === true, dataset: { campo: 'con_factura' }, 'aria-label': `El gasto ${n} tiene factura` })),
       h('td', { class: 'num cg-costo', dataset: { campo: 'costo' } }, '—'),
@@ -317,7 +318,18 @@
     if (!g) return;
     if (campo === 'iva_incluido' || campo === 'con_factura') g[campo] = el.checked;
     else if (campo === 'cantidad' || campo === 'precio_unitario') {
-      g[campo] = el.value === '' || (el.validity && el.validity.badInput) ? '' : Number(el.value);
+      const crudo = el.value.trim();
+      const n = crudo === '' ? '' : W.leerNumero(crudo);
+      if (n !== '' && !Number.isFinite(n)) {
+        // no se entiende lo escrito: se conserva el valor anterior y se avisa (al salir del campo se restituye)
+        el.setAttribute('aria-invalid', 'true');
+        el.title = `No se entiende «${crudo}»: escriba un número como 1,500 o 1500.50. Se conserva ${g[campo] === '' || g[campo] === undefined ? 'el campo vacío' : W.num(g[campo], 2)}.`;
+        tr.classList.add('cg-mal');
+        return;
+      }
+      el.removeAttribute('aria-invalid');
+      el.title = '';
+      g[campo] = n;
       if (g.estimado) {
         delete g.estimado; // ya es lo real
         tr.classList.remove('cg-estimado');
@@ -357,6 +369,12 @@
     };
     L.renglones.forEach((r) => est(`${r.descripcion}${r.medida ? ` (${r.medida})` : ''}`, r.categoria, r.compra, r.unitario_sin_iva, false, true));
     L.soldadura.forEach((s) => est('Soldadura: alambre y gas', 'CONSUMIBLE', 1, s.costo, false, true));
+    // el consumible de corte y la herramienta menor se cotizan en CONSUMIBLE: sin ticket propio, se esperan como estimado
+    const vivas = [...R.partidas, ...(R.automaticas || [])].filter((f) => f.ok && !f.agotada_por_armados);
+    const corte = vivas.reduce((s, f) => s + ((f.costos.consumibles && f.costos.consumibles.corte) || 0), 0);
+    const herr = vivas.reduce((s, f) => s + (f.costos.subtotales.herramienta_menor || 0), 0);
+    est('Consumibles de corte (estimado)', 'CONSUMIBLE', 1, corte, false, true);
+    est('Herramienta menor (estimado)', 'CONSUMIBLE', 1, herr, false, true);
     const ok = R.partidas.filter((f) => f.ok);
     const taller = ok.filter((f) => f.familia !== 'INSTALACION' && f.costos.h_MOD > 0);
     const h_ = taller.reduce((s, f) => s + f.costos.h_MOD, 0);
@@ -427,6 +445,8 @@
     el.value = v === undefined ? '' : String(v);
     el.removeAttribute('aria-invalid');
     $('#cg-venta-campo').classList.remove('invalido');
+    const av = $('#cg_venta_aviso');
+    if (av) av.hidden = true;
   }
 
   function editarVenta() {
@@ -436,15 +456,22 @@
     const campo = $('#cg-venta-campo');
     if (crudo === '') delete c.venta_pactada;
     else {
-      const n = Number(crudo);
-      const valido = Number.isFinite(n) && n >= 0 && n <= 1e10 && !(el.validity && el.validity.badInput);
+      const n = W.leerNumero(crudo);
+      const valido = Number.isFinite(n) && n >= 0 && n <= 1e10;
       campo.classList.toggle('invalido', !valido);
       el.setAttribute('aria-invalid', String(!valido));
+      const aviso = $('#cg_venta_aviso');
+      if (aviso) {
+        aviso.hidden = valido;
+        aviso.textContent = valido ? '' : `No se entiende «${crudo}» como importe: se conserva la venta pactada anterior${c.venta_pactada === undefined ? ' (ninguna)' : ` (${W.mxn(c.venta_pactada)})`}. Escriba un número como 150,000 o 150000.50.`;
+      }
       if (!valido) return;
       c.venta_pactada = n;
     }
     campo.classList.remove('invalido');
     el.removeAttribute('aria-invalid');
+    const av = $('#cg_venta_aviso');
+    if (av) av.hidden = true;
     W.persistir();
     W.render();
   }
@@ -467,6 +494,18 @@
     const cap = $('#cg-captura');
     cap.addEventListener('input', alEditar);
     cap.addEventListener('change', alEditar);
+    cap.addEventListener('focusout', (ev) => {
+      const el = ev.target;
+      if (!el || !el.dataset || !(el.dataset.campo === 'cantidad' || el.dataset.campo === 'precio_unitario') || el.getAttribute('aria-invalid') !== 'true') return;
+      const tr = el.closest('tr[data-id]');
+      const g = tr && gastos().find((x) => x.id === tr.dataset.id);
+      if (!g) return;
+      W.toast(`No se entiende «${el.value.trim()}» como número: se conserva el valor anterior.`);
+      el.value = g[el.dataset.campo] === '' || g[el.dataset.campo] === undefined ? '' : String(g[el.dataset.campo]);
+      el.removeAttribute('aria-invalid');
+      el.title = '';
+      actualizarGastos();
+    });
     cap.addEventListener('click', (ev) => {
       const b = ev.target.closest('[data-quitar]');
       if (b) quitar(b.dataset.quitar);

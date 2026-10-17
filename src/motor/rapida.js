@@ -10,6 +10,8 @@
  *              + días de instalación × personas × pago por día (2 × $500)
  *              + lo que el factor no cubre: las ménsulas con su abrazadera (por piezas), las mangueras (por tramos y abrazaderas,
  *                del catálogo de compras) y los viáticos (importe sin IVA)
+ *   Cada cifra que se ve se redondea al centavo en el motor (precio de la hoja, lámina, lámina × factor, cada extra, costo,
+ *   utilidad, precio, IVA y total): así cada renglón multiplica y suma exacto.
  *   precio   = costo × (1 + utilidad)            (la utilidad se SUMA sobre el costo)
  *   total    = precio × (1 + IVA)
  *
@@ -50,6 +52,8 @@
 
   const EPS = 1e-6;
   const HOLGURA_MM = 3; // una yarda de 1 220 mm cabe en la hoja de 4 ft (1 219 mm): son la misma medida
+  /** Dinero al centavo: cada cifra que el usuario ve se redondea en el motor, para que los renglones sumen y multipliquen exacto. */
+  const cent = (x) => Math.round((x + Number.EPSILON) * 100) / 100;
   const finito = (x) => typeof x === 'number' && Number.isFinite(x);
   const cuantas = (disponible, medida) => (medida > 0 ? Math.max(0, Math.floor((disponible + HOLGURA_MM) / medida + EPS)) : 0);
 
@@ -231,17 +235,21 @@
     };
     const men = partida({ descripcion: 'Ménsulas', barra_id: barras.menula, largo_pieza_mm: S.menula_largo_mm, anclajes_pieza: S.menula_anclajes, min_pieza: S.menula_min > 0 ? S.menula_min : undefined });
     const abz = partida({ descripcion: 'Abrazaderas', barra_id: barras.abrazadera, abrazadera_D_mm: D, abrazadera_vuelta: S.abrazadera_vuelta, min_pieza: S.abrazadera_min > 0 ? S.abrazadera_min : undefined });
-    const pieza = (f) => ({ barra_id: f.soporte.barra.id, barra: f.soporte.barra.descripcion, largo_mm: f.soporte.largo_pieza_mm, anclajes: f.soporte.anclajes / n, minutos: f.soporte.minutos_pieza, costo: f.costos.CD, unitario: f.costos.CD / n });
+    // el costo de cada pieza al centavo y el importe = piezas × (ménsula + abrazadera): lo que se ve multiplica y suma exacto
+    const pieza = (f) => {
+      const unitario = cent(f.costos.CD / n);
+      return { barra_id: f.soporte.barra.id, barra: f.soporte.barra.descripcion, largo_mm: f.soporte.largo_pieza_mm, anclajes: f.soporte.anclajes / n, minutos: f.soporte.minutos_pieza, costo: cent(unitario * n), unitario };
+    };
     const menula = pieza(men);
     const abrazadera = { ...pieza(abz), vuelta: abz.soporte.vuelta };
-    return { menula, abrazadera, unitario: menula.unitario + abrazadera.unitario, importe: menula.costo + abrazadera.costo };
+    return { menula, abrazadera, unitario: menula.unitario + abrazadera.unitario, importe: cent(menula.costo + abrazadera.costo) };
   }
 
   /** Un artículo del catálogo de compras a su precio sin IVA: { id, descripcion, unidad, unitario }. */
   function articulo(M, id) {
     const a = M.compras && M.compras.articulos && M.compras.articulos[id];
     if (!a || !finito(a.precio) || !finito(M.compras.iva_pct)) return null;
-    return { id, descripcion: a.descripcion || id, unidad: a.unidad || 'pza', unitario: a.iva_incluido === true ? a.precio / (1 + M.compras.iva_pct) : a.precio };
+    return { id, descripcion: a.descripcion || id, unidad: a.unidad || 'pza', unitario: cent(a.iva_incluido === true ? a.precio / (1 + M.compras.iva_pct) : a.precio) };
   }
 
   /**
@@ -277,7 +285,7 @@
     const precio = H ? PROV.convertir(M, H.precio, PROV.kgHoja(M, H)) : null;
     if (!H) errores.push(`La lámina «${hoja_id}» no está en la lista del proveedor.`);
     else if (!precio) errores.push(`La lámina «${H.descripcion || hoja_id}» no tiene precio o medidas válidas en la lista del proveedor.`);
-    else if (finito(Y) && Y > Math.max(H.ancho_mm, H.largo_mm) + HOLGURA_MM) errores.push(`Una yarda de ${Math.round(Y)} mm no cabe en la lámina de ${Math.round(H.ancho_mm)} × ${Math.round(H.largo_mm)} mm.`);
+    else if (finito(Y) && Y > Math.max(H.ancho_mm, H.largo_mm) + HOLGURA_MM) errores.push(`La yarda de ${Math.round(Y)} mm es más larga que la lámina de ${Math.round(H.ancho_mm)} × ${Math.round(H.largo_mm)} mm (su lado mayor mide ${Math.round(Math.max(H.ancho_mm, H.largo_mm))} mm).`);
     const u = e0.utilidad_pct === undefined || e0.utilidad_pct === null || e0.utilidad_pct === '' ? R.utilidad_pct : Number(e0.utilidad_pct);
     if (!finito(u) || u < 0 || u > 10) errores.push('La utilidad debe ser de 0 % a 1 000 %.');
     const diasFab = leerDias(e0.dias_fabricacion, 'fabricación', errores);
@@ -321,17 +329,22 @@
     let n_hojas;
     if (aco.n > 0) n_hojas = Math.ceil(n_yardas / aco.n - EPS);
     else {
-      // la plantilla no cabe en la hoja: cada yarda lleva hojas completas a lo largo y un retazo; los retazos se acomodan juntos
+      // la plantilla no cabe en la hoja (ni derecha ni girada): cada yarda lleva hojas completas a lo largo y un retazo; los retazos se acomodan juntos
       const completas = Math.floor(B / Lh + EPS);
       const retazo = B - completas * Lh;
       n_hojas = n_yardas * completas + (retazo > 1 ? Math.ceil(n_yardas / Math.max(1, cuantas(Lh, retazo)) - EPS) : 0);
-      advertencias.push(`La plantilla de cada yarda (${Math.round(B)} mm) es más larga que la lámina (${Math.round(Lh)} mm): cada yarda sale de varias piezas.`);
+      const de = (mm) => String(Math.round(mm)).replace(/\B(?=(\d{3})+$)/g, ',');
+      advertencias.push(B > Math.max(W, Lh) + HOLGURA_MM
+        ? `La plantilla de cada yarda (${de(B)} mm) es más larga que la lámina (${de(Math.max(W, Lh))} mm): cada yarda sale de varias piezas.`
+        : `La yarda de ${de(Y)} mm no cabe en el ancho de la hoja de ${de(W)} mm y la plantilla de ${de(B)} mm tampoco cabe en él: cada yarda sale de dos piezas o más.`);
     }
     const ultima = aco.n > 0 ? n_yardas - (n_hojas - 1) * aco.n : 0; // yardas que lleva la última hoja
-    const lamina = n_hojas * precio.sin_iva;
-    const lamina_factor = lamina * factor;
+    // dinero al centavo en cada paso que se ve: precio de la hoja, lámina, lámina × factor, cada extra, costo, utilidad, precio, IVA y total
+    const hoja_sin_iva = cent(precio.sin_iva);
+    const lamina = cent(n_hojas * hoja_sin_iva);
+    const lamina_factor = cent(lamina * factor);
     // la mano de obra de los días: días × personas × pago por día (sin días, nada)
-    const cuadrilla = (dias, personas, pago) => ({ dias: dias || 0, personas, pago_dia: pago, importe: (dias || 0) * personas * pago });
+    const cuadrilla = (dias, personas, pago) => ({ dias: dias || 0, personas, pago_dia: pago, importe: cent((dias || 0) * personas * pago) });
     const mano_obra = {
       fabricacion: cuadrilla(diasFab, R.personas_fabricacion, R.pago_dia_fabricacion),
       instalacion: cuadrilla(diasIns, R.personas_instalacion, R.pago_dia_instalacion),
@@ -346,14 +359,14 @@
     const n_abz = abzPedidas !== null ? abzPedidas : (tramos || 0) * MG.abrazaderas_por_tramo;
     const mangueras = {
       tramos: tramos || 0, manguera, abrazaderas: n_abz, abrazaderas_sugeridas: abzPedidas === null, abrazaderas_por_tramo: MG.abrazaderas_por_tramo, abrazadera: n_abz > 0 ? abzManguera : null,
-      importe: (tramos || 0) * (manguera ? manguera.unitario : 0) + (n_abz > 0 && abzManguera ? n_abz * abzManguera.unitario : 0),
+      importe: cent(cent((tramos || 0) * (manguera ? manguera.unitario : 0)) + cent(n_abz > 0 && abzManguera ? n_abz * abzManguera.unitario : 0)),
     };
-    const extras = { mangueras: mangueras.importe, soporteria: soporteria.importe, viaticos: viaticos || 0 };
-    extras.importe = extras.mangueras + extras.soporteria + extras.viaticos;
-    const costo = lamina_factor + bridas.importe + mano_obra.fabricacion.importe + mano_obra.instalacion.importe + extras.importe;
-    const utilidad = costo * u;
-    const precio_neto = costo + utilidad;
-    const iva_monto = precio_neto * iva;
+    const extras = { mangueras: mangueras.importe, soporteria: soporteria.importe, viaticos: cent(viaticos || 0) };
+    extras.importe = cent(extras.mangueras + extras.soporteria + extras.viaticos);
+    const costo = cent(lamina_factor + cent(bridas.importe) + mano_obra.fabricacion.importe + mano_obra.instalacion.importe + extras.mangueras + extras.soporteria + extras.viaticos);
+    const utilidad = cent(costo * u);
+    const precio_neto = cent(costo + utilidad);
+    const iva_monto = cent(precio_neto * iva);
     const aprovechado = Math.min(1, (B * Y * n_yardas) / (n_hojas * W * Lh));
     return {
       entrada: { D_mm: D, L_m, yarda_mm: Y, hoja_id, utilidad_pct: u, dias_fabricacion: diasFab, dias_instalacion: diasIns,
@@ -361,14 +374,14 @@
       },
       hoja: {
         id: hoja_id, descripcion: H.descripcion || hoja_id, material: H.material, calibre: H.calibre, ancho_mm: W, largo_mm: Lh,
-        espesor_mm: e, precio: precio.precio, sin_iva: precio.sin_iva, kg: precio.kg,
+        espesor_mm: e, precio: precio.precio, sin_iva: hoja_sin_iva, kg: precio.kg,
       },
       plantilla_mm: B, desarrollo_mm: B - holgura, holgura_mm: holgura, costura, D_med_mm: d.D_med, yarda_mm: Y,
       hoja_auto: !e0.hoja_id, hojas_comparadas: candidatas.length, // sin elegir lámina: de cuántas hojas del ancho de la yarda se tomó la más barata
       acomodo: aco, yardas: n_yardas, yardas_por_hoja: aco.n, yardas_ultima_hoja: ultima, hojas: n_hojas, aprovechamiento: aprovechado, kg: n_hojas * precio.kg,
       lamina, factor, lamina_factor,
-      bridas, mano_obra, extras, soporteria, mangueras,
-      costo, utilidad_pct: u, utilidad, precio: precio_neto, iva_pct: iva, iva: iva_monto, total: precio_neto + iva_monto,
+      bridas: { ...bridas, importe: cent(bridas.importe) }, mano_obra, extras, soporteria, mangueras,
+      costo, utilidad_pct: u, utilidad, precio: precio_neto, iva_pct: iva, iva: iva_monto, total: cent(precio_neto + iva_monto),
       plazo: diasFab === null && diasIns === null ? null : { fabricacion: diasFab || 0, instalacion: diasIns || 0, total: (diasFab || 0) + (diasIns || 0) },
       advertencias,
     };
