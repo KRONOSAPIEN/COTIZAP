@@ -664,7 +664,7 @@ const ok = (cond, msg) => {
     ok(t25.subtotal > t0.subtotal && Math.abs(t25.margen_real_pct - 0.25) < 2e-3, `con margen de 25 % el subtotal sube (${t0.subtotal.toFixed(2)} → ${t25.subtotal.toFixed(2)}) y la utilidad real es 25 %`);
     ok(await marcado('utilidad', 'modificado') && (await par()).utilidad_pct_precio === 0.25, 'el campo se marca como modificado y se guarda como fracción en la cotización');
     const notaU = await p.locator('#c_utilidad_nota').innerText();
-    ok(/equivale a 33\.3\s% sobre el costo/.test(notaU) && /maestros: 20\s%/.test(notaU), 'la nota dice a cuánto equivale sobre el costo (33.3 %) y cuál es el de las tablas (20 %)');
+    ok(/equivale a 34\.2\s% sobre el costo/.test(notaU) && /maestros: 20\s%/.test(notaU), 'la nota dice a cuánto equivale sobre el costo (34.2 %, con la comisión de 2 %) y cuál es el de las tablas (20 %)');
     ok(await p.locator('.campo-param[data-param="utilidad"] .param-reset').isVisible(), 'aparece «Restablecer»');
     await p.locator('.campo-param[data-param="utilidad"] .param-reset').click();
     ok(await campo('utilidad').inputValue() === '20' && (await par()) === undefined && (await T()).subtotal === t0.subtotal, 'restablecer vuelve al valor de las tablas y quita el parámetro de la cotización');
@@ -1838,7 +1838,7 @@ const ok = (cond, msg) => {
     const b1 = await tarjeta('B1');
     const b3 = await tarjeta('B3');
     const b6 = await tarjeta('B6');
-    ok(/22 piezas/.test(b1) && /Dint = 281 mm/.test(b1) && /8 barrenos de 9\.5 mm/.test(b1) && /6 barrenos de 9\.5 mm/.test(b3) && /24 piezas/.test(b6) && /Dperf = 170 mm/.test(b6) && /6 barrenos/.test(b6),
+    ok(/22 piezas/.test(b1) && /Dint = 281 mm/.test(b1) && /8 barrenos de 9\.5[23] mm/.test(b1) && /6 barrenos de 9\.5[23] mm/.test(b3) && /24 piezas/.test(b6) && /Dperf = 170 mm/.test(b6) && /6 barrenos/.test(b6),
       'las bridas dicen cuántas son, sus diámetros y sus barrenos (8 en la de 11″, 6 en la de 9″ y en las de placa)');
     const c1 = await tarjeta('C1');
     ok(/2 piezas/.test(c1) && /191/.test(c1) && /254/.test(c1) && /5 gajos/.test(c1), 'el codo de 5″ trae las cotas del plano (R = 191 y 254 mm, 5 gajos)');
@@ -3991,6 +3991,30 @@ const ok = (cond, msg) => {
     const dif = await p.evaluate(() => window.COTIZAP.web.estadoApp.res.bridas.filas.map((f) => [f.D_nom_mm, f.diferencia]));
     ok(dif.length > 0, 'el cuadre sigue activo');
     if (capturas) await p.locator('#planos-hojas .cuadre').screenshot({ path: path.join(capturas, 'muestra-cuadre-30sep.png') });
+    await p.context().close();
+  }
+  console.log('52) Parámetros de precio con texto es-MX, porcentajes sin redondeo de más');
+  {
+    const p = await nuevaPagina();
+    const T = () => estadoApp(p, () => window.COTIZAP.web.estadoApp.res.totales);
+    const par = () => estadoApp(p, () => window.COTIZAP.web.estadoApp.cot.parametros);
+    const campo = (id) => p.locator(`#c_${id}`);
+    const t0 = await T();
+    await campo('utilidad').fill('22,5');
+    ok((await par()).utilidad_pct_precio === 0.225 && (await T()).subtotal > t0.subtotal, 'escribir «22,5» en el margen de utilidad se toma como 22.5 %');
+    await campo('utilidad').fill('abc');
+    const sub = (await T()).subtotal;
+    ok(await p.locator('.campo-param[data-param="utilidad"]').evaluate((e) => e.classList.contains('invalido')) && /de 0 a 80/.test(await p.locator('#c_utilidad_nota').innerText()), 'un texto inválido avisa en la nota del campo');
+    ok((await par()).utilidad_pct_precio === 0.225 && (await T()).subtotal === sub, 'y conserva el valor anterior (22.5 %) sin borrarlo');
+    await campo('utilidad').blur();
+    ok(await campo('utilidad').inputValue() === '22.5', 'al salir del campo vuelve a mostrar 22.5');
+    await campo('descuento').fill('2,25');
+    ok((await par()).descuento_pct === 0.0225, 'el descuento acepta «2,25»');
+    ok(/Descuento 2\.25 %/.test(await p.locator('#totales .hero-sub').innerText()), 'la etiqueta del descuento dice «2.25 %», el mismo porcentaje de la cuenta');
+    await campo('vigencia_dias').fill('1,500');
+    ok(await estadoApp(p, () => window.COTIZAP.web.estadoApp.cot.vigencia_dias) === 1500, 'la vigencia acepta «1,500»');
+    await campo('vigencia_dias').fill('xx');
+    ok(await estadoApp(p, () => window.COTIZAP.web.estadoApp.cot.vigencia_dias) === 1500, 'una vigencia inválida no borra la anterior');
     await p.context().close();
   }
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);

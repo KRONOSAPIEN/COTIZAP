@@ -324,7 +324,7 @@
   const reemplazar = (cont, ...nodos) => cont.replaceChildren(...nodos.flat(Infinity).filter((n) => n !== null && n !== undefined && n !== false));
 
   /** 16 % · 8.5 %: sin decimales cuando sobran. */
-  const pctCorto = (x) => W.pct(x, Number.isInteger(Number((x * 100).toFixed(6))) ? 0 : 1);
+  const pctCorto = (x) => W.pctExacto(x);
 
   const kv = (et, val, un) => h('div', { class: 'kv' }, h('dt', null, et), h('dd', null, val, un ? h('span', { class: 'un' }, ` ${un}`) : null));
 
@@ -429,7 +429,15 @@
     ['cliente', 'proyecto', 'fecha', 'vigencia_dias', 'unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'ubicacion'].forEach((k) => {
       const el = $(`#c_${k}`);
       el.addEventListener('input', () => {
-        estado.cot[k] = k === 'vigencia_dias' ? Number(el.value) || 0 : el.value;
+        if (k === 'vigencia_dias') {
+          // texto es-MX: «1,500» vale 1500; un texto que no es entero de 1 en adelante no borra la vigencia que había
+          const n = el.value.trim() === '' ? 0 : W.leerNumero(el.value);
+          const valido = Number.isInteger(n) && n >= 0;
+          el.setAttribute('aria-invalid', String(!valido));
+          el.title = valido ? '' : 'Escriba un número entero de días (por ejemplo 30).';
+          if (!valido) return;
+          estado.cot[k] = n;
+        } else estado.cot[k] = el.value;
         if (estado.cot.ejemplo && (k === 'cliente' || k === 'proyecto')) estado.cot.ejemplo = false;
         persistir();
         render();
@@ -457,7 +465,7 @@
   function crearParametros() {
     PARAMS.forEach((d) => {
       const id = `c_${d.id}`;
-      const el = h('input', { id, type: 'number', min: String(d.min), max: String(d.max), step: String(d.paso), inputmode: d.entero ? 'numeric' : 'decimal', 'aria-describedby': `${id}_nota` });
+      const el = h('input', { id, type: 'text', inputmode: d.entero ? 'numeric' : 'decimal', 'aria-describedby': `${id}_nota` });
       const nota = h('div', { class: 'ayuda param-nota', id: `${id}_nota` });
       const reset = h('button', { type: 'button', class: 'btn-texto param-reset', hidden: true, onclick: () => restablecerParametro(d) }, 'Restablecer');
       const campo = h('div', { class: 'campo campo-param', dataset: { param: d.id } },
@@ -478,7 +486,7 @@
     if (crudo === '') {
       delete par[d.clave]; // vacío = el de las tablas maestras
     } else {
-      const n = Number(crudo);
+      const n = W.leerNumero(crudo);
       const valido = Number.isFinite(n) && n >= d.min && n <= d.max && (!d.entero || Number.isInteger(n));
       campo.classList.toggle('invalido', !valido);
       el.setAttribute('aria-invalid', String(!valido));
@@ -505,6 +513,9 @@
     const ok = R ? filasOk(R) : [];
     const piso = ok.reduce((t, f) => t + f.indicadores.precio_piso, 0);
     const sub = R ? R.totales.subtotal : 0;
+    const vigente = (clave) => { const x = PARAMS.find((q) => q.clave === clave); return x ? (propio(x) !== undefined ? propio(x) : deMaestros(x)) : 0; };
+    const comisionActual = vigente('comision_ventas_pct_precio');
+    const otrosActual = vigente('otros_pct_precio');
     PARAMS.forEach((d) => {
       const { el, nota, reset, campo } = ctlParam[d.id];
       const mod = modificado(d);
@@ -516,7 +527,7 @@
       }
       if (!campo.classList.contains('invalido')) {
         const partes = [d.base];
-        if (d.id === 'utilidad') partes.push(`equivale a ${W.num((valor / (1 - valor)) * 100, 1)}\u00a0% sobre el costo`);
+        if (d.id === 'utilidad') partes.push(`equivale a ${W.num((valor / (1 - valor - comisionActual - otrosActual)) * 100, 1)}\u00a0% sobre el costo`);
         if (d.id === 'descuento' && sub > 0) partes.push(`hasta ${W.num(Math.max(0, 1 - piso / sub) * 100, 1)}\u00a0% sin perder utilidad`);
         if (mod) partes.push(`maestros: ${tx(d, deMaestros(d))}`);
         nota.textContent = partes.join(' · ');
@@ -775,7 +786,7 @@
   function seccionHoja(f) {
     const r = svgHoja(f);
     const info = r.cabe
-      ? h('p', { class: 'nota' }, `Caben ${r.porHoja} ${r.porHoja === 1 ? 'plantilla' : 'plantillas'} por hoja (una por yarda, con un tajo a lo ancho): aprovechamiento geométrico ${W.pct(r.aprov, 1)}. La merma de tabla (${W.pct(f.qto.lam.phi, 0)}) supone reaprovechar parte del retazo en piezas pequeñas.`)
+      ? h('p', { class: 'nota' }, `Caben ${r.porHoja} ${r.porHoja === 1 ? 'plantilla' : 'plantillas'} por hoja (una por yarda, con un tajo a lo ancho): aprovechamiento geométrico ${W.pct(r.aprov, 1)}. La merma de tabla (${W.pctExacto(f.qto.lam.phi)}) supone reaprovechar parte del retazo en piezas pequeñas.`)
       : h('p', { class: 'nota nota-adv' }, W.icono('aviso'), 'La plantilla de la yarda es más larga que la hoja: cada anillo saldría de varias plantillas, con más costuras longitudinales de las cotizadas.');
     return h('div', { class: 'hoja-fig' }, h('div', { class: 'hoja-env' }, r.svg), info);
   }
@@ -1091,7 +1102,7 @@
     const s = f.soporte;
     if (!s) return {};
     return {
-      perfil: `${W.num(s.L_total_m, 3)} m × ${W.mxn(s.barra.precio_m)}/m ÷ (1 − merma ${W.pct(estado.res.maestros.merma.PERFIL, 0)})`,
+      perfil: `${W.num(s.L_total_m, 3)} m × ${W.mxn(s.barra.precio_m)}/m ÷ (1 − merma ${W.pctExacto(estado.res.maestros.merma.PERFIL)})`,
       anclajes: `${s.anclajes} × ${W.mxn(s.anclaje.unitario_sin_iva)} (${s.anclaje.descripcion})`,
       tornilleria: `${s.tornillos} juegos de ${descTornillo(s.tornillo)} × ${W.mxn(s.precio_tornillo)}`,
     };
@@ -1166,16 +1177,20 @@
     const filas = [
       ['Costo directo (CD)', '', W.mxn(p.CD)],
       [obra ? 'CI de la instalación' : 'CI de fábrica', `GIF ${W.mxn(p.gif_por_hora)}/h × ${W.num(f.costos.h_MOD, 3)} h`, W.mxn(p.CI_fabrica)],
-      ['CI de administración', `${W.pct(C.administracion_pct_cd, 1)} del CD`, W.mxn(p.CI_admin)],
-      ['Imprevistos', `riesgo ${p.riesgo} · ${W.pct(p.imp_pct, 1)} de CD + CI`, W.mxn(p.imprevistos)],
+      ['CI de administración', `${W.pctExacto(C.administracion_pct_cd)} del CD`, W.mxn(p.CI_admin)],
+      ['Imprevistos', `riesgo ${p.riesgo} · ${W.pctExacto(p.imp_pct)} de CD + CI`, W.mxn(p.imprevistos)],
       { clase: 'total', celdas: ['Costo total', '', W.mxn(p.C_T)] },
-      ['Financiamiento', `${W.pct(C.financiamiento.tasa_anual, 1)} anual · ${C.financiamiento.dias_cobro} días`, W.mxn(p.financiamiento)],
+      ['Financiamiento', `${W.pctExacto(C.financiamiento.tasa_anual)} anual · ${C.financiamiento.dias_cobro} días`, W.mxn(p.financiamiento)],
       { clase: 'total', celdas: ['Costo base', '', W.mxn(p.C_base)] },
-      ['Utilidad', `${W.pct(C.utilidad_pct_precio, 1)} del precio`, W.mxn(p.utilidad)],
-      ['Comisión de ventas', `${W.pct(C.comision_ventas_pct_precio, 1)} del precio`, W.mxn(p.comision)],
+      ['Utilidad', `${W.pctExacto(C.utilidad_pct_precio)} del precio`, W.mxn(p.utilidad)],
+      ['Comisión de ventas', `${W.pctExacto(C.comision_ventas_pct_precio)} del precio`, W.mxn(p.comision)],
     ];
-    if (p.otros) filas.push(['Otros', `${W.pct(C.otros_pct_precio, 1)} del precio`, W.mxn(p.otros)]);
+    if (p.otros) filas.push(['Otros', `${W.pctExacto(C.otros_pct_precio)} del precio`, W.mxn(p.otros)]);
     filas.push({ clase: 'total', celdas: ['Precio antes de IVA', `costo base ÷ ${W.num(p.divisor, 3)}`, W.mxn(f.precio.total_sin_redondeo)] });
+    const dif = Math.round((f.precio.importe - f.precio.total_sin_redondeo) * 100) / 100;
+    if (Math.abs(dif) >= 0.005) {
+      filas.push(['Redondeo a precio unitario', `${W.mxn(f.precio.unitario)} × ${f.entrada.cantidad}`, `${dif < 0 ? '−' : '+'}${W.mxn(Math.abs(dif))} → Importe ${W.mxn(f.precio.importe)}`]);
+    }
     return [
       tabla([{ t: 'Capa' }, { t: 'Base' }, { t: 'MXN', num: true }], filas),
       f.precio.aplico_cargo_minimo ? h('p', { class: 'nota nota-adv' }, W.icono('aviso'), `Se aplicó el cargo mínimo de partida (${W.mxn(C.cargo_minimo_partida)}).`) : null,
