@@ -152,7 +152,8 @@
     } else if (typeof valor === 'number') {
       ctl = h('input', { id, type: 'number', step: 'any', value: String(mostrado), dataset: { ruta: llave(ruta), tipo: pct ? 'pct' : 'num' } });
     } else {
-      ctl = h('input', { id, type: 'text', value: String(valor), dataset: { ruta: llave(ruta), tipo: 'txt' } });
+      // un texto (descripción, nombre) crece con su contenido: se ve completo aun en el celular
+      ctl = h('textarea', { id, rows: '1', class: 'm-txt', spellcheck: 'false', dataset: { ruta: llave(ruta), tipo: 'txt' } }, String(valor));
     }
     controles.set(llave(ruta), ctl);
     if (ay) ayudas.set(llave(ruta), ay);
@@ -380,7 +381,9 @@
   function tarjetaVentilador(m, i) {
     const nombre = m.nombre;
     const campo = (et, valor, tipo, alCambio, extra) => {
-      const el = h('input', { type: tipo === 'num' ? 'number' : 'text', step: 'any', value: String(valor), 'aria-label': `${et} · ${nombre}`, class: 'm-vent-ctl', ...(extra || {}) });
+      const el = tipo === 'num'
+        ? h('input', { type: 'number', step: 'any', value: String(valor), 'aria-label': `${et} · ${nombre}`, class: 'm-vent-ctl', ...(extra || {}) })
+        : h('textarea', { rows: '1', spellcheck: 'false', 'aria-label': `${et} · ${nombre}`, class: 'm-vent-ctl m-txt', ...(extra || {}) }, String(valor));
       el.addEventListener('change', () => {
         if (pintandoVent) return;
         const v = tipo === 'num' ? Number(el.value) : el.value.trim();
@@ -468,7 +471,7 @@
   /** En sólo lectura (o sin poder guardar) los campos se muestran pero no se editan. */
   function aplicarBloqueo() {
     const bloquear = soloLectura();
-    $$('#maestros-cuerpo input, #maestros-cuerpo select').forEach((i) => { i.disabled = bloquear; });
+    $$('#maestros-cuerpo input, #maestros-cuerpo select, #maestros-cuerpo textarea').forEach((i) => { i.disabled = bloquear; });
     const reset = $('#maestros-reset');
     if (reset) reset.disabled = bloquear;
     const deshacer = $('#maestros-deshacer');
@@ -648,7 +651,7 @@
     void el.offsetWidth; // reinicia la animación si ya estaba puesta
     el.classList.add('m-destello');
     setTimeout(() => el.classList.remove('m-destello'), 2200);
-    const campo = $('input, select', el);
+    const campo = $('input, select, textarea', el);
     if (campo && !campo.disabled) campo.focus({ preventScroll: true });
   }
 
@@ -747,6 +750,8 @@
       if (!enlazado) {
         enlazado = true;
         $('#maestros-cuerpo').addEventListener('change', alCambiar);
+        $('#maestros-cuerpo').addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target.classList && ev.target.classList.contains('m-txt')) { ev.preventDefault(); ev.target.blur(); } }); // es de un solo renglón lógico
+        $('#maestros-cuerpo').addEventListener('input', (ev) => { const t = ev.target; if (t.classList && t.classList.contains('m-txt')) { t.style.height = 'auto'; t.style.height = `${t.scrollHeight}px`; } });
         W.ayudaUI.enlazar($('#maestros-cuerpo'));
         $('#maestros-buscar').addEventListener('input', filtrar);
         $('#maestros-guia').addEventListener('click', () => W.ayudaUI.abrirGuia());

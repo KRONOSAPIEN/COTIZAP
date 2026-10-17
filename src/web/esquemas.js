@@ -57,8 +57,8 @@
   W.OPC = {
     forma: [['REDONDA', 'Redondo'], ['RECTANGULAR', 'Rectangular']],
     ref_diametro: [['INTERIOR', 'Interior (nominal)'], ['EXTERIOR', 'Exterior']],
-    tipo_union: [['BRIDADO', 'Bridado · aros, tornillos y junta'], ['ESPIGA', 'Espiga · macho–hembra'], ['LISO', 'Extremos lisos']],
-    clase_sellado: [['C', 'Clase C · juntas transversales'], ['B', 'Clase B · + costuras longitudinales'], ['A', 'Clase A · + penetraciones'], ['NINGUNA', 'Sin sellador']],
+    tipo_union: [['BRIDADO', 'Bridado (aros y tornillos)'], ['ESPIGA', 'Espiga (macho–hembra)'], ['LISO', 'Extremos lisos']],
+    clase_sellado: [['C', 'Clase C · juntas transversales'], ['B', 'Clase B · + costuras'], ['A', 'Clase A · + penetraciones'], ['NINGUNA', 'Sin sellador']],
     // Pintura: en blanco manda la regla del taller (según el material y dónde va instalado el ducto); un sistema elegido vale para todo lo que se pinta
     pintura: [['', 'Según material e instalación'], ['NINGUNA', 'Sin pintura'], ['ESMALTE', 'Sólo pintura (esmalte)'], ['PRIMARIO', 'Sólo primario'], ['PRIMARIO_ESMALTE', 'Primario + pintura (esmalte)']],
     ubicacion: [['', 'Según la cotización'], ['INTERIOR', 'Interior (bajo techo)'], ['EXTERIOR', 'Exterior (a la intemperie)']],
@@ -66,17 +66,17 @@
     servicio: [['', 'Según la cotización'], ['VENTILACION', 'Ventilación'], ['POLVO', 'Colección de polvo'], ['ABRASIVO', 'Material abrasivo']],
     riesgo: [['', 'Según la cotización'], ['BAJO', 'Bajo'], ['MEDIO', 'Medio'], ['ALTO', 'Alto']],
     proceso_corte: [['', 'Automático'], ['GUILLOTINA', 'Guillotina'], ['PLASMA', 'Plasma CNC'], ['LASER', 'Láser']],
-    tipo_costura: [['', 'Según el material (galvanizado: engargolado)'], ['A_TOPE', 'Soldada a tope'], ['TRASLAPE', 'Soldada a traslape'], ['PITTSBURGH', 'Engargolado Pittsburgh']],
+    tipo_costura: [['', 'Según el material'], ['A_TOPE', 'Soldada a tope'], ['TRASLAPE', 'Soldada a traslape'], ['PITTSBURGH', 'Engargolado Pittsburgh']],
     excentrica: [['NO', 'Concéntrica'], ['CARA_PLANA', 'Excéntrica · cara plana']],
     // Extremo libre del tramo de ajuste (el de las tablas maestras se ofrece aparte, como «Predeterminado»)
     posicion: [['HORIZONTAL', 'Horizontal'], ['VERTICAL', 'Vertical (subida o bajada)']],
-    cantidad_modo: [['AUTO', 'Automática: según el ducto de la cotización'], ['MANUAL', 'Manual: la que yo capture']],
-    criterio_horizontal: [['SEPARACION', 'Por separación (uno cada 2.5 m)'], ['JUNTA', 'Uno por junta (después de cada unión)']],
+    cantidad_modo: [['AUTO', 'Automática (según el ducto)'], ['MANUAL', 'Manual (la que yo capture)']],
+    criterio_horizontal: [['SEPARACION', 'Por separación (2.5 m)'], ['JUNTA', 'Uno por junta']],
     abrazadera_vuelta: [['MEDIA', 'Media vuelta · cuna de 180°'], ['COMPLETA', 'Vuelta completa · 360°, dos mitades']],
-    ajuste: [['SUELTA', 'Brida suelta (aro terminado, tornillos y junta)'], ['SIN_BRIDA', 'Sin brida (brida en un solo extremo)'], ['CON_BRIDA', 'Brida de taller (bridas en ambos extremos)']],
-    bridas_aparte: [['', 'Se hacen en esta partida (aros, tornillos y junta)'], ['true', 'Son de otra partida (Bridas sueltas o compradas): aquí sólo se unen al ducto']],
+    ajuste: [['SUELTA', 'Brida suelta (aro y tornillos)'], ['SIN_BRIDA', 'Sin brida (en un extremo)'], ['CON_BRIDA', 'Brida de taller (ambos)']],
+    bridas_aparte: [['', 'En esta partida'], ['true', 'De otra partida']],
     driver: [['PIEZA', 'Por pieza'], ['KG_NETO', 'Por kg neto'], ['KG_BRUTO', 'Por kg bruto'], ['M2_NETO', 'Por m² de lámina'], ['M_CORTE', 'Por m de corte'], ['M_SOLDADURA', 'Por m de soldadura']],
-    iva_compra: [['', 'Automático: el del catálogo (un precio capturado, antes de IVA)'], ['true', 'Sí: el precio trae IVA (se le quita)'], ['false', 'No: el precio es antes de IVA']],
+    iva_compra: [['', 'Automático (catálogo)'], ['true', 'Sí, el precio trae IVA'], ['false', 'No, es antes de IVA']],
     factura: [['true', 'Con factura'], ['false', 'Sin factura']],
   };
 
@@ -99,7 +99,7 @@
         id: 'posicion', etiqueta: 'Posición del tramo', tipo: 'select', opciones: 'posicion', defecto: 'HORIZONTAL',
         ayuda: 'Decide cada cuántos metros lleva un soporte (ménsulas automáticas): horizontal cada 2.5 m; vertical máximo cada 3.0 m y un soporte fuerte en la base',
       },
-      { id: 'tipo_costura', etiqueta: 'Costura longitudinal', tipo: 'select', opciones: 'tipo_costura', defecto: '' },
+      { id: 'tipo_costura', etiqueta: 'Costura longitudinal', tipo: 'select', opciones: 'tipo_costura', defecto: '', ayuda: 'Según el material: el galvanizado va engargolado' },
       {
         id: 'yarda_mm', grupo: 'armado', etiqueta: 'Ancho de la yarda', tipo: 'select', opciones: 'yardas', numerico: true, sufijoFuera: ' mm',
         ayuda: 'La yarda es un anillo rolado del ancho de la lámina; se engargolan hasta 3 por pieza',
@@ -258,10 +258,10 @@
     { id: 'calibre', etiqueta: 'Calibre', tipo: 'calibre' },
     { id: 'espesor_mm', etiqueta: 'Espesor', tipo: 'num', unidad: 'mm', min: 0.2, paso: 0.01, visible: (v) => v.calibre === 'PROPIO' },
     { id: 'ref_diametro', etiqueta: 'Dimensión nominal', tipo: 'select', opciones: 'ref_diametro', defecto: 'INTERIOR', familias: [...DUCTOS, 'BRIDA'] },
-    { id: 'tipo_union', etiqueta: 'Unión', tipo: 'select', opciones: 'tipo_union', defecto: 'BRIDADO', familias: DUCTOS },
+    { id: 'tipo_union', etiqueta: 'Unión', tipo: 'select', opciones: 'tipo_union', defecto: 'BRIDADO', familias: DUCTOS, ayuda: 'Bridado: aros de brida, tornillos y junta con sellador. Espiga: macho–hembra. Lisos: sin brida ni espiga' },
     {
       id: 'bridas_aparte', etiqueta: 'Las bridas', tipo: 'select', opciones: 'bridas_aparte', booleano: true, defecto: '', familias: DUCTOS, visible: (v) => (v.tipo_union || 'BRIDADO') === 'BRIDADO',
-      ayuda: 'Si los aros los hace el taller en una partida de Bridas sueltas (o son bridas de placa compradas), aquí sólo se cotiza armarlos y soldarlos al ducto; la pestaña Planos cuadra cuántas se necesitan',
+      ayuda: 'En esta partida: aquí se hacen los aros, sus tornillos y la junta. De otra partida: los aros salen de una partida de Bridas sueltas (o son bridas de placa compradas) y aquí sólo se cotiza armarlos y soldarlos al ducto; la pestaña Planos cuadra cuántas se necesitan',
     },
     {
       id: 'extremos_sin_brida', etiqueta: 'Extremos sin brida', tipo: 'marcas', opciones: 'extremos', familias: CON_EXTREMOS, visible: (v) => v.tipo_union !== 'LISO',

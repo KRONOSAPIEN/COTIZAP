@@ -424,6 +424,7 @@
     ['cliente', 'proyecto', 'fecha', 'vigencia_dias', 'unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'ubicacion'].forEach((k) => {
       const el = $(`#c_${k}`);
       if (el && document.activeElement !== el) el.value = c[k] === undefined ? '' : c[k];
+      if (k === 'proyecto' && el) { el.title = el.value; ajustarAltoTexto(el); }
     });
     // Ancho de la yarda: las opciones salen de las tablas maestras (pueden cambiar) y un ancho guardado que no está en la lista se muestra tal cual
     const sel = $('#c_yarda_mm');
@@ -438,7 +439,16 @@
     if (document.activeElement !== sel) sel.value = valor;
   }
 
+  /** El nombre del proyecto crece con su texto (sin barra de desplazamiento) para verse completo; el título lo trae entero. */
+  function ajustarAltoTexto(el) {
+    if (!el.offsetParent) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }
+
   function enlazarEncabezado() {
+    $('#c_proyecto').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); ev.target.blur(); } });
+    $('#c_proyecto').addEventListener('input', (ev) => { ev.target.title = ev.target.value; ajustarAltoTexto(ev.target); });
     ['cliente', 'proyecto', 'fecha', 'vigencia_dias', 'unidad_diam', 'unidad_long', 'riesgo', 'servicio', 'ubicacion'].forEach((k) => {
       const el = $(`#c_${k}`);
       el.addEventListener('input', () => {
@@ -1321,7 +1331,7 @@
       const nombre = Object.fromEntries(W.OPC.ajuste);
       // sin elegirlo: el tramo de ajuste toma el de las tablas y un tramo sin ajuste lleva brida de taller en ambos extremos
       const tablas = nombre[M.proceso.armado_yardas.extremo_ajuste_defecto] || '—';
-      return [['', `Predeterminado · con ajuste, ${tablas.split(' (')[0].toLowerCase()}; sin ajuste, bridas en ambos extremos`], ...W.OPC.ajuste];
+      return [['', `Predeterminado · ${tablas.split(' (')[0].toLowerCase()}`], ...W.OPC.ajuste];
     }
     if (clave === 'extremos') return W.EXTREMOS[dlg.familia] || [];
     if (clave === 'perfiles') return [['', 'Estándar del taller'], ...Object.keys(M.herrajes.perfiles).map((k) => [k, `${k} · ${M.herrajes.perfiles[k].descripcion}`])];

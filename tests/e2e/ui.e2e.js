@@ -982,7 +982,7 @@ const ok = (cond, msg) => {
     // la partida: «Según la cotización», o su propio ancho
     await editar(p, 0);
     ok((await p.locator('#f_yarda_mm option').allInnerTexts()).join('|') === 'Según la cotización · 914 mm · 3 ft|914 mm · 3 ft|1,220 mm · 4 ft', 'la partida ofrece «Según la cotización · 914 mm · 3 ft» y los dos anchos');
-    ok((await p.locator('#f_extremo_ajuste option').allInnerTexts()).join('|') === 'Predeterminado · con ajuste, brida suelta; sin ajuste, bridas en ambos extremos|Brida suelta (aro terminado, tornillos y junta)|Sin brida (brida en un solo extremo)|Brida de taller (bridas en ambos extremos)', 'y el extremo final: lo predeterminado (con ajuste, brida suelta; sin ajuste, de taller), brida suelta, sin brida o brida de taller');
+    ok((await p.locator('#f_extremo_ajuste option').allInnerTexts()).join('|') === 'Predeterminado · brida suelta|Brida suelta (aro y tornillos)|Sin brida (en un extremo)|Brida de taller (ambos)', 'y el extremo final: lo predeterminado (con ajuste, brida suelta; sin ajuste, de taller), brida suelta, sin brida o brida de taller');
     ok(await p.locator('#f_ajuste_sin_brida').count() === 0 && await p.locator('#f_L_max_pieza_mm').count() === 0, 'ya no están «Tramo de ajuste» (sí/no) ni «Longitud máx. por pieza»');
     ok(/3 yardas y ajuste de 258 mm/.test(await p.locator('#dlg-prev').innerText()), 'la vista previa usa el ancho de la cotización: «3 yardas y ajuste de 258 mm»');
     await p.selectOption('#f_yarda_mm', '1220');
@@ -1048,7 +1048,7 @@ const ok = (cond, msg) => {
     ok(guardada.extremo_ajuste === 'CON_BRIDA' && guardada.ajuste_sin_brida === undefined, 'el «no» de la versión anterior (ajuste_sin_brida: false) pasa a «Brida de taller en ambos extremos»');
     ok((await det()).geometria.n_piezas === 2 && (await det()).qto.her.n_aros === 4 && (await det()).qto.her.aros_sueltos.length === 0, 'y se calcula con brida de taller en ambos extremos: 2 piezas (3 yardas y el ajuste), 4 bridas y ningún aro suelto');
     await editar(p, 0);
-    ok((await p.locator('#f_extremo_ajuste option:checked').innerText()).trim() === 'Brida de taller (bridas en ambos extremos)', 'el formulario lo muestra así');
+    ok((await p.locator('#f_extremo_ajuste option:checked').innerText()).trim() === 'Brida de taller (ambos)', 'el formulario lo muestra así');
     ok(await p.locator('#f_L_max_pieza_mm').count() === 0, 'y la «longitud máxima por pieza» de una cotización anterior se ignora (ya no existe)');
     await p.click('#dlg-cancelar');
     await cargar((b) => { b.cotizacion.yarda_mm = 5000; b.cotizacion.partidas[0] = { ...b.cotizacion.partidas[0], extremo_ajuste: undefined, ajuste_sin_brida: true }; });
@@ -1069,7 +1069,7 @@ const ok = (cond, msg) => {
     ok(await p.locator('input#m_proceso__armado_yardas__yarda_defecto_mm').inputValue() === '1220' && await p.locator('input#m_proceso__armado_yardas__yardas_por_pieza_max').inputValue() === '3'
       && await p.locator('input#m_proceso__armado_yardas__ajuste_tolerancia_mm').inputValue() === '25', 'las tablas traen el armado: yarda 1 220 mm, 3 yardas por pieza y tolerancia 25 mm');
     const ea = p.locator('select#m_proceso__armado_yardas__extremo_ajuste_defecto');
-    ok(await ea.inputValue() === 'SUELTA' && (await ea.locator('option').allInnerTexts()).join('|') === 'Brida suelta (aro terminado, tornillos y junta)|Sin brida (brida en un solo extremo)|Brida de taller (bridas en ambos extremos)', 'el extremo del ajuste por omisión se elige de una lista: brida suelta (la de arranque), sin brida o brida de taller');
+    ok(await ea.inputValue() === 'SUELTA' && (await ea.locator('option').allInnerTexts()).join('|') === 'Brida suelta (aro y tornillos)|Sin brida (en un extremo)|Brida de taller (ambos)', 'el extremo del ajuste por omisión se elige de una lista: brida suelta (la de arranque), sin brida o brida de taller');
     const jy = p.locator('select#m_proceso__armado_yardas__junta_entre_yardas');
     ok(await jy.inputValue() === 'PITTSBURGH' && (await jy.locator('option').allInnerTexts()).join('|') === 'Soldada a tope|Soldada a traslape|Engargolado Pittsburgh', 'y la junta entre yardas, de la lista de costuras: engargolado Pittsburgh');
     const lista = await p.locator('input[id^="m_proceso__armado_yardas__yardas_mm"]').evaluateAll((es) => es.map((e) => e.value));
