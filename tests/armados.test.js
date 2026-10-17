@@ -23,7 +23,8 @@ const reduccionInjerto = (extra) => ({ id: 'ri', familia: 'REDUCCION_INJERTO', .
 const codo = (id, theta, extra) => ({ id, familia: 'CODO', ...lam, D_mm: pulg(5), theta_deg: theta, k_R: 1.5, n_gajos: theta === 90 ? 5 : 3, ...extra });
 const recto = (extra) => ({ id: 'rt', familia: 'RECTO', ...lam, D_mm: pulg(5), L_mm: 914, ...extra });
 const caso = () => ({ riesgo: 'MEDIO', servicio: 'POLVO', ubicacion: 'INTERIOR', yarda_mm: 914, partidas: [reduccionInjerto(), codo('c60', 60), recto(), codo('c90', 90)] });
-const sub = (res) => res.partidas.reduce((s, f) => s + (f.ok ? f.precio.importe : 0), 0);
+// el subtotal REAL de la cotización (con el sobrante de lámina): es contra lo que se mide el ahorro de las sugerencias
+const sub = (res) => res.totales.subtotal;
 const porId = (cot, res, id) => res.partidas[cot.partidas.findIndex((p) => p.id === id)];
 const caras = (f) => f.qto.her.bridas.map((b) => b.extremo);
 
@@ -53,7 +54,7 @@ test('Sugerir: injerto + codo de 60° (90°) y recto + codo de 90°, cada uno co
     assert.ok(s.dim_mm > 0 && s.dim_mm <= s.limite_mm && s.limite_mm === 3660);
     // el desglose: aros, tornillos, juntas y mano de obra ahorran; las partes suman el ahorro del costo directo
     assert.ok(s.desglose.aros > 0 && s.desglose.tornillos > 0 && s.desglose.juntas > 0 && s.desglose.mano_obra > 0);
-    casi(s.desglose.aros + s.desglose.tornillos + s.desglose.juntas + s.desglose.mano_obra + s.desglose.otros, s.ahorro_costo, 1e-9);
+    casi(s.desglose.aros + s.desglose.tornillos + s.desglose.juntas + s.desglose.mano_obra + s.desglose.otros + s.desglose.bridas_otra_partida + s.desglose.sobrante, s.ahorro_costo, 1e-9);
     casi(s.antes - s.despues, s.ahorro, 0.006);
   });
   assert.ok(!sug.some((s) => s.piezas.every((q) => q.partida.startsWith('c'))), 'codo + codo no');
@@ -73,10 +74,9 @@ test('Aplicar las sugerencias: baja el subtotal de las partidas en la suma de lo
   // las partidas del usuario más las dos juntas de armado
   assert.equal(res1.partidas.length, 6);
   assert.equal(res1.totales.n_partidas_ok, 4, 'las juntas derivadas no cuentan como partidas del usuario');
-  casi(sub(res0) - sub(res1), sug.reduce((s, x) => s + x.ahorro, 0), 0.006, 'las partidas bajan exactamente en la suma de los ahorros');
-  // el total con IVA: la diferencia es la de las partidas más el IVA y el cambio del material sobrante de comprar piezas enteras (tornillos…)
-  const dSobrante = (res0.automaticas[0] ? res0.automaticas[0].precio.importe : 0) - (res1.automaticas[0] ? res1.automaticas[0].precio.importe : 0);
-  casi(res0.totales.total - res1.totales.total, (sub(res0) - sub(res1) + dSobrante) * (1 + M.capas.iva_pct), 0.02, 'total = ahorros + sobrante, con IVA');
+  // el ahorro mostrado ya incluye el cambio del material sobrante de comprar piezas enteras: es el cambio real del subtotal
+  casi(res0.totales.subtotal - res1.totales.subtotal, sug.reduce((s, x) => s + x.ahorro, 0), 0.006, 'el subtotal baja exactamente en la suma de los ahorros');
+  casi(res0.totales.total - res1.totales.total, (res0.totales.subtotal - res1.totales.subtotal) * (1 + M.capas.iva_pct), 0.02, 'total = ahorros con IVA');
   assert.ok(res1.totales.total < res0.totales.total);
   // los aros que quedan: la reducción con injerto pierde el del injerto, el codo de 60° el A, el recto el de su extremo final, el codo de 90° el A
   assert.deepEqual(caras(porId(cot, res0, 'ri')), ['D1', 'D2', 'injerto']);
@@ -266,7 +266,7 @@ test('Partir y juntar cantidades: n armadas y el resto normal; al deshacer se vu
   assert.equal(r.ok, true);
   assert.deepEqual(r.partidas_nuevas, ['nuevo1']);
   assert.deepEqual(cot.partidas.map((p) => [p.id, p.cantidad]), [['rt', 1], ['c90', 2], ['nuevo1', 1]]);
-  assert.deepEqual(cot.armados[0].piezas, [{ partida: 'rt', cara: 'final' }, { partida: 'nuevo1', cara: 'A' }]);
+  assert.deepEqual(cot.armados[0].piezas, [{ partida: 'rt', cara: 'final', origen: 'rt' }, { partida: 'nuevo1', cara: 'A', origen: 'c90' }]);
   const res1 = C.cotizar(cot, M);
   casi(sub(res0) - sub(res1), sug[0].ahorro, 0.006, 'el ahorro prometido es el real, con la partida partida');
   assert.deepEqual(res1.partidas[1].geometria.extremos_sin_brida, [], 'los 2 codos del resto quedan con sus dos bridas');
@@ -434,7 +434,7 @@ test('Bridas de otra partida: el ahorro incluye la brida que se libera y coincid
   casi(s.antes - s.despues, s.ahorro, 0.006);
   assert.equal(A.armar(cot, s.piezas, s.n, M).ok, true);
   const res1 = C.cotizar(cot, M);
-  casi(sub(res0) - sub(res1), s.ahorro, 0.006, 'el ahorro es el cambio medido de las partidas');
+  casi(sub(res0) - sub(res1), s.ahorro, 0.006, 'el ahorro es el cambio medido del subtotal');
   assert.ok(s.ahorro > 0);
   // la partida de bridas baja en 2n y el cuadre sigue cuadrado: piden 2, hay 2
   assert.equal(porId(cot, res1, 'br').entrada.cantidad, 2);

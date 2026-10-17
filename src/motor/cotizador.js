@@ -186,7 +186,11 @@
       precio_total = M.capas.cargo_minimo_partida;
       aplico_cargo_minimo = true;
     }
-    const precio_unitario = U.redondear(precio_total / p.cantidad, 2);
+    // con el cargo mínimo, el unitario se redondea HACIA ARRIBA al centavo: así unitario × cantidad nunca queda por debajo del cargo
+    // (250 entre 3 piezas daba 83.33 × 3 = 249.99). Sin cargo mínimo el redondeo es el de siempre.
+    const precio_unitario = aplico_cargo_minimo
+      ? U.redondear(Math.ceil(U.redondear((precio_total / p.cantidad) * 100, 6)) / 100, 2)
+      : U.redondear(precio_total / p.cantidad, 2);
     const importe = U.redondear(precio_unitario * p.cantidad, 2);
     return {
       costos,
@@ -487,16 +491,25 @@
    */
   function partidaAgotada(entrada, M, previos) {
     const f = cotizarPartida({ ...entrada, cantidad: 1 }, M, previos);
-    const cero = (o, claves) => { const r = { ...o }; claves.forEach((k) => { r[k] = 0; }); return r; };
+    // En cero todo importe, costo, hora o peso que alguien sume: costos (con sus desgloses y subtotales), la pila de precio con
+    // sus capas, el precio y los indicadores. Se conservan las tasas (imp_pct, f_fin, divisor, gif_por_hora) y los precios de
+    // referencia de los insumos (`precios_usados`), que no son importes de la partida.
+    const ceros = (o, conservar) => {
+      if (typeof o === 'number') return 0;
+      if (!o || typeof o !== 'object' || Array.isArray(o)) return o;
+      const r = {};
+      Object.keys(o).forEach((k) => { r[k] = conservar && conservar.includes(k) ? o[k] : ceros(o[k]); });
+      return r;
+    };
     return {
       ...f,
       entrada: { ...f.entrada, cantidad: 0 },
       agotada_por_armados: true,
-      costos: cero(f.costos, ['CD', 'h_MOD']),
-      pila: cero(f.pila, ['C_T', 'C_base', 'precio']),
-      precio: cero(f.precio, ['total_sin_redondeo', 'importe']),
-      peso: cero(f.peso, ['neto_total_kg']),
-      indicadores: cero(f.indicadores, ['costo_total', 'precio_piso', 'horas_mod_reales']),
+      costos: ceros(f.costos, ['precios_usados']),
+      pila: ceros(f.pila, ['imp_pct', 'f_fin', 'divisor', 'gif_por_hora']),
+      precio: { ...ceros(f.precio), aplico_cargo_minimo: false },
+      peso: ceros(f.peso),
+      indicadores: ceros(f.indicadores),
     };
   }
 
@@ -555,13 +568,13 @@
         const b = her.bridas[0];
         const x = fila(b.forma, b.forma === 'REDONDA' ? b.D_nom_mm : b.a_nom_mm, b.b_nom_mm);
         x.hay += n;
-        x.partidas_hay += 1;
+        if (!f.agotada_por_armados) x.partidas_hay += 1; // una agotada por armados ya no tiene bridas que contar
         x.armados += f.armados_consumidas || 0;
       }
       if (f.familia === 'COMPRADO' && f.compra && f.compra.ducto_D_mm > 0) {
         const x = fila('REDONDA', f.compra.ducto_D_mm);
         x.hay += n;
-        x.partidas_hay += 1;
+        if (!f.agotada_por_armados) x.partidas_hay += 1;
         x.armados += f.armados_consumidas || 0;
       }
     });
@@ -593,7 +606,13 @@
     return { heredar, defs, yarda };
   }
 
-  function cotizar(cot, M0) {
+  /**
+   * Cotiza una cotización completa. `opciones.memo` (un Map, opcional): guarda el resultado de cada partida ya calculada con las
+   * mismas tablas, para que quien cotiza muchas variantes de una misma cotización (las sugerencias de armado) no repita lo que no cambió.
+   * Los soportes no se guardan (su resultado se completa con el conteo de las demás partidas). Con el mismo `memo` hay que pasar las mismas tablas.
+   */
+  function cotizar(cot, M0, opciones) {
+    const memo = opciones && opciones.memo instanceof Map ? opciones.memo : null;
     const c = esObjeto(cot) ? cot : {};
     const ef = maestrosEfectivos(c, M0);
     const M = ef.M;
@@ -608,7 +627,13 @@
       try {
         if (!esObjeto(p)) throw new U.ErrorValidacion(['La partida no es válida (se esperaba un objeto con sus datos).']);
         if (p.cantidad === 0 && p.armados_consumidas > 0) return { indice, ...partidaAgotada(heredar(p), M, problemas) };
-        return { indice, ...cotizarPartida(heredar(propios ? { ...p, ...propios } : p), M, problemas) };
+        const entrada = heredar(propios ? { ...p, ...propios } : p);
+        if (memo && entrada.familia !== 'SOPORTE') {
+          const clave = JSON.stringify(entrada);
+          if (!memo.has(clave)) memo.set(clave, cotizarPartida(entrada, M, problemas));
+          return { indice, ...memo.get(clave) };
+        }
+        return { indice, ...cotizarPartida(entrada, M, problemas) };
       } catch (err) {
         if (err instanceof U.ErrorValidacion) return { ok: false, indice, errores: err.errores, entrada: p };
         return {
@@ -706,7 +731,8 @@
           iva: U.redondear(vp.venta * C.iva_pct, 2),
           total: U.redondear(vp.venta * (1 + C.iva_pct), 2),
         },
-        n_partidas_ok: propias.filter((f) => f.ok).length, // sólo las del usuario: ni la automática del sobrante ni la UNION de un armado cuentan
+        n_partidas_ok: propias.filter((f) => f.ok && !f.agotada_por_armados).length, // sólo las del usuario: ni la automática del sobrante, ni la UNION de un armado, ni las agotadas por armados cuentan
+        n_partidas_agotadas: propias.filter((f) => f.ok && f.agotada_por_armados).length,
         n_partidas_error: propias.filter((f) => !f.ok).length,
         n_partidas_automaticas: automaticas.length,
       },

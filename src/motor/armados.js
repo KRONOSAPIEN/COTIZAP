@@ -300,7 +300,13 @@
         const sinQuitar = { ...x.p };
         delete sinQuitar.extremos_sin_brida;
         const e = MAT.espesorMm(M, M.materiales[x.p.material_id], x.p);
-        x.PF = GEO.perfilFabricacion(sinQuitar, e, M);
+        // el perfil de fabricación es lo más caro de revisar una pareja: quien revisa muchas (sugerir) pasa `cachePF` para no repetirlo
+        const clavePF = o.cachePF ? JSON.stringify(sinQuitar) : null;
+        if (clavePF !== null && o.cachePF.has(clavePF)) x.PF = o.cachePF.get(clavePF);
+        else {
+          x.PF = GEO.perfilFabricacion(sinQuitar, e, M);
+          if (clavePF !== null) o.cachePF.set(clavePF, x.PF);
+        }
         const d = dimensionMayor(x.p, x.PF, M);
         x.dim_mm = d.mm;
         x.formula = d.formula;
@@ -576,6 +582,7 @@
     const eff = base.partidas.slice(0, N);
 
     const cache = new Map();
+    const cachePF = new Map();
     const cotizarP = (p) => {
       const k = JSON.stringify(p);
       if (!cache.has(k)) {
@@ -605,7 +612,7 @@
           CARAS[B.p.familia].forEach((caraB) => {
             const armado = { id: 'sugerido', piezas: [{ partida: A.p.id, cara: caraA }, { partida: B.p.id, cara: caraB }], n: Math.min(num(A.p.cantidad), num(B.p.cantidad)) };
             if (!(armado.n >= 1)) return;
-            const v = validarArmado(eff, armado, M, { heredar, antes_de_partir: true, tomadas: new Map() });
+            const v = validarArmado(eff, armado, M, { heredar, antes_de_partir: true, tomadas: new Map(), cachePF });
             if (!v.ok) return;
             pares.push({ A, B, armado, v });
           });
@@ -669,34 +676,60 @@
       return { antes, despues, costo, ...sim };
     };
 
-    // asignación voraz: en cada vuelta, la pareja de mayor ahorro con lo que queda en las partidas de bridas, sin repetir partidas
-    // ni gastar más bridas de las que hay
+    // asignación voraz: en cada vuelta, la pareja que más baja el subtotal REAL de la cotización (se cotiza completa con el armado
+    // puesto, así entra el sobrante de lámina, que sube cuando el armado gasta menos hoja) sobre lo ya aceptado en la misma ronda,
+    // sin repetir partidas ni gastar más bridas de las que hay. Lo que se muestra es justo lo que cambia `cotizar().totales.subtotal`.
     const stock = base.stock ? clonarStock(base.stock) : crearStock(lista, M, heredar);
+    const memo = new Map();
+    const cotizarTodo = (x) => K.cotizar(x, Mb, { memo });
+    const sobranteDe = (r) => {
+      const a = (r.automaticas || [])[0];
+      return a ? { importe: a.precio.importe, CD: a.costos.CD } : { importe: 0, CD: 0 };
+    };
+    let trabajo = { ...c, partidas: U.clonar(lista), armados: U.clonar(Array.isArray(c.armados) ? c.armados : []) };
+    let actual = cotizarTodo(trabajo);
     const usadas = new Set();
     const salida = [];
-    const pendientes = evaluados.slice();
+    const pendientes = evaluados.map((e, k) => ({ e, k }));
     for (;;) {
       let mejor = null;
-      pendientes.forEach((e) => {
+      const sobAntes = sobranteDe(actual);
+      pendientes.forEach(({ e, k }) => {
         if (e.s.piezas.some((x) => usadas.has(x.partida))) return;
-        const val = valuarBridas(stock, e.pedido);
-        const ahorro = U.redondear(e.s.antes + val.antes - e.s.despues - val.despues, 2);
-        if (ahorro > 0.005 && (!mejor || ahorro > mejor.ahorro)) mejor = { e, val, ahorro };
+        // la pareja puesta sobre lo aceptado: `armar` parte las partidas igual que al aceptarla
+        let contador = 0;
+        const copia = { ...trabajo, partidas: U.clonar(trabajo.partidas), armados: U.clonar(trabajo.armados) };
+        const r = armar(copia, e.s.piezas.map((x) => ({ partida: x.partida, cara: x.cara })), e.s.n, M, {
+          heredar, nuevoId: () => `sg${k}_${(contador += 1)}`, armadoId: `sg${k}`,
+        });
+        if (!r.ok) return;
+        const cot2 = cotizarTodo(copia);
+        const ahorro = U.redondear(actual.totales.subtotal - cot2.totales.subtotal, 2);
+        if (ahorro > 0.005 && (!mejor || ahorro > mejor.ahorro)) mejor = { e, copia, cot2, ahorro };
       });
       if (!mejor) break;
-      const { e, val, ahorro } = mejor;
+      const { e, copia, cot2, ahorro } = mejor;
+      const val = valuarBridas(stock, e.pedido);
       e.s.piezas.forEach((x) => usadas.add(x.partida));
       aplicarConsumo(stock, val.tomas);
       const bridas = detalleBridas(e.pedido, val.tomas).map((b) => ({ ...b, de: b.de.map((x) => ({ ...x, partida: lista[x.indice].id })) }));
       const s = e.s;
+      const sobDespues = sobranteDe(cot2);
+      const ahorro_sobrante = U.redondear(sobAntes.importe - sobDespues.importe, 2); // negativo: el armado deja más sobrante de hoja y se cobra
+      const ahorro_costo = actual.totales.costo_directo - cot2.totales.costo_directo;
+      const desglose = { ...s.desglose, bridas_otra_partida: val.costo, sobrante: sobAntes.CD - sobDespues.CD };
+      desglose.otros = ahorro_costo - desglose.aros - desglose.tornillos - desglose.juntas - desglose.mano_obra - desglose.bridas_otra_partida - desglose.sobrante;
+      const antes = U.redondear(s.antes + val.antes, 2);
       salida.push({
         ...s,
-        ahorro, antes: U.redondear(s.antes + val.antes, 2), despues: U.redondear(s.despues + val.despues, 2),
-        ahorro_costo: s.ahorro_costo + val.costo,
-        desglose: { ...s.desglose, bridas_otra_partida: val.costo },
+        ahorro, antes, despues: U.redondear(antes - ahorro, 2),
+        ahorro_costo, desglose,
+        ahorro_sobrante,
         ahorro_bridas: U.redondear(val.antes - val.despues, 2), // lo que cuestan (con su indirecto y utilidad) las bridas de otra partida que se ahorran
         bridas, bridas_liberadas: val.liberadas, bridas_consumidas: val.consumidas,
       });
+      trabajo = copia;
+      actual = cot2;
     }
     return salida;
   }
@@ -722,16 +755,26 @@
   function armar(cot, piezas, n, M, opciones) {
     const o = opciones || {};
     const nuevoId = o.nuevoId || (() => idAleatorio('p'));
+    // n = conjuntos que se arman: entero de 1 a N_MAX; sin dato (undefined, null o vacío) es 1
+    const nn = n === undefined || n === null || n === '' ? 1 : Number(n);
+    if (!(Number.isInteger(nn) && nn >= 1 && nn <= N_MAX)) return { ok: false, errores: [`La cantidad de conjuntos a armar debe ser un entero de 1 a ${N_MAX}.`] };
+    n = nn;
     if (!Array.isArray(cot.partidas)) cot.partidas = [];
     if (!Array.isArray(cot.armados)) cot.armados = [];
-    const armado = { id: idAleatorio('a'), piezas: (piezas || []).map((q) => ({ partida: q.partida, cara: q.cara })), n };
+    const armado = { id: o.armadoId || idAleatorio('a'), piezas: (piezas || []).map((q) => ({ partida: q.partida, cara: q.cara })), n };
     const heredar = o.heredar || ((p) => p);
     const v = validarArmado(cot.partidas, armado, M, { heredar, antes_de_partir: true, armados: cot.armados });
     if (!v.ok) return { ok: false, errores: v.errores };
+    // cada pieza debe tener al menos `n` unidades: si no, la partida quedaría con cantidad negativa
+    const cortas = armado.piezas.map((q) => cot.partidas[hallar(cot.partidas, q.partida)]).filter((p) => !(num(p.cantidad) >= n));
+    if (cortas.length) {
+      return { ok: false, errores: cortas.map((p) => `La partida «${p.descripcion || p.id}» tiene ${num(p.cantidad)} ${num(p.cantidad) === 1 ? 'pieza' : 'piezas'} y el armado pide ${n}: no alcanza.`) };
+    }
     const nuevas = [];
     armado.piezas.forEach((q) => {
       const i = hallar(cot.partidas, q.partida);
       const p = cot.partidas[i];
+      q.origen = p.id; // la partida de donde salió la pieza: deshacer la junta ahí y no en otra parecida
       if (num(p.cantidad) === n) return;
       const copia = U.clonar(p);
       copia.id = nuevoId();
@@ -747,9 +790,10 @@
   }
 
   /**
-   * Quita un armado de la cotización (la modifica) y vuelve a juntar las partidas que se partieron: si una pieza del armado
-   * es idéntica (salvo id y cantidad) a otra partida que no está armada, se suman las cantidades en la primera de las dos.
-   * Devuelve { ok, juntadas }.
+   * Quita un armado de la cotización (la modifica). Si al armar se partió una partida, la parte armada vuelve a sumarse a la partida de
+   * la que salió (`origen` de la pieza) mientras ésta siga existiendo, no esté en otro armado y sea igual (salvo id y cantidad); si no se
+   * partió nada, la partida se queda como está y no se junta con ninguna otra. Los armados guardados sin `origen` (versiones
+   * anteriores) siguen juntando con la primera partida idéntica que no esté armada. Devuelve { ok, juntadas }.
    */
   function deshacerArmado(cot, id) {
     const arms = Array.isArray(cot.armados) ? cot.armados : [];
@@ -762,9 +806,17 @@
       const usadas = new Set([...enArmados().keys()].map((x) => x.split('|')[0]));
       const i = hallar(cot.partidas, q.partida);
       if (i < 0 || usadas.has(q.partida)) return;
-      const j = cot.partidas.findIndex((r, m) => m !== i && esObjeto(r) && !usadas.has(r.id) && igualesSalvoCantidad(r, cot.partidas[i]));
-      if (j < 0) return;
-      const [primera, segunda] = i < j ? [i, j] : [j, i];
+      let j;
+      if (typeof q.origen === 'string') {
+        if (q.origen === q.partida) return; // no se partió: la partida se queda como está
+        j = hallar(cot.partidas, q.origen);
+        if (j < 0 || j === i || usadas.has(q.origen) || !esObjeto(cot.partidas[j]) || !igualesSalvoCantidad(cot.partidas[j], cot.partidas[i])) return;
+      } else {
+        j = cot.partidas.findIndex((r, m) => m !== i && esObjeto(r) && !usadas.has(r.id) && igualesSalvoCantidad(r, cot.partidas[i]));
+        if (j < 0) return;
+      }
+      // con origen, se queda la partida de origen (aunque el usuario haya movido la copia); sin él, la primera de las dos
+      const [primera, segunda] = typeof q.origen === 'string' ? [j, i] : i < j ? [i, j] : [j, i];
       cot.partidas[primera].cantidad = num(cot.partidas[primera].cantidad) + num(cot.partidas[segunda].cantidad);
       cot.partidas.splice(segunda, 1);
       juntadas += 1;
@@ -782,7 +834,7 @@
       while (vistos.has(id)) id = idAleatorio('a');
       vistos.add(id);
       const n = Number.isInteger(a.n) && a.n >= 1 && a.n <= N_MAX ? a.n : 1;
-      return { id, piezas: a.piezas.map((q) => ({ partida: q.partida, cara: q.cara })), n };
+      return { id, piezas: a.piezas.map((q) => (typeof q.origen === 'string' && q.origen ? { partida: q.partida, cara: q.cara, origen: q.origen } : { partida: q.partida, cara: q.cara })), n };
     }).filter(Boolean);
   }
 

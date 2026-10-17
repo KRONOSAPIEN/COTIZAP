@@ -146,7 +146,7 @@
       h('div', { class: 'arm-sug-txt' },
         h('h3', null, mayuscula(s.descripcion)),
         h('p', { class: 'arm-sug-meta' }, partes.join(' · ')),
-        h('p', { class: 'arm-sug-desglose' }, `Del costo directo se ahorra: aros ${dinero(d.aros)} · tornillos ${dinero(d.tornillos)} · juntas ${dinero(d.juntas)} · mano de obra ${dinero(d.mano_obra)}${Math.abs(d.otros) >= 0.005 ? ` · otros ${dinero(d.otros)}` : ''}${Math.abs(d.bridas_otra_partida) >= 0.005 ? ` · bridas de otra partida ${dinero(d.bridas_otra_partida)}` : ''}.`),
+        h('p', { class: 'arm-sug-desglose' }, `Del costo directo se ahorra: aros ${dinero(d.aros)} · tornillos ${dinero(d.tornillos)} · juntas ${dinero(d.juntas)} · mano de obra ${dinero(d.mano_obra)}${Math.abs(d.otros) >= 0.005 ? ` · otros ${dinero(d.otros)}` : ''}${Math.abs(d.bridas_otra_partida) >= 0.005 ? ` · bridas de otra partida ${dinero(d.bridas_otra_partida)}` : ''}${Math.abs(d.sobrante) >= 0.005 ? ` · sobrante de lámina ${dinero(d.sobrante)}` : ''}. El ahorro de abajo es el cambio real del subtotal, con el sobrante de lámina que se cobra.`),
         textoBridas(s)),
       h('div', { class: 'arm-sug-der' },
         h('div', { class: 'arm-sug-ahorro', dataset: { ahorro: String(s.ahorro) } }, dinero(s.ahorro)),
