@@ -50,6 +50,9 @@
     return C.listaFabricacion.agrupar(cot, res, res.maestros, W.resumenMaterial);
   }
 
+  /** Las piezas de la partida: las efectivas si los conjuntos armados le descontaron bridas. */
+  const cantidadDe = (x) => (x.f && x.f.armados_consumidas > 0 ? x.f.entrada.cantidad : x.p.cantidad);
+
   function tarjeta(x) {
     const { p, d } = x;
     // el armado se llama como lo escribió quien lo pide («Unir injerto de 11″ con codo de 60° para obtener 90°»); el ducto
@@ -59,7 +62,7 @@
     return h('article', { class: 'pieza-plano', dataset: { id: p.id, familia: p.familia } },
       h('div', { class: 'pieza-cab' },
         h('span', { class: 'pieza-marca', title: 'Marca de la pieza' }, x.marca),
-        h('span', { class: 'pieza-cant' }, piezas(p.cantidad))),
+        h('span', { class: 'pieza-cant' }, piezas(cantidadDe(x)))),
       h('figure', { class: 'pieza-fig' }, W.svgArbol(C.planos.arbol(d, { px: 300, alto_max: 230 }))),
       h('h4', { class: 'pieza-tit' }, titulo),
       propia ? h('p', { class: 'pieza-desc' }, propia) : null,
@@ -69,7 +72,7 @@
 
   function hoja(hj, i, n) {
     const cot = E().cot;
-    const total = hj.items.reduce((s, x) => s + (Number(x.p.cantidad) || 0), 0);
+    const total = hj.items.reduce((s, x) => s + (Number(cantidadDe(x)) || 0), 0);
     return h('section', { class: 'hoja', dataset: { grupo: hj.g.id }, 'aria-label': `${hj.g.nombre(hj.items)}${hj.material ? ` · ${hj.material}` : ''}` },
       h('header', { class: 'hoja-cab' },
         h('h3', null, hj.g.nombre(hj.items), hj.material ? h('span', { class: 'hoja-mat' }, hj.material) : null),
@@ -138,7 +141,7 @@
       R.sinPlano ? `${R.sinPlano} ${R.sinPlano === 1 ? 'partida no lleva plano' : 'partidas no llevan plano'} (instalación, compras sin barrenos o piezas personalizadas)` : '',
       R.conError ? `${R.conError} ${R.conError === 1 ? 'partida tiene' : 'partidas tienen'} errores y no se dibuja${R.conError === 1 ? '' : 'n'}: corríjala${R.conError === 1 ? '' : 's'} en la cotización` : '',
     ].filter(Boolean);
-    const totalPiezas = R.hojas.reduce((s, hj) => s + hj.items.reduce((t, x) => t + (Number(x.p.cantidad) || 0), 0), 0);
+    const totalPiezas = R.hojas.reduce((s, hj) => s + hj.items.reduce((t, x) => t + (Number(cantidadDe(x)) || 0), 0), 0);
     resumen.textContent = R.n ? [`${R.n} ${R.n === 1 ? 'partida dibujada' : 'partidas dibujadas'} (${piezas(totalPiezas)}) en ${R.hojas.length} ${R.hojas.length === 1 ? 'hoja' : 'hojas'}`, ...notas].join(' · ') + '.' : notas.join(' · ');
     resumen.hidden = !resumen.textContent;
     if (!R.n) {
@@ -167,11 +170,17 @@
     const resumen = B.cuadra ? `Las ${W.num(B.piden, 0)} bridas que piden las piezas están en las partidas de bridas.`
       : [faltan.length ? `Faltan ${faltan.map((x) => `${-x.diferencia} de ${nombre(x)}`).join(', ')}` : '', sobran.length ? `sobran ${sobran.map((x) => `${x.diferencia} de ${nombre(x)}`).join(', ')}` : '']
         .filter(Boolean).join(' y ').replace(/^s/, 'S') + '. Revise las partidas de bridas (o los extremos sin brida de las piezas).';
+    // los conjuntos armados en taller no llevan brida en las caras que se juntan: se descontaron de las partidas de bridas
+    const porArmados = B.armados > 0
+      ? `Los conjuntos armados en taller ahorran ${W.num(B.armados, 0)} ${B.armados === 1 ? 'brida' : 'bridas'}: ya se descontaron de las partidas de bridas (las cifras de abajo son las efectivas).`
+      : '';
+    const hayEn = (x) => (x.armados > 0 ? `${W.num(x.hay, 0)} (${W.num(x.hay + x.armados, 0)} − ${W.num(x.armados, 0)} por armados)` : W.num(x.hay, 0));
     return h('section', { class: 'cuadre', 'aria-labelledby': 'cuadre-tit', dataset: { cuadra: B.cuadra ? 'si' : 'no' } },
       h('h3', { id: 'cuadre-tit' }, W.icono(B.cuadra ? 'check' : 'aviso'), 'Cuadre de bridas'),
       h('p', null, `Las piezas con «bridas de otra partida» piden una brida en cada extremo que la lleva (de taller o suelta); aquí se comparan, por diámetro, con las partidas de Bridas sueltas y las bridas de placa compradas. ${resumen}`),
+      porArmados ? h('p', { class: 'nota cuadre-armados' }, porArmados) : null,
       W.tabla([{ t: 'Ducto' }, { t: 'Piden las piezas', num: true }, { t: 'En partidas de bridas', num: true }, { t: '' }],
-        B.filas.map((x) => [nombre(x), W.num(x.piden, 0), W.num(x.hay, 0), estado(x)])));
+        B.filas.map((x) => [nombre(x), W.num(x.piden, 0), hayEn(x), estado(x)])));
   }
 
   /** Abre el pedido de ductería del 30-sep-2026 (los planos que mandó el taller) en lugar de la cotización actual; se puede deshacer. */

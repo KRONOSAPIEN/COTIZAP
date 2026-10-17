@@ -480,6 +480,27 @@
   }
 
   /**
+   * Una partida a la que los armados en taller le descontaron TODAS sus piezas (p. ej. 2 bridas de las que sólo se pedían 2): la
+   * cantidad efectiva es 0, que la validación no admite (una partida pide al menos 1 pieza). No se borra ni se marca con error:
+   * se calcula con 1 pieza —para que conserve su geometría, su ficha y su artículo— y se deja en cero lo que se suma a la
+   * cotización (precio, costos, indirectos, peso y horas). `entrada.cantidad` queda en 0 y `agotada_por_armados` en true.
+   */
+  function partidaAgotada(entrada, M, previos) {
+    const f = cotizarPartida({ ...entrada, cantidad: 1 }, M, previos);
+    const cero = (o, claves) => { const r = { ...o }; claves.forEach((k) => { r[k] = 0; }); return r; };
+    return {
+      ...f,
+      entrada: { ...f.entrada, cantidad: 0 },
+      agotada_por_armados: true,
+      costos: cero(f.costos, ['CD', 'h_MOD']),
+      pila: cero(f.pila, ['C_T', 'C_base', 'precio']),
+      precio: cero(f.precio, ['total_sin_redondeo', 'importe']),
+      peso: cero(f.peso, ['neto_total_kg']),
+      indicadores: cero(f.indicadores, ['costo_total', 'precio_piso', 'horas_mod_reales']),
+    };
+  }
+
+  /**
    * Partida automática que cobra el material sobrante de comprar piezas enteras (hojas, barras, tornillos, cartuchos y
    * envases completos): sólo la pila de precio, sin cargo mínimo (no es una partida que se fabrique).
    */
@@ -496,6 +517,9 @@
     };
   }
 
+  /** Clave de una medida de brida en el cuadre: redonda por su Ø nominal, rectangular por a × b (a 0.1 mm). La comparte el descuento de los armados. */
+  const claveBrida = (forma, a, b) => (forma === 'REDONDA' ? `R${U.redondear(a, 1)}` : `X${U.redondear(a, 1)}x${U.redondear(b, 1)}`);
+
   /**
    * Cotización completa: lista de partidas + totales con IVA. Nunca lanza por una partida: la que no se puede calcular
    * queda como { ok: false, errores } (y `interno: true` si fue una falla inesperada del cálculo, no de los datos).
@@ -510,8 +534,8 @@
   function cuadreBridas(filas) {
     const tabla = new Map();
     const fila = (forma, a, b) => {
-      const k = forma === 'REDONDA' ? `R${U.redondear(a, 1)}` : `X${U.redondear(a, 1)}x${U.redondear(b, 1)}`;
-      if (!tabla.has(k)) tabla.set(k, { forma, D_nom_mm: forma === 'REDONDA' ? a : undefined, a_nom_mm: forma === 'REDONDA' ? undefined : a, b_nom_mm: forma === 'REDONDA' ? undefined : b, piden: 0, hay: 0, partidas_piden: 0, partidas_hay: 0 });
+      const k = claveBrida(forma, a, b);
+      if (!tabla.has(k)) tabla.set(k, { forma, D_nom_mm: forma === 'REDONDA' ? a : undefined, a_nom_mm: forma === 'REDONDA' ? undefined : a, b_nom_mm: forma === 'REDONDA' ? undefined : b, piden: 0, hay: 0, partidas_piden: 0, partidas_hay: 0, armados: 0 });
       return tabla.get(k);
     };
     let piden = 0;
@@ -532,17 +556,22 @@
         const x = fila(b.forma, b.forma === 'REDONDA' ? b.D_nom_mm : b.a_nom_mm, b.b_nom_mm);
         x.hay += n;
         x.partidas_hay += 1;
+        x.armados += f.armados_consumidas || 0;
       }
       if (f.familia === 'COMPRADO' && f.compra && f.compra.ducto_D_mm > 0) {
         const x = fila('REDONDA', f.compra.ducto_D_mm);
         x.hay += n;
         x.partidas_hay += 1;
+        x.armados += f.armados_consumidas || 0;
       }
     });
-    if (!piden) return { activo: false, filas: [], piden: 0, hay: 0, cuadra: true };
+    const armados = [...tabla.values()].reduce((s, x) => s + x.armados, 0);
+    if (!piden && !armados) return { activo: false, filas: [], piden: 0, hay: 0, armados: 0, cuadra: true };
+    // `armados`: bridas de estas partidas que los conjuntos armados en taller ya no necesitan (se descontaron de su cantidad);
+    // `piden` y `hay` son las efectivas, con ese descuento hecho (hay + armados = las que se capturaron)
     const lista = [...tabla.values()].map((x) => ({ ...x, diferencia: x.hay - x.piden }))
       .sort((a, b) => (a.forma === b.forma ? (b.D_nom_mm || b.a_nom_mm) - (a.D_nom_mm || a.a_nom_mm) : a.forma === 'REDONDA' ? -1 : 1));
-    return { activo: true, filas: lista, piden, hay: lista.reduce((s, x) => s + x.hay, 0), cuadra: lista.every((x) => x.diferencia === 0) };
+    return { activo: true, filas: lista, piden, hay: lista.reduce((s, x) => s + x.hay, 0), armados, cuadra: lista.every((x) => x.diferencia === 0) };
   }
 
   /**
@@ -578,6 +607,7 @@
     const calcular = (p, indice, propios) => {
       try {
         if (!esObjeto(p)) throw new U.ErrorValidacion(['La partida no es válida (se esperaba un objeto con sus datos).']);
+        if (p.cantidad === 0 && p.armados_consumidas > 0) return { indice, ...partidaAgotada(heredar(p), M, problemas) };
         return { indice, ...cotizarPartida(heredar(propios ? { ...p, ...propios } : p), M, problemas) };
       } catch (err) {
         if (err instanceof U.ErrorValidacion) return { ok: false, indice, errores: err.errores, entrada: p };
@@ -587,6 +617,11 @@
       }
     };
     const filas = lista.map((p, indice) => (esAuto(p) ? null : calcular(p, indice)));
+    // las partidas de bridas de las que los armados descontaron piezas: cuántas se descontaron y cuántas se capturaron
+    Object.keys(armados.consumos || {}).forEach((i) => {
+      const f = filas[i];
+      if (f && f.ok) { f.armados_consumidas = armados.consumos[i].consumidas; f.cantidad_capturada = armados.consumos[i].original; }
+    });
     lista.forEach((p, indice) => {
       if (filas[indice] !== null) return;
       const sep = VAL.aNumero(p.separacion_m);
@@ -679,6 +714,6 @@
   }
 
   return {
-    FAMILIAS, PARAMETROS_COTIZACION, parametroDeMaestros, maestrosEfectivos, yardaDeCotizacion, crearHeredar, ventaPactada, validarPartida, levantarCantidades, cotizarPartida, cotizar,
+    FAMILIAS, PARAMETROS_COTIZACION, claveBrida, parametroDeMaestros, maestrosEfectivos, yardaDeCotizacion, crearHeredar, ventaPactada, validarPartida, levantarCantidades, cotizarPartida, cotizar,
   };
 }));

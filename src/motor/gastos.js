@@ -86,7 +86,7 @@
     return { importe, costo: importe, iva_acreditable: g.con_factura ? importe * iva_pct : 0 };
   }
 
-  const filasCalculadas = (res) => [...((res && res.partidas) || []), ...((res && res.automaticas) || [])].filter((f) => f && f.ok);
+  const filasCalculadas = (res) => [...((res && res.partidas) || []), ...((res && res.automaticas) || [])].filter((f) => f && f.ok && !f.agotada_por_armados);
 
   /** Costo directo que la cotización estimó, repartido en las categorías del control de gastos (sin el equipo: ver equipoCotizado). */
   function cotizadoPorCategoria(res) {

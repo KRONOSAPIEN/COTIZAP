@@ -125,6 +125,14 @@
     } catch (e) { return null; }
   }
 
+  /** Qué bridas de otras partidas se ahorran («Se ahorran 4 bridas de 11″ de la partida de bridas…»); null si el armado no las libera. */
+  function textoBridas(s) {
+    const util = (s.bridas || []).filter((b) => b.consumidas > 0);
+    if (!util.length) return null;
+    const por = util.map((b) => `${b.consumidas} ${b.consumidas === 1 ? 'brida' : 'bridas'} de ${ARM().textoD(b.D_nom_mm)}`).join(' y ');
+    return h('p', { class: 'arm-sug-bridas nota' }, `Se ahorran ${por}, que se descuentan de las partidas de bridas.`);
+  }
+
   function tarjetaSugerencia(s, i) {
     const d = s.desglose;
     const partes = [
@@ -138,7 +146,8 @@
       h('div', { class: 'arm-sug-txt' },
         h('h3', null, mayuscula(s.descripcion)),
         h('p', { class: 'arm-sug-meta' }, partes.join(' · ')),
-        h('p', { class: 'arm-sug-desglose' }, `Del costo directo se ahorra: aros ${dinero(d.aros)} · tornillos ${dinero(d.tornillos)} · juntas ${dinero(d.juntas)} · mano de obra ${dinero(d.mano_obra)}${Math.abs(d.otros) >= 0.005 ? ` · otros ${dinero(d.otros)}` : ''}.`)),
+        h('p', { class: 'arm-sug-desglose' }, `Del costo directo se ahorra: aros ${dinero(d.aros)} · tornillos ${dinero(d.tornillos)} · juntas ${dinero(d.juntas)} · mano de obra ${dinero(d.mano_obra)}${Math.abs(d.otros) >= 0.005 ? ` · otros ${dinero(d.otros)}` : ''}${Math.abs(d.bridas_otra_partida) >= 0.005 ? ` · bridas de otra partida ${dinero(d.bridas_otra_partida)}` : ''}.`),
+        textoBridas(s)),
       h('div', { class: 'arm-sug-der' },
         h('div', { class: 'arm-sug-ahorro', dataset: { ahorro: String(s.ahorro) } }, dinero(s.ahorro)),
         h('div', { class: 'arm-sug-et' }, 'de ahorro, sin IVA'),

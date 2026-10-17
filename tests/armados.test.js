@@ -406,3 +406,204 @@ test('Cantidades y ahorro: la UNION de un armado de varias piezas lleva n unione
   assert.equal(sug[0].n, 4);
   assert.ok(sug[0].ahorro > 3.5 * uno[0].ahorro, 'cuatro conjuntos ahorran cuatro veces lo de uno (la junta se cobra una vez, con su montaje)');
 });
+
+/* ------------------------------------------------------------------ */
+/* Bridas de otra partida (bridas_aparte): el armado las libera y se descuentan de la partida de bridas */
+/* ------------------------------------------------------------------ */
+
+const aparte = { bridas_aparte: true };
+const brida5 = (cantidad, extra) => ({ id: 'br', familia: 'BRIDA', material_id: 'GALVANIZADO', calibre: 22, ref_diametro: 'INTERIOR', D_mm: pulg(5), cantidad, ...extra });
+const comprada5 = (cantidad) => ({ id: 'cp', familia: 'COMPRADO', articulo_id: 'BRIDA_PLACA_5', cantidad });
+const casoAparte = (n, stock) => ({
+  riesgo: 'MEDIO', servicio: 'POLVO', ubicacion: 'INTERIOR', yarda_mm: 914,
+  partidas: [recto({ ...aparte, cantidad: n }), codo('c90', 90, { ...aparte, cantidad: n }), ...stock],
+});
+const cuadre5 = (res) => res.bridas.filas.find((f) => f.D_nom_mm === pulg(5));
+
+test('Bridas de otra partida: el ahorro incluye la brida que se libera y coincide con el cambio real de cotizar()', () => {
+  const cot = casoAparte(1, [brida5(4)]);
+  const res0 = C.cotizar(cot, M);
+  assert.equal(res0.bridas.cuadra, true, 'cuadrado antes: piden 4, hay 4');
+  const sug = A.sugerirArmados(cot, res0, M);
+  assert.equal(sug.length, 1);
+  const s = sug[0];
+  assert.equal(s.bridas_liberadas, 2);
+  assert.equal(s.bridas_consumidas, 2);
+  assert.ok(s.desglose.bridas_otra_partida > 0 && s.ahorro_bridas > 0);
+  assert.equal(s.bridas[0].de[0].partida, 'br');
+  casi(s.antes - s.despues, s.ahorro, 0.006);
+  assert.equal(A.armar(cot, s.piezas, s.n, M).ok, true);
+  const res1 = C.cotizar(cot, M);
+  casi(sub(res0) - sub(res1), s.ahorro, 0.006, 'el ahorro es el cambio medido de las partidas');
+  assert.ok(s.ahorro > 0);
+  // la partida de bridas baja en 2n y el cuadre sigue cuadrado: piden 2, hay 2
+  assert.equal(porId(cot, res1, 'br').entrada.cantidad, 2);
+  assert.equal(porId(cot, res1, 'br').armados_consumidas, 2);
+  assert.equal(porId(cot, res1, 'br').cantidad_capturada, 4);
+  assert.equal(res1.bridas.cuadra, true);
+  assert.deepEqual([cuadre5(res1).piden, cuadre5(res1).hay, cuadre5(res1).armados], [2, 2, 2]);
+  assert.equal(res1.bridas.armados, 2);
+  assert.equal(res1.armados[0].bridas_consumidas, 2);
+  assert.equal(res1.avisos.length, 0);
+  // la cotización del usuario no se toca
+  assert.equal(cot.partidas.find((p) => p.id === 'br').cantidad, 4);
+});
+
+test('Bridas de otra partida: n conjuntos descuentan 2n y res.partidas sigue alineado con cot.partidas', () => {
+  const cot = casoAparte(3, [brida5(12)]);
+  const res0 = C.cotizar(cot, M);
+  assert.equal(res0.bridas.cuadra, true);
+  const s = A.sugerirArmados(cot, res0, M)[0];
+  assert.equal(s.n, 3);
+  assert.equal(s.bridas_consumidas, 6);
+  A.armar(cot, s.piezas, s.n, M);
+  const antes = clon(cot.partidas);
+  const res1 = C.cotizar(cot, M);
+  assert.deepEqual(cot.partidas, antes, 'cotizar no muta cot.partidas');
+  assert.equal(res1.partidas.length, cot.partidas.length + 1, 'la UNION derivada va al final');
+  cot.partidas.forEach((p, i) => assert.equal(res1.partidas[i].entrada.familia, p.familia, 'alineada'));
+  assert.equal(res1.partidas[cot.partidas.length].entrada.familia, 'UNION');
+  assert.equal(porId(cot, res1, 'br').entrada.cantidad, 6);
+  assert.equal(res1.bridas.cuadra, true);
+});
+
+test('Bridas de otra partida: sin partida BRIDA del Ø se descuenta de las bridas compradas del ducto', () => {
+  const cot = casoAparte(1, [comprada5(4)]);
+  const res0 = C.cotizar(cot, M);
+  assert.equal(res0.bridas.cuadra, true);
+  const s = A.sugerirArmados(cot, res0, M)[0];
+  assert.equal(s.bridas[0].de[0].tipo, 'COMPRADO');
+  A.armar(cot, s.piezas, s.n, M);
+  const res1 = C.cotizar(cot, M);
+  casi(sub(res0) - sub(res1), s.ahorro, 0.006);
+  assert.equal(porId(cot, res1, 'cp').entrada.cantidad, 2);
+  assert.equal(res1.bridas.cuadra, true);
+  // y si hay las dos, primero la de taller y luego la comprada
+  const c2 = casoAparte(1, [brida5(1), comprada5(3)]);
+  const s2 = A.sugerirArmados(c2, null, M)[0];
+  assert.deepEqual(s2.bridas[0].de.map((x) => [x.tipo, x.consumidas]), [['BRIDA', 1], ['COMPRADO', 1]]);
+  A.armar(c2, s2.piezas, s2.n, M);
+  const r2 = C.cotizar(c2, M);
+  assert.equal(porId(c2, r2, 'br').entrada.cantidad, 0);
+  assert.equal(porId(c2, r2, 'cp').entrada.cantidad, 2);
+  assert.equal(r2.bridas.cuadra, true);
+});
+
+test('Bridas de otra partida: sin partida de bridas de ese Ø no se descuenta nada (el cuadre muestra que sobran)', () => {
+  const cot = casoAparte(1, [brida5(4, { D_mm: pulg(6) })]);
+  const res0 = C.cotizar(cot, M);
+  assert.deepEqual(A.sugerirArmados(cot, res0, M), [], 'sin las bridas que se ahorran el armado no conviene');
+  A.armar(cot, [{ partida: 'rt', cara: 'final' }, { partida: 'c90', cara: 'A' }], 1, M);
+  const res1 = C.cotizar(cot, M);
+  assert.equal(porId(cot, res1, 'br').entrada.cantidad, 4, 'la de 6″ no se toca');
+  assert.equal(porId(cot, res1, 'br').armados_consumidas, undefined);
+  assert.match(res1.avisos.join(' '), /libera 2 bridas que están en otra partida y no hay una partida de bridas del mismo diámetro/);
+  assert.equal(res1.armados[0].bridas_consumidas, 0);
+  assert.equal(res1.bridas.armados, 0);
+});
+
+test('Bridas de otra partida: varias sugerencias compiten por un stock limitado y no gastan más de lo que hay', () => {
+  // dos pares (recto + codo) que liberan 2 bridas cada uno; la partida de bridas tiene 3
+  const cot = {
+    yarda_mm: 914,
+    partidas: [recto({ ...aparte, id: 'r1' }), codo('k1', 90, aparte), recto({ ...aparte, id: 'r2', L_mm: 1828 }), codo('k2', 90, aparte), brida5(3)],
+  };
+  const sug = A.sugerirArmados(cot, null, M);
+  const consumidas = sug.reduce((s, x) => s + x.bridas_consumidas, 0);
+  assert.ok(sug.length >= 1);
+  assert.ok(consumidas <= 3, `no se descuentan más de las 3 que hay (${consumidas})`);
+  sug.forEach((s) => assert.ok(s.ahorro > 0));
+  // aplicadas todas las sugeridas, la partida de bridas no queda negativa y el ahorro total coincide con lo medido
+  const res0 = C.cotizar(cot, M);
+  sug.forEach((s) => A.armar(cot, s.piezas, s.n, M));
+  const res1 = C.cotizar(cot, M);
+  assert.ok(porId(cot, res1, 'br').entrada.cantidad >= 0);
+  casi(sub(res0) - sub(res1), sug.reduce((s, x) => s + x.ahorro, 0), 0.01);
+});
+
+test('Bridas de otra partida: si se descuentan todas la partida queda en $0 y sin error', () => {
+  const cot = casoAparte(1, [brida5(2)]);
+  const res0 = C.cotizar(cot, M);
+  const s = A.sugerirArmados(cot, res0, M)[0];
+  assert.equal(s.bridas_consumidas, 2);
+  A.armar(cot, s.piezas, s.n, M);
+  const res1 = C.cotizar(cot, M);
+  const f = porId(cot, res1, 'br');
+  assert.equal(f.ok, true);
+  assert.equal(f.agotada_por_armados, true);
+  assert.equal(f.entrada.cantidad, 0);
+  assert.equal(f.precio.importe, 0);
+  assert.equal(f.costos.CD, 0);
+  assert.equal(f.peso.neto_total_kg, 0);
+  assert.equal(res1.totales.n_partidas_error, 0);
+  casi(sub(res0) - sub(res1), s.ahorro, 0.006);
+  assert.equal(cuadre5(res1).diferencia, cuadre5(res0).diferencia, 'el cuadre queda igual de desajustado (faltaban 2 desde el principio)');
+  assert.equal(res1.avisos.length, 0);
+  // lo comprado en cero tampoco cuenta en la lista de compras
+  const c2 = casoAparte(1, [comprada5(2)]);
+  const s2 = A.sugerirArmados(c2, null, M)[0];
+  A.armar(c2, s2.piezas, s2.n, M);
+  const r2 = C.cotizar(c2, M);
+  assert.equal(porId(c2, r2, 'cp').precio.importe, 0);
+  assert.equal(r2.compras.comprados.some((x) => x.cantidad === 0), false);
+});
+
+test('Bridas de otra partida: si se borra o se reduce la partida de bridas, se descuenta lo que hay y nunca queda negativa', () => {
+  const cot = casoAparte(1, [brida5(4)]);
+  const s = A.sugerirArmados(cot, null, M)[0];
+  A.armar(cot, s.piezas, s.n, M);
+  // se reduce a 1: sólo se puede descontar 1
+  cot.partidas.find((p) => p.id === 'br').cantidad = 1;
+  const r1 = C.cotizar(cot, M);
+  assert.equal(porId(cot, r1, 'br').entrada.cantidad, 0);
+  assert.equal(r1.armados[0].bridas_consumidas, 1);
+  assert.equal(r1.armados[0].bridas_liberadas, 2);
+  assert.match(r1.avisos.join(' '), /sólo se pudieron descontar 1/);
+  // se borra: no hay de dónde descontar y el armado sigue válido
+  cot.partidas = cot.partidas.filter((p) => p.id !== 'br');
+  const r2 = C.cotizar(cot, M);
+  assert.equal(r2.armados[0].ok, true);
+  assert.equal(r2.armados[0].bridas_consumidas, 0);
+  assert.ok(r2.partidas.every((f) => f.ok));
+  // deshacer sigue funcionando
+  assert.equal(A.deshacerArmado(cot, cot.armados[0].id).ok, true);
+});
+
+test('Ejemplo del pedido del 30-sep: las bridas de otra partida dan sugerencias con ahorro y el cuadre no se desajusta', () => {
+  const cot = E.pedidoDucteria();
+  cot.partidas.forEach((p, i) => { p.id = `p${i}`; });
+  const res0 = C.cotizar(cot, M);
+  const dif0 = res0.bridas.filas.map((f) => [f.D_nom_mm, f.diferencia]);
+  const sug = A.sugerirArmados(cot, res0, M);
+  assert.ok(sug.length >= 3, `hay sugerencias (${sug.length})`);
+  sug.forEach((s) => { assert.ok(s.ahorro > 0); assert.ok(s.ahorro_bridas > 0); });
+  assert.ok(sug.reduce((s, x) => s + x.bridas_consumidas, 0) > 0);
+  for (let ronda = 0; ronda < 6; ronda += 1) {
+    const r = C.cotizar(cot, M);
+    const nuevas = A.sugerirArmados(cot, r, M);
+    if (!nuevas.length) break;
+    nuevas.forEach((s) => assert.equal(A.armar(cot, s.piezas, s.n, M).ok, true));
+  }
+  const res1 = C.cotizar(cot, M);
+  assert.equal(res1.totales.n_partidas_error, 0);
+  assert.ok(res1.totales.total < res0.totales.total);
+  assert.deepEqual(res1.bridas.filas.map((f) => [f.D_nom_mm, f.diferencia]), dif0, 'descontar lo que se libera no cambia lo que sobra o falta');
+  assert.ok(res1.bridas.armados > 0);
+  assert.ok(res1.partidas.every((f) => f.ok));
+});
+
+test('Bridas de otra partida: la lista de fabricación usa la cantidad efectiva de bridas y anota lo que se ahorra; una partida agotada va «aparte»', () => {
+  const cot = casoAparte(1, [brida5(6)]);
+  const s = A.sugerirArmados(cot, null, M)[0];
+  A.armar(cot, s.piezas, s.n, M);
+  const lista = LF.listaFabricacion(cot, C.cotizar(cot, M), M);
+  const b = lista.piezas.find((q) => q.id === 'br');
+  assert.equal(b.cantidad, 4, 'las 6 capturadas menos las 2 que se ahorran');
+  assert.ok(b.notas.some((n) => /2 se ahorran por conjuntos armados/.test(n)), b.notas.join(' | '));
+  // si se ahorran todas, la partida no es una tarjeta: se explica en «No se fabrican aquí»
+  const c2 = casoAparte(1, [brida5(2)]);
+  A.armar(c2, A.sugerirArmados(c2, null, M)[0].piezas, 1, M);
+  const l2 = LF.listaFabricacion(c2, C.cotizar(c2, M), M);
+  assert.equal(l2.piezas.some((q) => q.id === 'br'), false);
+  assert.match(l2.aparte.find((a) => a.id === 'br').motivo, /se ahorran por conjuntos armados/);
+});

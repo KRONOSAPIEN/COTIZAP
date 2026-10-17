@@ -84,6 +84,7 @@
     };
 
     ok.forEach((f) => {
+      if (f.agotada_por_armados) return; // los armados le descontaron todas sus piezas: no hay nada que comprar
       const n = f.entrada.cantidad;
       if (f.familia === 'COMPRADO') {
         comprados.push({

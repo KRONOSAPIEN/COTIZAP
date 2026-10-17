@@ -544,6 +544,13 @@
     if (det && root.matchMedia('(max-width: 1099px)').matches) det.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  /** «22 − 2 por armados = 20 bridas»: lo que los conjuntos armados le descontaron a una partida de bridas; '' si no le descontaron. */
+  function textoRebajaArmados(f) {
+    if (!f || !f.ok || !(f.armados_consumidas > 0)) return '';
+    const n = f.entrada.cantidad;
+    return `${f.cantidad_capturada} − ${f.armados_consumidas} por armados = ${n} ${n === 1 ? 'brida' : 'bridas'}`;
+  }
+
   function filaPartida(p, i) {
     const f = estado.res.partidas[i];
     const sel = p.id === estado.sel;
@@ -554,6 +561,8 @@
     if (p.unifilar_id) chips.push(h('span', { class: 'chip chip-auto chip-unifilar', title: p.unifilar_editada ? 'Pieza del croquis unifilar, editada a mano' : 'Pieza del croquis unifilar' }, p.unifilar_id, p.unifilar_editada ? ' · editada' : ''));
     if (p.trazado_ventilador) chips.push(h('span', { class: 'chip chip-auto chip-trazado', title: 'El ventilador elegido en el trazado isométrico (o su motor): se pone al día al volver a pasarlo' }, `Trazado · ${p.trazado_ventilador}`));
     chips.push(...W.armadosUI.chipsDe(p));
+    const rebaja = textoRebajaArmados(f);
+    if (rebaja) chips.push(h('span', { class: 'chip chip-auto chip-rebaja-armados', title: 'Los conjuntos armados en taller no llevan brida en las caras que se juntan: esas bridas se descontaron de esta partida', dataset: { rebaja: 'armados' } }, W.icono('info'), rebaja));
     const activar = () => seleccionar(p.id);
     const li = h('li', { class: `partida${sel ? ' sel' : ''}${f && !f.ok ? ' err' : ''}`, dataset: { id: p.id } },
       h('div', {
@@ -867,7 +876,7 @@
     const ind = f.indicadores;
     const tiles = h('div', { class: 'tiles tiles-3' },
       tile('Precio unitario', W.mxn(f.precio.unitario), f.precio.aplico_cargo_minimo ? 'cargo mínimo aplicado' : 'antes de IVA', 'tile-principal'),
-      tile('Importe', W.mxn(f.precio.importe), `${f.entrada.cantidad} ${f.entrada.cantidad === 1 ? 'pieza' : 'piezas'}`),
+      tile('Importe', W.mxn(f.precio.importe), textoRebajaArmados(f) || `${f.entrada.cantidad} ${f.entrada.cantidad === 1 ? 'pieza' : 'piezas'}`),
       tile('Peso neto', `${W.num(f.peso.neto_total_kg, 2)} kg`, f.peso.neto_unitario_kg ? `${W.num(f.peso.neto_unitario_kg, 2)} kg c/u` : ''),
       tile('Precio por kg', ind.precio_por_kg_neto ? W.mxn(ind.precio_por_kg_neto) : '—', ind.precio_por_m_lineal ? `${W.mxn(ind.precio_por_m_lineal)} por m lineal` : 'neto, antes de IVA'),
       tile('Mano de obra', `${W.num(ind.horas_mod_reales, 2)} h`, ind.horas_mod_por_kg_neto ? `${W.num(ind.horas_mod_por_kg_neto, 3)} h/kg` : ''),
@@ -1207,6 +1216,11 @@
       h('button', { type: 'button', class: 'btn', onclick: () => abrirDialogo(p.id) }, W.icono('editar'), 'Editar'));
     if (!f.ok) {
       reemplazar(cont, cab, h('div', { class: 'errores' }, h('p', { class: 'errores-tit' }, W.icono('error'), 'No se puede calcular esta partida'), h('ul', null, f.errores.map((e) => h('li', null, e)))));
+      return;
+    }
+    if (f.agotada_por_armados) { // los armados le descontaron todas sus piezas: queda en $0
+      reemplazar(cont, cab, h('div', { class: 'nota nota-agotada', role: 'note' }, W.icono('info'),
+        `Los conjuntos armados en taller ya no necesitan ninguna de estas bridas (${textoRebajaArmados(f)}): la partida queda en ${W.mxn(0)}. Si deshace los armados, vuelve a cotizarse completa.`));
       return;
     }
     const plano = seccionPlano(f);
@@ -1795,7 +1809,7 @@
     const c = estado.cot;
     const vigencia = Number.isFinite(c.vigencia_dias) && c.vigencia_dias > 0 ? Math.min(3650, Math.round(c.vigencia_dias)) : 0;
     const T = estado.res.totales;
-    const filas = estado.res.partidas.map((f, i) => ({ f, p: c.partidas[i] || f.entrada })).filter((x) => x.f.ok);
+    const filas = estado.res.partidas.map((f, i) => ({ f, p: c.partidas[i] || f.entrada })).filter((x) => x.f.ok && !x.f.agotada_por_armados);
     const dias = estado.res.capas.financiamiento.dias_cobro;
     const sec = $('#propuesta');
     sec.replaceChildren(

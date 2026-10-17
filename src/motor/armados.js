@@ -317,6 +317,116 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* Bridas de otra partida                                             */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Una pieza con `bridas_aparte` no trae sus bridas: están en partidas de bridas (familia BRIDA, de taller, o COMPRADO con
+   * `ducto_D_mm`). Al quitarle la brida a una cara, esa brida ya no hace falta: se descuenta de la partida de bridas del mismo Ø.
+   * Las medidas se emparejan con la MISMA clave del cuadre de bridas (cotizador.claveBrida: Ø nominal a 0.1 mm), así el cuadre
+   * sigue cuadrado. Primero se gastan las partidas BRIDA (en su orden en la lista) y, si no alcanzan, las COMPRADO. Si no hay
+   * partida del diámetro (o ya no tiene piezas) no se descuenta nada: el cuadre dirá que sobran. Nunca se baja de 0 piezas.
+   */
+  const claveDe = (b) => COT().claveBrida(b.forma, b.forma === 'REDONDA' ? b.D_nom_mm : b.a_nom_mm, b.b_nom_mm);
+
+  /** Las bridas (con su medida) que lleva una pieza, tal como las cuenta el cuadre. `p` normalizada. */
+  function bridasDe(p, M) {
+    const mat = M.materiales[p.material_id];
+    const e = MAT.espesorMm(M, mat, p);
+    return MAT.herrajes(GEO.perfilFabricacion(p, e, M), p, mat, e, M).bridas;
+  }
+  const contarBridas = (bridas) => {
+    const m = new Map();
+    bridas.forEach((b) => {
+      const k = claveDe(b);
+      const x = m.get(k) || { n: 0, forma: b.forma, D_nom_mm: b.D_nom_mm, a_nom_mm: b.a_nom_mm, b_nom_mm: b.b_nom_mm };
+      x.n += 1;
+      m.set(k, x);
+    });
+    return m;
+  };
+
+  /**
+   * Las bridas de otra partida que libera una pieza al quedar su `cara` sin brida, para `n` conjuntos: Map clave → { n, D_nom_mm, … }.
+   * Vacío si la pieza lleva sus propias bridas (sin `bridas_aparte`). `p` normalizada.
+   */
+  function bridasLiberadas(p, cara, n, M) {
+    const libres = new Map();
+    if (p.bridas_aparte !== true) return libres;
+    try {
+      const antes = contarBridas(bridasDe(p, M));
+      const despues = contarBridas(bridasDe(sinBridaEn(p, cara), M));
+      antes.forEach((x, k) => {
+        const d = x.n - (despues.has(k) ? despues.get(k).n : 0);
+        if (d > 0) libres.set(k, { ...x, n: d * n });
+      });
+    } catch (e) { /* una pieza que no se puede calcular no libera nada */ }
+    return libres;
+  }
+  const juntarLiberadas = (...mapas) => {
+    const m = new Map();
+    mapas.forEach((x) => x.forEach((v, k) => { const y = m.get(k); m.set(k, y ? { ...y, n: y.n + v.n } : { ...v }); }));
+    return m;
+  };
+
+  /**
+   * Las partidas de la cotización de las que se pueden descontar bridas: { entradas: [{ indice, tipo ('BRIDA' | 'COMPRADO'), clave,
+   * D_nom_mm, cantidad, consumidas }] }, las BRIDA primero. Sólo cuentan las que el cuadre cuenta (sin errores y de un Ø conocido).
+   */
+  function crearStock(lista, M, heredar) {
+    const entradas = [];
+    lista.forEach((crudo, indice) => {
+      if (!esObjeto(crudo) || (crudo.familia !== 'BRIDA' && crudo.familia !== 'COMPRADO')) return;
+      let p;
+      try {
+        const v = VAL.normalizarPartida({ cantidad: 1, ...heredar(crudo) }, M);
+        if (v.errores.length) return;
+        p = v.p;
+      } catch (e) { return; }
+      let D = 0;
+      if (p.familia === 'BRIDA') {
+        if (p.forma === 'RECTANGULAR') return;
+        D = num(p.D_mm);
+      } else {
+        const art = p.articulo_id && M.compras && M.compras.articulos ? M.compras.articulos[p.articulo_id] : null;
+        if (!(art && art.ducto_D_mm > 0)) return;
+        D = art.ducto_D_mm;
+      }
+      if (Number.isFinite(num(p.cantidad)) && num(p.cantidad) > 0) {
+        entradas.push({ indice, tipo: p.familia, clave: COT().claveBrida('REDONDA', D), D_nom_mm: D, cantidad: num(p.cantidad), consumidas: 0 });
+      }
+    });
+    entradas.sort((a, b) => (a.tipo === b.tipo ? a.indice - b.indice : a.tipo === 'BRIDA' ? -1 : 1));
+    return { entradas };
+  }
+  const clonarStock = (stock) => ({ entradas: stock.entradas.map((e) => ({ ...e })) });
+
+  /** Cuánto se descontaría de `stock` para liberar `pedido` (Map clave → { n }), sin tocarlo: { tomas: [{ indice, tipo, clave, cant }], liberadas, consumidas }. */
+  function simularConsumo(stock, pedido) {
+    const tomado = new Map();
+    const tomas = [];
+    let liberadas = 0;
+    let consumidas = 0;
+    pedido.forEach((v, clave) => {
+      let falta = v.n;
+      liberadas += v.n;
+      stock.entradas.filter((e) => e.clave === clave).forEach((e) => {
+        if (falta <= 0) return;
+        const t = Math.min(falta, Math.max(0, e.cantidad - e.consumidas - (tomado.get(e.indice) || 0)));
+        if (t <= 0) return;
+        tomado.set(e.indice, (tomado.get(e.indice) || 0) + t);
+        tomas.push({ indice: e.indice, tipo: e.tipo, clave, cant: t });
+        falta -= t;
+        consumidas += t;
+      });
+    });
+    return { tomas, liberadas, consumidas };
+  }
+  function aplicarConsumo(stock, tomas) {
+    tomas.forEach((t) => { stock.entradas.find((e) => e.indice === t.indice).consumidas += t.cant; });
+  }
+
+  /* ------------------------------------------------------------------ */
   /* Aplicar                                                            */
   /* ------------------------------------------------------------------ */
 
@@ -347,21 +457,37 @@
     return u;
   }
 
+  /** Las bridas liberadas de un armado y de dónde se descontaron: [{ clave, D_nom_mm, liberadas, consumidas, de: [{ indice, tipo, consumidas }] }]. */
+  function detalleBridas(pedido, tomas) {
+    return [...pedido.entries()].map(([clave, v]) => {
+      const de = tomas.filter((t) => t.clave === clave).map((t) => ({ indice: t.indice, tipo: t.tipo, consumidas: t.cant }));
+      return { clave, D_nom_mm: v.D_nom_mm, liberadas: v.n, consumidas: de.reduce((s, x) => s + x.consumidas, 0), de };
+    });
+  }
+
   /**
-   * Las partidas efectivas para cotizar. Devuelve { partidas, conjuntos, avisos }: `partidas` son las de la cotización, en su
+   * Las partidas efectivas para cotizar. Devuelve { partidas, conjuntos, avisos, consumos }: `partidas` son las de la cotización, en su
    * orden y con la cara sin brida en las piezas armadas, más al final la partida UNION de cada armado; `conjuntos` dice cómo quedó
    * cada armado (marca E1, E2… por su lugar en la lista, sus piezas, si se aplicó o por qué no). Un armado que ya no es válido
    * (se editó una partida) no se aplica y se avisa. Sin armados devuelve la misma lista.
+   *
+   * Bridas de otra partida: las piezas con `bridas_aparte` liberan una brida por conjunto en cada cara que pierde la suya; se
+   * descuentan de las partidas de bridas del mismo Ø (ver «Bridas de otra partida»). La partida efectiva trae la cantidad ya
+   * descontada y `armados_consumidas` (cuántas); si se descuentan todas queda `cantidad: 0` (el cotizador la calcula como partida
+   * agotada, en $0, sin error). `consumos`: { [índice]: { consumidas, original, tipo } }; cada conjunto trae `bridas` (qué liberó
+   * y de dónde se descontó), `bridas_liberadas` y `bridas_consumidas`. Nunca se modifica la lista de entrada.
    */
   function aplicarArmados(partidas, armados, M, opc) {
     const lista = Array.isArray(partidas) ? partidas : [];
     const arms = (Array.isArray(armados) ? armados : []).filter(esObjeto);
-    if (!arms.length) return { partidas: lista, conjuntos: [], avisos: [] };
+    if (!arms.length) return { partidas: lista, conjuntos: [], avisos: [], consumos: {} };
+    const heredar = (opc && opc.heredar) || ((p) => p);
     const efectivas = lista.slice();
     const extras = [];
     const conjuntos = [];
     const avisos = [];
     const tomadas = new Map();
+    let stock = null;
     arms.forEach((a, k) => {
       const marca = `E${k + 1}`;
       const v = validarArmado(lista, a, M, { ...(opc || {}), tomadas });
@@ -375,6 +501,19 @@
         efectivas[x.indice] = sinBridaEn(efectivas[x.indice], x.cara);
         tomadas.set(`${x.partida}|${x.cara}`, marca);
       });
+      // las bridas de otra partida que dejan de hacer falta
+      const pedido = juntarLiberadas(...v.piezas.map((x) => bridasLiberadas(x.p, x.cara, base.n, M)));
+      let bridas = [];
+      if (pedido.size) {
+        stock = stock || crearStock(lista, M, heredar);
+        const sim = simularConsumo(stock, pedido);
+        aplicarConsumo(stock, sim.tomas);
+        bridas = detalleBridas(pedido, sim.tomas);
+        if (sim.consumidas < sim.liberadas) {
+          const motivo = sim.consumidas ? `sólo se pudieron descontar ${sim.consumidas}` : 'no hay una partida de bridas del mismo diámetro de donde descontarlas';
+          avisos.push(`Armado ${marca}: libera ${sim.liberadas} ${sim.liberadas === 1 ? 'brida' : 'bridas'} que están en otra partida y ${motivo}: el cuadre de bridas mostrará las que sobran.`);
+        }
+      }
       extras.push(partidaUnion(a, marca, v));
       conjuntos.push({
         ...base,
@@ -382,9 +521,16 @@
         union_indice: lista.length + extras.length - 1,
         pareja: v.pareja, angulo_deg: v.angulo_deg, es_90: v.es_90, dim_mm: v.dim_mm, limite_mm: v.limite_mm, D_mm: v.D_mm,
         descripcion: extras[extras.length - 1].descripcion,
+        bridas, bridas_liberadas: bridas.reduce((s, x) => s + x.liberadas, 0), bridas_consumidas: bridas.reduce((s, x) => s + x.consumidas, 0),
       });
     });
-    return { partidas: efectivas.concat(extras), conjuntos, avisos };
+    // las partidas de bridas con su cantidad ya descontada
+    const consumos = {};
+    (stock ? stock.entradas : []).filter((e) => e.consumidas > 0).forEach((e) => {
+      consumos[e.indice] = { consumidas: e.consumidas, original: e.cantidad, tipo: e.tipo };
+      efectivas[e.indice] = { ...efectivas[e.indice], cantidad: e.cantidad - e.consumidas, armados_consumidas: e.consumidas };
+    });
+    return { partidas: efectivas.concat(extras), conjuntos, avisos, consumos, stock };
   }
 
   /* ------------------------------------------------------------------ */
@@ -407,9 +553,14 @@
    * Las parejas que se pueden armar y lo que ahorran, de mayor a menor. Cada sugerencia: { piezas: [{ partida, cara, nombre }], n,
    * pareja, descripcion, angulo_deg, es_90, dim_mm, limite_mm, D_mm, junta ('soldada' | 'engargolada'), ahorro (MXN, sin IVA:
    * precio de las partidas con y sin armado), antes, despues, ahorro_costo (costo directo) y desglose { aros, tornillos, juntas,
-   * mano_obra, otros } (costo directo ahorrado; negativo = cuesta más) }. Una partida aparece en una sola sugerencia (asignación
-   * voraz: primero la de mayor ahorro); al aceptarlas, las caras que quedan libres pueden dar nuevas sugerencias.
+   * mano_obra, otros, bridas_otra_partida } (costo directo ahorrado; negativo = cuesta más) }. Una partida aparece en una sola
+   * sugerencia (asignación voraz: primero la de mayor ahorro); al aceptarlas, las caras que quedan libres pueden dar nuevas sugerencias.
    * Sólo se sugiere lo que ahorra, cabe en el límite y es válido; las partidas sin `id` o con errores se omiten.
+   *
+   * Piezas con `bridas_aparte`: el armado libera bridas que están en otra partida (BRIDA o COMPRADO del mismo Ø). Su costo entra
+   * al ahorro (`ahorro_bridas`, `desglose.bridas_otra_partida`): precio de la partida de bridas con y sin las piezas descontadas.
+   * Varias sugerencias compiten por las mismas bridas: en cada vuelta de la asignación voraz se valúa con lo que queda, así no se
+   * descuentan más bridas de las que hay. `bridas`: [{ clave, D_nom_mm, liberadas, consumidas, de: [{ indice, partida, tipo, consumidas }] }].
    */
   function sugerirArmados(cot, res, M0) {
     const c = esObjeto(cot) ? cot : {};
@@ -462,7 +613,8 @@
       }
     }
 
-    // el ahorro de cada pareja con el mismo motor: las dos piezas con y sin armado, más la UNION
+    // el ahorro de cada pareja con el mismo motor: las dos piezas con y sin armado, más la UNION. Las bridas de otra partida que
+    // el armado libera se valúan aparte (dependen de cuánto queda en las partidas de bridas), al asignar
     const evaluados = [];
     pares.forEach(({ A, B, armado, v }) => {
       const n = armado.n;
@@ -480,30 +632,72 @@
       if (!fa || !fb || !fu || (ta.resto && !fra) || (tb.resto && !frb)) return;
       const antes = A.f.precio.importe + B.f.precio.importe;
       const despues = [fa, fb, fu, fra, frb].filter(Boolean).reduce((s, f) => s + f.precio.importe, 0);
-      const ahorro = U.redondear(antes - despues, 2);
-      if (!(ahorro > 0.005)) return;
       const cAntes = sumar([A.f, B.f]);
       const cDespues = sumar([fa, fb, fu, fra, frb].filter(Boolean));
       const d = (k) => cAntes[k] - cDespues[k];
       const desglose = { aros: d('aros'), tornillos: d('tornillos'), juntas: d('juntas'), mano_obra: d('mano_obra') };
       desglose.otros = d('total') - desglose.aros - desglose.tornillos - desglose.juntas - desglose.mano_obra;
+      const pedido = juntarLiberadas(...v.piezas.map((x) => bridasLiberadas(x.p, x.cara, n, M)));
       evaluados.push({
-        piezas: v.piezas.map((x) => ({ partida: x.partida, cara: x.cara, nombre: x.nombre })), n, pareja: v.pareja,
-        descripcion: `${v.piezas[0].nombre} con ${v.piezas[1].nombre}`, angulo_deg: v.angulo_deg, es_90: v.es_90,
-        dim_mm: v.dim_mm, limite_mm: v.limite_mm, D_mm: v.D_mm, junta: fu.geometria.costura === 'ENGARGOLADA' ? 'engargolada' : 'soldada',
-        ahorro, antes: U.redondear(antes, 2), despues: U.redondear(despues, 2), ahorro_costo: d('total'), desglose,
+        pedido,
+        s: {
+          piezas: v.piezas.map((x) => ({ partida: x.partida, cara: x.cara, nombre: x.nombre })), n, pareja: v.pareja,
+          descripcion: `${v.piezas[0].nombre} con ${v.piezas[1].nombre}`, angulo_deg: v.angulo_deg, es_90: v.es_90,
+          dim_mm: v.dim_mm, limite_mm: v.limite_mm, D_mm: v.D_mm, junta: fu.geometria.costura === 'ENGARGOLADA' ? 'engargolada' : 'soldada',
+          antes, despues, ahorro_costo: d('total'), desglose,
+        },
       });
     });
 
-    // asignación voraz: de mayor a menor ahorro, sin repetir partidas
-    evaluados.sort((a, b) => b.ahorro - a.ahorro);
+    // Las bridas de otra partida que libera un armado: lo que cuesta el stock de bridas del Ø antes y después de descontarlas,
+    // con el mismo precio de la partida de bridas (cotizada con su cantidad restante). { antes, despues, costo, tomas, liberadas, consumidas }
+    const importeRestante = (indice, m) => {
+      if (!(m > 0)) return { importe: 0, CD: 0 };
+      const f = cotizarP({ ...lista[indice], cantidad: m });
+      return f ? { importe: f.precio.importe, CD: f.costos.CD } : { importe: 0, CD: 0 };
+    };
+    const valuarBridas = (stock, pedido) => {
+      const sim = simularConsumo(stock, pedido);
+      let antes = 0; let despues = 0; let costo = 0;
+      [...new Set(sim.tomas.map((t) => t.indice))].forEach((indice) => {
+        const e = stock.entradas.find((x) => x.indice === indice);
+        const t = sim.tomas.filter((x) => x.indice === indice).reduce((s, x) => s + x.cant, 0);
+        const a = importeRestante(indice, e.cantidad - e.consumidas);
+        const b = importeRestante(indice, e.cantidad - e.consumidas - t);
+        antes += a.importe; despues += b.importe; costo += a.CD - b.CD;
+      });
+      return { antes, despues, costo, ...sim };
+    };
+
+    // asignación voraz: en cada vuelta, la pareja de mayor ahorro con lo que queda en las partidas de bridas, sin repetir partidas
+    // ni gastar más bridas de las que hay
+    const stock = base.stock ? clonarStock(base.stock) : crearStock(lista, M, heredar);
     const usadas = new Set();
     const salida = [];
-    evaluados.forEach((s) => {
-      if (s.piezas.some((x) => usadas.has(x.partida))) return;
-      s.piezas.forEach((x) => usadas.add(x.partida));
-      salida.push(s);
-    });
+    const pendientes = evaluados.slice();
+    for (;;) {
+      let mejor = null;
+      pendientes.forEach((e) => {
+        if (e.s.piezas.some((x) => usadas.has(x.partida))) return;
+        const val = valuarBridas(stock, e.pedido);
+        const ahorro = U.redondear(e.s.antes + val.antes - e.s.despues - val.despues, 2);
+        if (ahorro > 0.005 && (!mejor || ahorro > mejor.ahorro)) mejor = { e, val, ahorro };
+      });
+      if (!mejor) break;
+      const { e, val, ahorro } = mejor;
+      e.s.piezas.forEach((x) => usadas.add(x.partida));
+      aplicarConsumo(stock, val.tomas);
+      const bridas = detalleBridas(e.pedido, val.tomas).map((b) => ({ ...b, de: b.de.map((x) => ({ ...x, partida: lista[x.indice].id })) }));
+      const s = e.s;
+      salida.push({
+        ...s,
+        ahorro, antes: U.redondear(s.antes + val.antes, 2), despues: U.redondear(s.despues + val.despues, 2),
+        ahorro_costo: s.ahorro_costo + val.costo,
+        desglose: { ...s.desglose, bridas_otra_partida: val.costo },
+        ahorro_bridas: U.redondear(val.antes - val.despues, 2), // lo que cuestan (con su indirecto y utilidad) las bridas de otra partida que se ahorran
+        bridas, bridas_liberadas: val.liberadas, bridas_consumidas: val.consumidas,
+      });
+    }
     return salida;
   }
 

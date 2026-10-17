@@ -3949,6 +3949,50 @@ const ok = (cond, msg) => {
     } else console.log('  (pdftotext no está instalado: no se lee el texto del PDF)');
     await p.context().close();
   }
+  console.log('51) Armados con bridas de otra partida: el ejemplo del 30-sep sugiere armados, la fila de bridas dice «22 − n por armados» y el cuadre de Planos lo menciona');
+  {
+    const capturas = process.env.COTIZAP_E2E_CAPTURAS || ''; // si se define, guarda ahí una captura del diálogo y del cuadre
+    const p = await nuevaPagina();
+    await p.evaluate(() => window.COTIZAP.web.abrirCotizacion(window.COTIZAP.ejemplos.pedidoDucteria(), 'Ejemplo del 30-sep'));
+    await p.waitForTimeout(250);
+    const totalSin = () => p.evaluate(() => window.COTIZAP.web.estadoApp.res.totales.total);
+    const total0 = await totalSin();
+    ok(await p.locator('#lista-partidas .chip-rebaja-armados').count() === 0, 'sin armados ninguna fila de bridas dice «por armados»');
+
+    await p.click('#btn-sugerir-armados');
+    await p.waitForSelector('#dlg-armados[open]');
+    const sug = await p.locator('#arm-lista .arm-sug').evaluateAll((els) => els.map((e) => ({ txt: e.textContent, ahorro: Number(e.querySelector('.arm-sug-ahorro').dataset.ahorro) })));
+    ok(sug.length >= 3 && sug.every((s) => s.ahorro > 0), `el ejemplo del 30-sep ya sugiere armados con ahorro (${sug.length}: ${sug.map((s) => s.ahorro).join(', ')})`);
+    ok(sug.every((s) => /bridas de otra partida \$[\d,]+\.\d\d/.test(s.txt) && /Se ahorran \d+ bridas? de \d+″/.test(s.txt)), 'cada tarjeta dice «bridas de otra partida $x» y cuántas bridas se ahorran');
+    if (capturas) await p.locator('#dlg-armados').screenshot({ path: path.join(capturas, 'muestra-sugerencias-30sep.png') });
+
+    // armar una: la partida de bridas baja y su fila lo dice
+    await p.locator('#arm-lista .arm-sug').first().locator('button[data-armar]').click();
+    await p.waitForTimeout(200);
+    const rebajas = await p.locator('#lista-partidas .chip-rebaja-armados').allInnerTexts();
+    ok(rebajas.length >= 1 && rebajas.every((t) => /\d+ − \d+ por armados = \d+ bridas?/.test(t)), `la fila de bridas dice la rebaja: ${rebajas.join(' | ')}`);
+    ok(await totalSin() < total0, 'armar baja el total');
+
+    // armar todas lo que quede: hasta que ya no haya sugerencias
+    for (let i = 0; i < 5 && await p.locator('#arm-todas').isEnabled(); i += 1) {
+      await p.click('#arm-todas');
+      await p.waitForTimeout(250);
+    }
+    await p.click('#arm-cerrar');
+    ok(await p.locator('#lista-partidas .chip-rebaja-armados').count() >= 2, 'tras armar todas, varias partidas de bridas llevan su rebaja');
+    const sinErr = await p.evaluate(() => window.COTIZAP.web.estadoApp.res.totales.n_partidas_error);
+    ok(sinErr === 0, 'ninguna partida de bridas queda con error');
+
+    // el cuadre de Planos usa las cantidades efectivas y menciona los armados
+    await p.click('#tab-planos');
+    await p.waitForSelector('#planos-hojas .cuadre');
+    const cuadreTxt = await p.locator('#planos-hojas .cuadre').innerText();
+    ok(/Los conjuntos armados en taller ahorran \d+ bridas/.test(cuadreTxt) && /\d+ − \d+ por armados/.test(cuadreTxt), 'el cuadre de bridas menciona lo que ahorran los armados y las cifras efectivas');
+    const dif = await p.evaluate(() => window.COTIZAP.web.estadoApp.res.bridas.filas.map((f) => [f.D_nom_mm, f.diferencia]));
+    ok(dif.length > 0, 'el cuadre sigue activo');
+    if (capturas) await p.locator('#planos-hojas .cuadre').screenshot({ path: path.join(capturas, 'muestra-cuadre-30sep.png') });
+    await p.context().close();
+  }
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);
   await browser.close();
   console.log(fallos ? `\n${fallos} verificación(es) fallaron` : '\nTodas las verificaciones pasaron');

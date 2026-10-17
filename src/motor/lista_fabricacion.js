@@ -71,6 +71,8 @@
     cot.partidas.forEach((p, i) => {
       const f = res.partidas[i];
       if (!f || !f.ok) { conError += 1; noDibujadas.push({ p, f, i, error: true }); return; }
+      // los conjuntos armados le descontaron todas sus piezas (bridas de otra partida): no hay nada que fabricar, se dice por qué
+      if (f.agotada_por_armados) { sinPlano += 1; noDibujadas.push({ p, f, i, error: false }); return; }
       const d = PL().plano(f, M);
       // una familia con dibujo pero sin hoja en los planos tampoco se oculta: queda en `noDibujadas`
       if (!d || !GRUPOS.some((g) => g.fams.includes(p.familia))) { sinPlano += 1; noDibujadas.push({ p, f, i, error: false }); return; }
@@ -304,12 +306,14 @@
     // no una instrucción de taller: no trae código, se reconoce por su texto y no entra a la lista de fabricación.
     const avisos = (f.advertencias || []).filter((w) => !/más delgado que el mínimo recomendado/.test(w));
     const notas = [...(d.notas || [])];
+    // bridas de otra partida que los conjuntos armados en taller ya no necesitan: la cantidad de la tarjeta es la efectiva
+    if (f.armados_consumidas > 0) notas.push(`Se capturaron ${num(f.cantidad_capturada, 0)}: ${num(f.armados_consumidas, 0)} se ahorran por conjuntos armados (quedan ${num(f.entrada.cantidad, 0)}).`);
     let material = lamina ? sinParentesis(f.material) : '';
     if (f.familia === 'SOPORTE' && f.soporte && f.soporte.barra) material = f.soporte.barra.descripcion || '';
     if (f.familia === 'COMPRADO') material = 'Placa (comprada)';
     return {
       marca, grupo: marca.replace(/\d+$/, ''), indice: x.i, id: p.id, familia: f.familia, tipo: TIPO_FAMILIA[f.familia] || f.familia,
-      cantidad: p.cantidad, titulo, descripcion: p.descripcion && p.descripcion !== titulo ? p.descripcion : (p.familia === 'RECTO' && d.titulo_corto) || '',
+      cantidad: f.armados_consumidas > 0 ? f.entrada.cantidad : p.cantidad, titulo, descripcion: p.descripcion && p.descripcion !== titulo ? p.descripcion : (p.familia === 'RECTO' && d.titulo_corto) || '',
       material, calibre: lamina && !(p.espesor_mm > 0) ? p.calibre : null, espesor_mm: lamina ? f.espesor_mm : null,
       medidas: medidasDe(f, p, M),
       costura: f.geometria && f.geometria.costura ? (f.geometria.costura === 'ENGARGOLADA' ? 'Engargolada' : 'Soldada') : '',
@@ -329,6 +333,7 @@
       const e = f && Array.isArray(f.errores) && f.errores.length ? ` (${f.errores.join('; ')})` : '';
       return `Tiene errores y no se calculó: corríjala en la cotización${e}`;
     }
+    if (f && f.agotada_por_armados) return `Las ${f.cantidad_capturada} piezas se ahorran por conjuntos armados en taller: no hay nada que fabricar ni comprar`;
     switch (p.familia) {
       case 'INSTALACION': return 'Servicio de instalación en obra: no se fabrica';
       case 'COMPRADO': return 'Artículo comprado: se pide al proveedor, no se fabrica';
