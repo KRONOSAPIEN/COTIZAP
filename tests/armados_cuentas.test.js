@@ -216,3 +216,32 @@ test('Sin cargo mínimo el redondeo es el de siempre (unitario al centavo, impor
   assert.equal(f.precio.unitario, Math.round((f.precio.total_sin_redondeo / 7) * 100) / 100);
   casi(f.precio.importe, f.precio.unitario * 7, 0.0051);
 });
+
+test('deshacerArmado en cualquier orden (adelante, atrás, al azar) restaura exactamente las partidas y el subtotal del pedido del 30-sep', () => {
+  const base = pedido();
+  const original = clon(base.partidas);
+  const sub0 = C.cotizar(base, M).totales.subtotal;
+  const cot0 = clon(base);
+  for (let ronda = 0; ronda < 8; ronda += 1) {
+    const sug = A.sugerirArmados(cot0, null, M);
+    if (!sug.length) break;
+    sug.forEach((s) => assert.equal(A.armar(cot0, s.piezas, s.n, M).ok, true));
+  }
+  const lleno = cot0;
+  assert.ok(lleno.armados.length >= 4 && lleno.partidas.length > original.length);
+  // un generador determinista para el orden al azar
+  let semilla = 12345;
+  const azar = () => { semilla = (semilla * 1103515245 + 12345) % 2147483648; return semilla / 2147483648; };
+  const ordenes = {
+    adelante: (ids) => ids,
+    atrás: (ids) => ids.slice().reverse(),
+    'al azar': (ids) => ids.map((id) => [azar(), id]).sort((a, b) => a[0] - b[0]).map((x) => x[1]),
+  };
+  Object.keys(ordenes).forEach((nombre) => {
+    const cot = clon(lleno);
+    ordenes[nombre](cot.armados.map((a) => a.id)).forEach((id) => assert.equal(A.deshacerArmado(cot, id).ok, true));
+    assert.equal(cot.armados.length, 0);
+    assert.deepEqual(cot.partidas, original, `orden ${nombre}: la lista queda exacta`);
+    assert.equal(C.cotizar(cot, M).totales.subtotal, sub0, `orden ${nombre}: el mismo subtotal`);
+  });
+});

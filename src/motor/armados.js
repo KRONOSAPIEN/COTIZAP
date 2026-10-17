@@ -740,7 +740,7 @@
 
   const idAleatorio = (prefijo) => `${prefijo}${Math.random().toString(36).slice(2, 8)}`;
   /** Las claves que no cuentan para saber si dos partidas son la misma pieza (identidad y vínculos con otros módulos). */
-  const NO_COMPARAR = ['id', 'cantidad', 'unifilar_id', 'unifilar_editada', 'trazado_ventilador', 'trazado_pieza'];
+  const NO_COMPARAR = ['id', 'cantidad', 'copia_de', 'unifilar_id', 'unifilar_editada', 'trazado_ventilador', 'trazado_pieza'];
   const igualesSalvoCantidad = (a, b) => {
     const limpia = (p) => { const q = { ...p }; NO_COMPARAR.forEach((k) => delete q[k]); return JSON.stringify(Object.keys(q).sort().map((k) => [k, q[k]])); };
     return limpia(a) === limpia(b);
@@ -780,6 +780,7 @@
       copia.id = nuevoId();
       ['unifilar_id', 'unifilar_editada', 'trazado_ventilador', 'trazado_pieza'].forEach((k) => delete copia[k]);
       copia.cantidad = n;
+      copia.copia_de = p.id; // la partida se partió al armar: al deshacer (en cualquier orden) vuelve a juntarse con ésta
       p.cantidad = num(p.cantidad) - n;
       cot.partidas.splice(i + 1, 0, copia);
       q.partida = copia.id;
@@ -821,7 +822,35 @@
       cot.partidas.splice(segunda, 1);
       juntadas += 1;
     });
+    juntadas += juntarCopias(cot);
     return { ok: true, juntadas };
+  }
+
+  /**
+   * Vuelve a juntar las partidas que se partieron al armar (`copia_de`) con la de origen cuando ninguna de las dos está ya en un
+   * armado y siguen idénticas (salvo id y cantidad): suma la cantidad en el origen y quita la copia. Se repite hasta que no haya
+   * más (una copia de una copia). Si el origen ya no existe, la marca se quita. Devuelve cuántas se juntaron.
+   */
+  function juntarCopias(cot) {
+    let total = 0;
+    for (let cambio = true; cambio;) {
+      cambio = false;
+      const usadas = new Set([...caraTomadas(cot.armados, null).keys()].map((x) => x.split('|')[0]));
+      for (let i = 0; i < cot.partidas.length; i += 1) {
+        const c = cot.partidas[i];
+        if (!esObjeto(c) || typeof c.copia_de !== 'string') continue;
+        const j = hallar(cot.partidas, c.copia_de);
+        if (j < 0 || j === i) { delete c.copia_de; continue; }
+        const o = cot.partidas[j];
+        if (usadas.has(c.id) || usadas.has(o.id) || !igualesSalvoCantidad(o, c)) continue;
+        o.cantidad = num(o.cantidad) + num(c.cantidad);
+        cot.partidas.splice(i, 1);
+        total += 1;
+        cambio = true;
+        break;
+      }
+    }
+    return total;
   }
 
   /** Los armados de una cotización que viene de fuera: sólo los que tienen la forma esperada (id, dos piezas, n entero). */
