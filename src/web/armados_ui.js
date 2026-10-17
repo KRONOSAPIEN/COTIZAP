@@ -114,6 +114,17 @@
 
   const dinero = (x) => W.mxn(x);
 
+  /** Vista previa pequeña del conjunto ya unido (planos.js), con las partidas tal como están antes de armarlas; null si no se puede dibujar. */
+  function vistaPrevia(s) {
+    try {
+      const est = E();
+      const f = s.piezas.map((q) => est.res.partidas[est.cot.partidas.findIndex((p) => p.id === q.partida)]);
+      const d = C.planos.planoConjunto(f[0], s.piezas[0].cara, f[1], s.piezas[1].cara, est.res.maestros, { junta: s.junta });
+      if (!d) return null;
+      return h('figure', { class: 'arm-sug-fig', title: `Así queda el conjunto: ${s.descripcion}` }, W.svgArbol(C.planos.arbol(d, { px: 150, alto_max: 104, compacto: true })));
+    } catch (e) { return null; }
+  }
+
   function tarjetaSugerencia(s, i) {
     const d = s.desglose;
     const partes = [
@@ -123,6 +134,7 @@
       `${s.n} ${s.n === 1 ? 'conjunto' : 'conjuntos'}`,
     ].filter(Boolean);
     return h('article', { class: 'arm-sug', dataset: { sug: String(i), pareja: s.pareja } },
+      vistaPrevia(s),
       h('div', { class: 'arm-sug-txt' },
         h('h3', null, mayuscula(s.descripcion)),
         h('p', { class: 'arm-sug-meta' }, partes.join(' · ')),

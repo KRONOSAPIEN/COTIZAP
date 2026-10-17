@@ -189,7 +189,7 @@
    * La tarjeta de un conjunto armado en taller (E1, E2…): una figura simple con las dos piezas y su junta, sus marcas con la cara
    * que se une, el ángulo resultante, el tamaño y la nota del taller. Misma forma que `tarjeta`: { alto, pintar(pagina, y) }.
    */
-  function tarjetaConjunto(c, t) {
+  function tarjetaConjunto(c, t, planos) {
     const wTit = ANCHO - 54 - 90;
     const titulo = PDF.ajustar(c.titulo, wTit, 10.5, true).slice(0, 2);
     const altoCab = Math.max(30, 8 + titulo.length * 12.5 + 6);
@@ -208,7 +208,7 @@
       return { le, lv, h: Math.max(le.length, lv.length) * (t + 1.3) + 2.5 };
     });
     const lNota = PDF.ajustar(c.nota, ANCHO - 12, t, true);
-    const altoCuerpo = Math.max(112, medidas.reduce((a, r) => a + r.h, 0) + 10);
+    const altoCuerpo = Math.max(c.dibujo ? 150 : 112, medidas.reduce((a, r) => a + r.h, 0) + 10);
     const altoNota = lNota.length * (t + 1) + 8;
     const alto = altoCab + altoCuerpo + altoNota + 4;
 
@@ -223,20 +223,32 @@
       pg.texto(x + ANCHO - 6, y + 11, 'CONJUNTOS', { tam: 6, negrita: true, align: 'right', gris: GRIS_ET });
       pg.texto(x + ANCHO - 6, y + 28, `${num(c.cantidad, 0)} ${c.cantidad === 1 ? 'conjunto' : 'conjuntos'}`, { tam: 14, negrita: true, align: 'right' });
       pg.linea(x, y + altoCab, x + ANCHO, y + altoCab, { grosor: 0.5, gris: 0.45 });
-      // figura: las dos piezas lado a lado, con su marca, y la junta entre ellas
-      const fy = y + altoCab + 26;
-      const wCaja = 66;
-      const hCaja = 44;
-      const x0 = x + (COL_DIBUJO - 2 * wCaja) / 2;
-      c.piezas.forEach((q, i) => {
-        const bx = x0 + i * wCaja;
-        pg.rect(bx, fy, wCaja, hCaja, { grosor: 1, gris: 0.2, relleno: 0.93 });
-        pg.texto(bx + wCaja / 2, fy + 21, q.marca, { tam: 14, negrita: true, align: 'center' });
-        pg.texto(bx + wCaja / 2, fy + 35, q.cara_texto, { tam: 6.5, align: 'center', gris: 0.3 });
-      });
-      pg.linea(x0 + wCaja, fy - 8, x0 + wCaja, fy + hCaja + 8, { grosor: 1.6, gris: 0.1, guion: [3, 2] });
-      pg.texto(x0 + wCaja, fy - 12, `junta ${c.junta}`, { tam: 7, negrita: true, align: 'center' });
-      pg.texto(x0 + wCaja, fy + hCaja + 20, 'sin brida en la cara que se une', { tam: 6.5, align: 'center', gris: 0.35 });
+      // figura: el conjunto dibujado como queda unido; si no se puede dibujar, el esquema de las dos piezas lado a lado
+      const caja = { x: x + 4, y: y + altoCab + 3, w: COL_DIBUJO - 4, h: altoCuerpo - 6 };
+      let dibujado = false;
+      if (c.dibujo) {
+        try {
+          const arbol = planos().arbol(c.dibujo, { px: caja.w * 1.45, alto_max: caja.h * 1.45 });
+          // se prueba primero en una hoja de ensayo: si algún nodo no se puede pintar, se deja el esquema de respaldo
+          if (PDF.dibujarArbol(PDF.documento({ titulo: 'ensayo' }).pagina(), arbol, caja).omitidos === 0) { PDF.dibujarArbol(pg, arbol, caja); dibujado = true; }
+        } catch (e) { dibujado = false; }
+      }
+      if (!dibujado) {
+        // figura: las dos piezas lado a lado, con su marca, y la junta entre ellas
+        const fy = y + altoCab + 26;
+        const wCaja = 66;
+        const hCaja = 44;
+        const x0 = x + (COL_DIBUJO - 2 * wCaja) / 2;
+        c.piezas.forEach((q, i) => {
+          const bx = x0 + i * wCaja;
+          pg.rect(bx, fy, wCaja, hCaja, { grosor: 1, gris: 0.2, relleno: 0.93 });
+          pg.texto(bx + wCaja / 2, fy + 21, q.marca, { tam: 14, negrita: true, align: 'center' });
+          pg.texto(bx + wCaja / 2, fy + 35, q.cara_texto, { tam: 6.5, align: 'center', gris: 0.3 });
+        });
+        pg.linea(x0 + wCaja, fy - 8, x0 + wCaja, fy + hCaja + 8, { grosor: 1.6, gris: 0.1, guion: [3, 2] });
+        pg.texto(x0 + wCaja, fy - 12, `junta ${c.junta}`, { tam: 7, negrita: true, align: 'center' });
+        pg.texto(x0 + wCaja, fy + hCaja + 20, 'sin brida en la cara que se une', { tam: 6.5, align: 'center', gris: 0.35 });
+      }
       pg.linea(x + COL_DIBUJO + 4, y + altoCab + 4, x + COL_DIBUJO + 4, y + altoCab + altoCuerpo - 4, { grosor: 0.4, gris: 0.75 });
       let cy = y + altoCab + 6;
       medidas.forEach((r) => {
@@ -356,7 +368,7 @@
       cursor.pagina().texto(MARGEN, cursor.y + 12, 'Conjuntos armados en taller', { tam: 11, negrita: true });
       cursor.y += 20;
       conjuntos.forEach((c) => {
-        const tj = tarjetaConjunto(c, o.tamLetra || 8);
+        const tj = tarjetaConjunto(c, o.tamLetra || 8, planos);
         if (cursor.y + tj.alto > cursor.fondo) cursor.salto();
         tj.pintar(cursor.pagina(), cursor.y);
         posiciones.push({ marca: c.marca, pagina: hojas.indexOf(cursor.actual) + 1, y: cursor.y, alto: tj.alto, letra: o.tamLetra || 8, conjunto: true });

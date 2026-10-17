@@ -55,7 +55,8 @@
   function nuevo(familia) {
     // caras: los extremos de la pieza en el dibujo ({ c, dir hacia afuera, R }), por el nombre que les da el motor; ahí van las bridas
     // datos: lo que lleva el plano de pedido; notas: lo que sólo importa al cotizar (no va en la hoja para el proveedor)
-    return { familia, titulo: '', titulo_corto: '', datos: [], notas: [], trazos: [], cotas: [], caras: {} };
+    // silueta: los contornos de la pieza (polígonos cerrados) para medir cuánto ocupa y si se encima con otra en un conjunto
+    return { familia, titulo: '', titulo_corto: '', datos: [], notas: [], trazos: [], cotas: [], caras: {}, silueta: [] };
   }
   const ruta = (d, clase, cerrada) => ({ t: 'ruta', d, clase: clase || 'pieza', cerrada: !!cerrada });
   const circulo = (c, r, clase) => ({ t: 'circulo', c, r, clase: clase || 'pieza' });
@@ -95,23 +96,28 @@
       const ext = angs.map((a, i) => polar(O, radio(ro, i), a));
       const int = angs.map((a, i) => polar(O, radio(ri, i), a));
       d.trazos.push(ruta([...ext, ...int.slice().reverse()], 'pieza', true));
+      d.silueta.push([...ext, ...int.slice().reverse()]);
       angs.slice(1, -1).forEach((a, i) => d.trazos.push(ruta([int[i + 1], ext[i + 1]], 'junta')));
     } else {
       d.trazos.push({ t: 'sector', c: O, ri, ro, a0: 0, a1: th, clase: 'pieza' });
+      const pasos = Array.from({ length: 13 }, (_, i) => (th * i) / 12);
+      d.silueta.push([...pasos.map((a) => polar(O, ro, a)), ...pasos.slice().reverse().map((a) => polar(O, ri, a))]);
     }
     // construcción: el eje del codo y los radios a las caras
     d.trazos.push(arco(O, R, 0, th, 'eje'));
-    d.trazos.push(ruta([O, polar(O, ri, 0)], 'eje'));
-    d.trazos.push(ruta([O, polar(O, ri, th)], 'eje'));
+    d.trazos.push({ ...ruta([O, polar(O, ri, 0)], 'eje'), aux: true });
+    d.trazos.push({ ...ruta([O, polar(O, ri, th)], 'eje'), aux: true });
     d.trazos.push({ t: 'centro', c: O });
     // tangentes rectas en cada extremo
     const Lt = p.L_tangente_mm > 0 ? p.L_tangente_mm : 0;
     if (Lt > 0) {
       d.trazos.push(ruta([polar(O, ri, 0), P(ri, Lt), P(ro, Lt), polar(O, ro, 0)], 'pieza'));
+      d.silueta.push([polar(O, ri, 0), P(ri, Lt), P(ro, Lt), polar(O, ro, 0)]);
       const t = P(-Math.sin(rad(th)), -Math.cos(rad(th)));
       const a = polar(O, ri, th);
       const b = polar(O, ro, th);
       d.trazos.push(ruta([a, suma(a, por(t, Lt)), suma(b, por(t, Lt)), b], 'pieza'));
+      d.silueta.push([a, suma(a, por(t, Lt)), suma(b, por(t, Lt)), b]);
       d.datos.push(`Tangentes de ${mm(Lt)} mm`);
     }
     // las dos bocas: la de 0° (sale hacia abajo) y la de θ (sigue el giro), al final de su tangente
@@ -172,7 +178,9 @@
     d.trazos.push(ruta([...inj.ladoA], 'pieza'));
     d.trazos.push(ruta([...inj.ladoB], 'pieza'));
     d.trazos.push(ruta([inj.ladoA[1], inj.ladoB[1]], 'pieza'));
-    d.trazos.push({ t: 'relleno', d: [P(0, yS(0)), P(x1, yS(x1)), inj.ladoA[0], inj.ladoA[1], inj.ladoB[1], inj.ladoB[0], P(x2, yS(x2)), P(L, yS(L)), P(L, c.R2), P(0, c.R1)] });
+    const contorno = [P(0, yS(0)), P(x1, yS(x1)), inj.ladoA[0], inj.ladoA[1], inj.ladoB[1], inj.ladoB[0], P(x2, yS(x2)), P(L, yS(L)), P(L, c.R2), P(0, c.R1)];
+    d.trazos.push({ t: 'relleno', d: contorno });
+    d.silueta.push(contorno);
     // ejes del cuerpo y del injerto
     d.trazos.push(ruta([P(-L * 0.04, 0), P(L * 1.04, 0)], 'eje'));
     d.trazos.push(ruta([inj.J, suma(inj.E, por(inj.u, Lr * 0.06))], 'eje'));
@@ -215,6 +223,7 @@
     d.titulo = `Reducción${exc ? ' excéntrica' : ''} de ${nominal(p.D1_mm)} a ${nominal(p.D2_mm)}`;
     d.datos = [`De ${diam(p.D1_mm)} a ${diam(p.D2_mm)}`, `L = ${mm(L)} mm`, exc ? 'Cara plana arriba' : 'Concéntrica'];
     d.trazos.push(ruta([c.sup[0], c.sup[1], c.inf[1], c.inf[0]], 'pieza', true));
+    d.silueta.push([c.sup[0], c.sup[1], c.inf[1], c.inf[0]]);
     d.trazos.push(ruta([P(-L * 0.04, c.ejeY[0]), P(L * 1.04, c.ejeY[1])], 'eje'));
     const yb = Math.max(c.inf[0][1], c.inf[1][1]);
     d.cotas.push(cota(c.inf[0], c.sup[0], diam(p.D1_mm), 'D1_mm', 1, 1));
@@ -264,6 +273,11 @@
     const y0 = -H / 2;
     const y1 = H / 2;
     const caraEn = (x, dir) => ({ c: P(x, 0), dir: P(dir, 0), R: H / 2 });
+    // las bocas del tramo: el inicio y el final (la cara que se arma en taller es la final)
+    d.caras.inicio = caraEn(0, -1);
+    d.caras.final = caraEn(Ld, 1);
+    d.silueta.push([P(0, y0), P(Ld, y0), P(Ld, y1), P(0, y1)]);
+    d.recorte_mm = corto ? L - Ld : 0; // lo que el corte del dibujo le quita al largo real
     if (corto) {
       const xa = Ld * 0.46;
       const xb = Ld * 0.54;
@@ -277,9 +291,9 @@
       // sólo se ven los dos extremos del tramo
       if (bridado && arm && arm.piezas.length) {
         const ult = arm.piezas[arm.piezas.length - 1];
-        d.bridasLado = [{ cara: caraEn(0, -1), suelta: false }];
-        if (ult.bridas >= 2) d.bridasLado.push({ cara: caraEn(Ld, 1), suelta: false });
-        else if (ult.sueltas) d.bridasLado.push({ cara: caraEn(Ld, 1), suelta: true });
+        d.bridasLado = [{ cara: caraEn(0, -1), suelta: false, extremo: 'inicio' }];
+        if (ult.bridas >= 2) d.bridasLado.push({ cara: caraEn(Ld, 1), suelta: false, extremo: 'final' });
+        else if (ult.sueltas) d.bridasLado.push({ cara: caraEn(Ld, 1), suelta: true, extremo: 'final' });
       }
     } else {
       d.trazos.push({ t: 'relleno', d: [P(0, y0), P(Ld, y0), P(Ld, y1), P(0, y1)] });
@@ -299,9 +313,10 @@
           });
           if (k < arm.piezas.length - 1) d.trazos.push(ruta([P(x * esc, y0), P(x * esc, y1)], 'pieza')); // se separan las piezas
           if (bridado) {
-            d.bridasLado.push({ cara: caraEn(x0 * esc, -1), suelta: false });
-            if (q.bridas >= 2) d.bridasLado.push({ cara: caraEn(x * esc, 1), suelta: false });
-            else if (q.sueltas) d.bridasLado.push({ cara: caraEn(x * esc, 1), suelta: true });
+            const fin_ = k === arm.piezas.length - 1 ? 'final' : 'junta';
+            d.bridasLado.push({ cara: caraEn(x0 * esc, -1), suelta: false, extremo: k === 0 ? 'inicio' : 'junta' });
+            if (q.bridas >= 2) d.bridasLado.push({ cara: caraEn(x * esc, 1), suelta: false, extremo: fin_ });
+            else if (q.sueltas) d.bridasLado.push({ cara: caraEn(x * esc, 1), suelta: true, extremo: fin_ });
           }
         });
         if (anillos.length > 1 && anillos.length <= 8) anillos.forEach(([a, b]) => d.cotas.push(cota(P(a * esc, y0), P(b * esc, y0), mm(b - a), null, 1, 1)));
@@ -501,12 +516,13 @@
   }
 
   /** Las bridas de la pieza en sus bocas y lo que dicen los planos: extremos sin brida y bridas de otra partida. */
-  function bridasDeLaPieza(f, d) {
+  function bridasDeLaPieza(f, d, ocultar) {
+    const oc = ocultar || []; // caras que no llevan brida dibujada (en un conjunto, la que se une a otra pieza)
     const her = f.qto && f.qto.her;
     if (!her || her.tipo_union !== 'BRIDADO') return;
     const ancho = (her.bridas[0] && her.bridas[0].ancho_mm) || 38.1;
-    if (d.bridasLado) d.bridasLado.forEach((b) => bridaLado(d, b.cara, ancho, b.suelta));
-    else her.bridas.forEach((b) => { if (d.caras[b.extremo]) bridaLado(d, d.caras[b.extremo], ancho, b.suelta); });
+    if (d.bridasLado) d.bridasLado.forEach((b) => { if (!oc.includes(b.extremo)) bridaLado(d, b.cara, ancho, b.suelta); });
+    else her.bridas.forEach((b) => { if (d.caras[b.extremo] && !oc.includes(b.extremo)) bridaLado(d, d.caras[b.extremo], ancho, b.suelta); });
     const sin = f.geometria.extremos_sin_brida || [];
     const nombres = { tapa: 'la boca', A: 'un extremo', B: 'el otro extremo', D1: 'el extremo mayor', D2: 'el extremo menor', injerto: 'el injerto', tronco_1: 'un extremo del tronco', tronco_2: 'el otro extremo del tronco', redondo: 'el extremo redondo', rectangular: 'el extremo rectangular' };
     if (sin.length) {
@@ -523,7 +539,10 @@
    * El dibujo de una partida calculada (f.ok). Devuelve null si su familia no se dibuja (instalación, pieza personalizada,
    * artículo comprado sin círculo de barrenos) o si la partida no se calculó.
    */
-  function plano(f, M) {
+  function plano(f, M) { return construir(f, M, []); }
+
+  /** El dibujo de `plano` sin la brida de las caras `ocultar` (las de un conjunto armado que se unen a otra pieza). */
+  function construir(f, M, ocultar) {
     if (!f || !f.ok) return null;
     const d = nuevo(f.familia);
     let ok = true;
@@ -541,9 +560,254 @@
       case 'TAPA': tapa(f, d); break;
       default: ok = false;
     }
-    if (ok && !['BRIDA', 'COMPRADO', 'SOPORTE', 'UNION'].includes(f.familia)) bridasDeLaPieza(f, d);
+    if (ok && !['BRIDA', 'COMPRADO', 'SOPORTE', 'UNION'].includes(f.familia)) bridasDeLaPieza(f, d, ocultar);
     delete d.bridasLado;
     return ok ? d : null;
+  }
+
+  /* ---------------- Conjunto armado: dos piezas unidas, dibujadas como quedan ---------------- */
+
+  /** Qué pieza se queda en su orientación natural (menor número) y cuál se mueve hasta su cara. */
+  const BASE_PRIORIDAD = { REDUCCION_INJERTO: 0, RAMAL: 0, REDUCCION: 1, RECTO: 2, CODO: 3 };
+  /** Las dos bocas del cuerpo de cada familia: su eje va de la primera a la segunda. */
+  const EJE_CUERPO = { RECTO: ['inicio', 'final'], REDUCCION: ['D1', 'D2'], REDUCCION_INJERTO: ['D1', 'D2'], RAMAL: ['tronco_1', 'tronco_2'], CODO: ['A', 'B'] };
+
+  /** Las anclas de una pieza: por cada cara, el punto en su eje, la dirección hacia afuera y el radio; salen del mismo dibujo. */
+  function anclas(f, M) {
+    const d = plano(f, M);
+    return d ? d.caras : null;
+  }
+
+  /** Ángulo (grados, como `polar`: contra el reloj a la vista) de un vector en pantalla, y el vector de un ángulo. */
+  const angDe = (v) => (Math.atan2(-v[1], v[0]) * 180) / PI;
+  const vecDe = (a) => [Math.cos(rad(a)), -Math.sin(rad(a))];
+  /** Movimiento rígido: primero el espejo (y → m·y, m = ±1), luego el giro fi (rad) y la traslación t. */
+  function rigido(m, fi, t) {
+    const c = Math.cos(fi);
+    const s = Math.sin(fi);
+    const v = (q) => { const y = m * q[1]; return [c * q[0] - s * y, s * q[0] + c * y]; };
+    return { v, p: (q) => suma(v(q), t), m };
+  }
+  /** Los ángulos a0 → a1 de un arco o sector, tal como quedan tras el movimiento (siempre a0 < a1). */
+  function angulosMovidos(T, a0, a1) {
+    const n0 = angDe(T.v(vecDe(a0)));
+    const delta = T.m * (a1 - a0);
+    return delta < 0 ? [n0 + delta, n0] : [n0, n0 + delta];
+  }
+  /** Un trazo del dibujo de la pieza tras el movimiento (o null si no se usa en un conjunto). */
+  function moverTrazo(t, T) {
+    if (t.t === 'ruta' || t.t === 'relleno') return { ...t, d: t.d.map(T.p) };
+    if (t.t === 'circulo' || t.t === 'centro') return { ...t, c: T.p(t.c) };
+    if (t.t === 'arco' || t.t === 'sector') { const [a0, a1] = angulosMovidos(T, t.a0, t.a1); return { ...t, c: T.p(t.c), a0, a1 }; }
+    return null;
+  }
+  const enPoligono = (poly, x, y) => {
+    let dentro = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i, i += 1) {
+      const a = poly[i];
+      const b = poly[j];
+      if ((a[1] > y) !== (b[1] > y) && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) dentro = !dentro;
+    }
+    return dentro;
+  };
+  const enAlguno = (polys, x, y) => polys.some((q) => enPoligono(q, x, y));
+  const cajaDe = (polys) => {
+    let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity;
+    polys.forEach((q) => q.forEach((p) => { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }));
+    return { x0, y0, x1, y1 };
+  };
+  /** Área (mm²) que dos grupos de contornos comparten, por muestreo en rejilla sobre la caja de B. */
+  function solape(A, B) {
+    const c = cajaDe(B);
+    const n = 70;
+    const dx = (c.x1 - c.x0) / n;
+    const dy = (c.y1 - c.y0) / n;
+    let k = 0;
+    for (let i = 0; i < n; i += 1) {
+      for (let j = 0; j < n; j += 1) {
+        const x = c.x0 + (i + 0.37) * dx;
+        const y = c.y0 + (j + 0.61) * dy;
+        if (enAlguno(B, x, y) && enAlguno(A, x, y)) k += 1;
+      }
+    }
+    return k * dx * dy;
+  }
+  function distSegmento(p, a, b) {
+    const ab = resta(b, a);
+    const l2 = ab[0] * ab[0] + ab[1] * ab[1];
+    const t = l2 > 0 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1]) / l2)) : 0;
+    return largo(resta(p, suma(a, por(ab, t))));
+  }
+  const promedio = (polys) => {
+    const todos = polys.flat();
+    return [todos.reduce((s, q) => s + q[0], 0) / todos.length, todos.reduce((s, q) => s + q[1], 0) / todos.length];
+  };
+
+  /**
+   * El conjunto armado dibujado como queda unido, en una sola vista lateral: la pieza A (con su cara `caraA`) y la pieza B colocada
+   * de modo que su cara `caraB` coincide con la de A y sus ejes quedan opuestos. Cada pieza se dibuja con su propio dibujo (`plano`)
+   * y sus anclas son las caras de ese dibujo; B se mueve con un giro, una traslación y, si hace falta, un espejo (la pieza dada
+   * vuelta sobre su eje). La pieza de cuerpo (injerto, reducción, tramo) se queda en su orientación natural y la otra (el codo) se
+   * mueve. Entre las dos posibilidades de giro se elige la que no se encima con la otra pieza y se aleja de su eje; si empatan,
+   * la que sale hacia arriba. `opc`: { marcas: [marcaA, marcaB], junta: 'soldada' | 'engargolada' }.
+   * Devuelve la misma estructura que `plano` más `conjunto` (ángulo resultante, cota total, caras libres, junta), o null si las
+   * piezas no se pueden dibujar juntas.
+   */
+  function planoConjunto(fA, caraA, fB, caraB, M, opc) {
+    const o = opc || {};
+    const sirve = (f) => f && f.ok && BASE_PRIORIDAD[f.familia] !== undefined;
+    if (!sirve(fA) || !sirve(fB)) return null;
+    const cambia = BASE_PRIORIDAD[fB.familia] < BASE_PRIORIDAD[fA.familia];
+    const F = cambia ? [fB, fA] : [fA, fB];
+    const K = cambia ? [caraB, caraA] : [caraA, caraB];
+    const marcas = o.marcas ? (cambia ? [o.marcas[1], o.marcas[0]] : o.marcas) : [];
+    const d1 = construir(F[0], M, [K[0]]);
+    const d2 = construir(F[1], M, [K[1]]);
+    if (!d1 || !d2 || !d1.caras[K[0]] || !d2.caras[K[1]]) return null;
+    const a1 = d1.caras[K[0]];
+    const a2 = d2.caras[K[1]];
+    if (Math.abs(a1.R - a2.R) > Math.max(0.5, 0.01 * a1.R)) return null;
+    const ejeNombres = EJE_CUERPO[F[0].familia].filter((k) => d1.caras[k]);
+    const eje = [d1.caras[ejeNombres[0]].c, d1.caras[ejeNombres[ejeNombres.length - 1]].c];
+    const ejeDir = unit(resta(eje[1], eje[0]));
+
+    // las dos maneras de poner B (con y sin espejo): la cara de B queda en la de A, con la dirección contraria
+    const opciones = [1, -1].map((m) => {
+      const fi = Math.atan2(-a1.dir[1], -a1.dir[0]) - Math.atan2(m * a2.dir[1], a2.dir[0]);
+      const T0 = rigido(m, fi, [0, 0]);
+      const T = rigido(m, fi, resta(a1.c, T0.v(a2.c)));
+      const sil2 = d2.silueta.map((q) => q.map(T.p));
+      const libres = Object.keys(d2.caras).filter((k) => k !== K[1]).map((k) => ({ nombre: k, c: T.p(d2.caras[k].c), dir: T.v(d2.caras[k].dir), R: d2.caras[k].R }));
+      return {
+        T, sil2, libres, solape: solape(d1.silueta, sil2),
+        lejos: libres.length ? Math.min(...libres.map((l) => distSegmento(l.c, eje[0], eje[1]))) : 0,
+        arriba: libres.reduce((s, l) => s + l.dir[1], 0),
+      };
+    });
+    const c2 = cajaDe(d2.silueta);
+    const tolSolape = 0.005 * Math.max((c2.x1 - c2.x0) * (c2.y1 - c2.y0), 1);
+    const [o1, o2] = opciones;
+    let elegida = o1;
+    if (Math.abs(o1.solape - o2.solape) > tolSolape) elegida = o1.solape < o2.solape ? o1 : o2;
+    else if (Math.abs(o1.lejos - o2.lejos) > 1) elegida = o1.lejos > o2.lejos ? o1 : o2;
+    else if (Math.abs(o1.arriba - o2.arriba) > 1e-6) elegida = o1.arriba < o2.arriba ? o1 : o2;
+    const { T, sil2, libres } = elegida;
+
+    const d = nuevo('CONJUNTO');
+    const junta = o.junta || (F[0].geometria && F[0].geometria.costura === 'ENGARGOLADA' ? 'engargolada' : 'soldada');
+    const nombres = [d1, d2].map((x, i) => marcas[i] || x.titulo_corto || x.titulo);
+    d.titulo = `Conjunto armado: ${nombres.join(' + ')}`;
+    d.datos = [`${d1.titulo}${marcas[0] ? ` (${marcas[0]})` : ''}`, `${d2.titulo}${marcas[1] ? ` (${marcas[1]})` : ''}`, `Junta ${junta}; la cara que se une va sin brida`];
+    // trazos: A tal cual y B movido; las construcciones del centro del codo (radios y cruz) no se dibujan en el conjunto
+    d1.trazos.filter((t) => !t.aux && t.t !== 'centro').forEach((t) => d.trazos.push(t));
+    d2.trazos.filter((t) => !t.aux && t.t !== 'centro').forEach((t) => { const m = moverTrazo(t, T); if (m) d.trazos.push(m); });
+    const silPieza = [d1.silueta, sil2];
+    d.silueta = [...d1.silueta, ...sil2];
+    // la junta de armado en la cara que se une
+    const nrm = [-a1.dir[1], a1.dir[0]];
+    const extraJ = a1.R * 1.2 + 6;
+    d.trazos.push(ruta([suma(a1.c, por(nrm, extraJ)), suma(a1.c, por(nrm, -extraJ))], junta === 'engargolada' ? 'engargolado' : 'soldadura'));
+    // las caras libres (con sus bridas dibujadas por cada pieza)
+    Object.keys(d1.caras).filter((k) => k !== K[0]).forEach((k) => { d.caras[`1:${k}`] = d1.caras[k]; });
+    libres.forEach((l) => { d.caras[`2:${l.nombre}`] = { c: l.c, dir: l.dir, R: l.R }; });
+
+    // medidas del conjunto: la caja de los contornos y la cota de su dimensión mayor
+    const cj = cajaDe(d.silueta);
+    const w = cj.x1 - cj.x0;
+    const h = cj.y1 - cj.y0;
+    const horizontal = w >= h;
+    const recorte = [[d1, null], [d2, T]].reduce((s, [dd, TT]) => {
+      if (!dd.recorte_mm) return s;
+      const e = resta(dd.caras.final.c, dd.caras.inicio.c);
+      const dir = unit(TT ? TT.v(e) : e);
+      return s + dd.recorte_mm * Math.abs(horizontal ? dir[0] : dir[1]);
+    }, 0);
+    const total = (horizontal ? w : h) + recorte;
+    const ancho = Math.max(0, ...F.map((f) => (f.qto && f.qto.her && f.qto.her.tipo_union === 'BRIDADO' && f.qto.her.bridas[0] ? f.qto.her.bridas[0].ancho_mm : 0)));
+    // cotas por pieza: el largo de los tramos y reducciones que van paralelos a la cota total
+    const piezasCota = [];
+    [[F[0], d1, null], [F[1], d2, T]].forEach(([f, dd, TT]) => {
+      if (f.familia !== 'RECTO' && f.familia !== 'REDUCCION') return;
+      const [n0, n1] = EJE_CUERPO[f.familia];
+      const p0 = TT ? TT.p(dd.caras[n0].c) : dd.caras[n0].c;
+      const p1 = TT ? TT.p(dd.caras[n1].c) : dd.caras[n1].c;
+      const v = resta(p1, p0);
+      if (!(largo(v) > 0) || Math.abs((horizontal ? v[0] : v[1]) / largo(v)) < 0.98) return;
+      // el largo se mide sobre el eje mayor del dibujo (la reducción excéntrica tiene su eje inclinado)
+      const L = Math.abs(horizontal ? v[0] : v[1]);
+      const e = horizontal ? [Math.sign(v[0]), 0] : [0, Math.sign(v[1])];
+      piezasCota.push({ p0, p1: suma(p0, por(e, L)), texto: mm(f.familia === 'RECTO' ? f.entrada.L_mm : L), r: Math.max(dd.caras[n0].R, dd.caras[n1].R) });
+    });
+    // el ángulo resultante del injerto con su codo: entre el eje del tronco y la salida de la cara libre del codo
+    const esInjerto = (f) => f.familia === 'RAMAL' || f.familia === 'REDUCCION_INJERTO';
+    const conAngulo = esInjerto(F[0]) && F[1].familia === 'CODO' && K[0] === 'injerto' && libres.length === 1;
+    let angulo = null;
+    let Q = null;
+    if (conAngulo) {
+      const dF = libres[0].dir;
+      const dif = ((angDe(dF) - angDe(ejeDir) + 540) % 360) - 180;
+      angulo = Math.abs(dif);
+      const pF = libres[0].c;
+      // donde el eje de la salida cruza el eje del tronco
+      const den = dF[0] * ejeDir[1] - dF[1] * ejeDir[0];
+      if (Math.abs(den) > 1e-6) {
+        const s = ((eje[0][0] - pF[0]) * ejeDir[1] - (eje[0][1] - pF[1]) * ejeDir[0]) / den;
+        const q = suma(pF, por(dF, s));
+        if (s <= 0 && largo(resta(pF, q)) > 0) Q = q; // la salida mira hacia afuera de Q
+      }
+    }
+    // lado de las cotas: abajo (o a la derecha) salvo que el ángulo caiga ahí
+    let ladoDer = true;
+    if (Q && !horizontal) ladoDer = Q[0] < (cj.x0 + cj.x1) / 2;
+    const nivelTotal = piezasCota.length ? 2 : 1;
+    const ext = ancho > 0 ? ancho + 2 : 0;
+    if (horizontal) {
+      piezasCota.forEach((k) => d.cotas.push(cota(k.p0[0] <= k.p1[0] ? k.p0 : k.p1, k.p0[0] <= k.p1[0] ? k.p1 : k.p0, k.texto, null, 1, -1, ext + k.r)));
+      d.cotas.push(cota(P(cj.x0, cj.y1), P(cj.x1, cj.y1), mm(total), null, nivelTotal, -1, ext));
+    } else {
+      d.cotas.push(cota(ladoDer ? P(cj.x1, cj.y1) : P(cj.x0, cj.y0), ladoDer ? P(cj.x1, cj.y0) : P(cj.x0, cj.y1), mm(total), null, 1, -1, ext));
+    }
+    if (Q) {
+      const pF = libres[0].c;
+      const w_ = unit(resta(pF, Q));
+      let a0 = angDe(ejeDir);
+      let a1_ = angDe(w_);
+      if (a1_ < a0) [a0, a1_] = [a1_, a0];
+      d.trazos.push(ruta([pF, Q], 'eje'));
+      // el eje del tronco se prolonga hasta Q si éste queda fuera
+      const ext0 = eje.reduce((best, q) => (largo(resta(q, Q)) < largo(resta(best, Q)) ? q : best), eje[0]);
+      if (distSegmento(Q, eje[0], eje[1]) > 1) d.trazos.push(ruta([ext0, Q], 'eje'));
+      d.cotas.push(cotaAng(Q, Math.max(Math.min(0.3 * largo(resta(pF, Q)), 2.6 * a1.R), a1.R * 1.2), a0, a1_, grados(angulo), null));
+    }
+    // las marcas de cada pieza, junto a ella y hacia el lado contrario de la otra
+    if (marcas.length) {
+      const centros = silPieza.map(promedio);
+      marcas.forEach((txt, i) => {
+        if (!txt) return;
+        const sil = silPieza[i];
+        const dif = resta(centros[i], centros[1 - i]);
+        const lejosV = largo(dif) > 1e-6 ? unit(dif) : [0, -1];
+        let mejor = null;
+        [90, 270, 0, 180, 45, 135, 225, 315].forEach((a) => {
+          const v = vecDe(a);
+          let sc = v[0] * lejosV[0] + v[1] * lejosV[1];
+          const haciaCota = horizontal ? v[1] : (ladoDer ? v[0] : -v[0]); // la cota total va abajo o a un lado
+          if (haciaCota > 0.3) sc -= 2;
+          if (!mejor || sc > mejor.sc) mejor = { a, v, sc };
+        });
+        // el punto más lejano de la pieza en esa dirección (sobre la recta que sale de su centro), pasando la brida si la hay
+        const c0 = centros[i];
+        const apoyo = Math.max(0, ...sil.flat().map((q) => (q[0] - c0[0]) * mejor.v[0] + (q[1] - c0[1]) * mejor.v[1]));
+        const p = suma(c0, por(mejor.v, apoyo + ancho * 0.8));
+        d.cotas.push({ t: 'marca', p, hacia: mejor.a, texto: txt, campo: null });
+      });
+    }
+    d.conjunto = {
+      junta, juntaPunto: a1.c, juntaDir: a1.dir, base: F[0].familia, caras: K, marcas,
+      angulo_deg: angulo, total_mm: total, horizontal, espejo: T.m === -1, libres,
+      eje: { desde: eje[0], hasta: eje[1] }, solape_mm2: elegida.solape,
+    };
+    return d;
   }
 
   /** Título de la pieza como en los planos de pedido, sólo con lo capturado (sin calcular): «Reducción de 11″ a 10″ con injerto de 5″ a 30°». */
@@ -670,14 +934,14 @@
 
     if (!compacto) {
       /** Texto con su caja aproximada (ancho ≈ 0.58 · tamaño por carácter), girada con él, para el marco. */
-      const textoEn = (q, ang, txt, ancla, medio) => {
-        const w = String(txt).length * 0.58 * fs;
+      const textoEn = (q, ang, txt, ancla, medio, clase) => {
+        const w = String(txt).length * 0.58 * fs * (clase ? 1.6 : 1);
         const x0 = ancla === 'start' ? 0 : ancla === 'end' ? -w : -w / 2;
         const ys = medio ? [-0.55 * fs, 0.55 * fs] : [-0.85 * fs, 0.25 * fs];
         const c = Math.cos(rad(ang)); const sn = Math.sin(rad(ang));
         [[x0, ys[0]], [x0 + w, ys[0]], [x0 + w, ys[1]], [x0, ys[1]]].forEach(([dx, dy]) => meter([q[0] + dx * c - dy * sn, q[1] + dx * sn + dy * c]));
         return nodo('text', {
-          x: r2(q[0]), y: r2(q[1]), 'font-size': r2(fs), 'text-anchor': ancla || 'middle', class: 'pl-txt',
+          x: r2(q[0]), y: r2(q[1]), 'font-size': r2(fs * (clase ? 1.25 : 1)), 'text-anchor': ancla || 'middle', class: clase || 'pl-txt',
           ...(medio ? { 'dominant-baseline': 'middle' } : {}),
           ...(ang ? { transform: `rotate(${r2(ang)} ${r2(q[0])} ${r2(q[1])})` } : {}),
         }, [], txt);
@@ -713,6 +977,12 @@
           const t1 = [-Math.sin(rad(k.a1)), -Math.cos(rad(k.a1))];
           g.push(punta(polar(k.c, k.r, k.a0), por(t0, -1)), punta(polar(k.c, k.r, k.a1), t1));
           g.push(textoEn(polar(k.c, k.r + fs * 0.9, (k.a0 + k.a1) / 2), 0, k.texto, 'middle', true));
+        } else if (k.t === 'marca') {
+          // la marca de una pieza (I1, C1…): junto a ella, hacia la dirección `hacia`
+          const v = polar([0, 0], 1, k.hacia);
+          const ancla = v[0] > 0.35 ? 'start' : v[0] < -0.35 ? 'end' : 'middle';
+          const q = suma(k.p, [v[0] * 7 * u, v[1] * 7 * u + (v[1] < -0.35 ? 0 : v[1] > 0.35 ? 0.7 * fs : 0)]);
+          g.push(textoEn(q, 0, k.texto, ancla, true, 'pl-txt pl-marca'));
         } else if (k.t === 'nota') {
           const der = Math.cos(rad(k.hacia)) >= 0;
           const lejos = polar(k.p, 22 * u, k.hacia);
@@ -738,5 +1008,5 @@
     }, [...hijos, ...cotasGrupo]);
   }
 
-  return { plano, titulo, arbol, caja, formato: { mm, pulg, diam, nominal, grados } };
+  return { plano, planoConjunto, anclas, titulo, arbol, caja, formato: { mm, pulg, diam, nominal, grados } };
 }));

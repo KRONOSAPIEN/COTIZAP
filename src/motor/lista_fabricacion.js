@@ -355,7 +355,15 @@
         const pz = piezas.find((x) => x.id === q.partida);
         return { marca: pz ? pz.marca : '—', titulo: pz ? pz.titulo : q.nombre, cara: q.cara, cara_texto: NOMBRE_CARA[q.cara] || q.cara };
       });
+      // el dibujo del conjunto ya unido (planos.js); si no se puede dibujar, la tarjeta usa el esquema de dos cajas
+      let dibujo = null;
+      try {
+        const [qa, qb] = a.piezas;
+        const marcas = mias.map((x) => x.marca);
+        dibujo = PL().planoConjunto(res.partidas[qa.indice], qa.cara, res.partidas[qb.indice], qb.cara, res.maestros, { marcas: marcas.every((m) => m !== '—') ? marcas : undefined, junta });
+      } catch (e) { dibujo = null; }
       return {
+        dibujo,
         marca: a.marca, id: a.id, cantidad: a.n, piezas: mias, junta, descripcion: a.descripcion,
         titulo: `Conjunto armado: ${mias.map((x) => x.titulo).join(' + ')}`,
         pareja: a.pareja, angulo_deg: a.angulo_deg, es_90: a.es_90, dim_mm: a.dim_mm, limite_mm: a.limite_mm, D_mm: a.D_mm,

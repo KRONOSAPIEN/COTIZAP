@@ -83,7 +83,7 @@
         h('span', { class: 'hoja-num' }, `Hoja ${i + 1} de ${n}`)));
   }
 
-  /** La figura simple de un conjunto: sus dos piezas lado a lado, con su marca, y la junta de armado entre ellas. */
+  /** Respaldo: la figura simple de un conjunto (sus dos piezas lado a lado, con su marca, y la junta de armado entre ellas) cuando no se puede dibujar unido. */
   function figuraConjunto(c) {
     const NS = 'http://www.w3.org/2000/svg';
     const el = (tag, at, txt) => { const e = document.createElementNS(NS, tag); Object.keys(at).forEach((k) => e.setAttribute(k, at[k])); if (txt !== undefined) e.textContent = txt; return e; };
@@ -101,11 +101,13 @@
   }
 
   function tarjetaConjunto(c) {
+    // el conjunto dibujado como queda unido; si no se pudo dibujar, el esquema de dos cajas
+    const figura = c.dibujo ? W.svgArbol(C.planos.arbol(c.dibujo, { px: 330, alto_max: 250, titulo: `Conjunto ${c.marca}: ${c.piezas.map((x) => x.marca).join(' con ')}, junta ${c.junta}` })) : figuraConjunto(c);
     return h('article', { class: 'conjunto-armado', dataset: { marca: c.marca, armado: c.id } },
       h('div', { class: 'pieza-cab' },
         h('span', { class: 'pieza-marca', title: 'Marca del conjunto armado' }, c.marca),
         h('span', { class: 'pieza-cant' }, `${W.num(c.cantidad, 0)} ${c.cantidad === 1 ? 'conjunto' : 'conjuntos'}`)),
-      h('figure', { class: 'pieza-fig' }, figuraConjunto(c)),
+      h('figure', { class: 'pieza-fig' }, figura),
       h('div', null,
         h('h4', { class: 'pieza-tit' }, c.titulo),
         h('ul', { class: 'plano-datos' },

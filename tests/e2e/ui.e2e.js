@@ -3894,6 +3894,10 @@ const ok = (cond, msg) => {
     ok(sug.length === 2 && sug.every((s) => s.ahorro > 0), `«Sugerir armados» propone 2 parejas, cada una con su ahorro (${sug.map((s) => s.ahorro).join(' y ')})`);
     ok(sug.some((s) => /con injerto de 5″ a 30° con codo de 60° de 5″/i.test(s.txt) && /Ángulo resultante 90°/.test(s.txt)) && sug.some((s) => /tramo recto de 5″ × 914 mm con codo de 90° de 5″/i.test(s.txt)), 'son injerto + codo de 60° (sale a 90°) y recto + codo de 90°; codo + codo no aparece');
     ok(/3,?660 mm/.test(await p.locator('#arm-ayuda').innerText()), 'el diálogo dice el límite de 3,660 mm');
+    // vista previa: cada sugerencia trae su dibujo del conjunto ya unido (un svg.plano con las dos piezas y la junta marcada)
+    ok(await p.locator('#arm-lista .arm-sug svg.plano').count() === 2 && await p.locator('#arm-lista .arm-sug').evaluateAll((els) => els.every((e) => e.querySelectorAll('svg.plano').length === 1)), 'el diálogo muestra un svg.plano por sugerencia');
+    const previa = await p.locator('#arm-lista .arm-sug svg.plano').evaluateAll((els) => els.map((e) => ({ ancho: e.getBoundingClientRect().width, alto: e.getBoundingClientRect().height, junta: e.querySelectorAll('.pl-engargolado').length, piezas: e.querySelectorAll('.pl-relleno, .pl-pieza').length })));
+    ok(previa.every((v) => v.ancho > 60 && v.alto > 30 && v.junta === 1 && v.piezas >= 2), `la vista previa se ve (con su junta engargolada y las dos piezas): ${JSON.stringify(previa)}`);
 
     // armar una: el total baja, aparece el chip en las dos piezas y la partida automática de la junta
     await p.locator('#arm-lista .arm-sug').first().locator('button[data-armar]').click();
@@ -3932,6 +3936,8 @@ const ok = (cond, msg) => {
     // Planos y lista de fabricación: los conjuntos E1 y E2 con sus piezas
     await p.click('#tab-planos');
     const conj = await p.locator('#planos-hojas .conjunto-armado').evaluateAll((els) => els.map((e) => e.textContent));
+    ok(await p.locator('#planos-hojas .conjunto-armado svg.plano').count() === 2 && await p.locator('#planos-hojas .conjunto-armado svg.plano .pl-engargolado').count() === 2 && await p.locator('#planos-hojas .conjunto-armado svg.conj-fig').count() === 0, 'Planos dibuja cada conjunto unido (svg.plano con su junta engargolada), no el esquema de cajas');
+    ok(/90°/.test(await p.locator('#planos-hojas .conjunto-armado svg.plano').first().textContent() + await p.locator('#planos-hojas .conjunto-armado svg.plano').nth(1).textContent()), 'el dibujo del conjunto del injerto marca el ángulo resultante de 90°');
     ok(conj.length === 2 && /E1/.test(conj[0]) && /E2/.test(conj[1]) && /Se arma en taller: sin brida en esta cara; junta engargolada/.test(conj[0]), 'Planos muestra los conjuntos E1 y E2 con la nota «Se arma en taller: sin brida en esta cara; junta engargolada»');
     const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#btn-lista-pdf-planos')]);
     const bytes = fs.readFileSync(await dl.path());

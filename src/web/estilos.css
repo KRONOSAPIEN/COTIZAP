@@ -412,6 +412,7 @@ svg.plano { display: block; max-width: 100%; height: auto; overflow: visible; }
 .pl-ext { stroke-width: 0.6px; }
 .pl-flecha { fill: var(--accent); }
 .pl-txt { fill: var(--fg); font-family: var(--font-ui); font-weight: 600; }
+.pl-txt.pl-marca { font-weight: 800; }
 .pl-cotas[data-campo] { cursor: pointer; }
 .pl-cotas.activa .pl-cota, .pl-cotas.activa .pl-ext { stroke: var(--s2); stroke-width: 2px; }
 .pl-cotas.activa .pl-flecha { fill: var(--s2); }
@@ -1570,6 +1571,9 @@ dd.ti-sem-verde, dd.ti-sem-ambar { background: none; font-weight: 600; }
 .arm-lista { display: flex; flex-direction: column; gap: 10px; max-height: 55vh; overflow: auto; }
 .arm-sug { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
 .arm-sug h3 { font-size: 15px; margin: 0 0 4px; }
+.arm-sug-fig { margin: 0; flex: 0 0 150px; display: flex; align-items: center; justify-content: center; }
+.arm-sug-fig svg { width: 150px; height: auto; max-width: 100%; }
+.arm-sug-txt { flex: 1 1 auto; min-width: 0; }
 .arm-sug-meta, .arm-sug-desglose { margin: 0; font-size: 12.5px; color: var(--fg-2); }
 .arm-sug-der { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: 0 0 auto; }
 .arm-sug-ahorro { font: 600 20px var(--font-ui); color: var(--good); }
@@ -1583,4 +1587,4 @@ dd.ti-sem-verde, dd.ti-sem-ambar { background: none; font-weight: 600; }
 .conj-fig line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; }
 .conj-fig text { fill: var(--fg); font: 600 11px var(--font-ui); }
 .conj-fig .conj-txt { fill: var(--fg-2); font-weight: 500; font-size: 10px; }
-@media (max-width: 620px) { .arm-sug { flex-direction: column; align-items: stretch; } .arm-sug-der { align-items: flex-start; } .conjunto-armado { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 620px) { .arm-sug { flex-direction: column; align-items: stretch; } .arm-sug-fig { flex-basis: auto; } .arm-sug-der { align-items: flex-start; } .conjunto-armado { grid-template-columns: minmax(0, 1fr); } }
