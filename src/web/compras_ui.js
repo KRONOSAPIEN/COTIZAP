@@ -145,7 +145,7 @@
         ? `El sobrante (${W.mxn(L.sobrante)}) no se cobra: sale de la utilidad o queda como retazo en el taller. Márquelo arriba para cobrarlo.`
         : 'Lo que se compra entero ya lo cobran las partidas: no hay sobrante.';
     const sold = L.soldadura.filter((s) => s.kg_alambre > 0);
-    const nombre = (ref) => { const a = C.ayudaMaestros.buscar(['precios', ref]); return a ? a.t.charAt(0).toLowerCase() + a.t.slice(1) : ref; };
+    const nombre = (ref) => { const t = C.ayudaMaestros.nombrePrecio(ref); return t.charAt(0).toLowerCase() + t.slice(1); };
     W.reemplazar(cont,
       W.tabla([{ t: 'Concepto' }, { t: 'Se necesita' }, { t: 'Comprar' }, { t: 'Precio sin IVA', num: true }, { t: 'Importe', num: true }, { t: 'Cotizado', num: true }, { t: 'Sobrante', num: true }], filas),
       h('p', { class: `nota${auto ? ' ok' : ''}` }, W.icono(auto ? 'check' : 'info'), nota),

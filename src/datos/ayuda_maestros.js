@@ -438,7 +438,7 @@
     'MXN por metro de cinta. Cada brida lleva medio empaque (el otro medio es de la brida de enfrente).',
     'Sube el costo de todas las uniones con brida; más diámetro = más metros de empaque.',
     { afecta: ['mat'], tip: [8, 80] });
-  P('precio_cartucho_sellador', 'Cartucho de sellador',
+  P('precio_cartucho_sellador', 'Sellador (cartucho)',
     'Cartucho de sellador para juntas (hoy Sikaflex blanco de 600 mL).',
     'MXN por cartucho, sin IVA ($459 con IVA → $395.69). El cálculo lo prorratea por mL con «tamaño del cartucho» de Herrajes.',
     'Sube el costo de las juntas que llevan sellador (espiga y clases de sellado). El gris de 600 mL cuesta $359 con IVA.',
@@ -1738,6 +1738,26 @@
     return null;
   }
 
+  /* ---------- Nombre legible de una variable de precio ---------- */
+  const FRAC = { '1/4': '¼', '1/2': '½', '3/4': '¾' };
+  /** «5_16_x_1_1_4» → «5/16″ × 1¼″»: fracciones de pulgada y «x» como cruz. */
+  function nombreDeClave(clave) {
+    let t = String(clave).replace(/^precio_(kg|m3|m|L|pza|juego|cartucho)?_?/, '');
+    t = t.replace(/(^|_)(\d+)_(\d+)_(\d+)(?=_|$)/g, (m, a, e, n, d) => `${a}${e}${FRAC[`${n}/${d}`] || ` ${n}/${d}`}″`)
+      .replace(/(^|_)(\d+)_(\d+)(?=_|$)/g, (m, a, n, d) => `${a}${n}/${d}″`)
+      .replace(/_x_/g, ' × ').replace(/_/g, ' ').replace(/ +/g, ' ').trim();
+    if (!t) t = String(clave).replace(/_/g, ' ');
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+  /**
+   * Nombre para mostrar de una variable de `M.precios`: el título de su ayuda y, si no lo hay (variable nueva o ajena), uno armado de la clave.
+   * Nunca devuelve la clave tal cual (con guiones bajos). La clave guardada no cambia.
+   */
+  function nombrePrecio(clave) {
+    const a = buscar(['precios', clave]);
+    return a && a.t ? a.t : nombreDeClave(clave);
+  }
+
   /* ---------- Recorrido de las tablas tal como las dibuja el editor ---------- */
   const GRUPOS = ['proveedor', 'precios', 'compras', 'mano_obra', 'merma', 'capas', 'rapida', 'proceso', 'herrajes', 'materiales', 'calibres', 'servicios', 'calculo', 'ventiladores'];
   /** Las columnas de la curva de cada modelo del catálogo de ventiladores. */
@@ -1806,6 +1826,6 @@
 
   return {
     AFECTA, ORIGENES, UNIDADES, FAMILIAS, OPERACIONES, MATERIALES, SISTEMAS, ARTICULOS, CATALOGO: CAT, GRUPOS, COLUMNAS_CALCULO, COLUMNAS_VENTILADORES,
-    esPct, etiqueta, unidadDe, mostrado, buscar, coincide, recorrer, fueraDeRango,
+    esPct, etiqueta, unidadDe, mostrado, buscar, nombrePrecio, coincide, recorrer, fueraDeRango,
   };
 }));

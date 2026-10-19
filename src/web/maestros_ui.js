@@ -79,7 +79,7 @@
   ];
   function opcionesDePrecio(re) {
     const P = W.estadoApp.M.precios;
-    const texto = (k) => { const un = unidadDe(['precios', k]); return `${k} · ${fmt(P[k])}${un ? ` ${un}` : ''}`; };
+    const texto = (k) => { const un = unidadDe(['precios', k]); return `${A.nombrePrecio(k).replace(/\s*\([^)]*\)/g, '')} · $${fmt(P[k])}${un ? `/${un.replace(/^MXN\//, '')}` : ''}`; };
     const propios = Object.keys(P).filter((k) => re.test(k));
     const otros = Object.keys(P).filter((k) => !re.test(k));
     return [...propios.map((k) => [k, texto(k)]), ...(propios.length && otros.length ? [[null, '— otros precios —']] : []), ...otros.map((k) => [k, texto(k)])];
@@ -100,7 +100,7 @@
       const c = W.estadoApp.M.proceso.costuras;
       return Object.keys(c).map((k) => [k, c[k] && c[k].nombre ? c[k].nombre : k]);
     }],
-    ['materiales.*.brida_al_ducto', () => [['SOLDADA', 'Soldada (filete aro–ducto)'], ['CEJA', 'Con ceja (se mete y se le hace una ceja al ducto)']]],
+    ['materiales.*.brida_al_ducto', () => [['SOLDADA', 'Soldada'], ['CEJA', 'Con ceja']]],
     ['proceso.corte.proceso_recto', () => claves(W.estadoApp.M.proceso.corte.v_m_min)],
     ['proceso.corte.proceso_perfilado', () => claves(W.estadoApp.M.proceso.corte.v_m_min)],
     ['proceso.injerto_inclinado_hacia', () => [['MENOR', 'MENOR (de mayor a menor)'], ['MAYOR', 'MAYOR']]],
@@ -109,7 +109,7 @@
     ['herrajes.uniones.BRIDADO.junta', () => [['SELLADOR', 'Sikaflex: cordón sobre los barrenos'], ['EMPAQUE', 'Empaque de neopreno (y el cordón de la clase)']]],
     ['proceso.costuras.*.soldada', () => [['true', 'Sí'], ['false', 'No']]],
     ['compras.articulos.*.iva_incluido', () => [['true', 'Sí: el precio ya trae IVA'], ['false', 'No: el precio es antes de IVA']]],
-    ['compras.articulos.*.categoria', () => Object.keys(C.gastos.CATEGORIAS).map((k) => [k, C.gastos.CATEGORIAS[k]])],
+    ['compras.articulos.*.categoria', () => Object.keys(C.gastos.CATEGORIAS).map((k) => [k, C.gastos.CATEGORIAS[k].split(':')[0]])],
     ['proceso.soportes.anclaje_defecto', () => Object.keys(W.estadoApp.M.compras.articulos).map((k) => [k, W.estadoApp.M.compras.articulos[k].descripcion || k])],
     ['proceso.soportes.tornillo', () => claves(W.estadoApp.M.herrajes.tornillo_precio_ref)],
     ['rapida.hoja_defecto', () => C.rapida.hojas(W.estadoApp.M).map((x) => [x.id, x.descripcion])],
@@ -162,7 +162,7 @@
         h('label', { for: id }, h('span', { class: etiquetaPropia || ay ? 'm-et m-et-txt' : 'm-et' }, etiquetaPropia || ay ? titulo : (typeof k === 'number' ? `#${k + 1}` : String(k))),
           !etiquetaPropia && ay && typeof k !== 'number' && String(k) !== titulo ? h('span', { class: 'm-clave' }, String(k)) : null),
         W.ayudaUI.boton(ruta, 'fila', { fueraDelTab: true })),
-      h('div', { class: 'm-ctl' }, ctl, un ? h('span', { class: 'sufijo' }, un) : h('span', { class: 'sufijo' })));
+      h('div', { class: 'm-ctl' }, ctl, un && !lista ? h('span', { class: 'sufijo' }, un) : h('span', { class: 'sufijo' })));
   }
 
   function tituloTabla(ruta) {
@@ -396,9 +396,9 @@
     // el artículo del catálogo de compras con su precio (opcional): sin él, la partida del ventilador queda por capturar
     const arts = W.estadoApp.M.compras.articulos;
     const art = h('select', { class: 'm-vent-ctl', 'aria-label': `Artículo de compras · ${nombre}` },
-      h('option', { value: '', selected: !m.articulo }, 'Ninguno: el precio se captura en la partida'),
+      h('option', { value: '', selected: !m.articulo }, 'Ninguno (precio por partida)'),
       m.articulo && !Object.prototype.hasOwnProperty.call(arts, m.articulo) ? h('option', { value: m.articulo, selected: true }, `${m.articulo} (no está en el catálogo)`) : null,
-      Object.keys(arts).map((k) => h('option', { value: k, selected: m.articulo === k }, `${arts[k].descripcion || k} · ${k}`)));
+      Object.keys(arts).map((k) => h('option', { value: k, selected: m.articulo === k }, arts[k].descripcion || etiqueta(k))));
     art.addEventListener('change', () => !pintandoVent && cambiarCatalogo((l) => { l[i].articulo = art.value; }, `${nombre}: artículo de compras`));
     const ilus = h('input', { type: 'checkbox', checked: !!m.ilustrativo, 'aria-label': `Ilustrativo · ${nombre}` });
     ilus.addEventListener('change', () => !pintandoVent && cambiarCatalogo((l) => { l[i].ilustrativo = ilus.checked; }, `${nombre}: ${ilus.checked ? 'marcado' : 'ya no'} ilustrativo`));

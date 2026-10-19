@@ -1376,7 +1376,7 @@ const ok = (cond, msg) => {
     await p.fill('#maestros-buscar', 'gas_ref');
     const gasRef = p.locator('select#m_materiales__ACERO_CARBON__gas_ref');
     const opsGas = await gasRef.locator('option').allInnerTexts();
-    ok(/^precio_m3_gas_mezcla_ar_co2 · 145 MXN\/m³$/.test(opsGas[0]) && opsGas[1].startsWith('precio_m3_gas_argon') && opsGas[2] === '— otros precios —', 'los precios a los que apunta un material se eligen de una lista, con su precio actual, y primero los del tipo que corresponde');
+    ok(/^Gas mezcla Ar\/CO₂ · \$145\/m³$/.test(opsGas[0]) && opsGas[1].startsWith('Argón puro') && opsGas[2] === '— otros precios —', 'los precios a los que apunta un material se eligen de una lista, con su precio actual, y primero los del tipo que corresponde');
     ok(await gasRef.locator('option:checked').innerText() !== '' && await gasRef.inputValue() === 'precio_m3_gas_mezcla_ar_co2', 'el valor guardado queda elegido');
     await fila('m_materiales__ACERO_CARBON__gas_ref').locator('.m-ayuda').click();
     ok(/145 MXN\/m³/.test(await pop.locator('.m-pop-cuerpo').innerText()) && await pop.locator('button:has-text("Ir a ese precio")').count() === 1, 'su ayuda dice cuánto vale ese precio y lleva a él');
@@ -4215,6 +4215,39 @@ const ok = (cond, msg) => {
     const despues = await totalDe();
     const mostrado = await p.locator('#totales [data-ahorro-armados]').getAttribute('data-ahorro-armados');
     ok(nSug >= 3 && cent(Number(mostrado)) === cent(antes - despues), `el ahorro mostrado (${mostrado}) es el total antes de armar (${antes.toFixed(2)}) menos el de después (${despues.toFixed(2)}) = ${(antes - despues).toFixed(2)}`);
+    await p.context().close();
+  }
+  console.log('55) Tablas maestras: los precios se eligen por su nombre en español (nunca la clave técnica) y ningún menú se corta en el celular');
+  {
+    const p = await nuevaPagina({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await p.click('#tab-maestros');
+    await p.waitForTimeout(300);
+    await p.evaluate(() => document.querySelectorAll('#panel-maestros details').forEach((d) => { d.open = true; }));
+    await p.waitForTimeout(200);
+    const raros = await p.evaluate(() => [...document.querySelectorAll('#panel-maestros select option')].map((o) => o.textContent).filter((t) => t.includes('_')));
+    ok(raros.length === 0, `ninguna opción de las tablas maestras muestra una clave técnica${raros.length ? `: ${raros.slice(0, 4).join(' | ')}` : ''}`);
+    const nOpc = await p.locator('#panel-maestros select').count();
+    ok(nOpc > 10, `hay menús que revisar (${nOpc})`);
+    const tor = await p.evaluate(() => {
+      const s = document.querySelector('#panel-maestros select[data-ruta*="tornillo_precio_ref"]');
+      return s ? [...s.options].map((o) => o.textContent).find((t) => /5\/16/.test(t)) : null;
+    });
+    ok(/^.*5\/16″ × 1¼″.* · \$3\.67\/juego$/.test(tor || ''), `el tornillo se lee «${tor}»`);
+    const cortados = await p.evaluate(() => {
+      const c = document.createElement('canvas').getContext('2d');
+      const mal = [];
+      document.querySelectorAll('#panel-maestros select').forEach((s) => {
+        if (!s.offsetParent) return;
+        const cs = getComputedStyle(s);
+        c.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+        const texto = s.selectedOptions[0] ? s.selectedOptions[0].textContent : '';
+        const util = s.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 20; // la flecha del menú
+        const ancho = c.measureText(texto).width;
+        if (ancho > util + 1 || s.scrollWidth > s.clientWidth + 1) mal.push(`${texto} (${Math.round(ancho)} > ${Math.round(util)})`);
+      });
+      return mal;
+    });
+    ok(cortados.length === 0, `a 390 px ningún menú corta su texto${cortados.length ? `: ${cortados.slice(0, 4).join(' | ')}` : ''}`);
     await p.context().close();
   }
   ok(errores.length === 0, `sin errores de consola${errores.length ? `: ${errores.join(' | ')}` : ''}`);

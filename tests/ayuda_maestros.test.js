@@ -206,3 +206,13 @@ test('validación del editor: un cero en el ancho de un perfil con punto en su c
   assert.equal(V.exigePositivo(['proceso', 'corte', 'v_m_min', 'PLASMA', 0, 1]), true);
   assert.equal(V.exigePositivo(['precios', 'precio_kg_solera']), false);
 });
+
+test('nombrePrecio: toda variable de precio tiene un nombre en español sin guiones bajos, y una clave desconocida también', () => {
+  Object.keys(M.precios).forEach((k) => {
+    const n = A.nombrePrecio(k);
+    assert.ok(n && !/_/.test(n), `${k} → «${n}»`);
+  });
+  assert.equal(A.nombrePrecio('precio_juego_tornillo_5_16_x_1_1_4'), 'Tornillo 5/16″ × 1¼″ (brida estándar)');
+  assert.equal(A.nombrePrecio('precio_juego_tornillo_3_8_x_2_1_2_zinc'), 'Tornillo 3/8″ × 2½″ zinc');
+  assert.equal(A.nombrePrecio('precio_kg_cobre_raro'), 'Cobre raro');
+});

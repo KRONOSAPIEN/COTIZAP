@@ -177,7 +177,7 @@
     if (typeof actual === 'string' && lista.length > 8 && M.precios && Object.prototype.hasOwnProperty.call(M.precios, actual)) {
       const un = A.unidadDe(['precios', actual]);
       return seccion('A qué precio apunta',
-        h('p', null, `Ahora apunta a «${actual}»: `, h('strong', null, `${fmt(M.precios[actual])}${un ? ` ${un}` : ''}`), '.'),
+        h('p', null, `Ahora apunta a «${A.nombrePrecio(actual)}»: `, h('strong', null, `${fmt(M.precios[actual])}${un ? ` ${un}` : ''}`), '.'),
         h('button', { type: 'button', class: 'btn btn-sec btn-chico', onclick: () => { cerrar(); W.maestrosUI.irA(['precios', actual]); } }, 'Ir a ese precio'));
     }
     if (lista.length < 2 || lista.length > 6) return null;
