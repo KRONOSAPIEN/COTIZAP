@@ -22,7 +22,7 @@
   'use strict';
 
   const RUTA = 'config/maestros';
-  const VERSION_DOC = 2;
+  const VERSION_DOC = 3;
   const SIN_PERMISO = ['invalid_argument', 'revoked', 'not_granted'];
   const SIN_DB = ['capability_disabled', 'capability_removed'];
   const SIN_REINTENTO = ['quota_exceeded', 'transform_error'];
@@ -101,7 +101,7 @@
       }
     }
 
-    /** Abre el almacén y decide qué parche manda. Resuelve { origen: 'remoto' | 'local', parche }; nunca rechaza. */
+    /** Abre el almacén y decide qué parche manda. Resuelve { origen: 'remoto' | 'local', parche, version? }; nunca rechaza. */
     async function iniciar(parcheLocal) {
       const local = esObjeto(parcheLocal) ? parcheLocal : {};
       try {
@@ -154,7 +154,7 @@
       if (remoto && (!hayPendiente || soloLectura)) {
         if (hayPendiente) ls.borrar(llavePend);
         emitir(soloLectura ? 'lectura' : 'guardado');
-        return { origen: 'remoto', parche: remoto };
+        return { origen: 'remoto', parche: remoto, version: datos.v }; // `version`: la del documento guardado (las anteriores a la 3 pueden traer el salario de $500)
       }
       // Lo local manda: hay cambios que no llegaron a subirse (o todavía no existe nada guardado). La app los vuelve a
       // programar con `programar`, que los compara contra lo que hay en el almacén.

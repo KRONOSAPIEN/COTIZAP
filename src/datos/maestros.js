@@ -1,7 +1,7 @@
 /**
  * COTIZAP · maestros.js — Bases de datos maestras (valores de arranque).
  *
- * ⚠ SON REALES la mano de obra ($500 por hora) y la lámina y los perfiles de la lista del proveedor
+ * ⚠ SON REALES la mano de obra ($100 por hora con prestaciones) y la lámina y los perfiles de la lista del proveedor
  *   (cotizaciones y factura del 30-sep-2026). TODO LO DEMÁS (consumibles, equipo, tiempos, indirectos,
  *   utilidad) es ILUSTRATIVO: existe para que el motor funcione de inmediato y para servir de vector
  *   de prueba. Antes de cotizar a un cliente debe sustituirse por:
@@ -25,7 +25,7 @@
 
   const base = {
     meta: {
-      version: '1.9.0',
+      version: '1.10.0',
       moneda: 'MXN',
       aviso: 'Mano de obra, lámina y perfiles del proveedor y catálogo de compras son reales; el resto son valores ilustrativos. Revisar antes de cotizar.',
     },
@@ -453,30 +453,31 @@
 
     /* ------------------------------------------------------------------ */
     /* TARIFAS DE OPERACIÓN                                               */
-    /* El taller paga por DÍA: $500 ($3,500 a la semana ÷ 7 días; dato   */
-    /* del taller, sin utilidades ni prestaciones) y cuesta la hora así:  */
-    /*   salario_hora = salario_diario ÷ horas por día = 500 ÷ 8 = $62.50 */
+    /* El taller cuesta cada trabajador por DÍA: $800 con prestaciones   */
+    /* incluidas, y la hora sale así:                                     */
+    /*   salario_hora = salario_diario ÷ horas por día = 800 ÷ 8 = $100.00 */
     /*   mo_h         = salario_hora × FSR                                */
-    /* FSR = 1.00 porque así lo calcula el taller. Para cobrar en cada    */
-    /* hora lo que se paga y no se trabaja (7 días por 5) y las           */
-    /* prestaciones de ley, el FSR sube (7/5 = 1.40 sólo por los días).   */
+    /* FSR = 1.00 porque el salario por día ya incluye las prestaciones.  */
+    /* Si se capturara un salario sin prestaciones, el FSR subiría para   */
+    /* cobrar lo que se paga y no se trabaja (7 días por 5 = 1.40) y las  */
+    /* cargas de ley.                                                     */
     /* `instalacion` es la cuadrilla que monta en obra (familia INSTALACION). */
     /* ------------------------------------------------------------------ */
     mano_obra: {
       FSR: 1.0,
       jornada: { horas_dia: 8 },
       operaciones: {
-        corte: { salario_diario: 500, equipo_h: 45 },
-        rolado: { salario_diario: 500, equipo_h: 55 },
-        armado: { salario_diario: 500, equipo_h: 25 },
-        aros: { salario_diario: 500, equipo_h: 40 },
-        soldadura: { salario_diario: 500, equipo_h: 45 },
-        engargolado: { salario_diario: 500, equipo_h: 35 },
-        barrenado: { salario_diario: 500, equipo_h: 25 },
-        acabado: { salario_diario: 500, equipo_h: 20 },
-        pintura: { salario_diario: 500, equipo_h: 40 },
-        qc_embalaje: { salario_diario: 500, equipo_h: 0 },
-        instalacion: { salario_diario: 500, equipo_h: 0 },
+        corte: { salario_diario: 800, equipo_h: 45 },
+        rolado: { salario_diario: 800, equipo_h: 55 },
+        armado: { salario_diario: 800, equipo_h: 25 },
+        aros: { salario_diario: 800, equipo_h: 40 },
+        soldadura: { salario_diario: 800, equipo_h: 45 },
+        engargolado: { salario_diario: 800, equipo_h: 35 },
+        barrenado: { salario_diario: 800, equipo_h: 25 },
+        acabado: { salario_diario: 800, equipo_h: 20 },
+        pintura: { salario_diario: 800, equipo_h: 40 },
+        qc_embalaje: { salario_diario: 800, equipo_h: 0 },
+        instalacion: { salario_diario: 800, equipo_h: 0 },
       },
     },
 
@@ -549,9 +550,9 @@
       utilidad_pct: 0.2, // se suma sobre el costo (lámina × factor + bridas + mano de obra por días). Ilustrativa: el taller no la ha dicho
       // los días de la pestaña suman su mano de obra (el taller, 7-oct-2026): días × personas × pago por día
       personas_fabricacion: 1, // la fabricación de las bridas: 1 persona
-      pago_dia_fabricacion: 500, // a $500 por día
+      pago_dia_fabricacion: 800, // a $800 por día (con prestaciones)
       personas_instalacion: 2, // la instalación: 2 personas
-      pago_dia_instalacion: 500, // a $500 por día cada una
+      pago_dia_instalacion: 800, // a $800 por día cada una (con prestaciones)
       bridas_por_metros: [ // hasta 40 m, $5,000; de 40 a 80 m, $12,000; de 80 a 120 m, $18,000 (sin IVA)
         { hasta_m: 40, importe: 5000 },
         { hasta_m: 80, importe: 12000 },
@@ -758,7 +759,39 @@
     return p;
   }
 
+  /**
+   * Versión 1.10.0: el salario por día pasó de $500 a $800 (con prestaciones: $100.00 la hora) y lo mismo el pago por día de
+   * la cotización rápida. Un parche anterior que todavía trae el valor de entonces ($500 exactos) lo suelta, para que rija el
+   * nuevo y no se siga pagando a $62.50 la hora sin que nadie lo note; cualquier otro valor capturado se conserva.
+   * No es parte de `migrarParche` (que corre en cada lectura): sólo se aplica a lo guardado o importado por una versión
+   * anterior (ver `VERSION_PARCHE`), para que quien capture $500 a propósito hoy no lo vea desaparecer.
+   * No muta el parche recibido.
+   */
+  function quitarSalarioAnterior(parche) {
+    if (parche === null || typeof parche !== 'object' || Array.isArray(parche)) return parche;
+    const esObj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+    const vaciar = (o, k) => { if (esObj(o[k]) && !Object.keys(o[k]).length) delete o[k]; };
+    const p = U.clonar(parche);
+    if (esObj(p.mano_obra) && esObj(p.mano_obra.operaciones)) {
+      const ops = p.mano_obra.operaciones;
+      Object.keys(ops).forEach((k) => {
+        if (esObj(ops[k]) && ops[k].salario_diario === 500) delete ops[k].salario_diario;
+        vaciar(ops, k);
+      });
+      vaciar(p.mano_obra, 'operaciones');
+      vaciar(p, 'mano_obra');
+    }
+    if (esObj(p.rapida)) {
+      ['pago_dia_fabricacion', 'pago_dia_instalacion'].forEach((k) => { if (p.rapida[k] === 500) delete p.rapida[k]; });
+      vaciar(p, 'rapida');
+    }
+    return p;
+  }
+
+  /** Los parches y archivos con una versión menor que ésta pueden traer el salario de $500 (ver `quitarSalarioAnterior`). */
+  const VERSION_PARCHE = 3;
+
   return {
-    crearMaestros, migrarParche, sanearParche, leerParche, base,
+    crearMaestros, migrarParche, sanearParche, leerParche, quitarSalarioAnterior, VERSION_PARCHE, base,
   };
 }));

@@ -18,9 +18,9 @@
   const OPERACIONES = ['corte', 'rolado', 'armado', 'aros', 'soldadura', 'engargolado', 'barrenado', 'acabado', 'pintura', 'qc_embalaje'];
 
   /**
-   * Costo de una hora de la operación, como lo calcula el taller: salario_hora = salario_diario ÷ horas por día ($500 ÷ 8 =
-   * $62.50, sin utilidades ni prestaciones). mo_h = salario_hora · FSR: el factor de salario real suma lo que se paga y no se
-   * trabaja (la semana paga 7 días por 5 trabajados: 7/5) y las prestaciones; con FSR = 1, la hora es el salario del día ÷ 8.
+   * Costo de una hora de la operación, como lo calcula el taller: salario_hora = salario_diario ÷ horas por día ($800 ÷ 8 =
+   * $100.00, con prestaciones incluidas). mo_h = salario_hora · FSR: el factor de salario real suma lo que se paga y no se
+   * trabaja y las prestaciones; con FSR = 1 (el salario por día ya las incluye), la hora es el salario del día ÷ 8.
    */
   function tarifa(M, op) {
     const o = M.mano_obra.operaciones[op];

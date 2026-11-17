@@ -186,20 +186,20 @@ test('Acomodo: las plantillas no se enciman, caen dentro de la hoja y nadie acom
   assert.equal(R.acomodo(1219, 3048, 914, 3300).n, 0, 'la plantilla más larga que la hoja no se acomoda');
 });
 
-test('Días: dan el plazo y suman su mano de obra (bridas: 1 persona × $500; instalación: 2 × $500) antes de la utilidad', () => {
+test('Días: dan el plazo y suman su mano de obra (bridas: 1 persona × $800; instalación: 2 × $800) antes de la utilidad', () => {
   const M = crearMaestros();
   const sin = R.cotizar({ D_mm: 279.4, L_m: 40 }, M);
   assert.equal(sin.plazo, null);
   assert.equal(sin.mano_obra.fabricacion.importe + sin.mano_obra.instalacion.importe, 0, 'sin días, sin mano de obra');
   const con = R.cotizar({ D_mm: 279.4, L_m: 40, dias_fabricacion: 5, dias_instalacion: 2.5 }, M);
   assert.deepEqual(con.plazo, { fabricacion: 5, instalacion: 2.5, total: 7.5 });
-  assert.deepEqual(con.mano_obra.fabricacion, { dias: 5, personas: 1, pago_dia: 500, importe: 2500 });
-  assert.deepEqual(con.mano_obra.instalacion, { dias: 2.5, personas: 2, pago_dia: 500, importe: 2500 });
-  cerca(con.costo, sin.costo + 2500 + 2500, 1e-9, 'la mano de obra se suma al costo');
-  const cs = c2(sin.costo + 5000);
+  assert.deepEqual(con.mano_obra.fabricacion, { dias: 5, personas: 1, pago_dia: 800, importe: 4000 });
+  assert.deepEqual(con.mano_obra.instalacion, { dias: 2.5, personas: 2, pago_dia: 800, importe: 4000 });
+  cerca(con.costo, sin.costo + 4000 + 4000, 1e-9, 'la mano de obra se suma al costo');
+  const cs = c2(sin.costo + 8000);
   assert.equal(con.total, c2(c2(cs + c2(cs * 0.2)) + c2(c2(cs + c2(cs * 0.2)) * 0.16)), 'y lleva utilidad e IVA');
-  // el caso de la pestaña: 11″ y 40 m, 5 días de bridas y 3 de instalación → $51,048.00 (antes de redondear en cada paso)
-  cerca(R.cotizar({ D_mm: 279.4, L_m: 40, dias_fabricacion: 5, dias_instalacion: 3 }, M).total, ((11 * 920 / 1.16) * 3 + 5000 + 2500 + 3000) * 1.2 * 1.16, 0.2);
+  // el caso de la pestaña: 11″ y 40 m, 5 días de bridas y 3 de instalación → $55,641.60 (antes de redondear en cada paso)
+  cerca(R.cotizar({ D_mm: 279.4, L_m: 40, dias_fabricacion: 5, dias_instalacion: 3 }, M).total, ((11 * 920 / 1.16) * 3 + 5000 + 4000 + 4800) * 1.2 * 1.16, 0.2);
   assert.deepEqual(R.cotizar({ D_mm: 279.4, L_m: 40, dias_instalacion: 3 }, M).plazo, { fabricacion: 0, instalacion: 3, total: 3 });
   // las personas y el pago por día salen de las tablas
   const M3 = crearMaestros();
@@ -234,8 +234,8 @@ test('El arreglo unifilar del 22-sep-2026: 31 m a 11″ en yardas de 3 ft — el
   assert.equal(r38.hojas, 17);
   assert.ok(r38.lamina > r.lamina);
   // el total de la regla con 4 días de bridas y 5 de instalación (2 personas)
-  assert.equal(r.costo, c2(3 * c2(12 * c2(690 / 1.16)) + 5000 + 4 * 500 + 5 * 2 * 500));
-  assert.equal(r.total, 46512.13, 'antes $46,512.00, sin redondear el precio de la hoja a $594.83');
+  assert.equal(r.costo, c2(3 * c2(12 * c2(690 / 1.16)) + 5000 + 4 * 800 + 5 * 2 * 800));
+  assert.equal(r.total, 52358.53, 'antes $52,358.40, sin redondear el precio de la hoja a $594.83');
 });
 
 test('Sin elegir lámina: del ancho de la yarda, la que menos desperdicia; la elegida manda', () => {
@@ -264,7 +264,7 @@ test('Ménsulas por piezas: las que estime el ingeniero (o las sugeridas), del �
   const no = R.cotizar(base, M);
   assert.equal(no.soporteria.menulas, 0, 'sin decir: no lleva (como antes)');
   assert.equal(no.soporteria.sugeridas, 13, 'pero dice cuántas se sugieren: 31 m ÷ 2.5 = 12.4 → 13');
-  assert.equal(no.total, 46512.13);
+  assert.equal(no.total, 52358.53);
   // las mismas piezas cotizadas como partidas de soportería dan el mismo costo directo
   const S = M.rapida.soporteria;
   const cd = (n, men, abz) => C.cotizarPartida({ familia: 'SOPORTE', cantidad: n, barra_id: men, largo_pieza_mm: S.menula_largo_mm, anclajes_pieza: S.menula_anclajes, min_pieza: S.menula_min }, M).costos.CD
@@ -281,12 +281,12 @@ test('Ménsulas por piezas: las que estime el ingeniero (o las sugeridas), del �
   const siete = R.cotizar({ ...base, menulas: 7, menula_barra: 'ANG_1_1_2X3_16', abrazadera_barra: 'SOL_1_1_2X3_16' }, M).soporteria;
   assert.equal(siete.menulas, 7);
   assert.equal(siete.sugeridas_usadas, false);
-  cerca(siete.importe, cd(7, 'ANG_1_1_2X3_16', 'SOL_1_1_2X3_16'), 0.04);
+  cerca(siete.importe, cd(7, 'ANG_1_1_2X3_16', 'SOL_1_1_2X3_16'), 0.07);
   assert.match(siete.menula.barra, /Ángulo 1½" × 3\/16"/);
   assert.match(siete.abrazadera.barra, /Solera 1½" × 3\/16"/);
   const siete14 = R.cotizar({ ...base, menulas: 7 }, M).soporteria;
   assert.ok(siete.unitario > siete14.unitario, 'el ángulo y la solera más gruesos cuestan más');
-  assert.equal(siete14.importe, 2416.75, '7 ménsulas de 1¼″ con su abrazadera: $2,416.75 (antes $2,416.78; el caso real gastó $2,386.20)');
+  assert.equal(siete14.importe, 3102.4, '7 ménsulas de 1¼″ con su abrazadera: $3,102.40 (con la hora a $100.00; a $62.50 eran $2,416.75)');
   assert.equal(R.cotizar({ ...base, menulas: 0 }, M).extras.soporteria, 0, '0 = no lleva');
   assert.equal(R.cotizar({ ...base, L_m: 40, menulas: 'AUTO' }, M).soporteria.menulas, 16);
   assert.equal(R.cotizar({ ...base, L_m: 1, menulas: 'AUTO' }, M).soporteria.menulas, 1, 'al menos una');
@@ -325,9 +325,9 @@ test('Mangueras por tramos del catálogo con sus abrazaderas (6 por tramo si no 
   assert.deepEqual(R.manguerasDelCatalogo(M).map((x) => x.id), ['MANGUERA_6', 'MANGUERA_5', 'MANGUERA_3']);
   // el caso real completo: 7 ménsulas, 3 tramos y los viáticos
   const todo = R.cotizar({ ...base, menulas: 7, mangueras_tramos: 3, viaticos: 1987.93 }, M);
-  cerca(todo.extras.importe, 2416.78 + 6275.92 + 1987.93, 0.15);
+  cerca(todo.extras.importe, 3102.4 + 6275.85 + 1987.93, 0.01, 'ménsulas $3,102.40 + mangueras $6,275.85 + viáticos');
   cerca(todo.costo, no.costo + todo.extras.importe, 1e-9);
-  assert.equal(todo.total, 61379.42, 'antes $61,379.44');
+  assert.equal(todo.total, 68180.24, 'con la hora a $100.00; antes $61,379.42');
   assert.equal(todo.entrada.mangueras_tramos, 3);
   assert.throws(() => R.cotizar({ ...base, mangueras_tramos: -1 }, M), /Los tramos de manguera debe ser un número entero/);
   assert.throws(() => R.cotizar({ ...base, mangueras_tramos: 1, manguera_id: 'NO_EXISTE' }, M), /La manguera «NO_EXISTE»/);

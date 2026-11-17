@@ -200,23 +200,20 @@ test('Cotizador: cambiar el precio de la hoja o el IVA incluido mueve el costo d
 
 /* ---------- mano de obra: salario por día y jornada ---------- */
 
-test('Mano de obra: $500 por día sin utilidades ni prestaciones (FSR = 1.00); la hora es el salario del día ÷ 8 h = $62.50 + equipo', () => {
-  [...MO.OPERACIONES, 'instalacion'].forEach((op) => assert.equal(M.mano_obra.operaciones[op].salario_diario, 500, op));
+test('Mano de obra: $800 por día con prestaciones (FSR = 1.00); la hora es el salario del día ÷ 8 h = $100.00 + equipo', () => {
+  [...MO.OPERACIONES, 'instalacion'].forEach((op) => assert.equal(M.mano_obra.operaciones[op].salario_diario, 800, op));
   assert.deepEqual(M.mano_obra.jornada, { horas_dia: 8 });
-  assert.equal(M.mano_obra.FSR, 1, 'la hora como la calcula el taller: sin los días de descanso pagados ni prestaciones');
+  assert.equal(M.mano_obra.FSR, 1, 'el salario por día ya incluye las prestaciones: la hora es el día ÷ 8 h');
   const t = MO.tarifa(M, 'corte');
-  casi(t.salario_hora, 62.5, 1e-12, '500 ÷ 8');
-  casi(t.mo_h, 62.5, 1e-12);
+  casi(t.salario_hora, 100, 1e-12, '800 ÷ 8');
+  casi(t.mo_h, 100, 1e-12);
   casi(t.equipo_h, 45, 1e-12);
-  casi(t.total_h, 107.5, 1e-12);
-  casi(MO.tarifa(M, 'instalacion').mo_h, 62.5, 1e-12, 'la cuadrilla de instalación también');
-  // el trabajador gana $3,500 a la semana: ÷ 7 días = $500 por día, ÷ 8 h = $62.50
-  casi(3500 / 7 / 8, t.salario_hora, 1e-12);
-  // el factor recupera lo que se paga y no se trabaja: 7 días pagados por 5 trabajados → FSR 7/5 = 1.40 → $87.50
-  casi(MO.tarifa(crearMaestros({ mano_obra: { FSR: 1.4 } }), 'soldadura').mo_h, 87.5, 1e-12);
-  casi(MO.tarifa(crearMaestros({ mano_obra: { FSR: 1.4 } }), 'soldadura').mo_h * 40, 3500, 1e-9, 'con 1.40, las 40 h trabajadas pagan la semana completa');
+  casi(t.total_h, 145, 1e-12);
+  [...MO.OPERACIONES, 'instalacion'].forEach((op) => casi(MO.tarifa(M, op).mo_h, 100, 1e-12, `la hora de ${op}`));
+  // un FSR mayor multiplica la hora (con 1.40, $140.00)
+  casi(MO.tarifa(crearMaestros({ mano_obra: { FSR: 1.4 } }), 'soldadura').mo_h, 140, 1e-12);
   casi(MO.tarifa(crearMaestros({ mano_obra: { operaciones: { soldadura: { salario_diario: 600 } } } }), 'soldadura').mo_h, 600 / 8, 1e-12);
-  casi(MO.tarifa(crearMaestros({ mano_obra: { jornada: { horas_dia: 10 } } }), 'corte').mo_h, 50, 1e-12);
+  casi(MO.tarifa(crearMaestros({ mano_obra: { jornada: { horas_dia: 10 } } }), 'corte').mo_h, 80, 1e-12);
   assert.equal('salario_hora' in M.mano_obra.operaciones.corte, false, 'el salario se captura por día, no por hora');
 });
 
@@ -240,7 +237,7 @@ test('Mano de obra: un salario por día ausente o una jornada imposible se avisa
 
 test('Mano de obra: el costo de la partida sube en proporción al salario; con el doble de salario la MOD cuesta el doble', () => {
   const base = C.cotizarPartida(galv(22), M);
-  const ops = Object.fromEntries(MO.OPERACIONES.map((op) => [op, { salario_diario: 1000 }]));
+  const ops = Object.fromEntries(MO.OPERACIONES.map((op) => [op, { salario_diario: 1600 }]));
   const doble = C.cotizarPartida(galv(22), crearMaestros({ mano_obra: { operaciones: ops } }));
   casi(doble.costos.subtotales.mano_obra, base.costos.subtotales.mano_obra * 2, 1e-12);
   casi(doble.costos.subtotales.equipo, base.costos.subtotales.equipo, 1e-12, 'el equipo no cambia');
@@ -280,6 +277,36 @@ test('migrarParche: descarta el «salario por hora» de la versión 1.5 (se capt
   assert.equal('jornada_h' in Mm.mano_obra, false);
   assert.equal(Mm.mano_obra.jornada.horas_dia, 9);
   assert.equal('salario_hora' in Mm.mano_obra.operaciones.soldadura, false);
-  assert.equal(Mm.mano_obra.operaciones.soldadura.salario_diario, 500, 'rige el salario diario de las tablas');
+  assert.equal(Mm.mano_obra.operaciones.soldadura.salario_diario, 800, 'rige el salario diario de las tablas');
   assert.equal(Mm.mano_obra.operaciones.corte.salario_diario, 700);
+});
+
+test('quitarSalarioAnterior: un salario de $500 exactos (el de antes) cede su lugar al de $800; cualquier otro valor se conserva', () => {
+  const { quitarSalarioAnterior, VERSION_PARCHE } = require('../src/datos/maestros');
+  assert.equal(VERSION_PARCHE, 3);
+  const viejo = {
+    precios: { precio_kg_acero_carbon: 25 },
+    mano_obra: { FSR: 1.2, operaciones: { corte: { salario_diario: 500 }, rolado: { salario_diario: 650, equipo_h: 60 }, soldadura: { salario_diario: 500, equipo_h: 50 } } },
+    rapida: { pago_dia_fabricacion: 500, pago_dia_instalacion: 700, personas_instalacion: 3 },
+  };
+  const copia = JSON.parse(JSON.stringify(viejo));
+  const nuevo = quitarSalarioAnterior(viejo);
+  assert.deepEqual(viejo, copia, 'no muta el parche recibido');
+  assert.deepEqual(nuevo, {
+    precios: { precio_kg_acero_carbon: 25 },
+    mano_obra: { FSR: 1.2, operaciones: { rolado: { salario_diario: 650, equipo_h: 60 }, soldadura: { equipo_h: 50 } } },
+    rapida: { pago_dia_instalacion: 700, personas_instalacion: 3 },
+  });
+  // un parche que sólo tenía el salario de antes queda vacío; el 500 como texto o con otro valor no se toca
+  assert.deepEqual(quitarSalarioAnterior({ mano_obra: { operaciones: { corte: { salario_diario: 500 } } }, rapida: { pago_dia_fabricacion: 500 } }), {});
+  assert.deepEqual(quitarSalarioAnterior({ mano_obra: { operaciones: { corte: { salario_diario: 500.5 } } } }), { mano_obra: { operaciones: { corte: { salario_diario: 500.5 } } } });
+  assert.equal(quitarSalarioAnterior(null), null);
+  assert.deepEqual(quitarSalarioAnterior([1]), [1]);
+  assert.deepEqual(quitarSalarioAnterior({}), {});
+  // con el parche ya migrado rigen las tablas de hoy (00 ÷ 8 h) y se conserva lo demás (aquí FSR 1.20)
+  const Mm = crearMaestros(quitarSalarioAnterior(viejo));
+  assert.equal(Mm.mano_obra.operaciones.corte.salario_diario, 800);
+  assert.equal(Mm.mano_obra.operaciones.rolado.salario_diario, 650);
+  assert.equal(Mm.rapida.pago_dia_fabricacion, 800);
+  casi(MO.tarifa(Mm, 'corte').mo_h, 800 / 8 * 1.2, 1e-12, 'el FSR capturado se conserva');
 });

@@ -183,7 +183,7 @@ test('deshacerArmado: si la partida de origen ya no existe o cambió, la parte a
 /* ------------------------------------------------------------------ */
 
 test('Cargo mínimo: el importe nunca queda por debajo del cargo (cantidades de 1 a 12) y no se pasa de un centavo por pieza', () => {
-  const cargos = [10000, 12345.67, 9999.99, 7000.01]; // por encima del precio de 12 piezas de esta partida, para que el cargo mínimo aplique siempre
+  const cargos = [10000, 12345.67, 9999.99, 8500.01]; // por encima del precio de 12 piezas de esta partida, para que el cargo mínimo aplique siempre
   cargos.forEach((cargo) => {
     const Mc = clon(M);
     Mc.capas.cargo_minimo_partida = cargo;

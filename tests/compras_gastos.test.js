@@ -14,7 +14,7 @@ const U = require('../src/motor/util');
 
 const M = crearMaestros();
 const IVA = M.compras.iva_pct;
-const HORA = 500 / 8; // $62.50: el salario del día ÷ 8 h (sin utilidades ni prestaciones)
+const HORA = 800 / 8; // $100.00: el salario del día (con prestaciones) ÷ 8 h
 const casi = (real, esperado, tol = 1e-9, msg = '') => {
   assert.ok(Math.abs(real - esperado) <= tol * Math.max(1, Math.abs(esperado)), `${msg} esperado ${esperado}, obtenido ${real}`);
 };
@@ -132,7 +132,7 @@ test('Bridas sueltas (sólo aros): sin lámina, un aro terminado por unidad con 
   assert.equal(rect.qto.her.aros_sueltos.length, 1);
 });
 
-test('Instalación en obra: cuadrilla × días × horas a $62.50, viáticos sin el IVA que se acredita, comidas sin factura, y su pila de precio', () => {
+test('Instalación en obra: cuadrilla × días × horas a $100.00, viáticos sin el IVA que se acredita, comidas sin factura, y su pila de precio', () => {
   const p = {
     familia: 'INSTALACION', cantidad: 1, personas: 2, dias: 5, viajes: 1, casetas_viaje: 806, gasolina_viaje: 1500,
     noches: 4, hospedaje_noche: 650, comida_dia: 250, otros_gastos: 1160,
@@ -141,7 +141,7 @@ test('Instalación en obra: cuadrilla × días × horas a $62.50, viáticos sin 
   const h = 2 * 5 * 8;
   casi(r.costos.h_MOD, h);
   casi(r.costos.mano_obra.instalacion, h * HORA);
-  casi(r.costos.mano_obra.instalacion, 5000, 1e-12, '80 h × $62.50');
+  casi(r.costos.mano_obra.instalacion, 8000, 1e-12, '80 h × $100.00');
   casi(r.costos.equipo.instalacion, 0);
   casi(r.costos.herramienta_menor, 0.03 * h * HORA);
   casi(r.costos.viaticos.casetas, 806 / (1 + IVA));
@@ -458,7 +458,7 @@ test('Resumen del control de gastos: lo cotizado por categoría suma el costo di
   const gastos = [
     { concepto: 'Lámina', categoria: 'MATERIAL', cantidad: 1, precio_unitario: 1160, iva_incluido: true, con_factura: true },
     { concepto: 'Comida', categoria: 'VIATICOS', cantidad: 1, precio_unitario: 300, iva_incluido: true, con_factura: false },
-    { concepto: 'Raya de instalación', categoria: 'INSTALACION', cantidad: 8, precio_unitario: 62.5 },
+    { concepto: 'Raya de instalación', categoria: 'INSTALACION', cantidad: 8, precio_unitario: 100 },
     { concepto: '', cantidad: '', precio_unitario: '' },
     { concepto: 'Malo', cantidad: -2, precio_unitario: 10 },
   ];
@@ -476,21 +476,21 @@ test('Resumen del control de gastos: lo cotizado por categoría suma el costo di
   casi(R.categorias.find((x) => x.clave === 'MANO_OBRA').cotizado, res.partidas[0].costos.subtotales.mano_obra + sop.subtotales.mano_obra, 1e-9, 'la mano de obra del taller, también la de la soportería');
   const herramienta = [...res.partidas, ...res.automaticas].reduce((s, f) => s + f.costos.subtotales.herramienta_menor, 0);
   casi(R.categorias.find((x) => x.clave === 'CONSUMIBLE').cotizado, res.partidas[0].costos.subtotales.consumibles + herramienta + (spc.CONSUMIBLE || 0), 1e-9, 'consumibles, herramienta menor y el sobrante de la pintura');
-  casi(R.totales.real, 1000 + 300 + 500, 1e-12);
+  casi(R.totales.real, 1000 + 300 + 800, 1e-12);
   casi(R.totales.iva_acreditable, 160, 1e-12, 'sólo la lámina: la comida no tiene factura y la raya no lleva IVA');
   assert.equal(R.totales.n_gastos, 3, 'el vacío y el inválido no cuentan');
   assert.equal(R.errores.length, 1);
   assert.match(R.errores[0], /Renglón 5: Malo: la cantidad/);
   casi(R.resultado.venta, 9000);
   assert.equal(R.resultado.venta_es_pactada, true);
-  casi(R.resultado.utilidad_antes_indirectos, 9000 - 1800, 1e-12);
+  casi(R.resultado.utilidad_antes_indirectos, 9000 - 2100, 1e-12);
   const indirectos = res.totales.C_base_total - res.totales.costo_directo;
   casi(R.resultado.indirectos_estimados, indirectos, 1e-9);
-  casi(R.resultado.utilidad_despues_indirectos, 9000 * 0.98 - 1800 - equipo - indirectos, 1e-9);
+  casi(R.resultado.utilidad_despues_indirectos, 9000 * 0.98 - 2100 - equipo - indirectos, 1e-9);
   // la venta pactada con IVA: el resultado se mide contra la venta sin IVA
   const conIva = G.resumen(C.cotizar({ ...cot, venta_pactada: 10440, venta_pactada_con_iva: true }, M), gastos, 0.16);
   casi(conIva.resultado.venta, 9000, 1e-9);
-  casi(conIva.resultado.utilidad_antes_indirectos, 9000 - 1800, 1e-9);
+  casi(conIva.resultado.utilidad_antes_indirectos, 9000 - 2100, 1e-9);
   casi(R.resultado.comision_y_otros, 9000 * 0.02, 1e-9);
   // sin venta pactada, el precio calculado
   const sin = G.resumen(C.cotizar({ ...cot, venta_pactada: undefined }, M), [], 0.16);

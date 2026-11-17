@@ -12,7 +12,7 @@
  *
  * El oráculo recalcula TODO paso a paso con aritmética directa (sin llamar a las funciones del motor)
  * y compara contra la salida del motor. Los valores monetarios dependen de las tablas maestras
- * (mano de obra a $500 por día ÷ 8 h = $62.50 la hora, lista del proveedor, valores ilustrativos): si se cambian, este
+ * (mano de obra a $800 por día con prestaciones ÷ 8 h = $100.00 la hora, lista del proveedor, valores ilustrativos): si se cambian, este
  * vector debe regenerarse.
  */
 const test = require('node:test');
@@ -185,11 +185,11 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
   const costo_pintura = litros * P.precio_L_primario + litros * 0.1 * P.precio_L_diluyente;
 
   /* Paso 14 · mano de obra y equipo (η = 0.80) */
-  // los trabajadores ganan $500 por día ($3,500 a la semana ÷ 7), sin utilidades ni prestaciones; el taller cuesta la hora como
-  // el salario del día ÷ 8 h = $62.50 (FSR = 1.00)
+  // el taller cuesta cada trabajador $800 por día con prestaciones incluidas; la hora es el salario del día ÷ 8 h = $100.00
+  // (FSR = 1.00, porque el salario ya incluye las prestaciones)
   const FSR = 1.0;
-  const hora = 500 / 8;
-  assert.equal(hora, 62.5);
+  const hora = 800 / 8;
+  assert.equal(hora, 100);
   const tar = (eq) => ({ mo: hora * FSR, eq });
   const ops = {
     corte: [t_corte, tar(45)], rolado: [t_rolado, tar(55)], armado: [t_armado, tar(25)], aros: [t_aros, tar(40)],
@@ -230,9 +230,9 @@ test('Ejemplo A — recálculo independiente paso a paso', () => {
 
 /* Los tres modos del extremo del ajuste: el vector de cada uno (CD, C_T y precio con el mismo método del documento). */
 const MODOS = {
-  SIN_BRIDA: { n_aros: 1, n_sueltos: 0, horas: 2.703, CD: 1363.95, C_T: 1770.95, precio: 2309.63 },
-  SUELTA: { n_aros: 1, n_sueltos: 1, horas: 3.751, CD: 1551.51, C_T: 2074.25, precio: 2705.19 },
-  CON_BRIDA: { n_aros: 2, n_sueltos: 0, horas: 3.961, CD: 1578, C_T: 2122.57, precio: 2768.21 },
+  SIN_BRIDA: { n_aros: 1, n_sueltos: 0, horas: 2.703, CD: 1468.36, C_T: 1888.22, precio: 2462.57 },
+  SUELTA: { n_aros: 1, n_sueltos: 1, horas: 3.751, CD: 1696.39, C_T: 2236.98, precio: 2917.43 },
+  CON_BRIDA: { n_aros: 2, n_sueltos: 0, horas: 3.961, CD: 1731, C_T: 2294.42, precio: 2992.33 },
 };
 
 test('Ejemplo A — el extremo del ajuste: sin brida, brida suelta (por omisión) o brida de taller', () => {
@@ -293,9 +293,9 @@ const GOLDEN = {
   L_aro_mm: 1215.8,
   n_tornillos: 8,
   horas_mod_reales: 3.751,
-  CD: 1551.51,
-  C_T: 2074.25,
-  precio_unitario: 2705.19,
+  CD: 1696.39,
+  C_T: 2236.98,
+  precio_unitario: 2917.43,
 };
 
 test('Ejemplo A — vector de referencia (valores redondeados que cita el documento)', () => {

@@ -312,15 +312,15 @@ test('Deshacer un armado cuando el codo está en otro: no se junta lo que sigue 
 });
 
 test('Cotizaciones sin armados dan exactamente lo mismo que antes', () => {
-  // los totales de las muestras, calculados con la versión anterior a los armados
+  // los totales de las muestras (con la hora a $100.00): los armados no los cambian
   const pedido = C.cotizar(E.pedidoDucteria(), M);
-  assert.equal(pedido.totales.total, 54254.29);
-  assert.equal(pedido.totales.subtotal, 46770.94);
+  assert.equal(pedido.totales.total, 59651.42);
+  assert.equal(pedido.totales.subtotal, 51423.64);
   assert.equal(pedido.partidas.length, 36);
   assert.equal(pedido.automaticas.length, 1);
   assert.deepEqual(pedido.armados, []);
   const gastos = C.cotizar(E.casoControlGastos(), M);
-  assert.equal(gastos.totales.total, 83512.58);
+  assert.equal(gastos.totales.total, 92037.01);
   assert.equal(gastos.partidas.length, 13);
   // sin armados, o con una lista vacía, o mal formada: el mismo resultado byte a byte
   const cot = E.pedidoDucteria();

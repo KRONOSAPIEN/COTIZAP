@@ -123,11 +123,18 @@ test('Primera vez con precios ya capturados en este navegador: se suben al artef
   await t.almacen.vaciar();
   assert.equal(t.bd.escrituras.length, 1);
   assert.deepEqual(t.bd.mapa.get(RUTA).parche, local);
-  assert.equal(t.bd.mapa.get(RUTA).v, 2);
+  assert.equal(t.bd.mapa.get(RUTA).v, 3, 'versión 3: el salario por día de $500 ya no rige');
   assert.equal(t.bd.mapa.get(RUTA).actualizado, '2026-10-05T18:30:00.000Z');
   assert.equal(t.ls.leer(LLAVE), null, 'una vez confirmada la escritura ya no hay pendiente');
   assert.equal(t.ultimo()[0], 'guardado');
   assert.equal(t.ultimo()[1].hora, Date.UTC(2026, 9, 5, 18, 30));
+});
+
+test('Al abrir con un documento remoto, se informa su versión (los anteriores a la 3 pueden traer el salario de $500)', async () => {
+  const t = armar({ bd: crearBD({ [RUTA]: doc({ precios: { precio_kg_acero_carbon: 27 } }) }) });
+  const r = await t.almacen.iniciar({});
+  assert.equal(r.origen, 'remoto');
+  assert.equal(r.version, 2);
 });
 
 test('Lo guardado en el artefacto manda al abrir (aunque este navegador esté vacío o tenga otra cosa)', async () => {

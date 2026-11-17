@@ -8,8 +8,8 @@
  * esmalte y selladas con Sikaflex en lugar del empaque, y en 2 días las 7 ménsulas. Se instaló en Querétaro (local: sin hospedaje
  * ni comidas) con dos personas durante 5 días, y hubo un viaje Querétaro–México (casetas $806 y gasolina $1,500).
  * Los gastos son los de la hoja, renglón por renglón (precios con IVA como los trae la hoja; las bridas de placa como las cotizó
- * el proveedor, antes de IVA; todo con factura salvo la raya, que no lleva IVA), con la mano de obra a $62.50 por hora ($500 por
- * día ÷ 8 h, como la calcula el taller). El esmalte no venía en la hoja: va como gasto estimado (lo que pide la lista de compras).
+ * el proveedor, antes de IVA; todo con factura salvo la raya, que no lleva IVA), con la mano de obra a $100.00 por hora ($800 por
+ * día con prestaciones ÷ 8 h, como la calcula el taller). El esmalte no venía en la hoja: va como gasto estimado (lo que pide la lista de compras).
  * Los barrenos de las bridas son los de los planos de pedido del 30-sep-2026 (8 en las de 11″ y 10″, 6 en las de 9″ y en las de
  * placa): la media junta de las 60 bridas da los 208 juegos exactos de la hoja, que con la reserva se compran en 220.
  * Supuestos por confirmar: cada ménsula lleva 1 300 mm de ángulo (brazo y pierna de 650 mm: de dos ángulos salen las 7, como se
@@ -39,7 +39,7 @@
   'use strict';
 
   const FECHA = '2026-10-06';
-  const HORA = 500 / 8; // $62.50: el salario del día ÷ 8 h
+  const HORA = 800 / 8; // $100.00: el salario del día con prestaciones ÷ 8 h
 
   function casoControlGastos() {
     const brida = (pulg, n) => ({

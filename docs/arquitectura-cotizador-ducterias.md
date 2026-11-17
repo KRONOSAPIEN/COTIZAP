@@ -4,7 +4,7 @@
 
 > Documento de arquitectura para analistas de datos y programadores. Define **qué se calcula, con qué fórmulas y con qué datos**, sin depender de una plataforma. La implementación de referencia (JavaScript sin dependencias) vive en `src/`, sus pruebas en `tests/`, y **todas las cifras de los ejemplos de este documento son la salida literal del motor**.
 >
-> ⚠ **Sólo cuatro grupos de valores son reales: la mano de obra ($500 por día, dato del taller: $62.50 la hora, el salario del día ÷ 8 h), la lámina y los perfiles de la lista del proveedor (cotizaciones y factura del 30-sep-2026), los artículos del catálogo de compras (hoja de control de gastos del 6-oct-2026 y cotización del proveedor de corte del 2-oct-2026) y los tiempos de rolado y barrenado de las bridas (calibrados con el taller: 30 bridas en 4 días). Todo lo demás —consumibles, equipo, los demás tiempos, indirectos, utilidad— es ILUSTRATIVO** en este documento y en `src/datos/maestros.js`: existe para que el motor funcione y para servir de vector de prueba, y debe sustituirse por precios, tarifas y estudios de tiempos del taller antes de cotizar a un cliente (§10). El proyecto real de la hoja de control de gastos se reproduce completo en §7.4.
+> ⚠ **Sólo cuatro grupos de valores son reales: la mano de obra ($800 por día con prestaciones, dato del taller: $100.00 la hora, el salario del día ÷ 8 h), la lámina y los perfiles de la lista del proveedor (cotizaciones y factura del 30-sep-2026), los artículos del catálogo de compras (hoja de control de gastos del 6-oct-2026 y cotización del proveedor de corte del 2-oct-2026) y los tiempos de rolado y barrenado de las bridas (calibrados con el taller: 30 bridas en 4 días). Todo lo demás —consumibles, equipo, los demás tiempos, indirectos, utilidad— es ILUSTRATIVO** en este documento y en `src/datos/maestros.js`: existe para que el motor funcione y para servir de vector de prueba, y debe sustituirse por precios, tarifas y estudios de tiempos del taller antes de cotizar a un cliente (§10). El proyecto real de la hoja de control de gastos se reproduce completo en §7.4.
 
 ## Contenido
 
@@ -33,9 +33,9 @@
 | Diámetro y calibre del ejemplo | Ø12" (interior), calibre 16, acero al carbón, 3 m, bridado (los valores sugeridos en el prompt). | §7 |
 | Injerto simple, reducción con injerto y ángulos del taller | El «ramal en ángulo» pasó a llamarse **injerto simple** (misma geometría, id `RAMAL`). El «pantalón» se sustituyó por la **reducción con injerto** (id `REDUCCION_INJERTO`): una reducción D1 → D2 con el injerto **sobre el cono**. **Todo injerto es a 30° o 45°** y **los codos son de 30°, 45°, 60° o 90°**: son listas de maestros y el cotizador rechaza cualquier otro ángulo. El pantalón se retiró de la interfaz; el motor lo sigue calculando sólo para abrir cotizaciones anteriores. Seis supuestos de detalle están por confirmar con el taller (§10.5). | §3.4.1 · §3.4.4 · §3.4.5 · §7.3 · §10.5 |
 | Parámetros de precio de la cotización | El encabezado de la cotización lleva los parámetros comerciales que se ajustan al cotizar —**margen de utilidad, comisión de ventas, descuento al cliente y días de cobro** y, en «Más parámetros de precio», **administración, financiamiento anual e IVA**— para no ir a las tablas maestras. Valen sólo para esa cotización: el motor los toma de `cotizacion.parametros` y los pone encima de las capas de T9 (§5.4); lo que no se cambia sale de los maestros. Cuatro supuestos de detalle están por confirmar (§10.7). | §5.2 · §5.4 · §6 · §10.7 |
-| Mano de obra por día y lista de precios del proveedor | Los trabajadores ganan **$500 por día** ($3,500 a la semana ÷ 7), **sin utilidades ni prestaciones**, y el taller cuesta la hora como **el salario del día ÷ 8 h = $62.50** (FSR = 1.00): `salario_hora = salario_diario / horas_día` y `mo_h = salario_hora · FSR` (T8). Así no se recuperan los 2 días de descanso que se pagan ni las prestaciones: con FSR = 7/5 = 1.40 la hora costaría $87.50 (§4.1, §7.4.1). El proveedor de acero cotiza **por pieza y con IVA incluido** (hojas y barras): la lista (T3b) conserva el precio como se cotiza y el motor lo convierte a **$/kg sin IVA** con los kg de la pieza (§5.1.1); lo que no está cotizado usa un precio por kg de respaldo. Cuatro supuestos de detalle están por confirmar (§10.6). | T3 · T3b · T8 · §4.1 · §5.1.1 · §10.6 |
+| Mano de obra por día y lista de precios del proveedor | Cada trabajador cuesta **$800 por día con prestaciones incluidas**, y el taller cuesta la hora como **el salario del día ÷ 8 h = $100.00** (FSR = 1.00): `salario_hora = salario_diario / horas_día` y `mo_h = salario_hora · FSR` (T8). Como los $800 ya incluyen las prestaciones y los días de descanso, el FSR no sube de 1.00 (§4.1, §7.4.1). El proveedor de acero cotiza **por pieza y con IVA incluido** (hojas y barras): la lista (T3b) conserva el precio como se cotiza y el motor lo convierte a **$/kg sin IVA** con los kg de la pieza (§5.1.1); lo que no está cotizado usa un precio por kg de respaldo. Cuatro supuestos de detalle están por confirmar (§10.6). | T3 · T3b · T8 · §4.1 · §5.1.1 · §10.6 |
 | Ménsulas automáticas | La partida de soportería calcula sola cuántas piezas pide el ducto: un soporte cada 2.5 m en lo horizontal (máx. 3.0 m), cada 3.0 m en lo vertical con uno fuerte en la base y uno junto a cada codo e injerto; se puede capturar a mano, y entonces avisa si queda corta. El tramo recto dice si es horizontal o vertical | §3.6.2 · T7e · §10.12 |
-| Hoja de control de gastos (proyecto vendido por otro ingeniero) | Se analizó la hoja del 6-oct-2026 de un proyecto que se vendió en **$45,710 con IVA** y acabó con pérdidas, y se agregó lo que le faltaba a la app: **bridas sueltas** (sólo aros, con las puntas de la solera que la roladora no curva: la regla del taller π·(D + 81 mm)), **soportería** cortada de barras de la lista, **artículos del catálogo de compras con o sin IVA** (un precio con IVA se cuesta sin él), **instalación en obra con viáticos**, la **lista de compras en piezas enteras** (el sobrante siempre se cobra), la **venta pactada** contra el precio mínimo y el **control de gastos** real contra cotizado. Convención de IVA: la venta pactada se captura **con o sin IVA** (la de este proyecto venía con IVA: el margen se mide sin él) y los precios del proveedor **traen IVA**. Con las respuestas del taller del 7-oct-2026 el caso quedó así: la hora a $62.50, las bridas de solera en **4 días**, **Sikaflex en lugar del empaque**, esmalte en las bridas, ménsulas de 650 mm en 2 días, abrazaderas para el ducto de 11″, instalación local (sin hospedaje ni comidas) y las 30 bridas de placa del proveedor de corte con su tornillería y su Sikaflex. El proyecto completo es el caso de referencia de §7.4; los supuestos que quedan están en §10.12. | T3c · T7e · §3.5.1 · §3.5.4 · §3.6 · §4.5 · §5.5–5.7 · §7.4 · §10.12 |
+| Hoja de control de gastos (proyecto vendido por otro ingeniero) | Se analizó la hoja del 6-oct-2026 de un proyecto que se vendió en **$45,710 con IVA** y acabó con pérdidas, y se agregó lo que le faltaba a la app: **bridas sueltas** (sólo aros, con las puntas de la solera que la roladora no curva: la regla del taller π·(D + 81 mm)), **soportería** cortada de barras de la lista, **artículos del catálogo de compras con o sin IVA** (un precio con IVA se cuesta sin él), **instalación en obra con viáticos**, la **lista de compras en piezas enteras** (el sobrante siempre se cobra), la **venta pactada** contra el precio mínimo y el **control de gastos** real contra cotizado. Convención de IVA: la venta pactada se captura **con o sin IVA** (la de este proyecto venía con IVA: el margen se mide sin él) y los precios del proveedor **traen IVA**. Con las respuestas del taller del 7-oct-2026 el caso quedó así: la hora a $100.00 (con prestaciones), las bridas de solera en **4 días**, **Sikaflex en lugar del empaque**, esmalte en las bridas, ménsulas de 650 mm en 2 días, abrazaderas para el ducto de 11″, instalación local (sin hospedaje ni comidas) y las 30 bridas de placa del proveedor de corte con su tornillería y su Sikaflex. El proyecto completo es el caso de referencia de §7.4; los supuestos que quedan están en §10.12. | T3c · T7e · §3.5.1 · §3.5.4 · §3.6 · §4.5 · §5.5–5.7 · §7.4 · §10.12 |
 | Junta de las bridas con Sikaflex | El taller **sella la cara de la brida con un cordón de Sikaflex** sobre el círculo de barrenos, en lugar del empaque de neopreno (`uniones.BRIDADO.junta = SELLADOR`; 40 mL por metro + 15 % de merma; media junta por brida, de taller, suelta o de placa comprada). Ese cordón es también el sello de la junta transversal: no se le suma el de la clase C. El empaque sigue disponible (`EMPAQUE`). | T5 · §3.5.4 · §3.5.5 |
 | Brida estándar del taller | **Una sola brida para todos los diámetros: aro de solera 1½" × 3/16", barreno Ø3/8", tornillo 5/16" × 1¼".** Se modela como el perfil `SOL38x4.8` (tipo solera, rolada "de canto"), que lleva en sus propias columnas el barreno y el tornillo; los ángulos quedan como opción por partida (`perfil_id`). Los supuestos de detalle están por confirmar con el taller (§10.4); la junta con Sikaflex ya la confirmó. | T4 · T5 · §3.5 · §10.4 |
 | Armado del tramo recto por yardas | El taller no rola tramos de 3 m: rola **yardas** —anillos del ancho de la lámina (914 mm = 3 ft ó 1 220 mm = 4 ft)—, las **engargola** hasta de 3 en una pieza con brida en ambos extremos, y lo que falta lo arma con las yardas completas que sobren y un **tramo de ajuste** (menos de una yarda) cuyo extremo libre **no lleva brida de taller**, para ponerlo en campo ajustando la distancia. **Quien diseña elige el ancho de la yarda** (3 ft ó 4 ft) en el encabezado de la cotización, o por partida. En ese extremo libre se cotiza, por omisión, la **brida suelta** —el taller manda el aro ya terminado (rolado, con el cierre soldado, barrenado y pintado), con sus tornillos y el material de su junta, sin soldarlo al ducto: se suelda en obra—; la partida puede pedir también «sin brida» (la brida no está en el precio) o «brida de taller». El motor reparte el largo así (§3.2): anillos que se rolan por separado, juntas engargoladas entre yardas, bridas sólo donde corresponde, corte con un tajo a lo ancho de la hoja. Los supuestos de detalle están por confirmar (§10.9). | T7c · §3.2 · §3.5.7 · §4.1 · §10.9 |
@@ -70,7 +70,7 @@
 | **Merma (φ)** | Fracción del material comprado que no queda en la pieza. |
 | **QTO** | *Quantity take-off*: levantamiento de cantidades físicas, sin precios. |
 | **CD / CI / GIF** | Costo directo / costo indirecto / gastos indirectos de fábrica. |
-| **MOD / FSR** | Mano de obra directa / Factor de Salario Real (convierte el salario en lo que cuesta cada hora trabajada: días de descanso pagados y prestaciones; vale 1.00 porque el taller cuesta la hora como $500 ÷ 8 h; 7/5 = 1.40 recupera los días de descanso). |
+| **MOD / FSR** | Mano de obra directa / Factor de Salario Real (convierte el salario en lo que cuesta cada hora trabajada: días de descanso pagados y prestaciones; vale 1.00 porque el salario por día ($800) ya incluye las prestaciones y el taller cuesta la hora como $800 ÷ 8 h). |
 | **FO** | Factor de operación: arco encendido ÷ tiempo total de soldadura. |
 | **GMAW / GTAW** | Soldadura MIG-MAG (microalambre) / TIG (varilla). |
 | **MSG / GSG / USSG** | Tablas de calibre: acero al carbón / galvanizado / inoxidable. |
@@ -378,28 +378,28 @@ Las **manos** (valores ilustrativos: confirmar con la ficha técnica de la pintu
 | `primario` | 55 % | 50 µm | 0.65 | 11.00 m²/L | 7.15 m²/L | `precio_L_primario` |
 | `esmalte` | 45 % | 40 µm | 0.65 | 11.25 m²/L | 7.31 m²/L | `precio_L_esmalte` |
 
-**T8 · Tarifas de operación** (`mano_obra`). Los trabajadores ganan **$500 por día** ($3,500 a la semana ÷ 7 días), **sin utilidades ni prestaciones**, y el taller cuesta la hora como el salario del día entre las horas de la jornada (`mano_obra.jornada.horas_dia` = 8): **$62.50 la hora**, más el equipo de la operación. `instalacion` es la tarifa de la cuadrilla en obra (§4.5).
+**T8 · Tarifas de operación** (`mano_obra`). Cada trabajador cuesta **$800 por día con prestaciones incluidas**, y el taller cuesta la hora como el salario del día entre las horas de la jornada (`mano_obra.jornada.horas_dia` = 8): **$100.00 la hora**, más el equipo de la operación. `instalacion` es la tarifa de la cuadrilla en obra (§4.5).
 
 ```text
-salario_hora = salario_diario / horas_día          # 500 / 8 = 62.50
+salario_hora = salario_diario / horas_día          # 800 / 8 = 100.00
 mo_h         = salario_hora · FSR                   # FSR = 1.00
 ```
 
-Con FSR = 1.00 la hora **no recupera** lo que se paga y no se trabaja —la semana paga 7 días por 5 trabajados: $1,000 de cada $3,500— ni las prestaciones (IMSS, aguinaldo, vacaciones). Para recuperarlo, `FSR` = 7/5 = **1.40** da $87.50 la hora; con prestaciones, más (§4.1, §7.4.1).
+Con FSR = 1.00 la hora es exactamente el salario del día entre 8 h porque los $800 **ya incluyen las prestaciones** (IMSS, aguinaldo, vacaciones, los días de descanso que se pagan). Si se capturara un salario sin prestaciones, el `FSR` debería subir para recuperarlas (7/5 = **1.40** sólo por los días de descanso; §4.1, §7.4.1); con $800 ya incluidas, subirlo las cobraría dos veces.
 
 | Operación | Salario por día (MXN) | Salario por hora = día ÷ 8 h | `mo_h` = salario por hora · FSR (1.00) (MXN/h) | Equipo (MXN/h) | Tarifa total (MXN/h) |
 | --- | --- | --- | --- | --- | --- |
-| `corte` | 500 | 62.50 | 62.50 | 45 | 107.50 |
-| `rolado` | 500 | 62.50 | 62.50 | 55 | 117.50 |
-| `armado` | 500 | 62.50 | 62.50 | 25 | 87.50 |
-| `aros` | 500 | 62.50 | 62.50 | 40 | 102.50 |
-| `soldadura` | 500 | 62.50 | 62.50 | 45 | 107.50 |
-| `engargolado` | 500 | 62.50 | 62.50 | 35 | 97.50 |
-| `barrenado` | 500 | 62.50 | 62.50 | 25 | 87.50 |
-| `acabado` | 500 | 62.50 | 62.50 | 20 | 82.50 |
-| `pintura` | 500 | 62.50 | 62.50 | 40 | 102.50 |
-| `qc_embalaje` | 500 | 62.50 | 62.50 | 0 | 62.50 |
-| `instalacion` | 500 | 62.50 | 62.50 | 0 | 62.50 |
+| `corte` | 800 | 100.00 | 100.00 | 45 | 145.00 |
+| `rolado` | 800 | 100.00 | 100.00 | 55 | 155.00 |
+| `armado` | 800 | 100.00 | 100.00 | 25 | 125.00 |
+| `aros` | 800 | 100.00 | 100.00 | 40 | 140.00 |
+| `soldadura` | 800 | 100.00 | 100.00 | 45 | 145.00 |
+| `engargolado` | 800 | 100.00 | 100.00 | 35 | 135.00 |
+| `barrenado` | 800 | 100.00 | 100.00 | 25 | 125.00 |
+| `acabado` | 800 | 100.00 | 100.00 | 20 | 120.00 |
+| `pintura` | 800 | 100.00 | 100.00 | 40 | 140.00 |
+| `qc_embalaje` | 800 | 100.00 | 100.00 | 0 | 100.00 |
+| `instalacion` | 800 | 100.00 | 100.00 | 0 | 100.00 |
 
 **T9 · Capas de precio** (valores ilustrativos; ver §5)
 
@@ -428,7 +428,7 @@ Con FSR = 1.00 la hora **no recupera** lo que se paga y no se trabaja —la sema
 | `yarda_min_mm` | 300 | ancho de yarda (de lámina) más angosto |
 | `yarda_max_mm` | 2,000 | ancho de yarda (de lámina) más ancho |
 
-**T11 · Cotización rápida** (`rapida`; regla del taller, 7-oct-2026; reglas en §5.8). La hoja de la lista del proveedor con que se cuentan las hojas (`hoja_defecto`: galvanizada cal. 22 de 4 × 10 ft), el **factor de la lámina** (`factor_lamina` = 3), la **utilidad** que se suma sobre el costo (`utilidad_pct` = 20 %, ilustrativa), la **mano de obra por días** (`personas_fabricacion` = 1 y `pago_dia_fabricacion` = $500 para la fabricación de las bridas; `personas_instalacion` = 2 y `pago_dia_instalacion` = $500 para la instalación), las **ménsulas** (`soporteria`: la ménsula de arranque de ángulo 1¼″ × 1/8″ de 1 300 mm con 4 anclajes y 137.14 min de taller, y la abrazadera tipo cuna de solera 1¼″ × 1/8″ de media vuelta con 15 min; §5.8), las **mangueras** (`mangueras`: la de 6″ del catálogo, la abrazadera de manguera y 6 abrazaderas por tramo) y las **bridas por metros**:
+**T11 · Cotización rápida** (`rapida`; regla del taller, 7-oct-2026; reglas en §5.8). La hoja de la lista del proveedor con que se cuentan las hojas (`hoja_defecto`: galvanizada cal. 22 de 4 × 10 ft), el **factor de la lámina** (`factor_lamina` = 3), la **utilidad** que se suma sobre el costo (`utilidad_pct` = 20 %, ilustrativa), la **mano de obra por días** (`personas_fabricacion` = 1 y `pago_dia_fabricacion` = $800 para la fabricación de las bridas; `personas_instalacion` = 2 y `pago_dia_instalacion` = $800 para la instalación), las **ménsulas** (`soporteria`: la ménsula de arranque de ángulo 1¼″ × 1/8″ de 1 300 mm con 4 anclajes y 137.14 min de taller, y la abrazadera tipo cuna de solera 1¼″ × 1/8″ de media vuelta con 15 min; §5.8), las **mangueras** (`mangueras`: la de 6″ del catálogo, la abrazadera de manguera y 6 abrazaderas por tramo) y las **bridas por metros**:
 
 | Metros hasta el punto más alejado | Bridas (MXN sin IVA) |
 | --- | --- |
@@ -597,11 +597,11 @@ Rectangular:  P_med = 2·(a + b + 2e) ;  B = P_med + n_costuras·a_costura
 
 | Yarda (mm) | `extremo_ajuste` | Qué cotiza el extremo libre | Armado | Bridas de taller | Aros sueltos | CD (MXN) | Precio antes de IVA (MXN) | Más que «sin brida» |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1,220 | `SIN_BRIDA` | Nada: la brida de ese extremo no está en el precio | 2 yardas + ajuste de 560 mm | 1 | 0 | 1,363.95 | 2,309.63 | — |
-| 1,220 | `SUELTA` | El aro terminado (rolado, cierre soldado, barrenado y pintado), los tornillos y el material de su junta; no se suelda al ducto | 2 yardas + ajuste de 560 mm | 1 | 1 | 1,551.51 | 2,705.19 | +395.56 |
-| 1,220 | `CON_BRIDA` | Brida fabricada y soldada en taller, como en los demás extremos | 2 yardas + ajuste de 560 mm | 2 | 0 | 1,578.00 | 2,768.21 | +458.58 |
-| 914 | `SIN_BRIDA` | Nada: la brida de ese extremo no está en el precio | 3 yardas y ajuste de 258 mm | 3 | 0 | 1,813.26 | 3,282.20 | — |
-| 914 | `SUELTA` | El aro terminado (rolado, cierre soldado, barrenado y pintado), los tornillos y el material de su junta; no se suelda al ducto | 3 yardas y ajuste de 258 mm | 3 | 1 | 2,000.81 | 3,677.76 | +395.56 |
+| 1,220 | `SIN_BRIDA` | Nada: la brida de ese extremo no está en el precio | 2 yardas + ajuste de 560 mm | 1 | 0 | 1,468.36 | 2,462.57 | — |
+| 1,220 | `SUELTA` | El aro terminado (rolado, cierre soldado, barrenado y pintado), los tornillos y el material de su junta; no se suelda al ducto | 2 yardas + ajuste de 560 mm | 1 | 1 | 1,696.39 | 2,917.43 | +454.86 |
+| 1,220 | `CON_BRIDA` | Brida fabricada y soldada en taller, como en los demás extremos | 2 yardas + ajuste de 560 mm | 2 | 0 | 1,731.00 | 2,992.33 | +529.76 |
+| 914 | `SIN_BRIDA` | Nada: la brida de ese extremo no está en el precio | 3 yardas y ajuste de 258 mm | 3 | 0 | 2,023.00 | 3,589.44 | — |
+| 914 | `SUELTA` | El aro terminado (rolado, cierre soldado, barrenado y pintado), los tornillos y el material de su junta; no se suelda al ducto | 3 yardas y ajuste de 258 mm | 3 | 1 | 2,251.03 | 4,044.29 | +454.85 |
 | 914 | `CON_BRIDA` | Brida fabricada y soldada en taller, como en los demás extremos | 3 yardas y ajuste de 258 mm | 4 | 0 | 2,027.31 | 3,740.78 | +458.58 |
 
   La brida suelta cuesta menos que la de taller: es el mismo aro, con el mismo material y las mismas operaciones (rolado, cierre soldado, barrenado y pintura), pero no se arma ni se suelda al ducto y su junta no se sella en taller.
@@ -1104,7 +1104,7 @@ t_real(op)   = t_estándar(op) / η_taller
 Costo(op)    = (t_real / 60) · ( mo_h(op) + equipo_h(op) )        mo_h = salario_diario / horas_día · FSR
 ```
 
-`FSR` (Factor de Salario Real) convierte el salario en lo que de verdad cuesta cada hora trabajada: lo que se paga y no se trabaja (los días de descanso, vacaciones, festivos) y las prestaciones y cargas (IMSS, INFONAVIT, aguinaldo, prima vacacional). El taller cuesta la hora como **el salario del día ÷ 8 h = $62.50**, sin utilidades ni prestaciones, por eso FSR = 1.00 (T8). **Ojo:** la semana paga 7 días por 5 trabajados, así que cada hora trabajada le cuesta al taller $3,500 ÷ 40 h = **$87.50**: con FSR = 1.00 se deja de cobrar $25 por hora (en el caso de §7.4, $3,200 en 128 h). Para recuperarlo, `FSR` = 7/5 = **1.40**; con prestaciones, más (§7.4.1).
+`FSR` (Factor de Salario Real) convierte el salario en lo que de verdad cuesta cada hora trabajada: lo que se paga y no se trabaja (los días de descanso, vacaciones, festivos) y las prestaciones y cargas (IMSS, INFONAVIT, aguinaldo, prima vacacional). El taller cuesta la hora como **el salario del día ÷ 8 h = $800 ÷ 8 = $100.00**, y el salario por día **ya incluye las prestaciones**, por eso FSR = 1.00 (T8). **Ojo:** si se capturara un salario sin prestaciones, la semana pagaría 7 días por 5 trabajados y cada hora trabajada costaría más que el salario del día ÷ 8 h; para recuperarlo, `FSR` = 7/5 = **1.40** (más, con prestaciones). Con los $800 de hoy, subir el FSR las cobraría dos veces (§7.4.1).
 
 ### 4.2 Drivers por familia
 
@@ -1170,7 +1170,7 @@ La cuadrilla que instala en obra cobra **horas reales** (en obra no se aplica la
 
 ```text
 horas     = cantidad · personas · días · horas_día                     # horas_día: la de la partida o la jornada de T8 (8 h)
-MO        = horas · mo_h(instalación)                                  # $62.50 la hora ($500 ÷ 8 h) ; equipo_h = 0
+MO        = horas · mo_h(instalación)                                  # $100.00 la hora ($800 ÷ 8 h) ; equipo_h = 0
 casetas   = cantidad · viajes · casetas_viaje
 gasolina  = cantidad · viajes · gasolina_viaje
 hospedaje = cantidad · personas · noches · hospedaje_noche
@@ -1401,8 +1401,8 @@ por_hoja   = acomodo de plantillas yarda × B en la hoja (abajo) ;  hojas = ⌈ 
              (si la plantilla no cabe de ninguna forma: cada yarda lleva hojas completas y un retazo; los retazos se acomodan juntos)
 lámina     = hojas × precio de la hoja sin IVA                       # lista del proveedor (T3b)
 costo      = lámina × factor_lamina + bridas(metros)                 # el primer renglón de «bridas por metros» que alcanza
-           + días_fab × personas_fab × pago_día_fab                 # fabricación de las bridas: 1 persona × $500
-           + días_inst × personas_inst × pago_día_inst              # instalación: 2 personas × $500
+           + días_fab × personas_fab × pago_día_fab                 # fabricación de las bridas: 1 persona × $800
+           + días_inst × personas_inst × pago_día_inst              # instalación: 2 personas × $800
 precio     = costo × (1 + utilidad)                                  # la utilidad se SUMA sobre el costo (no es % del precio)
 total      = precio × (1 + IVA)                                      # el IVA de la pila de precio (T9)
 ```
@@ -1427,7 +1427,7 @@ Con la lámina galvanizada cal. 22 de 4 × 10 ft ($920 con IVA = $793.10 sin IVA
 
 Para 11″ y 40 m con yardas de 4 ft: la plantilla de una yarda mide π × (279.4 + 0.85) + 32 = 912 mm, así que cada hoja de 3,048 mm da 3 yardas; 40 m son 33 yardas, es decir, 11 hojas. Con yardas de 3 ft son 44 yardas en 15 hojas de 3 × 10 ft (3 por hoja, sin franja de sobrante): $44,220.00, casi lo mismo que con yardas de 4 ft. Si se cortaran de la hoja de 4 × 10 ft, se desperdiciaría una franja de 305 mm en cada una y saldría en $56,640.00.
 
-**El plazo y su mano de obra** (el taller, 7-oct-2026). La pestaña tiene un apartado para los **días de fabricación de bridas** y los **días de instalación** (de 0 a 365, admite medios días). Se muestran junto al total («5 días de fabricación de bridas + 3 días de instalación = 8 días») y **suman su mano de obra al costo**, antes de la utilidad: la fabricación de las bridas, 1 persona a $500 por día; la instalación, 2 personas a $500 por día. Con 11″ y 40 m, 5 días de bridas ($2,500) y 3 de instalación ($3,000) llevan el costo de $31,172.30 a $36,672.30 y el total de $43,391.84 a **$51,047.84**. Sin días no se suma nada. **Ménsulas, mangueras y viáticos** (el taller, 7 y 8-oct-2026): lo que el factor de la lámina no cubre suma al costo, antes de la utilidad. Las ménsulas y las mangueras **no se capturan como importe sino por piezas**, y la app las costea con los precios de las tablas; los viáticos sí son un importe en pesos sin IVA.
+**El plazo y su mano de obra** (el taller, 7-oct-2026). La pestaña tiene un apartado para los **días de fabricación de bridas** y los **días de instalación** (de 0 a 365, admite medios días). Se muestran junto al total («5 días de fabricación de bridas + 3 días de instalación = 8 días») y **suman su mano de obra al costo**, antes de la utilidad: la fabricación de las bridas, 1 persona a $800 por día; la instalación, 2 personas a $800 por día. Con 11″ y 40 m, 5 días de bridas ($4,000) y 3 de instalación ($4,800) llevan el costo de $31,172.30 a $39,972.30 y el total de $43,391.84 a **$55,641.44**. Sin días no se suma nada. **Ménsulas, mangueras y viáticos** (el taller, 7 y 8-oct-2026): lo que el factor de la lámina no cubre suma al costo, antes de la utilidad. Las ménsulas y las mangueras **no se capturan como importe sino por piezas**, y la app las costea con los precios de las tablas; los viáticos sí son un importe en pesos sin IVA.
 
 **Ménsulas por piezas.** El ingeniero captura **cuántas ménsulas** estima (`menulas`) y elige el **ángulo** de la ménsula (1¼″ × 1/8″ de arranque, o 1½″ × 3/16″, de los ángulos de la lista del proveedor) y la **solera** de su abrazadera (1¼″ × 1/8″ de arranque, o 1½″ × 3/16″). Vacía, van las **sugeridas**, una cada 2.5 m de los metros (`menulas: 'AUTO'`); 0 = no lleva. El motor, sin `menulas`, no pone ménsulas, como antes.
 
@@ -1439,9 +1439,9 @@ mangueras  = tramos × precio sin IVA de la manguera elegida + abrazaderas × pr
 abrazaderas de manguera = las capturadas | tramos × abrazaderas_por_tramo (6)
 ```
 
-Cada ménsula lleva su abrazadera, y el costo es el **costo directo** de las partidas (material de la lista del proveedor con su merma, anclajes del catálogo sin IVA, minutos reales de taller con su equipo y herramienta menor), sin indirectos ni utilidad: la utilidad la suma la cotización rápida. En el unifilar se sugieren **13 ménsulas con abrazadera**: la ménsula de ángulo 1¼″ cuesta $310.57 (sobre todo sus 137 min de taller) y la abrazadera de solera 1¼″ $34.68, **$4,488.25** en total, y el total pasa de $46,512.13 a **$52,759.77**; con 40 m se sugieren 16. Si el ingeniero estima 7 (las del caso real), son $2,416.75 —el caso real gastó $2,386.20 en soportería—; de ángulo y solera de 1½″ × 3/16″, $351.86 + $43.00 cada una, $2,764.02.
+Cada ménsula lleva su abrazadera, y el costo es el **costo directo** de las partidas (material de la lista del proveedor con su merma, anclajes del catálogo sin IVA, minutos reales de taller con su equipo y herramienta menor), sin indirectos ni utilidad: la utilidad la suma la cotización rápida. En el unifilar se sugieren **13 ménsulas con abrazadera**: la ménsula de ángulo 1¼″ cuesta $398.86 (sobre todo sus 137 min de taller a $100.00 la hora) y la abrazadera de solera 1¼″ $44.34, **$5,761.60** en total, y el total pasa de $52,358.53 a **$60,378.67**; con 40 m se sugieren 16. Si el ingeniero estima 7 (las del caso real), son $3,102.40 —el caso real gastó $2,986.20 en soportería, con la raya a la misma hora—; de ángulo y solera de 1½″ × 3/16″, $440.15 + $52.66 cada una, $3,449.67.
 
-**Mangueras por tramos.** Se capturan los **tramos** (`mangueras_tramos`), se elige la **manguera** del catálogo de compras (la de 6″, tramo de 5 m, de arranque; o la de 5″ o 3″) y, si se quiere, cuántas **abrazaderas de manguera** (vacío: 6 por tramo, `rapida.mangueras.abrazaderas_por_tramo`, la proporción del caso real). Los precios son los del catálogo sin IVA. Los 3 tramos de 6″ del caso real con sus 18 abrazaderas: 3 × $1,807.49 + 18 × $47.41 = **$6,275.85** (la abrazadera, $55 ÷ 1.16, se redondea a $47.41 para que el renglón multiplique exacto; el caso real gastó $6,275.92). Con 7 ménsulas de 1½″, los 3 tramos y los $1,987.93 de viáticos, el unifilar sale en **$61,862.82**. Cada cifra de la cotización rápida se redondea al centavo en el motor (precio de la hoja, lámina, lámina × factor, cada extra, costo, utilidad, precio, IVA y total): lo que se ve multiplica y suma exacto. Como sólo se conocen los metros, la cuenta no suma los soportes junto a los codos ni los de las subidas (la cotización detallada sí, §3.6.2). La utilidad capturada en la pestaña vale sólo para esa cotización rápida; vacía, se usa la de T11. El diámetro se captura en la unidad de la cotización (pulgadas o mm) y lo capturado se recuerda en el navegador. Más metros que el último renglón de las bridas no tienen precio: la app lo dice y no da un total.
+**Mangueras por tramos.** Se capturan los **tramos** (`mangueras_tramos`), se elige la **manguera** del catálogo de compras (la de 6″, tramo de 5 m, de arranque; o la de 5″ o 3″) y, si se quiere, cuántas **abrazaderas de manguera** (vacío: 6 por tramo, `rapida.mangueras.abrazaderas_por_tramo`, la proporción del caso real). Los precios son los del catálogo sin IVA. Los 3 tramos de 6″ del caso real con sus 18 abrazaderas: 3 × $1,807.49 + 18 × $47.41 = **$6,275.85** (la abrazadera, $55 ÷ 1.16, se redondea a $47.41 para que el renglón multiplique exacto; el caso real gastó $6,275.92). Con 7 ménsulas de 1½″, los 3 tramos y los $1,987.93 de viáticos, el unifilar sale en **$68,663.65**. Cada cifra de la cotización rápida se redondea al centavo en el motor (precio de la hoja, lámina, lámina × factor, cada extra, costo, utilidad, precio, IVA y total): lo que se ve multiplica y suma exacto. Como sólo se conocen los metros, la cuenta no suma los soportes junto a los codos ni los de las subidas (la cotización detallada sí, §3.6.2). La utilidad capturada en la pestaña vale sólo para esa cotización rápida; vacía, se usa la de T11. El diámetro se captura en la unidad de la cotización (pulgadas o mm) y lo capturado se recuerda en el navegador. Más metros que el último renglón de las bridas no tienen precio: la app lo dice y no da un total.
 
 **Para el cliente.** La pestaña arma el texto que se le manda: el cliente u obra (campo opcional), el ducto, qué incluye (suministro y fabricación; instalación si hay días de instalación; mangueras, soportería y viáticos si se capturaron), el precio con IVA, el plazo y la vigencia de la cotización. **No lleva el desglose interno** (factor, utilidad). *Copiar texto* lo pone en el portapapeles (si el visor no lo permite, lo deja seleccionado para copiarlo a mano) e *Imprimir* saca una hoja carta con lo mismo.
 
@@ -1462,16 +1462,16 @@ Así queda la cotización rápida de esa obra (11″, 31 m, yardas de 3 ft, 4 d�
 | Lámina | 2,379.30 | 7,137.96 | — |
 | Ductería (lámina × 3; la obra la compró hecha) | 7,137.90 | 21,413.88 | 18,965.52 |
 | Bridas (placas, soleras, tornillería, Sikaflex y esmalte) | 5,000.00 | 5,000.00 | 6,661.90 |
-| Mano de obra de las bridas (4 días) | 2,000.00 | 2,000.00 | 2,000.00 |
-| Instalación (2 personas × 5 días) | 5,000.00 | 5,000.00 | 5,000.00 |
+| Mano de obra de las bridas (4 días) | 3,200.00 | 3,200.00 | 3,200.00 |
+| Instalación (2 personas × 5 días) | 8,000.00 | 8,000.00 | 8,000.00 |
 | Mangueras y sus abrazaderas | — | — | 6,275.92 |
-| Soportería (ménsulas, abrazaderas, poste y 2 días) | — | — | 2,386.20 |
+| Soportería (ménsulas, abrazaderas, poste y 2 días) | — | — | 2,986.20 |
 | Viáticos | — | — | 1,987.93 |
-| **Costo** | **19,137.90** | **33,413.88** | **43,277.47** |
-| Precio con 20 % de utilidad y el IVA | 26,639.96 | 46,512.13 | se vendió en 45,710.00 |
+| **Costo** | **23,337.90** | **37,613.88** | **48,077.47** |
+| Precio con 20 % de utilidad y el IVA | 32,486.36 | 52,358.53 | se vendió en 45,710.00 |
 
 - Con las láminas bien contadas, **la lámina × 3 ($21,413.88) queda 13 % arriba de lo que cobró el proveedor por fabricar toda la ductería ($18,965.52)**: el factor de 3 está bien calibrado para la ductería. Con las 5 láminas de la nota, × 3 daría $7,137.90: ni la mitad de lo que costó la ductería hecha.
-- Aun bien contada, la regla queda $9,863.59 abajo del costo real de la obra: no trae las **mangueras** ($6,275.92), la **soportería** ($2,386.20) ni los **viáticos** ($1,987.93), y las bridas costaron $1,661.90 más que los $5,000 de la tabla (eran 60: 30 de solera y 30 de placa). Con 20 % de utilidad e IVA la regla da $46,512.13; la obra se vendió en $45,710.00 con IVA y perdió $3,872.30 antes de indirectos (§7.4).
+- Aun bien contada, la regla queda $10,463.59 abajo del costo real de la obra: no trae las **mangueras** ($6,275.92), la **soportería** ($2,986.20) ni los **viáticos** ($1,987.93), y las bridas costaron $1,661.90 más que los $5,000 de la tabla (eran 60: 30 de solera y 30 de placa). Con 20 % de utilidad e IVA la regla da $52,358.53; la obra se vendió en $45,710.00 con IVA y perdió $8,672.30 antes de indirectos (§7.4).
 - La pestaña trae esta obra como ejemplo («Probar con el arreglo unifilar: 11″ y 31 m») y en cada cotización escribe el desarrollo de la yarda («π × 280.3 mm = 880 mm + 32 mm de la costura = 912 mm: el perímetro, no el diámetro»).
 
 ---
@@ -1659,16 +1659,16 @@ Costo de pintura       = 0.4305 · 220 + 0.0431 · 70 = 97.73 MXN
 
 | Operación | t real (min) | MO (MXN/h) | Equipo (MXN/h) | Costo (MXN) |
 | --- | --- | --- | --- | --- |
-| Corte | 4.85 | 62.50 | 45 | 8.68 |
-| Rolado | 13.14 | 62.50 | 55 | 25.73 |
-| Armado y punteo | 12.50 | 62.50 | 25 | 18.23 |
-| Aros de brida | 82.75 | 62.50 | 40 | 141.37 |
-| Soldadura | 25.94 | 62.50 | 45 | 46.47 |
-| Engargolado | 6.35 | 62.50 | 35 | 10.32 |
-| Barrenado | 40.00 | 62.50 | 25 | 58.33 |
-| Acabado | 6.48 | 62.50 | 20 | 8.92 |
-| Pintura | 26.94 | 62.50 | 40 | 46.02 |
-| Inspección y embalaje | 6.12 | 62.50 | 0 | 6.38 |
+| Corte | 4.85 | 100.00 | 45 | 11.72 |
+| Rolado | 13.14 | 100.00 | 55 | 33.95 |
+| Armado y punteo | 12.50 | 100.00 | 25 | 26.04 |
+| Aros de brida | 82.75 | 100.00 | 40 | 193.08 |
+| Soldadura | 25.94 | 100.00 | 45 | 62.69 |
+| Engargolado | 6.35 | 100.00 | 35 | 14.29 |
+| Barrenado | 40.00 | 100.00 | 25 | 83.33 |
+| Acabado | 6.48 | 100.00 | 20 | 12.96 |
+| Pintura | 26.94 | 100.00 | 40 | 62.86 |
+| Inspección y embalaje | 6.12 | 100.00 | 0 | 10.20 |
 
 | Concepto | MXN |
 | --- | --- |
@@ -1679,38 +1679,38 @@ Costo de pintura       = 0.4305 · 220 + 0.0431 · 70 = 97.73 MXN
 | Flete de entrada (2 % de lámina + perfil) | 18.67 |
 | **Subtotal materiales** | **1,046.16** |
 | Alambre + gas + consumibles de corte + pintura | 127.87 |
-| Mano de obra directa | 234.44 |
+| Mano de obra directa | 375.11 |
 | Equipo (hora-máquina) | 136.00 |
-| Herramienta menor (3 % de MO) | 7.03 |
-| **COSTO DIRECTO (CD)** | **1,551.51** |
+| Herramienta menor (3 % de MO) | 11.25 |
+| **COSTO DIRECTO (CD)** | **1,696.39** |
 
 **Paso 12 · Pila de precio**
 
 | Capa | Fórmula | MXN |
 | --- | --- | --- |
-| CD |  | 1,551.51 |
+| CD |  | 1,696.39 |
 | CI de fábrica | GIF · h_MOD = 85.00 · 3.7511 | 318.84 |
-| CI de administración | 8 % · CD | 124.12 |
-| Imprevistos (riesgo MEDIO) | 4 % · (CD + CI) | 79.78 |
-| **Costo total C_T** | CD + CI + imprevistos | **2,074.25** |
-| Financiamiento | C_T · 14 % · 45/365 = C_T · 1.726 % | 35.80 |
-| **Costo base** | C_T + financiamiento | **2,110.05** |
-| **PRECIO antes de IVA** | C_base / (1 − 0.20 − 0.02) = 2,110.05 / 0.78 | **2,705.19** |
-|   ↳ utilidad (20 % del precio) |  | 541.04 |
-|   ↳ comisión de ventas (2 % del precio) |  | 54.10 |
-| IVA 16 % |  | 432.83 |
-| **Total con IVA** |  | **3,138.02** |
+| CI de administración | 8 % · CD | 135.71 |
+| Imprevistos (riesgo MEDIO) | 4 % · (CD + CI) | 86.04 |
+| **Costo total C_T** | CD + CI + imprevistos | **2,236.98** |
+| Financiamiento | C_T · 14 % · 45/365 = C_T · 1.726 % | 38.61 |
+| **Costo base** | C_T + financiamiento | **2,275.59** |
+| **PRECIO antes de IVA** | C_base / (1 − 0.20 − 0.02) = 2,275.59 / 0.78 | **2,917.43** |
+|   ↳ utilidad (20 % del precio) |  | 583.49 |
+|   ↳ comisión de ventas (2 % del precio) |  | 58.35 |
+| IVA 16 % |  | 466.79 |
+| **Total con IVA** |  | **3,384.22** |
 
 **Resultado e indicadores de control**
 
 | Indicador | Valor |
 | --- | --- |
-| Precio unitario antes de IVA | **2,705.19 MXN** |
+| Precio unitario antes de IVA | **2,917.43 MXN** |
 | Peso neto que se manda (lámina + aros, incluido el suelto) | 37.923 kg |
-| Precio por kg neto | 71.33 MXN/kg |
-| Precio por metro lineal | 901.73 MXN/m |
+| Precio por kg neto | 76.93 MXN/kg |
+| Precio por metro lineal | 972.48 MXN/m |
 | Horas de mano de obra directa (reales) | 3.751 h |
-| Margen de contribución (P − CD)/P | 42.6 % |
+| Margen de contribución (P − CD)/P | 41.9 % |
 | Markup sobre costo total | 30.4 % |
 | Costo de la merma en lámina | 2.996 kg · 22.47 = 67.33 MXN |
 
@@ -1740,12 +1740,12 @@ L_corte = π·D_med·(2·j·κ + 2) + 2·L_eje = 11.154 m ;  L_soldadura (chapa)
 | Peso neto terminado, con aros (kg) | 37.923 | 11.812 |
 | Longitud de soldadura total (m) | 5.01 | 6.63 |
 | Horas de MOD reales (h) | 3.96 | 5.26 |
-| Costo directo CD (MXN) | 1,578.00 | 1,027.97 |
-| Precio antes de IVA (MXN) | 2,768.21 | 2,111.94 |
-| Precio por kg neto (MXN/kg) | 73.00 | 178.80 |
+| Costo directo CD (MXN) | 1,731.00 | 1,231.03 |
+| Precio antes de IVA (MXN) | 2,992.33 | 2,409.40 |
+| Precio por kg neto (MXN/kg) | 78.91 | 203.98 |
 | Horas MOD por kg neto (h/kg) | 0.104 | 0.445 |
 
-**Lectura:** el área del codo es sólo 1.3 % mayor que la de un tramo recto de igual longitud de eje (F_arco = 1.0131), pero su **precio por kg neto es 2.45×** el del tramo recto y su **costo directo por m² de lámina es 2.69×**. El sobrecosto no está en el área: está en la merma (20 % vs 8 %), en el corte perfilado, en el armado (k_dif = 1.35) y en la soldadura de 4 juntas elípticas.
+**Lectura:** el área del codo es sólo 1.3 % mayor que la de un tramo recto de igual longitud de eje (F_arco = 1.0131), pero su **precio por kg neto es 2.59×** el del tramo recto y su **costo directo por m² de lámina es 2.94×**. El sobrecosto no está en el área: está en la merma (20 % vs 8 %), en el corte perfilado, en el armado (k_dif = 1.35) y en la soldadura de 4 juntas elípticas.
 
 ### 7.3 Ejemplo C — Reducción con injerto 45° sobre el cono, Ø12" → Ø10" con injerto Ø6", calibre 16
 
@@ -1817,27 +1817,27 @@ Bridas                        = 3 aros (D1, D2 y d): 1215.8 mm · 1056.2 mm · 7
 
 | Indicador | Valor |
 | --- | --- |
-| Costo directo (CD) | 838.48 MXN |
-| Precio unitario antes de IVA | **1,777.96 MXN** |
+| Costo directo (CD) | 1,022.64 MXN |
+| Precio unitario antes de IVA | **2,047.74 MXN** |
 | Peso neto terminado (lámina + 3 aros) | 7.915 kg |
-| Precio por kg neto | 224.64 MXN/kg |
+| Precio por kg neto | 258.72 MXN/kg |
 | Horas de mano de obra directa (reales) | 4.768 h  (k_dif armado = 1.9) |
 
 **Sensibilidad** (misma pieza, un solo cambio)
 
 | Variante | L reducción (mm) | Orificio (m²) | Precio (MXN) | vs. base |
 | --- | --- | --- | --- | --- |
-| Base: 45°, de extremo mayor a menor (hacia D2) | 247.4 | 0.0249 | 1,777.96 | — |
-| 30°, hacia D2 | 320.7 | 0.0340 | 1,846.77 | +3.9 % |
-| 45°, si se inclinara hacia D1 (`MAYOR`) | 288.7 | 0.0304 | 1,816.63 | +2.2 % |
+| Base: 45°, de extremo mayor a menor (hacia D2) | 247.4 | 0.0249 | 2,047.74 | — |
+| 30°, hacia D2 | 320.7 | 0.0340 | 2,119.60 | +3.5 % |
+| 45°, si se inclinara hacia D1 (`MAYOR`) | 288.7 | 0.0304 | 2,088.11 | +2.0 % |
 
-**Lectura:** el precio por kg neto es **3.15×** el del tramo recto del Ejemplo A, por lo mismo que el codo: merma de 28 % contra 8 %, dificultad de armado 1.9 contra 1.0 y tres bridas en una pieza chica. A 30° la silleta es más larga y el cono también; hacia el extremo menor el cono "se cierra" y la silleta resulta más corta que si el injerto mirara hacia el mayor.
+**Lectura:** el precio por kg neto es **3.36×** el del tramo recto del Ejemplo A, por lo mismo que el codo: merma de 28 % contra 8 %, dificultad de armado 1.9 contra 1.0 y tres bridas en una pieza chica. A 30° la silleta es más larga y el cono también; hacia el extremo menor el cono "se cierra" y la silleta resulta más corta que si el injerto mirara hacia el mayor.
 
 ### 7.4 Caso real — la hoja de control de gastos del 6-oct-2026 (vendido en $45,710 con IVA)
 
 **El proyecto.** Ductería cal. 22 que fabricó un proveedor ($22,000 con IVA); **30 bridas de placa de 3/16″** de 5″, 6″ y 7″ (24 + 2 + 4) que cortó con plasma el proveedor de corte (cotización del 2-oct-2026: $3,440 más IVA = $3,990.40); **30 bridas de solera hechas en el taller** (22 para ducto de 11″, 6 de 10″ y 2 de 9″) en **4 días**, pintadas con esmalte y selladas con Sikaflex (sin empaque); soportería (7 ménsulas de 650 mm hechas en 2 días, 7 abrazaderas para el ducto de 11″ y un poste); mangueras con sus abrazaderas, y la **instalación local, en Querétaro, con dos personas durante 5 días** (sin hospedaje ni comidas) más un viaje Querétaro–México (casetas $806 y gasolina $1,500). Otro ingeniero lo vendió en **$45,710 con IVA** ($39,405.17 antes de IVA); la hoja calculó un costo total de $46,539.06 y una «ganancia» de −$829.06. El proyecto completo —partidas y gastos, con las respuestas del taller del 7-oct-2026— viene en la app como ejemplo (Compras y gastos → «Ver el ejemplo»; `src/datos/ejemplos.js`) y es el caso de referencia de `tests/caso_real.test.js`.
 
-**Lo que corrige la app** (§7.4.1). La hoja restó de la venta con IVA sus compras con IVA y la raya, que no lleva IVA: no descontó el **IVA neto que se le paga al SAT** ($713.23). Además pagó 2 días de bridas en lugar de 4 y no traía los 2 días de las ménsulas ni el esmalte. Con todo, lo gastado sin IVA es **$43,277.47** contra una venta de **$39,405.17** sin IVA: el proyecto **pierde $3,872.30 antes de indirectos (−9.8 %)** y, con los indirectos que estima la cotización (ilustrativos), **$17,094.23**.
+**Lo que corrige la app** (§7.4.1). La hoja restó de la venta con IVA sus compras con IVA y la raya, que no lleva IVA: no descontó el **IVA neto que se le paga al SAT** ($713.23). Además pagó 2 días de bridas en lugar de 4 y no traía los 2 días de las ménsulas ni el esmalte. Con todo, y con la hora a $100.00 (salario de $800 por día con prestaciones), lo gastado sin IVA es **$48,077.47** contra una venta de **$39,405.17** sin IVA: el proyecto **pierde $8,672.30 antes de indirectos (−22.0 %)** y, con los indirectos que estima la cotización (ilustrativos), **$22,609.54**.
 
 **Las partidas en la app** (con las tablas de arranque):
 
@@ -1847,25 +1847,25 @@ Bridas                        = 3 aros (D1, D2 y d): 1215.8 mm · 1056.2 mm · 7
 | 2 | Brida de placa 3/16″ para ducto de 5″ (Ø 194/130 mm, barrenos en Ø 170 mm) | Comprado | 24 | 0.00 | 3,111.87 | 4,558.56 |
 | 3 | Brida de placa 3/16″ para ducto de 6″ (Ø 221/157 mm, barrenos en Ø 193 mm) | Comprado | 2 | 0.00 | 281.51 | 412.38 |
 | 4 | Brida de placa 3/16″ para ducto de 7″ (Ø 258/182 mm, barrenos en Ø 230 mm) | Comprado | 4 | 0.00 | 650.08 | 952.28 |
-| 5 | Bridas de solera para ducto Ø11″ | Bridas sueltas | 22 | 23.74 | 4,047.02 | 8,665.58 |
-| 6 | Bridas de solera para ducto Ø10″ | Bridas sueltas | 6 | 6.28 | 1,056.17 | 2,271.06 |
-| 7 | Bridas de solera para ducto Ø9″ | Bridas sueltas | 2 | 1.86 | 313.60 | 673.94 |
-| 8 | Ménsulas para soportar ductos (650 mm) | Soportería | 7 | 16.00 | 2,174.01 | 5,029.22 |
-| 9 | Abrazaderas para fijar los ductos a las ménsulas | Soportería | 7 | 1.75 | 242.77 | 557.41 |
-| 10 | Poste | Soportería | 1 | 0.25 | 466.99 | 712.89 |
+| 5 | Bridas de solera para ducto Ø11″ | Bridas sueltas | 22 | 23.74 | 4,964.04 | 10,008.90 |
+| 6 | Bridas de solera para ducto Ø10″ | Bridas sueltas | 6 | 6.28 | 1,298.71 | 2,626.32 |
+| 7 | Bridas de solera para ducto Ø9″ | Bridas sueltas | 2 | 1.86 | 385.49 | 779.24 |
+| 8 | Ménsulas para soportar ductos (650 mm) | Soportería | 7 | 16.00 | 2,792.00 | 5,934.46 |
+| 9 | Abrazaderas para fijar los ductos a las ménsulas | Soportería | 7 | 1.75 | 310.37 | 656.39 |
+| 10 | Poste | Soportería | 1 | 0.25 | 476.65 | 727.04 |
 | 11 | Abrazadera ajustable para manguera | Comprado | 18 | 0.00 | 853.45 | 1,250.10 |
 | 12 | Manguera azul de 6″ (tramo de 5 m) | Comprado | 3 | 0.00 | 5,422.47 | 7,943.13 |
-| 13 | Instalación local en Querétaro (2 personas, 5 días) y un viaje a México | Instalación | 1 | 80.00 | 7,137.93 | 10,456.03 |
-|  | **Total** |  |  | **129.88** | **45,221.26** | **71,993.60** |
+| 13 | Instalación local en Querétaro (2 personas, 5 días) y un viaje a México | Instalación | 1 | 80.00 | 10,227.93 | 14,982.43 |
+|  | **Total** |  |  | **129.88** | **50,237.94** | **79,342.25** |
 
 **Las bridas de solera: la regla del taller y el cálculo.** La hoja corta cada aro de π·(D + 81 mm). El cálculo da lo mismo con la fibra neutra del aro y las puntas que la roladora no curva (§3.5.1):
 
 | Bridas | Ø ducto | Regla de la hoja π·(D + 81) (mm) | Cálculo: π·(D_ext + 2c) + 3 + 126 (mm) | Diferencia (mm) | Horas de taller | Precio (MXN) |
 | --- | --- | --- | --- | --- | --- | --- |
-| 22 | 11″ = 279.4 mm | 1132.2 | 1131.8 | -0.4 | 23.74 | 8,665.58 |
-| 6 | 10″ = 254.0 mm | 1052.4 | 1052.0 | -0.4 | 6.28 | 2,271.06 |
-| 2 | 9″ = 228.6 mm | 972.6 | 972.2 | -0.4 | 1.86 | 673.94 |
-| **30** |  | **33169** | **33157** |  | **31.88** | **11,610.58** |
+| 22 | 11″ = 279.4 mm | 1132.2 | 1131.8 | -0.4 | 23.74 | 10,008.90 |
+| 6 | 10″ = 254.0 mm | 1052.4 | 1052.0 | -0.4 | 6.28 | 2,626.32 |
+| 2 | 9″ = 228.6 mm | 972.6 | 972.2 | -0.4 | 1.86 | 779.24 |
+| **30** |  | **33169** | **33157** |  | **31.88** | **13,414.46** |
 
 Las **31.88 h** de taller de las 30 bridas son los **4 días** que dijo el taller: con ellos se calibraron los tiempos de rolado y barrenado de T7b (el reparto entre los dos es un supuesto, §10.12).
 
@@ -1882,14 +1882,14 @@ Las **31.88 h** de taller de las 30 bridas son los **4 días** que dijo el talle
 
 ```text
 Horas en obra       = 1 vez · 2 personas · 5 días · 8 h = 80 h   (horas reales: en obra no se aplica la eficiencia del taller)
-Mano de obra        = 80 h · 62.50 = 5,000.00 MXN   (500 por día ÷ 8 h)
-Herramienta menor   = 3 % · MO = 150.00 MXN
+Mano de obra        = 80 h · 100.00 = 8,000.00 MXN   (800 por día con prestaciones ÷ 8 h)
+Herramienta menor   = 3 % · MO = 240.00 MXN
 Casetas             = 1 viaje · 806.00 con IVA / 1.16 = 694.83 MXN   (con factura: el IVA se acredita)
 Gasolina            = 1 viaje · 1,500.00 / 1.16 = 1,293.10 MXN
 Hospedaje y comidas = 0: la instalación es local, en Querétaro
-Costo directo       = 7,137.93 MXN
+Costo directo       = 10,227.93 MXN
 Indirectos por hora = 0.00 / h (la cuadrilla no usa la nave: `capas.gif_por_hora_instalacion`) + 8 % de administración
-Precio antes de IVA = 10,456.03 MXN
+Precio antes de IVA = 14,982.43 MXN
 ```
 
 **La soportería** (§3.6.2; el largo de la ménsula —brazo y pierna de 650 mm— es un supuesto que reproduce la compra; las abrazaderas no llevan tornillería propia: los juegos de la hoja son los de las bridas):
@@ -1898,7 +1898,7 @@ Precio antes de IVA = 10,456.03 MXN
 Ménsulas: barra               = Ángulo 1¼" × 1/8": 260.00 con IVA → 224.14 sin IVA → 37.36/m
 Ménsulas: perfil              = 7 piezas · 1.30 m (brazo y pierna de 650 mm) = 9.10 m · 37.36 / (1 − 0.05) = 357.83 MXN
 Ménsulas: anclajes            = 7 · 4 = 28 × Taquete de 3/8″ (16.00 con IVA → 13.79) = 386.21 MXN
-Ménsulas: tiempo de taller    = 7 · 137.14 min reales / 60 = 16.00 h (los 2 días del taller) · (62.50 de mano de obra + 25.00 de equipo)/h = 1,399.97 MXN
+Ménsulas: tiempo de taller    = 7 · 137.14 min reales / 60 = 16.00 h (los 2 días del taller) · (100.00 de mano de obra + 25.00 de equipo)/h = 1,999.96 MXN
 Abrazaderas: largo            = π·(D + t)/2 + 2·oreja = π·(279.4 + 3.175)/2 + 2·50 = 543.9 mm   (media vuelta al ducto de 11″ y dos orejas)
 Abrazaderas: perfil           = 7 · 0.5439 m = 3.81 m de Solera 1¼" × 1/8" = 86.37 MXN (sin tornillería propia)
 Abrazaderas: tiempo de taller = 7 · 15 min (tabla) / 60 = 1.75 h
@@ -1926,62 +1926,62 @@ Compra                        = 2 ángulos (4 ménsulas por barra), 1 solera (11
 | Comprado | Manguera azul de 6″ (tramo de 5 m) | 3 | 3 tramos | 1,807.49 | 5,422.47 | 5,422.47 | — |
 |  | **Total** |  |  |  | **33,289.53** | **32,813.90** | **497.86** |
 
-**Real contra cotizado** (§5.7, con los 20 renglones capturados como gastos: los de la hoja, las bridas de placa como las cotizó el proveedor, la raya a $62.50 y el esmalte estimado):
+**Real contra cotizado** (§5.7, con los 20 renglones capturados como gastos: los de la hoja, las bridas de placa como las cotizó el proveedor, la raya a $100.00 y el esmalte estimado):
 
 | Renglón del control de gastos | Cotizado (MXN) | Real (MXN) | Diferencia (MXN) | Real / cotizado |
 | --- | --- | --- | --- | --- |
-| Material | 3,293.14 | 2,891.90 | −401.24 | 88 % |
-| Consumibles | 365.87 | 330.00 | −35.87 | 90 % |
-| Mano de obra del taller | 3,117.61 | 3,000.00 | −117.61 | 96 % |
+| Material | 2,916.96 | 2,891.90 | −25.06 | 99 % |
+| Consumibles | 754.79 | 330.00 | −424.79 | 44 % |
+| Mano de obra del taller | 4,988.18 | 4,800.00 | −188.18 | 96 % |
 | Compras y trabajos de terceros | 28,681.44 | 28,681.44 | — | 100 % |
-| Soportería y anclajes | 1,275.05 | 1,386.20 | +111.15 | 109 % |
-| Mano de obra de instalación | 5,000.00 | 5,000.00 | — | 100 % |
+| Soportería y anclajes | 1,408.44 | 1,386.20 | −22.24 | 98 % |
+| Mano de obra de instalación | 8,000.00 | 8,000.00 | — | 100 % |
 | Viáticos y traslados | 1,987.93 | 1,987.93 | — | 100 % |
-| **Total** | **43,721.05** | **43,277.47** | **−443.58** | **99 %** |
+| **Total** | **48,737.73** | **48,077.47** | **−660.26** | **99 %** |
 
-Lo cotizado queda $443.58 (1.0 %) arriba de lo gastado, sobre todo porque cobra el sobrante de las piezas enteras (siempre se cobra, §5.5) y el taller no lo apunta como gasto. El costo directo de la cotización suma además $1,500.21 de equipo del taller, que no llega con ticket.
+Lo cotizado queda $660.26 (1.4 %) arriba de lo gastado, sobre todo porque cobra el sobrante de las piezas enteras (siempre se cobra, §5.5) y el taller no lo apunta como gasto. El costo directo de la cotización suma además $1,500.21 de equipo del taller, que no llega con ticket.
 
 **El resultado del proyecto:**
 
 | Concepto | MXN | Qué es |
 | --- | --- | --- |
 | Venta pactada (sin IVA) | 39,405.17 | Se pactó con IVA: 45,710.00 ÷ 1.16; el IVA (6,304.83) es del SAT |
-| Gastos reales sin IVA | 43,277.47 | 20 renglones: los de la hoja, la raya a 62.50 por hora y el esmalte estimado; el IVA acreditable (5,644.40) no es costo |
-| **Utilidad antes de indirectos** | **−$3,872.30** | −9.8 % de la venta: lo que la hoja llama «ganancia», corregido (§7.4.1) |
+| Gastos reales sin IVA | 48,077.47 | 20 renglones: los de la hoja, la raya a 100.00 por hora y el esmalte estimado; el IVA acreditable (5,644.40) no es costo |
+| **Utilidad antes de indirectos** | **−$8,672.30** | −22.0 % de la venta: lo que la hoja llama «ganancia», corregido (§7.4.1) |
 | Comisión de ventas y otros | −$788.10 | 2 % de la venta |
 | Equipo del taller (hora-máquina) | −$1,500.21 | Estimado de la cotización: no llega con ticket |
-| Indirectos, imprevistos y financiamiento | −$10,933.61 | Estimados con las tablas maestras (GIF $85.00/h de taller, 8 % de administración, 4 % de imprevistos): ilustrativos |
-| **Utilidad después de indirectos** | **−$17,094.23** | −43.4 % de la venta |
+| Indirectos, imprevistos y financiamiento | −$11,648.93 | Estimados con las tablas maestras (GIF $85.00/h de taller, 8 % de administración, 4 % de imprevistos): ilustrativos |
+| **Utilidad después de indirectos** | **−$22,609.54** | −57.4 % de la venta |
 
-#### 7.4.1 Por qué la hoja daba −$829 y la app da −$3,872
+#### 7.4.1 Por qué la hoja daba −$829 y la app da −$8,672
 
 | Paso | MXN | Por qué |
 | --- | --- | --- |
 | Resultado de la hoja | −$829.06 | 45,710.00 de venta (con IVA) − 46,539.06 (compras con IVA y 6,000.00 de raya) |
 | − IVA neto que se le paga al SAT | −$713.23 | De los 6,304.83 de IVA de la venta sólo se acreditan los 5,591.60 de las compras: la raya no trae IVA |
 | = La hoja, con su IVA | −$1,542.30 | Es lo mismo que la venta sin IVA (39,405.17) menos los gastos de la hoja sin IVA |
-| − 2 días más de bridas y 2 de ménsulas | −$2,000.00 | 32 h × 62.50: las bridas llevaron 4 días (la hoja pagó 2) y las ménsulas 2 (no venían) |
+| − La raya a $100.00 la hora contra la de la hoja | −$6,800.00 | 128 h × 100.00 = 12,800.00 contra los 6,000.00 de la hoja: las bridas llevaron 4 días (la hoja pagó 2), las ménsulas 2 (no venían) y la hora de la hoja no incluía las prestaciones |
 | − Esmalte y diluyente | −$330.00 | No venían en la hoja; estimado: 1 L de cada uno, lo que pide la lista de compras |
-| **= Utilidad antes de indirectos** | **−$3,872.30** | La misma que da el control de gastos de la app |
+| **= Utilidad antes de indirectos** | **−$8,672.30** | La misma que da el control de gastos de la app |
 
-**La hora de $62.50.** El taller cuesta la hora como el salario del día ÷ 8 h. Pero la semana paga 7 días por 5 trabajados: cada hora trabajada cuesta $3,500 ÷ 40 h = $87.50, y eso sin prestaciones (IMSS, aguinaldo, vacaciones). En este proyecto (128 h de raya) son $3,200 más de pérdida que la hoja no ve:
+**La hora de $100.00.** El taller cuesta a cada trabajador $800 por día con prestaciones incluidas (IMSS, aguinaldo, vacaciones, días de descanso), así que la hora es el salario del día ÷ 8 h = $100.00 y el FSR queda en 1.00. En este proyecto (128 h de raya) pesa mucho: la hoja pagó $6,000 de raya y la app la cuesta en $12,800.
 
 | Cómo se cuesta la hora | MXN por hora | Raya del proyecto (128 h) | Utilidad antes de indirectos |
 | --- | --- | --- | --- |
-| Como la calcula el taller: $500 ÷ 8 h (FSR 1.00) | 62.50 | 8,000.00 | −$3,872.30 |
-| Con los días de descanso pagados: $3,500 ÷ 40 h trabajadas (FSR 7/5 = 1.40) | 87.50 | 11,200.00 | −$7,072.30 |
+| Con prestaciones: $800 ÷ 8 h (FSR 1.00, la de hoy) | 100.00 | 12,800.00 | −$8,672.30 |
+| La de antes: $500 ÷ 8 h, sin prestaciones | 62.50 | 8,000.00 | −$3,872.30 |
 
-Para que la app lo cobre basta poner `FSR` = 1.40 en las tablas maestras (T8); con prestaciones, más.
+Como el salario por día ya incluye las prestaciones, el `FSR` se queda en 1.00 (T8): subirlo las cobraría dos veces.
 
 **¿En cuánto se debió vender?**
 
 | Precio | MXN sin IVA | Con IVA | Contra la venta (39,405.17 sin IVA) |
 | --- | --- | --- | --- |
-| Costo directo de la cotización | 45,221.26 | 52,456.66 | faltaron 5,816.09 (14.8 % de la venta) |
-| Precio mínimo (utilidad cero: cubre indirectos, financiamiento y comisión) | 57,300.89 | 66,469.03 | faltaron 17,895.72 (45.4 % de la venta) |
-| Precio calculado (20 % de utilidad sobre el precio) | 71,993.60 | 83,512.58 | faltaron 32,588.43 (82.7 % de la venta) |
+| Costo directo de la cotización | 50,237.94 | 58,275.01 | faltaron 10,832.77 (27.5 % de la venta) |
+| Precio mínimo (utilidad cero: cubre indirectos, financiamiento y comisión) | 63,149.87 | 73,253.85 | faltaron 23,744.70 (60.3 % de la venta) |
+| Precio calculado (20 % de utilidad sobre el precio) | 79,342.25 | 92,037.01 | faltaron 39,937.08 (101.4 % de la venta) |
 
-La venta no pagó ni el costo directo: le faltaron $5,816.09. Para el precio mínimo, con los indirectos ilustrativos de las tablas, faltaron **$17,895.72 (45 % de la venta)**, y con 20 % de utilidad sobre el precio la app calcula **$71,993.60 más IVA ($83,512.58)**. La hoja proponía $58,173.83 antes de impuestos (25 % sobre su costo con IVA) y $67,481.64 con IVA. Cuánto de esa diferencia es real depende de los indirectos del taller, que hoy son ilustrativos (§10.1).
+La venta no pagó ni el costo directo: le faltaron $10,832.77. Para el precio mínimo, con los indirectos ilustrativos de las tablas, faltaron **$23,744.70 (60 % de la venta)**, y con 20 % de utilidad sobre el precio la app calcula **$79,342.25 más IVA ($92,037.01)**. La hoja proponía $58,173.83 antes de impuestos (25 % sobre su costo con IVA) y $67,481.64 con IVA. Cuánto de esa diferencia es real depende de los indirectos del taller, que hoy son ilustrativos (§10.1).
 
 ### 7.5 Caso real — el pedido de ductería completo: ¿fabricar o comprar?
 
@@ -2028,7 +2028,7 @@ La de 6″ que falta va en las reducciones de 6″ a 5″ del arreglo unifilar (
 | Lámina neta (kg) | 209.6 | 222.3 |
 | Mano de obra (h) | 49.4 | 48.2 |
 | Consumibles (MXN) | 799.37 | 335.75 |
-| Costo directo (MXN) | 13,556.67 | 13,760.34 |
+| Costo directo (MXN) | 15,464.24 | 15,620.71 |
 
 No se suelda un solo metro de lámina: la soldadura de las costuras y las juntas pasa a engargolado (sumada al de las juntas entre yardas que ya había) y la de las bridas al ducto, a 56 cejas; la lámina sube por la holgura del Pittsburgh y por las cejas, y los consumibles bajan a menos de la mitad porque ya no hay alambre ni gas. Con los tiempos de arranque, el costo directo de las partidas queda muy parecido (sin el sobrante de las hojas enteras, que siempre se cobra y suma lo mismo en los dos casos).
 
@@ -2036,11 +2036,11 @@ No se suelda un solo metro de lámina: la soldadura de las costuras y las juntas
 
 | Escenario (30 partidas de ductería) | Costo directo | Material | Mano de obra | kg | Precio mínimo | Precio calculado | Costo directo / proveedor |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **Cal. 22, con las bridas metidas y su ceja (el pedido)** | 14,772.18 | 9,875.05 | 48.2 h · 3,010.32 | 222 | 21,642.64 | 28,306.24 | 78 % |
-| Cal. 22, sin meter las bridas | 13,778.99 | 9,873.15 | 37.1 h · 2,317.23 | 220 | 19,467.09 | 25,607.57 | 73 % |
-| Cal. 24 (lo que dicen los planos), con las bridas y su ceja | 12,589.15 | 7,702.79 | 48.0 h · 3,003.06 | 183 | 19,086.77 | 25,125.38 | 66 % |
+| **Cal. 22, con las bridas metidas y su ceja (el pedido)** | 16,632.56 | 9,875.05 | 48.2 h · 4,816.51 | 222 | 23,811.66 | 30,959.22 | 88 % |
+| Cal. 22, sin meter las bridas | 15,211.04 | 9,873.15 | 37.1 h · 3,707.56 | 220 | 21,136.72 | 27,610.46 | 80 % |
+| Cal. 24 (lo que dicen los planos), con las bridas y su ceja | 14,445.04 | 7,702.79 | 48.0 h · 4,804.89 | 183 | 21,250.56 | 27,742.09 | 76 % |
 
-Hecha en el taller, la ductería costaría en directo $14,772.18 (con el sobrante de las hojas enteras, que siempre se cobra): el **78 %** de lo que cobró el proveedor. Pero con los indirectos ilustrativos de las tablas el **precio mínimo** sería de $21,642.64, **más que el precio del proveedor**: comprarla convino, salvo que el taller tenga tiempo libre (sus indirectos ya pagados), en cuyo caso hacerla ahorraría hasta unos $4,200. Dos salvedades: los tiempos de taller de la ductería no están calibrados (sólo los de las bridas, §7.4), y el precio calculado incluye el cargo mínimo de las 6 uniones ($250 cada una). Para decidir conviene capturar las horas reales de una yarda, de un codo y de una ceja (§10.1).
+Hecha en el taller, la ductería costaría en directo $16,632.56 (con el sobrante de las hojas enteras, que siempre se cobra, y la hora a $100.00): el **88 %** de lo que cobró el proveedor. Pero con los indirectos ilustrativos de las tablas el **precio mínimo** sería de $23,811.66, **más que el precio del proveedor**: comprarla convino, salvo que el taller tenga tiempo libre (sus indirectos ya pagados), en cuyo caso hacerla ahorraría hasta unos $2,300. Dos salvedades: los tiempos de taller de la ductería no están calibrados (sólo los de las bridas, §7.4), y el precio calculado incluye el cargo mínimo de las 6 uniones ($250 cada una). Para decidir conviene capturar las horas reales de una yarda, de un codo y de una ceja (§10.1).
 
 ---
 
@@ -2110,7 +2110,7 @@ Reglas del guardado automático (`src/web/almacen.js`): la escritura se hace tra
 
 - **Vector de referencia (*golden test*):** el Ejemplo A de §7.1. `tests/ejemplo_recto.test.js` lo recalcula **de forma independiente** con aritmética directa, línea por línea, y lo compara contra el motor.
 - **Oráculos geométricos independientes:** codo, reducción excéntrica, transición, injerto simple (distancia media de silleta, área del orificio y perímetro de la silleta por fuerza bruta, también del mismo diámetro: `K(1) = 4/π` y `t_med` en forma cerrada) y reducción con injerto (silleta sobre el cono por bisección, polilínea y rejilla; ensamble recalculado línea por línea) se comparan contra mallas 3D y promedios numéricos de fuerza bruta (`tests/geometria.test.js`). **Toda familia nueva debe traer su oráculo independiente.**
-- **Lista del proveedor y mano de obra** (`tests/proveedor.test.js`): la lista reproduce al centavo los precios sin IVA de la factura; kg por hoja y por barra y $/kg recalculados desde las medidas; qué renglón usa el cálculo (hoja estándar, calibre sin cotizar, placa, inoxidable); IVA incluido o no; un precio inválido cae a la tabla; el salario es por día y la hora cuesta salario ÷ horas por día × FSR ($62.50; con FSR 1.40, $87.50); un parche guardado con la jornada de antes pasa a horas por día, y los días de la semana y el salario por hora de versiones anteriores se descartan.
+- **Lista del proveedor y mano de obra** (`tests/proveedor.test.js`): la lista reproduce al centavo los precios sin IVA de la factura; kg por hoja y por barra y $/kg recalculados desde las medidas; qué renglón usa el cálculo (hoja estándar, calibre sin cotizar, placa, inoxidable); IVA incluido o no; un precio inválido cae a la tabla; el salario es por día y la hora cuesta salario ÷ horas por día × FSR ($100.00 con los $800 por día; con FSR 1.40, $140.00); un parche guardado con la jornada de antes pasa a horas por día, y los días de la semana y el salario por hora de versiones anteriores se descartan. Un parche o archivo guardado con el salario de $500 exactos (el de antes) lo suelta para que rija el de $800 (`quitarSalarioAnterior`, documento versión 3); cualquier otro valor capturado se conserva.
 - **Parámetros de la cotización** (`tests/parametros.test.js`): cada parámetro recalculado desde `C_base` (margen, comisión, administración, días y tasa de cobro, IVA); descuento con IVA sobre el neto; utilidad real y su forma cerrada; valores inválidos que se ignoran con aviso; las tablas maestras no se mutan; la vista previa de una partida coincide con la lista; y los campos del encabezado en las pruebas de interfaz (sección 19).
 - **Armado por yardas** (`tests/geometria.test.js`, `tests/motor.test.js`, `tests/ejemplo_recto.test.js`): los casos del taller (3 yardas por pieza, el extremo del ajuste sin brida de taller, a ±25 mm, ajuste solo, otro máximo de yardas por pieza); la distribución se contrasta contra un **oráculo que arma el tramo pieza por pieza con un lazo** en 4 000 largos y anchos al azar, en los tres modos del extremo libre (más invariantes: sólo la última pieza trae el ajuste, ninguna pasa de 3 yardas, lo que se corta es el largo pedido ±tolerancia); cantidades físicas (anillos, corte a lo ancho, juntas, extremos con brida, junta soldada si las tablas lo piden); **la brida suelta** (qué se le hace al aro en taller —se rola, se barrena, se le suelda el cierre y se pinta, con las mismas horas y la misma pintura que a uno de taller— y qué no —no se arma, no lleva filete al ducto ni sellador—; el material completo; el peso y los drivers por kilo y por metro de soldadura; las operaciones omitidas; con `ESPIGA` o `LISO` no hay aros; sigue a las tablas y a la partida); el **ancho de yarda de la cotización** (lo heredan sólo los tramos rectos; la partida manda; vacío, 0 o inválido se ignoran); la conversión del `ajuste_sin_brida` sí/no de la versión anterior; y el Ejemplo A recalculado de forma independiente —con su aro suelto— en los tres modos.
 - **Pintura** (`tests/motor.test.js`, `tests/robustez.test.js`): la matriz material × instalación × partida (acero al carbón interior/exterior, galvanizado sólo en las bridas, inoxidable sin pintura, sistema elegido en la partida, dos caras del ducto, unión de espiga sin aros, aro suelto) con **superficie, litros de cada mano, minutos y costo recalculados a mano** desde las tablas; la instalación heredada de la cotización y la de la partida; los valores que no existen; las tablas de pintura (ubicación por omisión, manos y sistemas de cada material); y la migración de la pintura por defecto de una versión anterior.
@@ -2185,7 +2185,7 @@ El dibujo es una función pura (`src/web/planos.js`): de la partida calculada sa
 | Velocidades de corte, rolado y soldadura | Cronometrar ≥ 5 piezas por calibre y proceso | Semestral |
 | `FO`, `η_taller` | Muestreo de trabajo (tiempo de arco encendido vs. tiempo total) | Semestral |
 | `k_dif` y merma por familia (en especial la reducción con injerto) | Horas reales y kg comprados por familia vs. estimados | Por familia |
-| Salario por día (hoy $500, dato del taller), jornada, FSR, `GIF_por_hora_MOD` | Nómina real y contabilidad de costos | Anual / trimestral |
+| Salario por día (hoy $800 con prestaciones, dato del taller), jornada, FSR, `GIF_por_hora_MOD` | Nómina real y contabilidad de costos | Anual / trimestral |
 | Catálogo de compras (T3c) y viáticos | Tickets y facturas de cada proyecto (el control de gastos los junta) | Por proyecto |
 | Tabla `servicios` (calibre mínimo) | Norma interna / SMACNA / ACGIH aplicable | Al adoptar la norma |
 | Datos de detalle del estándar de bridas (paso entre barrenos, soldadura del aro, cordón de la junta, posición del barreno) | Confirmar con el taller los supuestos de §10.4 | Una vez, y al cambiar el estándar |
@@ -2199,7 +2199,7 @@ El dibujo es una función pura (`src/web/planos.js`): de la partida calculada sa
 - **Ducto espiral, collarines, campanas, difusores:** no modelados; usar `PERSONALIZADO` o `COMPRADO`.
 - **Anidado de hojas (modo B):** descrito en §3.3, no implementado; el motor usa φ de tabla.
 - **Fuera de alcance:** flete a obra, renta de andamios y grúas, ingeniería. Se cotizan como `otros_gastos` de la instalación, como partidas `COMPRADO` o como módulos aparte. La instalación y la soportería ya se cotizan (§3.6.2, §4.5).
-- **Valores ilustrativos:** ver §10.1. Son reales la mano de obra ($500 por día), la lámina y los perfiles de la lista del proveedor (30-sep-2026) y el catálogo de compras (6-oct-2026); lo demás (consumibles, equipo, tiempos, indirectos, utilidad) sigue siendo ilustrativo y hasta calibrarlo el motor sirve para comparar alternativas y validar la lógica, no para fijar precios de venta.
+- **Valores ilustrativos:** ver §10.1. Son reales la mano de obra ($800 por día con prestaciones), la lámina y los perfiles de la lista del proveedor (30-sep-2026) y el catálogo de compras (6-oct-2026); lo demás (consumibles, equipo, tiempos, indirectos, utilidad) sigue siendo ilustrativo y hasta calibrarlo el motor sirve para comparar alternativas y validar la lógica, no para fijar precios de venta.
 - **Lista de compras:** el acomodo en barras es *first-fit decreasing* (a lo más una barra de más que el óptimo); las hojas se cuentan por kilos, no por un anidado real de las plantillas (§3.3).
 
 ### 10.3 Siguientes pasos recomendados
@@ -2237,7 +2237,7 @@ El taller definió: *injerto simple* (antes ramal en ángulo); *reducción con i
 
 ### 10.6 Supuestos de la lista del proveedor por confirmar
 
-Datos que dio el taller: los trabajadores ganan **$500 por día, sin utilidades ni prestaciones**, y la hora se cuesta como $500 ÷ 8 h = $62.50 (FSR = 1.00; ver §10.12); las barras de ángulo y solera se consideran de **6 m**; el proveedor de acero cotiza hojas y barras por pieza (cotizaciones y factura del 30-sep-2026). Lo demás se **supuso** y se edita en las tablas maestras:
+Datos que dio el taller: cada trabajador cuesta **$800 por día con prestaciones incluidas**, y la hora se cuesta como $800 ÷ 8 h = $100.00 (FSR = 1.00; ver §10.12); las barras de ángulo y solera se consideran de **6 m**; el proveedor de acero cotiza hojas y barras por pieza (cotizaciones y factura del 30-sep-2026). Lo demás se **supuso** y se edita en las tablas maestras:
 
 | Supuesto | Valor usado | Dónde se cambia | Efecto si es distinto |
 | --- | --- | --- | --- |
@@ -2318,11 +2318,11 @@ La ayuda explica **cómo calcula este cotizador**; no sustituye al criterio del 
 
 ### 10.12 Supuestos de la hoja de control de gastos por confirmar
 
-Lo que dijo el taller (6 y 7 de octubre de 2026): el trabajador gana **$500 por día** ($3,500 a la semana ÷ 7) **sin utilidades ni prestaciones**, y la hora se cuesta como **$500 ÷ 8 h = $62.50**; la venta fue **con IVA** y los precios del proveedor **traían IVA**; las puntas de la solera **no se rolan** (por eso π·(D + 81 mm)); las 30 bridas de solera llevan **4 días** (sobre todo por el rolado y el barrenado); el empaque se sustituyó por **Sikaflex** y las bridas **sí llevan esmalte**; las ménsulas llevan **2 días** y son de **máximo 650 mm**; las abrazaderas son para el ducto de mayor diámetro (**11″**); la instalación es **local, en Querétaro** (sin hospedaje ni comidas), y las bridas chicas son **30 bridas de placa** de 3/16″ (24 de 5″, 2 de 6″ y 4 de 7″) de la cotización del proveedor de corte. Lo demás se **supuso** al reproducir la hoja (§7.4) y se cambia en las tablas o en las partidas:
+Lo que dijo el taller (6 y 7 de octubre de 2026): el trabajador cuesta **$800 por día con prestaciones incluidas** (antes $500 por día, $3,500 a la semana ÷ 7, sin prestaciones), y la hora se cuesta como **$800 ÷ 8 h = $100.00**; la venta fue **con IVA** y los precios del proveedor **traían IVA**; las puntas de la solera **no se rolan** (por eso π·(D + 81 mm)); las 30 bridas de solera llevan **4 días** (sobre todo por el rolado y el barrenado); el empaque se sustituyó por **Sikaflex** y las bridas **sí llevan esmalte**; las ménsulas llevan **2 días** y son de **máximo 650 mm**; las abrazaderas son para el ducto de mayor diámetro (**11″**); la instalación es **local, en Querétaro** (sin hospedaje ni comidas), y las bridas chicas son **30 bridas de placa** de 3/16″ (24 de 5″, 2 de 6″ y 4 de 7″) de la cotización del proveedor de corte. Lo demás se **supuso** al reproducir la hoja (§7.4) y se cambia en las tablas o en las partidas:
 
 | Supuesto | Valor usado | Dónde se cambia | Efecto si es distinto |
 | --- | --- | --- | --- |
-| La hora, sin días de descanso ni prestaciones | FSR = 1.00: $62.50 la hora, como la calcula el taller | `mano_obra.FSR` | La semana paga 7 días por 5 trabajados: con FSR = 1.40 la hora es $87.50 (en este proyecto, $3,200 más de raya); con prestaciones, más (§7.4.1). |
+| La hora, con prestaciones | FSR = 1.00: $100.00 la hora ($800 por día con prestaciones ÷ 8 h), como la calcula el taller | `mano_obra.FSR` | El salario por día ya incluye las prestaciones: con FSR mayor que 1.00 se cobrarían dos veces (§7.4.1). |
 | Reparto de los 4 días de las bridas | Rolado: 10 min por aro + 19 min por metro de solera; barrenado: 2 min por barreno. Dan 31.88 h para las 30 | `proceso.aros`, `proceso.barrenado` | El total ya es el del taller; el reparto mueve el precio de bridas de otro diámetro o con otro número de barrenos. |
 | Barrenos de las bridas de placa | **Confirmado con los planos de pedido:** 6 en cada una (3 juegos por brida: 90) | `tornillos_pieza` de los artículos `BRIDA_PLACA_*` (T3c) | Con ellos la app da los 208 juegos exactos de la hoja y compra 220, como se compró. |
 | Tornillos de las abrazaderas | Ninguno propio: los 208 juegos de la hoja son los de las bridas | `tornillos_pieza` de la partida | Si llevan 2 por abrazadera (sus orejas a la ménsula), son 14 juegos más: 222 exactos y se comprarían 240. |
@@ -2334,7 +2334,7 @@ Lo que dijo el taller (6 y 7 de octubre de 2026): el trabajador gana **$500 por 
 | Esmalte de las bridas de placa | No se pintan (se compran cortadas); las de solera, sí | Una partida aparte | Si también se pintaron, sumar su esmalte. |
 | Esmalte en los gastos | Estimado: 1 L de esmalte ($260) y 1 L de diluyente ($70) antes de IVA, lo que pide la lista de compras; la hoja no lo traía | El renglón del control de gastos | Capturar lo que de verdad se compró. |
 | Viaje Querétaro–México | Casetas $806 y gasolina $1,500, como viático de la instalación | `viajes`, `casetas_viaje`, `gasolina_viaje` | Si fue para recoger el ducto o las bridas, es flete: el total no cambia, sólo su renglón. |
-| Indirectos, equipo y financiamiento | Ilustrativos (GIF $85/h de taller, 8 % de administración, 4 % de imprevistos, equipo por hora): con ellos el proyecto pierde $17,094.23 | `capas.*`, `mano_obra.operaciones.*.equipo_h` | Con los indirectos reales del taller el resultado puede ser otro: es el dato que más mueve el «después de indirectos». |
+| Indirectos, equipo y financiamiento | Ilustrativos (GIF $85/h de taller, 8 % de administración, 4 % de imprevistos, equipo por hora): con ellos el proyecto pierde $22,609.54 | `capas.*`, `mano_obra.operaciones.*.equipo_h` | Con los indirectos reales del taller el resultado puede ser otro: es el dato que más mueve el «después de indirectos». |
 | Peso del PTR 2″ × 2″ cal. 14 | 2.91 kg/m, calculado de la sección (el proveedor no lo da) | `proveedor.barras.PTR_2X2_C14.kg_m` | Sólo cambia el peso que se manda, no el costo. |
 | Categorías del control de gastos | Los renglones se capturaron en la categoría que les corresponde (tornillería, soleras y Sikaflex: material; ángulos, PTR y taquetes: soportería; ducto, bridas de placa, mangueras y abrazaderas: compras a terceros; esmalte: consumibles) | `categoria` de cada gasto y de cada artículo de T3c | Sólo cambia en qué renglón se compara; el total no cambia. |
 
@@ -2379,4 +2379,4 @@ Los planos de pedido del 30-sep-2026 confirmaron el gramil (24 mm), los barrenos
 | Precio de la galvanizada de 3 × 8 ft | **Aproximado** igual (× 914 × 2,438 / (1,219 × 3,048)): cal. 22 $552 y cal. 24 $420 con IVA | Lista del proveedor (T3b) | Como los precios aproximados van por área, la lámina que «menos desperdicia» es la de mejor acomodo; con los precios reales (la hoja chica suele costar más por kg) puede ganar la otra. |
 | Mangueras, soportería y viáticos | **Opcionales (7-oct-2026):** el factor de 3 cubre la ductería, no ellos; suman al costo, antes de la utilidad. Las ménsulas y las mangueras **por piezas** a los precios de las tablas (8-oct-2026); los viáticos, por importe | Pestaña Cotización rápida › Ménsulas y mangueras | En la obra del unifilar (§5.8.1) fueron $10,650.05 sin IVA: sin capturarlos, la cotización rápida se queda corta. |
 | Ménsulas sugeridas y su costo | Sin capturar cuántas: una con su abrazadera cada 2.5 m de los metros. La ménsula en 137 min (las 7 del caso real en 2 días) y la abrazadera en 15 min (ilustrativo); 6 abrazaderas por tramo de manguera | `rapida.soporteria`, `rapida.mangueras` (T11) y `proceso.soportes.espaciado` | Las sugeridas no cuentan los soportes junto a codos y derivaciones ni los de las subidas: en un sistema con muchas bajadas capture las que estime. La ménsula de 137 min es la mitad de su costo: medir el tiempo real cambia mucho el importe. |
-| Días de fabricación e instalación | **Confirmado (7-oct-2026):** suman su mano de obra: bridas, 1 persona × $500 por día; instalación, 2 personas × $500 por día; con utilidad e IVA encima | T11 | Otra cuadrilla u otro pago se cambian en T11. Los viáticos (hospedaje, comidas) no están: la instalación es local. |
+| Días de fabricación e instalación | **Confirmado (7-oct-2026):** suman su mano de obra: bridas, 1 persona × $800 por día; instalación, 2 personas × $800 por día (con prestaciones); con utilidad e IVA encima | T11 | Otra cuadrilla u otro pago se cambian en T11. Los viáticos (hospedaje, comidas) no están: la instalación es local. |

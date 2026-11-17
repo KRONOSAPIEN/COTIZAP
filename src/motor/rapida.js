@@ -6,8 +6,8 @@
  *   láminas  = hojas enteras de la lista del proveedor para hacer esos metros de ducto a ese diámetro
  *   lámina   = láminas × precio de la hoja sin IVA
  *   costo    = lámina × factor_lamina (3: cubre mano de obra, accesorios y lo demás) + bridas por metros
- *              + días de fabricación de bridas × personas × pago por día (1 × $500)
- *              + días de instalación × personas × pago por día (2 × $500)
+ *              + días de fabricación de bridas × personas × pago por día (1 × $800)
+ *              + días de instalación × personas × pago por día (2 × $800)
  *              + lo que el factor no cubre: las ménsulas con su abrazadera (por piezas), las mangueras (por tramos y abrazaderas,
  *                del catálogo de compras) y los viáticos (importe sin IVA)
  *   Cada cifra que se ve se redondea al centavo en el motor (precio de la hoja, lámina, lámina × factor, cada extra, costo,

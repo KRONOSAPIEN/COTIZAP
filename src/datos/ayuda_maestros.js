@@ -120,9 +120,9 @@
     { origen: 'real', origenTxt: 'Precios de la hoja de control de gastos del 6 de octubre de 2026 y de la cotización del proveedor de corte del 2 de octubre.', afecta: ['mat'], ej: 'Taquete de 3/8″ a $16 con IVA → $13.79 sin IVA por pieza.' });
   E('mano_obra', 'Mano de obra y equipo',
     'Cuánto cuesta una hora de cada operación: el salario por DÍA del personal, las horas del día y el costo por hora de la máquina.',
-    'Salario en MXN por día (hoy $500: $3,500 a la semana ÷ 7 días, sin utilidades ni prestaciones). En equipo: depreciación + energía + mantenimiento.',
-    'La hora cuesta salario ÷ horas por día × FSR: con $500 y 8 h, $62.50. Subirla encarece las horas de taller y de instalación.',
-    { origen: 'mixto', origenTxt: 'El salario de $500 por día es real ($3,500 a la semana ÷ 7 días); el costo de equipo por hora es ilustrativo.', afecta: ['mo', 'eq'], ej: '$500 por día ÷ 8 h = $62.50 por hora.' });
+    'Salario en MXN por día (hoy $800 con prestaciones incluidas). En equipo: depreciación + energía + mantenimiento.',
+    'La hora cuesta salario ÷ horas por día × FSR: con $800 y 8 h, $100.00. Subirla encarece las horas de taller y de instalación.',
+    { origen: 'mixto', origenTxt: 'La hora de $100.00 ($800 por día con prestaciones ÷ 8 h) es dato del taller; el equipo por hora es ilustrativo.', afecta: ['mo', 'eq'], ej: '$800 por día (con prestaciones) ÷ 8 h = $100.00 por hora.' });
   E('merma', 'Merma por familia de pieza',
     'La parte de la lámina comprada que no queda en la pieza: recortes, huecos de injertos y cortes. Una merma por familia.',
     'Capture en %. Entre más curvas, cuñas e injertos tenga la familia, más recorte deja. Se obtiene pesando recortes contra lámina usada en obras reales.',
@@ -182,21 +182,21 @@
   E('rapida.personas_fabricacion', 'Personas en la fabricación de bridas',
     'Cuántas personas hacen las bridas en los días de fabricación de la cotización rápida.',
     'Un número entero. El taller: 1 persona.',
-    'La mano de obra de la fabricación es días × personas × pago por día: con 1 persona a $500, 4 días son $2,000.',
+    'La mano de obra de la fabricación es días × personas × pago por día: con 1 persona a $800, 4 días son $3,200.',
     { afecta: ['rapida'], tip: [1, 4] });
   E('rapida.pago_dia_fabricacion', 'Pago por día en la fabricación de bridas',
     'Lo que gana por día cada persona que hace las bridas.',
-    'En MXN por día. El taller: $500.',
+    'En MXN por día, con prestaciones. El taller: $800.',
     'Sube o baja la mano de obra de la fabricación en proporción a los días.',
     { afecta: ['rapida'], tip: [300, 1500] });
   E('rapida.personas_instalacion', 'Personas en la instalación',
     'Cuántas personas instalan en los días de instalación de la cotización rápida.',
     'Un número entero. El taller: 2 personas.',
-    'La mano de obra de la instalación es días × personas × pago por día: con 2 personas a $500, 3 días son $3,000.',
+    'La mano de obra de la instalación es días × personas × pago por día: con 2 personas a $800, 3 días son $4,800.',
     { afecta: ['rapida'], tip: [1, 6] });
   E('rapida.pago_dia_instalacion', 'Pago por día en la instalación',
     'Lo que gana por día cada persona que instala.',
-    'En MXN por día. El taller: $500.',
+    'En MXN por día, con prestaciones. El taller: $800.',
     'Sube o baja la mano de obra de la instalación en proporción a los días y a las personas.',
     { afecta: ['rapida'], tip: [300, 1500] });
   E('rapida.bridas_por_metros', 'Bridas por metros',
@@ -231,7 +231,7 @@
   E('rapida.soporteria.menula_min', 'Minutos de taller por ménsula',
     'Lo que tarda el taller en hacer una ménsula: cortar, doblar, barrenar y puntear.',
     'En min reales (sin eficiencia). El taller: 7 ménsulas en 2 días (16 h) = 137 min cada una. 0 = el de Proceso › Soportería.',
-    'Es lo que más pesa en la ménsula: 137 min a $62.50/h son unos $143 de mano de obra por pieza.',
+    'Es lo que más pesa en la ménsula: 137 min a $100.00/h son unos $229 de mano de obra por pieza.',
     { afecta: ['rapida'], tip: [15, 240] });
   E('rapida.soporteria.abrazadera_barra', 'Barra de la abrazadera',
     'La barra de la que se corta cada abrazadera; su largo sale del diámetro máximo de la cotización rápida.',
@@ -527,11 +527,11 @@
   /* ---------------------------------------- Mano de obra ---------------------------------------- */
   E('mano_obra.FSR', 'Factor de Salario Real (FSR)',
     'Multiplicador del salario para cobrar en cada hora lo que se paga y no se trabaja y las prestaciones del trabajador (IMSS, INFONAVIT, aguinaldo, vacaciones…).',
-    'Hoy 1.00: el taller cuesta la hora como el salario del día ÷ 8, sin prestaciones. 1.40 cobra los 7 días que se pagan por 5 trabajados; 1.6 a 1.9 suma además las prestaciones.',
-    'Multiplica TODA la mano de obra. Con 1.40 cada hora cuesta 40 % más ($87.50): suben mano de obra, herramienta menor y el precio.',
+    'Hoy 1.00: el salario por día ($800) ya incluye las prestaciones, así que la hora es el salario del día ÷ 8 ($100.00). Súbalo sólo si captura un salario sin prestaciones: 1.40 cobra los 7 días que se pagan por 5 trabajados; 1.6 a 1.9 suma además las prestaciones.',
+    'Multiplica TODA la mano de obra. Con 1.40 cada hora cuesta 40 % más ($140.00): suben mano de obra, herramienta menor y el precio.',
     {
-      afecta: ['mo'], tip: [1, 2.2], ej: 'Hora de $62.50 × FSR 1.40 = $87.50: lo que cuesta cada hora trabajada si la semana paga 7 días por 40 h.',
-      ojo: 'Con 1.00, el sábado y el domingo que se pagan ($1,000 de cada $3,500) no los cobra ninguna hora: tienen que salir de los indirectos. No lo use para «meter utilidad»: la utilidad va en la Pila de precio.',
+      afecta: ['mo'], tip: [1, 2.2], ej: 'Hora de $100.00 × FSR 1.40 = $140.00.',
+      ojo: 'El salario de hoy ya incluye las prestaciones: con un FSR mayor que 1.00 se cobrarían dos veces. No lo use para «meter utilidad»: la utilidad va en la Pila de precio.',
     });
   E('mano_obra.jornada', 'Jornada',
     'Cuántas horas tiene el día con que el salario por día se vuelve costo por hora.',
@@ -541,11 +541,11 @@
   E('mano_obra.jornada.horas_dia', 'Horas por día',
     'Las horas que se trabajan en un día de jornada.',
     'En horas (hoy 8). También es el día de la cuadrilla de instalación si la partida no dice otro.',
-    'Más horas por día = hora más barata y días de instalación más largos: con 9 h la hora baja de $62.50 a $55.56.',
+    'Más horas por día = hora más barata y días de instalación más largos: con 9 h la hora baja de $100.00 a $88.89.',
     { afecta: ['mo'], tip: [6, 12] });
   E('mano_obra.operaciones', 'Tarifas por operación',
     'Una tarifa para cada operación del taller (corte, rolado, armado, aros, soldadura, engargolado, barrenado, acabado, pintura, inspección) y para la instalación en obra.',
-    'Cada operación lleva salario por día y costo de equipo por hora. Hoy el salario es de $500 por día en todas.',
+    'Cada operación lleva salario por día y costo de equipo por hora. Hoy el salario es de $800 por día (con prestaciones) en todas.',
     'Cada hora de una operación se cobra con su tarifa; las operaciones con muchas horas (soldadura, armado) pesan más en el precio.',
     { afecta: ['mo', 'eq'] });
   E('mano_obra.operaciones.*', 'Tarifa de {0}',
@@ -554,10 +554,10 @@
     'Cambia sólo el costo de las horas de esta operación.',
     { afecta: ['mo', 'eq'], nom: OPERACIONES });
   E('mano_obra.operaciones.*.salario_diario', 'Salario por día · {0}',
-    'Lo que gana por día el personal de esta operación, sin utilidades ni prestaciones.',
-    'MXN por día. Hoy $500 en todas ($3,500 a la semana ÷ 7). Capture otro si esta operación la hace personal de otro nivel (un soldador, un ayudante).',
+    'Lo que cuesta por día el personal de esta operación, con prestaciones incluidas.',
+    'MXN por día. Hoy $800 en todas (con prestaciones). Capture otro si esta operación la hace personal de otro nivel (un soldador, un ayudante).',
     'Sube o baja en la misma proporción el costo de mano de obra de esta operación: la hora es este salario ÷ 8 h × FSR.',
-    { afecta: ['mo'], tip: [250, 2000], nom: OPERACIONES, ej: '$500 por día = $62.50 por hora; 1 h de soldadura cuesta $62.50 de mano de obra más su equipo.' });
+    { afecta: ['mo'], tip: [250, 2000], nom: OPERACIONES, ej: '$800 por día = $100.00 por hora; 1 h de soldadura cuesta $100.00 de mano de obra más su equipo.' });
   E('mano_obra.operaciones.*.equipo_h', 'Costo del equipo por hora · {0}',
     'Lo que cuesta cada hora de usar la máquina de esta operación: depreciación, energía y mantenimiento.',
     'MXN por hora de máquina = (inversión ÷ horas útiles al año) + energía + mantenimiento. ILUSTRATIVO. Use 0 si no hay máquina.',

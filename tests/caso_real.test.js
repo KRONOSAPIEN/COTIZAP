@@ -8,8 +8,8 @@
  *
  * Lo que se verifica: que la cotización de la app reproduce la compra real de la hoja (las barras, los 28 taquetes, los 220
  * juegos de tornillos y los 2 Sikaflex), que lo cotizado queda a menos de 1 % de lo gastado sin IVA, y el resultado del proyecto
- * con la venta pactada con IVA, conciliado con el −$829 de la hoja. La mano de obra es la del taller: $500 por día ÷ 8 h =
- * $62.50 la hora. Los datos viven en src/datos/ejemplos.js; aquí todo se recalcula con aritmética directa.
+ * con la venta pactada con IVA, conciliado con el −$829 de la hoja. La mano de obra es la del taller: $800 por día (con prestaciones) ÷ 8 h =
+ * $100.00 la hora. Los datos viven en src/datos/ejemplos.js; aquí todo se recalcula con aritmética directa.
  */
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -25,7 +25,7 @@ const GASTOS = COTIZACION.gastos;
 
 const res = C.cotizar(COTIZACION, M);
 const casi = (real, esperado, tol, msg) => assert.ok(Math.abs(real - esperado) <= tol, `${msg}: esperado ${esperado} ± ${tol}, obtenido ${real}`);
-const HORA = 500 / 8;
+const HORA = 800 / 8; // $100.00: $800 por día con prestaciones ÷ 8 h
 const sinIva = (x) => x / 1.16;
 const VENTA = 45710 / 1.16; // la venta se pactó con IVA
 
@@ -93,7 +93,7 @@ test('Caso real: lo que cotiza la app, con el sobrante de piezas enteras que sie
   const real = compras + 260 + 70 + (32 + 16 + 80) * HORA;
   casi(compras, 34947.47, 0.005, 'las compras de la hoja, sin IVA');
   casi(R.totales.real, real, 0.005, 'gasto real sin IVA');
-  casi(R.totales.real, 43277.47, 0.005);
+  casi(R.totales.real, 48077.47, 0.005);
   const dif = Math.abs(R.totales.cotizado - R.totales.real) / R.totales.real;
   assert.ok(dif < 0.015, `la app ${R.totales.cotizado.toFixed(2)} contra lo real ${R.totales.real.toFixed(2)}: ${(dif * 100).toFixed(2)} %`);
   casi(R.totales.cotizado + R.resultado.equipo_estimado, res.totales.costo_directo, 1e-6, 'el costo directo suma además el equipo');
@@ -101,9 +101,9 @@ test('Caso real: lo que cotiza la app, con el sobrante de piezas enteras que sie
   const cat = Object.fromEntries(R.categorias.map((x) => [x.clave, x]));
   casi(cat.VIATICOS.cotizado, cat.VIATICOS.real, 0.005, 'viáticos: sólo el viaje (instalación local)');
   casi(cat.PROVEEDOR.cotizado, cat.PROVEEDOR.real, 0.005, 'ducto, bridas de placa, mangueras y abrazaderas (su tornillería y su Sikaflex van a material)');
-  casi(cat.INSTALACION.real, 5000, 0.005, 'instalación: 80 h × $62.50');
+  casi(cat.INSTALACION.real, 8000, 0.005, 'instalación: 80 h × $100.00');
   casi(cat.INSTALACION.cotizado, cat.INSTALACION.real, 0.005, 'la cuadrilla cotizada es la que se pagó');
-  casi(cat.MANO_OBRA.real, 3000, 0.005, 'taller: 48 h × $62.50');
+  casi(cat.MANO_OBRA.real, 4800, 0.005, 'taller: 48 h × $100.00');
   // el IVA de las compras de la hoja (todas con IVA salvo la raya) y el del esmalte y el diluyente se acreditan
   const ivaHoja = (46539.064 - 6000) - sinIva(46539.064 - 6000);
   casi(ivaHoja, 5591.60, 0.005);
@@ -115,8 +115,8 @@ test('Caso real: el resultado con la venta de $45,710 con IVA ($39,405.17 antes 
   casi(VENTA, 39405.17, 0.005);
   casi(R.resultado.venta, VENTA, 1e-6);
   casi(R.resultado.utilidad_antes_indirectos, VENTA - R.totales.real, 1e-6);
-  casi(R.resultado.utilidad_antes_indirectos, -3872.30, 0.005, 'pierde antes de indirectos');
-  casi(R.resultado.margen_antes_indirectos_pct, -3872.30 / 39405.17, 1e-6, '≈ −9.8 %');
+  casi(R.resultado.utilidad_antes_indirectos, -8672.30, 0.005, 'pierde antes de indirectos');
+  casi(R.resultado.margen_antes_indirectos_pct, -8672.30 / 39405.17, 1e-6, '≈ −22.0 %');
   // La hoja restaba sus costos (con IVA, y la raya, que no lo lleva) de la venta con IVA: −$829.06. Pero del IVA de la venta
   // ($6,304.83) sólo se acredita el de las compras ($5,591.60): los $713.23 que faltan se le pagan al SAT.
   const hoja = 45710 - 46539.064;
@@ -124,8 +124,9 @@ test('Caso real: el resultado con la venta de $45,710 con IVA ($39,405.17 antes 
   const ivaNeto = (45710 - VENTA) - ((46539.064 - 6000) - sinIva(46539.064 - 6000));
   casi(ivaNeto, 713.23, 0.005);
   casi(hoja - ivaNeto, -1542.29, 0.01, 'la hoja con el IVA que se paga');
-  // y faltaban 2 días de bridas y 2 de ménsulas (32 h a $62.50) y el esmalte ($330)
-  casi(hoja - ivaNeto - 32 * HORA - 330, R.resultado.utilidad_antes_indirectos, 0.01);
+  // la hoja pagó $6,000 de raya; con la hora a $100.00 las 128 h del taller y la obra cuestan $12,800 (faltaban 2 días de bridas y 2 de
+  // ménsulas, y la hora de la hoja era menor) y falta el esmalte ($330)
+  casi(hoja - ivaNeto - (128 * HORA - 6000) - 330, R.resultado.utilidad_antes_indirectos, 0.01);
   assert.ok(R.resultado.utilidad_despues_indirectos < R.resultado.utilidad_antes_indirectos, 'con equipo, indirectos y comisión pierde más');
   const V = res.totales.venta;
   assert.equal(V.con_iva, true);

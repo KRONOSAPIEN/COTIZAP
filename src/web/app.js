@@ -18,6 +18,7 @@
   const LLAVE_MAE = 'cotizap.maestros.v2';
   const LLAVE_MAE_V1 = 'cotizap.maestros.v1';
   const LLAVE_MIGRADO = 'cotizap.maestros.migrado_v1';
+  const LLAVE_SALARIO_800 = 'cotizap.maestros.salario_800';
   const LLAVE_PENDIENTE = 'cotizap.maestros.pendiente'; // hay cambios en las tablas que todavía no llegaron al almacén del artefacto
 
   /* ================================================================== */
@@ -88,6 +89,14 @@
         guardarLS(LLAVE_MAE, parche);
       }
       guardarLS(LLAVE_MIGRADO, true);
+    }
+    if (!leerLS(LLAVE_SALARIO_800)) {
+      // Una sola vez: un salario de $500 por día guardado por una versión anterior cede su lugar al de $800 (con prestaciones).
+      if (parche && Object.keys(parche).length) {
+        parche = C.maestros.quitarSalarioAnterior(parche);
+        guardarLS(LLAVE_MAE, parche);
+      }
+      guardarLS(LLAVE_SALARIO_800, true);
     }
     estado.M = parche ? C.maestros.crearMaestros(parche) : base; // sólo entra lo que tiene la forma de las tablas
     estado.cot = cotizacionValida(leerLS(LLAVE_COT), estado.M) || cotizacionEjemplo();
@@ -1785,7 +1794,7 @@
   }
 
   function jsonIntercambio() {
-    return JSON.stringify({ app: 'COTIZAP', version: 2, exportado: new Date().toISOString(), cotizacion: estado.cot, maestros: parcheMaestros() }, null, 2);
+    return JSON.stringify({ app: 'COTIZAP', version: C.maestros.VERSION_PARCHE, exportado: new Date().toISOString(), cotizacion: estado.cot, maestros: parcheMaestros() }, null, 2);
   }
 
   async function copiar(texto, area) {
@@ -1804,6 +1813,8 @@
     if (esObjeto(obj) && esObjeto(obj.maestros)) {
       const { herrajes, ...resto } = obj.maestros;
       parche = antigua ? resto : obj.maestros;
+      // Los archivos anteriores a la versión 3 pueden traer el salario de $500 por día: rige el de hoy
+      if (!(Number(obj.version) >= C.maestros.VERSION_PARCHE)) parche = C.maestros.quitarSalarioAnterior(parche);
     }
     const M = parche ? C.maestros.crearMaestros(parche) : estado.M;
     const cot = esObjeto(obj) ? cotizacionValida(obj.cotizacion, M) : null;
@@ -1976,7 +1987,7 @@
     root.addEventListener('pagehide', () => Almacen.vaciar());
     const arranque = parcheMaestros();
     Almacen.iniciar(arranque).then((r) => {
-      if (r.origen === 'remoto') aplicarRemoto(r.parche, arranque);
+      if (r.origen === 'remoto') aplicarRemoto(Number(r.version) >= 3 ? r.parche : C.maestros.quitarSalarioAnterior(r.parche), arranque);
       else persistir(); // lo local manda (cambios pendientes o primera vez): se sube
     });
   }

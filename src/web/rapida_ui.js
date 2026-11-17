@@ -146,7 +146,7 @@
     h('td', null, h('div', { class: 'r-concepto' }, concepto), detalle ? h('div', { class: 'r-detalle' }, detalle) : null),
     h('td', { class: 'num' }, importe));
 
-  /** «2 personas × $500 por día» */
+  /** «2 personas × $800 por día» */
   const cuadrilla = (personas, pago) => `${plural(personas, 'persona', 'personas')} × ${W.mxn(pago)} por día`;
   /** El renglón de la mano de obra de unos días (sólo si se capturaron). */
   const manoDeObra = (concepto, m) => (m.dias > 0 ? renglon(`${concepto}: ${corto(m.dias)} ${m.dias === 1 ? 'día' : 'días'}`, `${corto(m.dias)} ${m.dias === 1 ? 'día' : 'días'} × ${cuadrilla(m.personas, m.pago_dia)}.`, W.mxn(m.importe)) : null);
