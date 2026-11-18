@@ -1046,3 +1046,48 @@ test('Los cuerpos del dibujo 3D (§0.4): cada tramo en sus piezas sin huecos, lo
   assert.equal(c.uniones.length, 10);
   assert.ok(c.uniones.every((u) => u.D > 0 && Math.abs(Math.hypot(u.eje.x, u.eje.y, u.eje.z) - 1) < 1e-9));
 });
+
+test('Clic y medida tecleada sin mover el puntero: horizontal aunque P0 (ajustado a la rejilla) caiga justo debajo del clic', () => {
+  const s = nuevoTablero();
+  s.herr = 'TRAMO';
+  s.nivel = 3000;
+  s.cam = { ...CAMARA, k: 0.3 }; // con más zoom la rejilla de 100 mm da errores de ajuste de varios px
+  const base = P(s, 0, 0, 3000);
+  let clic = null;
+  for (let dy0 = 1; dy0 <= 40 && !clic; dy0++) {
+    for (let dx0 = -3; dx0 <= 3 && !clic; dx0++) {
+      const c = { x: base.x + dx0, y: base.y - dy0 };
+      const t = nuevoTablero();
+      t.cam = { ...s.cam };
+      t.herr = 'TRAMO';
+      t.nivel = 3000;
+      if (!TB.empezar(t, null, c.x, c.y)) continue;
+      const p = TB.pantalla(t, t.traza.P0);
+      const ex = c.x - p.x;
+      const ey = c.y - p.y;
+      const dv = Math.abs(Math.atan2(ex, ey) * 180 / Math.PI);
+      if (Math.hypot(ex, ey) >= 6 && Math.min(dv, 180 - dv) <= 5) clic = c;
+    }
+  }
+  assert.ok(clic, 'hay un píxel cuyo P0 ajustado queda ≥ 6 px en la vertical');
+  assert.ok(TB.empezar(s, null, clic.x, clic.y));
+  const q = TB.pantalla(s, s.traza.P0);
+  assert.ok(Math.hypot(clic.x - q.x, clic.y - q.y) >= 6);
+  teclas(s, '2');
+  const f = TB.fantasma(s, clic.x, clic.y);
+  assert.equal(f.op.direccion.elevacion_deg, 0, 'horizontal');
+  assert.equal(f.largo, 2000);
+  assert.ok(TB.confirmar(s, clic.x, clic.y));
+  const g = s.g.seg.get(s.t.tramos[s.t.tramos.length - 1].id);
+  assert.ok(Math.abs(g.u.z) < 1e-9, 'el tramo creado es horizontal');
+});
+
+test('Mover el puntero más de 4 px en vertical sobre P0 sigue eligiendo el plano vertical', () => {
+  const s = nuevoTablero();
+  s.herr = 'TRAMO';
+  s.nivel = 3000;
+  const q = P(s, 0, 0, 3000);
+  assert.ok(TB.empezar(s, null, q.x, q.y));
+  const f = TB.fantasma(s, q.x, q.y - 60);
+  assert.deepEqual(f.op.direccion, { azimut_deg: 0, elevacion_deg: 90 });
+});

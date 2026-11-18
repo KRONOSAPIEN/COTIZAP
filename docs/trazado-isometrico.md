@@ -189,6 +189,8 @@ Al seleccionar una toma, el inspector muestra **Acople** con dos opciones: [Mang
    | `@135` | Azimut de 135° (después de una vertical, en horizontal) |
    | `^45` | Elevación de 45° |
 
+   Si se hace clic y se teclea una medida sin mover el puntero (a 4 px o menos de donde empezó el trazo o el tramo), el ducto sale en horizontal por omisión: primero las direcciones hacia +X, +Y o +Z, sin importar en qué lado del punto ajustado a la rejilla cayó el clic.
+
 5. **Cambiar de plano o fijar el eje:**
 
    | Tecla | Hace |

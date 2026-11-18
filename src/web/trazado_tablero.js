@@ -868,7 +868,7 @@
     if (!ops.length) return decir(s, TZ.textoCandidatas(a.nombre, ops), true);
     if (s.herr === 'RINJ' && !(s.D2 < a.tronco.diametro_in)) return decir(s, `El tronco después debe ser menor que ${a.tronco.id} (${pulg(a.tronco.diametro_in)}): elija «tronco después».`, true);
     s.D = s.herr === 'RINJ' ? Math.min(s.D, s.D2) : a.D;
-    s.traza = { desde: a.desde, P0: a.P0, nombre: a.nombre, ops, previa: null, fija: null, tab: 0, iman: null, cache: new Map(), rinj: s.herr === 'RINJ' };
+    s.traza = { desde: a.desde, P0: a.P0, nombre: a.nombre, ops, previa: null, fija: null, tab: 0, iman: null, cache: new Map(), rinj: s.herr === 'RINJ', punteroRef: { x, y } };
     s.caja = '';
     s.fijar = null;
     return decir(s, TZ.textoCandidatas(a.nombre, ops), false);
@@ -1050,6 +1050,9 @@
         tr.sinIman = `El imán no encuentra cómo llegar a ${ob.nombre} desde aquí.`;
       } else tr.sinIman = null;
     }
+    // el puntero «quieto» (a 4 px o menos de donde empezó el trazo o el tramo) se toma como si estuviera en P0
+    const quieto = !!tr.punteroRef && Math.hypot(x - tr.punteroRef.x, y - tr.punteroRef.y) <= 4;
+    if (quieto) { const q0 = pantalla(s, P0); x = q0.x; y = q0.y; }
     const pl = planoDeTrabajo(s, x, y);
     let cands = tr.ops;
     if (pl.tipo === 'EJE') cands = cands.filter((o) => norma(cruz(TZ.vectorDe(o.direccion), pl.eje)) < 1e-9);
@@ -1208,7 +1211,7 @@
     const libre = !antes.has(fin) && tipoNodo(s, fin) === 'EXTREMO';
     const ops = libre ? TZ.candidatas(s.t, s.M, fin) : [];
     if (!ops.length) { s.traza = null; return true; }
-    s.traza = { desde: fin, P0: s.g.pos.get(fin), nombre: fin, ops, previa: f.op.direccion, fija: f.op.direccion, tab: 0, iman: null, cache: new Map(), rinj: false };
+    s.traza = { desde: fin, P0: s.g.pos.get(fin), nombre: fin, ops, previa: f.op.direccion, fija: f.op.direccion, tab: 0, iman: null, cache: new Map(), rinj: false, punteroRef: { x, y } };
     if (tr.rinj) s.D = Math.min(s.D, s.D2);
     return true;
   }
